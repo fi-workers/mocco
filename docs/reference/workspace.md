@@ -38,7 +38,7 @@ The product term is **workspace**, everywhere users and the DB can see: tables a
 ## Deferred (by design)
 
 - **Invitations** — the TABLE exists (`mocco_invitations`, vendor shape + email index) because the plugin's core read path (`get-full-organization`) hard-joins the model; without it the primary workspace load 500s (probe-verified). The invite FLOW lands together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index, and a deliberate inviter-deletion policy — naive `inviter_id ON DELETE CASCADE` would silently destroy pending invites when the inviter leaves). ⚠️ The vendor's default table name is unprefixed `invitation`: the invite-flow PR must map it to `mocco_invitations` or the `mocco_` prefix invariant silently breaks.
-- **Frontend client plugin** — the client wrapper does not yet register the organization client, so the client-side session type lacks `activeOrganizationId` while the server session has it. This skew is known and must be closed atomically with the first workspace UI (add the client plugin + neutral helpers in `lib/auth-client.ts` in that same PR).
+- **Frontend client plugin** — no longer needed: workspaces are consumed via tRPC (see Boundary enforcement), so the client session type never has to carry `activeOrganizationId`.
 - Teams, dynamic roles, workspace-level settings.
 
 ## Known gaps (accepted for this slice, revisit with workspace UI)
@@ -50,4 +50,4 @@ The product term is **workspace**, everywhere users and the DB can see: tables a
 
 ## Boundary enforcement
 
-`no-restricted-imports` (backend eslint) forbids importing `auth/provider` outside `auth/` — workspace capability is consumed through the neutral surface only. When a real consumer arrives, extend `auth/index.ts` with neutral functions (`createWorkspace`, `getActiveWorkspace`, …) rather than importing the provider.
+`no-restricted-imports` (backend eslint) forbids importing `auth/provider`, the vendor package, **and the `auth/testing` seam** outside `auth/` (test files excepted — they bind pglite through `auth/testing`). The promised neutral functions now exist: `listWorkspaces` / `createWorkspace` / `setActiveWorkspace` / `getActiveWorkspace` in `auth/workspaces.ts`, exported via `auth/index.ts` and consumed by the tRPC `workspace` router — the frontend talks tRPC and never needs a vendor client plugin (which also settles the once-deferred client session-type skew).

@@ -2,8 +2,6 @@
 // Wraps the vendor's organization API; consumed by the tRPC layer.
 import { getProvider, type Provider } from './provider';
 
-type Api = Provider['api'];
-
 /** Workspace shape exposed to the rest of the codebase. */
 export interface Workspace {
   id: string;
@@ -61,12 +59,9 @@ export async function setActiveWorkspace(headers: Headers, workspaceId: string):
 export async function getActiveWorkspace(
   headers: Headers,
 ): Promise<(Workspace & { members: WorkspaceMember[] }) | null> {
-  let full: Awaited<ReturnType<Api['getFullOrganization']>>;
-  try {
-    full = await getProvider().api.getFullOrganization({ headers });
-  } catch {
-    return null; // no active workspace on the session
-  }
+  // Vendor contract (probe-verified): returns null when no workspace is active —
+  // real errors (DB down etc.) propagate instead of masquerading as an empty state.
+  const full = await getProvider().api.getFullOrganization({ headers });
   if (!full) {
     return null;
   }

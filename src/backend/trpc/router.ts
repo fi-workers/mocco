@@ -26,8 +26,17 @@ export const appRouter = router({
         try {
           return await createWorkspace(ctx.headers, input);
         } catch (error) {
+          // Map ONLY duplicate-slug rejections; anything else re-throws untouched.
+          // Two sources: the vendor's exact-match pre-check (BAD_REQUEST "already
+          // exists"), and the DB's case-insensitive lower(slug) unique index
+          // (concurrent / case-variant races surface as a pg unique violation).
           const { status } = error as { status?: string };
-          if (status === 'BAD_REQUEST') {
+          const message = (error as Error).message;
+          const cause = (error as { cause?: { message?: string } }).cause?.message ?? '';
+          if (
+            (status === 'BAD_REQUEST' && /already exists/i.test(message)) ||
+            cause.includes('mocco_workspaces_slug_lower_uq')
+          ) {
             throw new TRPCError({ code: 'CONFLICT', message: 'That slug is already taken.' });
           }
           throw error;

@@ -116,11 +116,63 @@ describe('tRPC workspace router on pglite', () => {
     expect(ownerActive?.id).toBe(ws.id);
   });
 
+  it('a case-variant race hitting the DB index still maps to CONFLICT', async () => {
+    const api = await signedInCaller('owner@example.com');
+    // Bypass zod+vendor pre-check by inserting an uppercase slug directly; the
+    // router's lowercase create then collides on lower(slug) → pg 23505 → CONFLICT.
+    await t.db.insert(t.schema.workspaces).values({ name: 'Taken', slug: 'TAKEN' });
+    await expect(api.workspace.create({ name: 'Mine', slug: 'taken' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+  });
+
   it('setActive with a valid-but-nonexistent uuid is rejected', async () => {
     const api = await signedInCaller('owner@example.com');
     await api.workspace.create({ name: 'Mine', slug: 'mine' });
     await expect(
       api.workspace.setActive({ workspaceId: '00000000-0000-4000-8000-000000000000' }),
     ).rejects.toMatchObject({ message: expect.stringMatching(/not a member/i) as string });
+  });
+});
+
+// HTTP-level: the mounted handler with a real Request — exercises createContext,
+// the neutral getSession, and the superjson wire format (Dates revive).
+describe('trpcHandler over HTTP', () => {
+  let t: TestDb;
+  let provider: Provider;
+
+  beforeEach(async () => {
+    t = await createTestDb();
+    provider = createTestProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    setProviderForTesting(provider);
+  });
+  afterEach(async () => {
+    setProviderForTesting(undefined);
+    await t.close();
+  });
+
+  it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
+    const { trpcHandler } = await import('./handler');
+
+    const health = await trpcHandler(new Request('http://local/api/trpc/health'));
+    expect(health.status).toBe(200);
+
+    const { headers } = await provider.api.signUpEmail({
+      body: { email: 'wire@example.com', password: 'fixture-password-1', name: 'u' },
+      returnHeaders: true,
+    });
+    const cookie = headers.get('set-cookie') ?? '';
+    await provider.api.createOrganization({
+      body: { name: 'Wire', slug: 'wire-ws' },
+      headers: new Headers({ cookie }),
+    });
+
+    const res = await trpcHandler(new Request('http://local/api/trpc/workspace.list', { headers: { cookie } }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result: { data: { json: { slug: string; createdAt: unknown }[]; meta?: unknown } };
+    };
+    expect(body.result.data.json[0]?.slug).toBe('wire-ws');
+    expect(body.result.data.meta).toBeDefined(); // superjson envelope carrying the Date
   });
 });
