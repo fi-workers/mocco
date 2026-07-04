@@ -13,3 +13,4 @@ Records the notable changes to this project. Format follows [Keep a Changelog](h
 - Docker-free integration tests on pglite (WASM Postgres) applying the real migrations.
 - CI: supply-chain-hardened GitHub Actions gate (SHA-pinned actions, integrity-pinned yarn, scripts-off install, migration-drift check) — required on `main`.
 - llm-wiki documentation system (`docs/` — ADRs, concepts, guides, reference).
+- HTML click-through prototype (`docs/prototype/` — non-functional design reference for the governance screens).
