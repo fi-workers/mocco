@@ -1,6 +1,6 @@
 // Neutral workspace surface — no vendor names leave this directory.
 // Wraps the vendor's organization API; consumed by the tRPC layer.
-import { getProvider, type Provider } from './provider';
+import { getProvider } from './provider';
 
 /** Workspace shape exposed to the rest of the codebase. */
 export interface Workspace {
