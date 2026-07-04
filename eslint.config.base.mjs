@@ -112,10 +112,15 @@ export function createBaseConfig({ tsconfigRootDir }) {
     },
     { files: ['**/*.{js,mjs,cjs}', '**/*.config.{js,mjs,cjs,ts}'], ...tseslint.configs.disableTypeChecked },
 
-    // Test files and test-support helpers may use devDependencies (test-only packages like pglite)
+    // Test files and test-support helpers may use devDependencies (test-only packages like pglite),
+    // and fixture credentials are not real secrets.
     {
       files: ['**/*.{test,spec}.{ts,tsx,mts,cts}', '**/testing/**', '**/test/**'],
-      rules: { 'import-x/no-extraneous-dependencies': ['error', { devDependencies: true }] },
+      rules: {
+        'import-x/no-extraneous-dependencies': ['error', { devDependencies: true }],
+        'sonarjs/no-hardcoded-passwords': 'off',
+        'sonarjs/no-duplicate-string': 'off',
+      },
     },
   ];
 }
