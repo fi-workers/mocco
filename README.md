@@ -1,5 +1,7 @@
 # Mocco
 
+[![CI](https://github.com/fi-workers/mocco/actions/workflows/ci.yml/badge.svg)](https://github.com/fi-workers/mocco/actions/workflows/ci.yml)
+
 > A **deploy governance control plane** on top of GitHub Actions. GitHub Actions runs your pipelines; Mocco owns the **pause/resume gates** — approvals, separation of duties, audit, and credential gating.
 > Long-term vision: a unified ops control plane covering health checks and monitoring.
 
@@ -36,7 +38,8 @@ docs/prototype/ non-functional click-through (design validation)
 
 - lint: **ESLint 10 flat** (airbnb-extended + typescript-eslint strict + unicorn + sonarjs), prettier
 - test: Jest (backend, including pglite integration tests) · build: Next.js
-- `make dev` / `yarn lint` / `yarn test` / `yarn format`
+- `make dev` / `yarn lint` / `yarn test` / `yarn format` / `yarn frontend build`
+- CI runs this same harness on every PR (`.github/workflows/ci.yml`)
 - Decision records: `docs/adr/`
 
 ## License
