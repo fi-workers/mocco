@@ -48,6 +48,7 @@ Tests must pass without docker: integration tests run on **pglite** (in-memory W
 - Conventional-commit style titles (`feat:`, `chore:`, `docs:`, `ci:`).
 - Each schema change ships its own drizzle migration; migration history tracks PR order.
 - Update the relevant `docs/reference/` page when behavior changes; ADR bodies are immutable (supersede with a new ADR).
+- Frontend code follows [docs/reference/frontend-conventions.md](./docs/reference/frontend-conventions.md) — RSC-first, `'use client'` at leaves, no waterfalls, bundle discipline; lint enforces Next CWV + jsx-a11y strict + @eslint-react type-checked.
 
 ## Key decisions (read before large changes)
 
