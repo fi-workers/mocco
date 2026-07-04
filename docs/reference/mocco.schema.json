@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mocco.club/schema/mocco.schema.json",
+  "title": ".mocco.yml",
+  "description": "Mocco pipeline + gate definition (draft v1). No env — ADR 0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "pipeline", "steps"],
+  "properties": {
+    "version": { "const": 1 },
+    "pipeline": { "type": "string", "minLength": 1 },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "oneOf": [{ "$ref": "#/$defs/step" }, { "$ref": "#/$defs/gate" }] }
+    },
+    "concurrency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "group": { "type": "string" },
+        "mode": { "enum": ["oldest_first", "newest_first", "newest_ready_first", "unordered"] }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prevent_outdated": { "enum": ["reject", "skip", "off"] }
+      }
+    },
+    "preconditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_merged_to": { "type": "string" },
+        "require_status_checks": { "type": "array", "items": { "type": "string" } },
+        "require_code_owner_review": { "type": "boolean" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "hash_chain": { "type": "boolean" } }
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "executor"],
+      "properties": {
+        "run": { "type": "string", "minLength": 1 },
+        "executor": { "type": "string", "minLength": 1 },
+        "with": { "type": "object" },
+        "credential": { "$ref": "#/$defs/credential" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "resume"],
+      "properties": {
+        "gate": { "type": "string", "minLength": 1 },
+        "resume": {
+          "type": "array",
+          "minItems": 1,
+          "description": "AND-combined. count people from each role must resume.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "count"],
+            "properties": {
+              "role": { "type": "string", "minLength": 1 },
+              "count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "prevent_self": { "type": "boolean", "default": true },
+        "reason_required": { "type": "boolean", "default": false }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "role"],
+      "properties": {
+        "provider": { "enum": ["aws-oidc", "gcp-oidc", "azure-oidc", "vault"] },
+        "role": { "type": "string", "minLength": 1 },
+        "ttl": { "type": "string", "pattern": "^[0-9]+[smh]$" }
+      }
+    }
+  }
+}

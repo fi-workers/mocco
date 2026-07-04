@@ -10,7 +10,7 @@
 ## Quickstart (local)
 
 ```bash
-make application     # brew: mkcert traefik node corepack
+make application     # brew: mkcert nss traefik node corepack
 make initialize      # certs + /etc/hosts + yarn install
 make docker-up       # local Postgres
 yarn db:migrate      # apply schema
@@ -22,7 +22,7 @@ Details: [docs/guides/local-setup.md](./docs/guides/local-setup.md)
 
 ## Self-hosting
 
-Mocco is self-hostable. Requirements: Node 22+, Postgres, a GitHub OAuth App (login) and a GitHub App (webhooks & dispatch). It deploys as a regular Next.js app — Vercel is not required. (A dedicated self-hosting guide is in progress; see the local setup guide in the meantime.)
+Mocco is self-hostable. Requirements: Node 22+ and Postgres — login is email+password, so no OAuth app is needed. (A GitHub App for webhooks & dispatch arrives with the repo-integration phase.) It deploys as a regular Next.js app — Vercel is not required. (A dedicated self-hosting guide is in progress; see the local setup guide in the meantime.)
 
 ## Structure
 
