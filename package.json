@@ -1,0 +1,50 @@
+{
+  "name": "mocco",
+  "private": true,
+  "packageManager": "yarn@4.11.0",
+  "workspaces": [
+    "src/*"
+  ],
+  "scripts": {
+    "frontend": "yarn workspace @mocco/frontend",
+    "backend": "yarn workspace @mocco/backend",
+    "common": "yarn workspace @mocco/common",
+    "lint": "concurrently --max-processes 1 \"yarn:lint-*\"",
+    "lint-common": "yarn common lint && yarn common ts-check",
+    "lint-backend": "yarn backend lint && yarn backend ts-check",
+    "lint-frontend": "yarn frontend lint && yarn frontend ts-check",
+    "test": "yarn backend test",
+    "dev": "concurrently -c 'bgGreen.bold,bgBlue.bold' 'yarn:run-frontend' 'yarn:run-traefik'",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "prepare": "husky",
+    "run-frontend": "yarn frontend dev",
+    "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:seed": "tsx src/backend/db/seed.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "concurrently": "9.2.3",
+    "drizzle-kit": "0.31.10",
+    "eslint": "10.6.0",
+    "eslint-config-airbnb-extended": "3.1.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-sonarjs": "4.1.0",
+    "eslint-plugin-unicorn": "69.0.0",
+    "globals": "17.7.0",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
+    "prettier": "3.9.4",
+    "tsx": "4.22.4",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.62.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
