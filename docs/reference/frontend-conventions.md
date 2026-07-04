@@ -13,6 +13,14 @@ tags: [reference, frontend, nextjs, react, performance, lint]
 
 > How `src/frontend` is written. Grounded in Next.js App Router guidance and Vercel's React performance rules. Lint enforces most of this — the rest is convention.
 
+## Adopted patterns (from 2026 FE research)
+
+- **React Compiler is ON** (`next.config.ts: reactCompiler`). Do NOT hand-write `useMemo` / `useCallback` / `React.memo` — the compiler owns memoization. The strict `react-hooks` lint is the prerequisite that keeps it safe.
+- **Name your effects.** `useEffect(function syncDeployStatus() {…})` — an unnameable effect is doing too much (split it). Named effects make AI-generated code reviewable at a glance.
+- **Effects are a last resort.** External/real-time data → `useSyncExternalStore` subscription; latest-value reads inside effects → `useEffectEvent` (React 19.2) so deps stay real triggers only. `startTransition` only for genuinely heavy updates (big list filters), never habitually.
+- **Parse, don't validate.** Every external boundary (API responses, webhooks, URL params, storage) goes through zod `safeParse`. Domain identifiers are branded — `z.string().brand<'GitSha'>()` etc. — so mixed-up arguments fail at compile time. `as` casts live only inside parsers; `any`/`@ts-ignore` are lint errors.
+- **URL is state.** Shareable view state (filters, tabs, time ranges, sort, pagination) lives in `searchParams`, read by Server Components. Rule of thumb: "if someone opens this URL, must they see the same screen?" Never put secrets/ephemeral UI state in the URL. push for undoable steps, replace (debounced) for live typing.
+
 ## Architecture
 
 - **Server Components by default.** Everything in `app/` stays a Server Component unless it needs interactivity. Push `'use client'` to the **smallest leaf** that actually needs state/effects/handlers — never on layouts or data-heavy sections.
