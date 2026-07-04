@@ -8,9 +8,7 @@
   "scripts": {
     "frontend": "yarn workspace @mocco/frontend",
     "backend": "yarn workspace @mocco/backend",
-    "common": "yarn workspace @mocco/common",
     "lint": "concurrently --max-processes 1 \"yarn:lint-*\"",
-    "lint-common": "yarn common lint && yarn common ts-check",
     "lint-backend": "yarn backend lint && yarn backend ts-check",
     "lint-frontend": "yarn frontend lint && yarn frontend ts-check",
     "test": "yarn backend test",
@@ -21,8 +19,7 @@
     "run-frontend": "yarn frontend dev",
     "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "db:seed": "tsx src/backend/db/seed.ts"
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
