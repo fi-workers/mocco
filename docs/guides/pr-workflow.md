@@ -33,8 +33,10 @@ tags: [guide, pr, workflow, process]
 
 ## Cadence
 
-1. Agent builds the slice on a `feat/…` / `chore/…` / `docs/…` / `ci/…` branch, runs the full harness, opens the PR with a Summary + Verified body.
-2. Maintainer reviews and merges (any merge strategy).
-3. **Feedback auto-promotion**: any rule-worthy review feedback is promoted by the agent, in the same session, to the strongest enforcing layer — lint rule > test > AGENTS.md > skill/docs — and announced in the PR. The process learns without anyone having to remember.
+1. Agent builds the slice on a `feat/…` / `chore/…` / `docs/…` / `ci/…` branch and runs the full harness.
+2. **Pre-PR senior team review** (`/pr` skill): five independent persona reviewers (product planner, backend, frontend, platform engineer, designer) read the raw diff — never the author's summary — and return severity-tagged findings. Blockers/majors are adversarially verified (evidence required, noise discarded), tests are strengthened for every confirmed finding and flagged untested path, then the PR is opened with a Team review section.
+3. **Post-PR review loop** (`/pr-review` skill): three fresh-eyes reviewers (correctness+security / conventions+architecture / tests+UX) re-review the posted diff, confirmed findings are fixed as new commits, and the loop repeats until a round is clean (max 3) — then the agent posts "Ready to merge ✅" and reports **머지 준비 완료**.
+4. Maintainer reviews and merges (any merge strategy). The agent never merges.
+5. **Feedback auto-promotion**: any rule-worthy review feedback is promoted by the agent, in the same session, to the strongest enforcing layer — lint rule > test > AGENTS.md > skill/docs — and announced in the PR. The process learns without anyone having to remember.
 
 See also: [AGENTS.md](../../AGENTS.md) · [frontend conventions](../reference/frontend-conventions.md) · [CI conventions](../reference/ci-conventions.md)

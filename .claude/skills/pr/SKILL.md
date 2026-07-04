@@ -1,11 +1,11 @@
 ---
 name: pr
-description: Ship one small, review-ready PR the Mocco way — one concern, green harness, English-only, house commit/PR format. Use when starting a new slice of work or when asked to "make a PR" / "다음 PR".
+description: Ship one small, review-ready PR the Mocco way — pre-PR senior team review, strengthened tests, green harness, house commit/PR format. Use when starting a new slice of work or when asked to "make a PR" / "다음 PR".
 ---
 
 # Mocco PR workflow
 
-Ship exactly **one concern per PR**, in dependency order, always green. The reviewer merges; you never merge or push to `main`.
+Ship exactly **one concern per PR**, in dependency order, always green. The human reviewer merges; you never merge or push to `main`. After the PR is up, run the `/pr-review` skill for the post-PR loop.
 
 ## Before you branch
 
@@ -33,6 +33,30 @@ yarn test               # jest incl. pglite integration
 yarn frontend build     # when frontend changed
 ```
 
+## Pre-PR senior team review (before anything is pushed)
+
+Spawn **five parallel subagents**, one per persona. Anti-rubber-stamp rules (grounded in 2026 multi-agent review practice):
+
+- **Give each reviewer the raw diff (`git diff origin/main`) + repo docs pointers — never your own summary or intentions.** Trusting the implementer's framing is how rubber-stamping happens.
+- Each prompt starts adversarially: _"Assume this diff contains problems. Your job is to find them, not to approve. If you truly find nothing in your domain, say so explicitly."_
+- Reviewers run **independently in parallel** (no shared context — prevents groupthink).
+- Required output shape per finding: `severity (blocker|major|minor) · file:line · issue · evidence · suggested fix · untested paths you noticed`.
+
+| Persona                      | Lens                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Senior Product Planner**   | Does the change match the spec/ADRs/feature-map intent? Scope creep, missing acceptance criteria, naming & UX copy            |
+| **Senior Backend Engineer**  | Correctness, authz/data boundaries, migrations, error paths, missing pglite coverage                                          |
+| **Senior Frontend Engineer** | RSC/client boundaries, frontend-conventions.md compliance (no manual memo, named effects, URL-state), bundle, code-level a11y |
+| **Senior Platform Engineer** | Architecture & coupling, vendor isolation, CI/supply-chain impact, performance, operability                                   |
+| **Senior Designer**          | UI states (loading/error/empty), consistency, responsiveness, visual accessibility                                            |
+
+Then triage:
+
+1. **Adversarially verify every blocker/major** — challenge it against the actual code; demand evidence. Findings that don't survive are discarded (noise control). Minors are batched or dropped with a stated reason.
+2. **Strengthen tests**: convert confirmed findings AND reviewer-flagged untested paths into new/extended tests — failure paths first (wrong input, unauthorized, empty states). This step is mandatory even when findings are zero: each reviewer's "untested paths" list must be answered with a test or a written reason.
+3. Apply fixes, re-run the full harness.
+4. **Loop cap**: if fixes were substantial, run one more panel round (max 2 rounds total or until a round yields zero confirmed blockers/majors).
+
 ## Commit & PR format
 
 6. Commit message: conventional prefix, English, imperative. End with exactly:
@@ -46,12 +70,16 @@ yarn frontend build     # when frontend changed
 
    <what this slice is, 2-6 bullets — say what's intentionally NOT here>
 
+   ## Team review
+
+   <N findings (X blocker / Y major / Z minor) → fixed / discarded-with-reason; tests added>
+
    ## Verified
 
    <the actual harness results: test counts, build, lint>
    ```
    Title = the commit subject. Keep PR bodies free of session links too.
-8. Tell the user the PR URL and wait for their review/merge signal before starting the next slice.
+8. **Hand off to `/pr-review`** for the post-PR loop, then tell the user the PR URL. Wait for their merge signal before the next slice.
 
 ## After merge
 

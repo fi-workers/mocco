@@ -44,7 +44,7 @@ Tests must pass without docker: integration tests run on **pglite** (in-memory W
 
 ## PR conventions
 
-Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md) — or invoke the `/pr` skill (`.claude/skills/pr/SKILL.md`), which is the executable version.
+Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md). Executable versions: `/pr` (build → senior team review → strengthened tests → PR) and `/pr-review` (posted-PR review loop → fixes → "Ready to merge").
 
 - **Small PRs, one concern each**, in dependency order. Keep every PR installable and green on a fresh clone.
 - **Feedback auto-promotion**: when review feedback states or implies a reusable rule, the agent must promote it immediately to the strongest layer — lint rule > test > AGENTS.md > skill/docs — in the same session, and say so. Don't rely on memory.
