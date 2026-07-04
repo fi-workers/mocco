@@ -40,7 +40,8 @@ export const workspaces = pgTable(
   {
     id: uuid().primaryKey().defaultRandom(),
     name: text().notNull(),
-    slug: text().notNull().unique(),
+    // uniqueness is the case-insensitive index below (subsumes exact uniqueness)
+    slug: text().notNull(),
     logo: text(),
     metadata: text(),
     createdAt,

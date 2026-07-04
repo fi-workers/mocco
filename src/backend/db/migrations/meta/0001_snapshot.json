@@ -1,5 +1,5 @@
 {
-  "id": "5bf6788a-8b7a-4df1-9ac7-70adf4c2e1d6",
+  "id": "58ea52f8-ff26-4970-a8cd-82ab26b92731",
   "prevId": "4645f2c5-d6f8-4c5e-85ab-c45c2cc5ffc0",
   "version": "7",
   "dialect": "postgresql",
@@ -551,15 +551,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "mocco_workspaces_slug_unique": {
-          "name": "mocco_workspaces_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

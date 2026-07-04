@@ -13,8 +13,7 @@ CREATE TABLE "mocco_workspaces" (
 	"slug" text NOT NULL,
 	"logo" text,
 	"metadata" text,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "mocco_workspaces_slug_unique" UNIQUE("slug")
+	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "mocco_sessions" ADD COLUMN "active_workspace_id" uuid;--> statement-breakpoint

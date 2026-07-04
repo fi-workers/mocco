@@ -15,14 +15,14 @@ tags: [reference, workspace, auth, schema]
 
 ## Naming decision
 
-The product term is **workspace**, everywhere users and the DB can see: tables are `mocco_workspaces` / `mocco_members`, columns are `workspace_id` / `active_workspace_id`. The vendor's model vocabulary ("organization") survives only as drizzle object keys inside `db/schema.ts` and the adapter mapping in `auth/provider.ts` — the two files that are allowed to know the vendor. Public APIs and future UI say workspace.
+The product term is **workspace**, everywhere users and the DB can see: tables are `mocco_workspaces` / `mocco_members`, columns are `workspace_id` / `active_workspace_id`. The vendor's model vocabulary ("organization") survives only inside `auth/` (the provider, and the auth tests that legitimately exercise the vendor API) plus the drizzle object keys in `db/schema.ts` that the adapter mapping requires. Everything outside that boundary — public APIs, docs, future UI — says workspace, and eslint blocks vendor imports outside `auth/`.
 
 ## Tables & invariants (enforced at the DB)
 
 | Invariant | Mechanism |
 |---|---|
 | One membership per (workspace, user) | `UNIQUE (workspace_id, user_id)` |
-| Slug unique **case-insensitively** | `UNIQUE INDEX on lower(slug)` (vendor pre-check is exact-match only) |
+| Slug unique **case-insensitively** | `UNIQUE INDEX on lower(slug)` — the only slug uniqueness (subsumes exact matches; vendor pre-check is exact-match only) |
 | Roles limited to `owner · admin · member` | CHECK constraint (widen via migration when dynamic roles land) |
 | Deleting a workspace removes memberships | FK `ON DELETE CASCADE` |
 | Deleting a workspace clears sessions pointing at it | `sessions.active_workspace_id` FK `ON DELETE SET NULL` |
@@ -36,7 +36,7 @@ The product term is **workspace**, everywhere users and the DB can see: tables a
 
 ## Deferred (by design)
 
-- **Invitations** — land together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index, and a deliberate inviter-deletion policy — naive `inviter_id ON DELETE CASCADE` would silently destroy pending invites when the inviter leaves).
+- **Invitations** — land together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index, and a deliberate inviter-deletion policy — naive `inviter_id ON DELETE CASCADE` would silently destroy pending invites when the inviter leaves). ⚠️ The vendor's default table name is unprefixed `invitation`: the invite-flow PR must map it to `mocco_invitations` or the `mocco_` prefix invariant silently breaks.
 - **Frontend client plugin** — the client wrapper does not yet register the organization client, so the client-side session type lacks `activeOrganizationId` while the server session has it. This skew is known and must be closed atomically with the first workspace UI (add the client plugin + neutral helpers in `lib/auth-client.ts` in that same PR).
 - Teams, dynamic roles, workspace-level settings.
 

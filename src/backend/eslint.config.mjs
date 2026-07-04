@@ -18,6 +18,10 @@ export default [
               group: ['**/auth/provider', '*/auth/provider'],
               message: 'Import the neutral auth surface (auth/index.ts) instead of the vendor provider.',
             },
+            {
+              group: ['better-auth', 'better-auth/*'],
+              message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/index.ts).',
+            },
           ],
         },
       ],
