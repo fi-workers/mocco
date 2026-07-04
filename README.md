@@ -8,8 +8,8 @@
 ## Quickstart (local)
 
 ```bash
-make application     # brew: mkcert traefik cloudflared node corepack
-make initialize      # certs + /etc/hosts + tunnel + yarn install
+make application     # brew: mkcert traefik node corepack
+make initialize      # certs + /etc/hosts + yarn install
 make docker-up       # local Postgres
 yarn db:migrate      # apply schema
 yarn db:seed         # sample data (optional)
