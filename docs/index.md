@@ -19,7 +19,7 @@ related:
 ## Product core
 
 - **Reason to exist:** even with GitHub write permission, block deploys for anyone without production deploy permission.
-- **Four components:** GitHub App / Commit Sync UI / Approval & Policy Engine / Verify Action
+- **Core model:** pipelines pause at **gates**; only authorized roles resume them, and **credential gating** (OIDC/STS) makes bypass impossible. Executor-agnostic — GitHub Actions is the first adapter (ADR 0003/0004).
 
 ## Decisions (ADR)
 

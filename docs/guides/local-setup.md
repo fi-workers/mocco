@@ -28,7 +28,7 @@ Local DB → docker compose postgres(:5432)
 make application   # brew: mkcert nss traefik node corepack
 make initialize    # certs(mkcert) + hosts(/etc/hosts, sudo) + yarn install
 make docker-up     # local Postgres
-yarn db:generate && yarn db:migrate
+yarn db:migrate     # migrations are committed; generate only when changing schema.ts
 ```
 
 - `make certs` — `mkcert mocco.work '*.mocco.work'` → `infra/local/cert/` (gitignore)
