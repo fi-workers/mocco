@@ -212,6 +212,7 @@ describe('workspace (organization plugin) on pglite', () => {
     });
 
     const rows = await t.db.select().from(t.schema.members);
+    expect(rows).toHaveLength(2); // exactly owner + the updated member, no duplicates
     expect(new Set(rows.map(r => r.role))).toEqual(new Set(['owner', 'admin,member']));
   });
 

@@ -25,5 +25,6 @@ tags: [reference, ci, security, supply-chain, github-actions]
 
 ## Initial workflows (the CI PR)
 
-- `ci.yml` — on `pull_request` + `push` to main: install (immutable) → lint (backend+frontend) → ts-check → test (pglite) → frontend build. No secrets, `permissions: contents: read`, SHA-pinned actions, `pr-` scoped cache (or none).
+- `ci.yml` — on `pull_request` + `merge_group` + `push` to main: install (immutable, dependency scripts disabled) → format check → lint (backend+frontend, incl. ts-check) → test (pglite) → migration-drift check → frontend build. No secrets, `permissions: contents: read`, SHA-pinned actions, `pr-` scoped cache (or none).
 - Publishing/release workflows do not exist yet; when they do, they follow rules 3–5 and get their own review.
+- **Required checks**: after `ci.yml` lands, branch protection on `main` must require the `ci` check (checks that only advise don't gate — write ≠ deploy applies to us too).

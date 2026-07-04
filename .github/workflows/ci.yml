@@ -49,5 +49,13 @@ jobs:
         run: yarn lint
       - name: Test (jest + pglite integration)
         run: yarn test
+      - name: Migration drift check (schema.ts must match committed migrations)
+        run: |
+          yarn db:generate
+          test -z "$(git status --porcelain src/backend/db/migrations)" || {
+            echo '::error::drizzle migrations out of sync with schema.ts — run yarn db:generate and commit the result'
+            git status --porcelain src/backend/db/migrations
+            exit 1
+          }
       - name: Build (Next.js)
         run: yarn frontend build
