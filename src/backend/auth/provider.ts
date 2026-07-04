@@ -52,7 +52,7 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
           // Slugs are case-insensitively unique at the DB (lower(slug) index);
           // normalize on create so stored slugs are always lowercase and the
           // vendor's exact-match duplicate pre-check stays meaningful.
-          beforeCreateOrganization: ({ organization: org }) => ({
+          beforeCreateOrganization: async ({ organization: org }) => ({
             data: { ...org, slug: org.slug?.toLowerCase() },
           }),
         },

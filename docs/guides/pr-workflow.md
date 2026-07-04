@@ -17,7 +17,7 @@ tags: [guide, pr, workflow, process]
 
 - **One concern per PR**, in dependency order. Small enough to actually review — the reviewer is the safety mechanism, not a rubber stamp.
 - **Sequential landing.** The next slice starts from fresh `main` after the previous PR merges. No long-lived stacks.
-- **Every PR is green and installable on a fresh clone**: lint (`--max-warnings 0`), ts-check, tests (pglite, docker-free), frontend build, `yarn install` without lockfile drift.
+- **Every PR is green and installable on a fresh clone**: format (`yarn format:check`), lint (`--max-warnings 0`), ts-check, tests (pglite, docker-free), migration drift (schema.ts ↔ committed migrations), frontend build, `yarn install` without lockfile drift — the same set CI enforces (`.github/workflows/ci.yml`).
 - **`main` is never pushed directly** — everything goes through a PR, reviewed and merged by a maintainer.
 
 ## House rules enforced per PR
