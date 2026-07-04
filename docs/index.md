@@ -45,6 +45,7 @@ related:
 ## Specs · Reference
 
 - [Feature map — MVP scope](./reference/feature-map.md) — MVP vs Post-MVP
+- [Prototype scope & IA](./specs/2026-06-30-prototype-scope.md) — click-through screen definitions ([prototype itself](./prototype/README.md))
 - [Workspace model](./reference/workspace.md) — tables, invariants, contracts, known gaps
 - [Frontend conventions](./reference/frontend-conventions.md) — RSC-first, adopted 2026 patterns, lint stack
 - [CI conventions](./reference/ci-conventions.md) — supply-chain hardening rules
