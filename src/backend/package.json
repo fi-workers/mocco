@@ -10,8 +10,10 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {
+    "better-auth": "1.6.23",
     "drizzle-orm": "0.45.2",
-    "pg": "8.22.0"
+    "pg": "8.22.0",
+    "zod": "4.1.13"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
