@@ -65,6 +65,11 @@ export type Provider = ReturnType<typeof createProvider>;
 
 const state: { provider?: Provider } = {};
 
+/** Test wiring only: point the default instance at an isolated (pglite) provider. */
+export function setProviderForTesting(provider: Provider | undefined): void {
+  state.provider = provider;
+}
+
 /** Default instance bound to the app DB. Created lazily so builds don't need env. */
 export function getProvider(): Provider {
   if (!state.provider) {
