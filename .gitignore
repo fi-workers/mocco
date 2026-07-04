@@ -19,6 +19,4 @@ infra/local/cert/*.pem
 
 # Local agent/editor settings (never commit to the public repo)
 .claude/
-CLAUDE.md
 CLAUDE.local.md
-AGENTS.md
