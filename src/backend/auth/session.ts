@@ -15,3 +15,12 @@ export async function authHandler(request: Request): Promise<Response> {
 export async function getSession(headers: Headers): Promise<Session | null> {
   return await getProvider().api.getSession({ headers });
 }
+
+export {
+  listWorkspaces,
+  createWorkspace,
+  setActiveWorkspace,
+  getActiveWorkspace,
+  type Workspace,
+  type WorkspaceMember,
+} from './workspaces';

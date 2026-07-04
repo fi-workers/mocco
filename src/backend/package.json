@@ -12,9 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@trpc/server": "11.18.0",
     "better-auth": "1.6.23",
     "drizzle-orm": "0.45.2",
     "pg": "8.22.0",
+    "superjson": "2.2.6",
     "zod": "4.1.13"
   },
   "devDependencies": {
