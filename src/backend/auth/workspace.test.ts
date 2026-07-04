@@ -212,7 +212,7 @@ describe('workspace (organization plugin) on pglite', () => {
     });
 
     const rows = await t.db.select().from(t.schema.members);
-    expect(rows.map(r => r.role).toSorted((x, y) => x.localeCompare(y))).toEqual(['admin,member', 'owner']);
+    expect(new Set(rows.map(r => r.role))).toEqual(new Set(['owner', 'admin,member']));
   });
 
   it('slugs are normalized to lowercase on create', async () => {

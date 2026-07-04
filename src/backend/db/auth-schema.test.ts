@@ -12,10 +12,7 @@ describe('auth schema (users/sessions/accounts/verifications)', () => {
   });
 
   it('user insert/select after migrations are applied', async () => {
-    const [u] = await t.db
-      .insert(t.schema.users)
-      .values({ email: 'andrea@example.com', name: 'andrea' })
-      .returning();
+    const [u] = await t.db.insert(t.schema.users).values({ email: 'andrea@example.com', name: 'andrea' }).returning();
 
     expect(u?.id).toBeTruthy();
     expect(u?.emailVerified).toBe(false);
