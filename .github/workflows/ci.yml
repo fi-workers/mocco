@@ -51,7 +51,8 @@ jobs:
         run: yarn test
       - name: Migration drift check (schema.ts must match committed migrations)
         run: |
-          yarn db:generate
+          # stdin closed: an ambiguous rename would otherwise prompt and hang until timeout
+          yarn db:generate < /dev/null
           test -z "$(git status --porcelain src/backend/db/migrations)" || {
             echo '::error::drizzle migrations out of sync with schema.ts — run yarn db:generate and commit the result'
             git status --porcelain src/backend/db/migrations
