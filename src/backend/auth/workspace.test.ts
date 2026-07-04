@@ -136,6 +136,30 @@ describe('workspace (organization plugin) on pglite', () => {
     expect(owners).toHaveLength(1);
   });
 
+  it('a non-member cannot set a workspace they do not belong to as active', async () => {
+    const { headers: ownerHeaders } = await signUp('owner@example.com');
+    const org = await auth.api.createOrganization({
+      body: { name: 'Private', slug: 'private-ws' },
+      headers: ownerHeaders,
+    });
+
+    const { headers: strangerHeaders } = await signUp('stranger@example.com');
+    await expect(
+      auth.api.setActiveOrganization({
+        body: { organizationId: org?.id ?? '' },
+        headers: strangerHeaders,
+      }),
+    ).rejects.toBeTruthy();
+
+    // membership unchanged (owner only) and no stranger session points at the workspace
+    expect(await t.db.select().from(t.schema.members)).toHaveLength(1);
+    const pointing = await t.db
+      .select()
+      .from(t.schema.sessions)
+      .where(eq(t.schema.sessions.activeOrganizationId, org?.id ?? ''));
+    expect(pointing).toHaveLength(1); // the owner's own session only
+  });
+
   it('unauthenticated createWorkspace is rejected', async () => {
     await expect(
       auth.api.createOrganization({ body: { name: 'Nope', slug: 'nope' }, headers: new Headers() }),

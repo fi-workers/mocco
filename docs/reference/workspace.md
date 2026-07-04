@@ -36,9 +36,14 @@ The product term is **workspace**, everywhere users and the DB can see: tables a
 
 ## Deferred (by design)
 
-- **Invitations** — land together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index).
+- **Invitations** — land together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index, and a deliberate inviter-deletion policy — naive `inviter_id ON DELETE CASCADE` would silently destroy pending invites when the inviter leaves).
 - **Frontend client plugin** — the client wrapper does not yet register the organization client, so the client-side session type lacks `activeOrganizationId` while the server session has it. This skew is known and must be closed atomically with the first workspace UI (add the client plugin + neutral helpers in `lib/auth-client.ts` in that same PR).
 - Teams, dynamic roles, workspace-level settings.
+
+## Known gaps (accepted for this slice, revisit with workspace UI)
+
+- **Last-owner protection**: ownership lives only in `members.role='owner'`; deleting the last owner (user cascade) leaves an ownerless workspace row. Role transitions (`updateMemberRole`) and sole-owner guards are untested until the member-management UI lands.
+- `expiresAt`-style timestamps are `timestamp` without timezone — fine while everything runs UTC; revisit if that assumption changes.
 
 ## Boundary enforcement
 
