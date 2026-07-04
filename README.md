@@ -39,7 +39,7 @@ docs/prototype/ non-functional click-through (design validation)
 - lint: **ESLint 10 flat** (airbnb-extended + typescript-eslint strict + unicorn + sonarjs), prettier
 - test: Jest (backend, including pglite integration tests) · build: Next.js
 - `make dev` / `yarn lint` / `yarn test` / `yarn format` / `yarn frontend build`
-- CI runs this same harness on every PR (`.github/workflows/ci.yml`)
+- CI gates every PR with the same checks: format:check · lint+ts · tests · migration drift · build (`.github/workflows/ci.yml`)
 - Decision records: `docs/adr/`
 
 ## License
