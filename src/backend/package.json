@@ -1,0 +1,28 @@
+{
+  "name": "@mocco/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
+    "@types/jest": "30.0.0",
+    "@types/pg": "8.20.0",
+    "eslint": "10.6.0",
+    "jest": "30.4.2",
+    "ts-jest": "29.4.11",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
