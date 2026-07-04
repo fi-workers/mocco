@@ -1,0 +1,18 @@
+[log]
+level = "INFO"
+
+[providers.file]
+filename = "traefik-dynamic.toml"
+watch = true
+
+[api]
+dashboard = true
+insecure = true
+
+[entryPoints.http]
+address = ":80"
+[entryPoints.http.http.redirections.entryPoint]
+to = "https"
+
+[entryPoints.https]
+address = ":443"
