@@ -4,6 +4,17 @@ import { createTestDb, type TestDb } from '../db/testing/pglite';
 
 import { createProvider, type Provider } from './provider';
 
+/** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
+const causeOf = async (p: Promise<unknown>): Promise<string> => {
+  try {
+    await p;
+    return '';
+  } catch (error) {
+    const {cause} = (error as { cause?: { message?: string } });
+    return cause?.message ?? (error as Error).message;
+  }
+};
+
 // Full-stack workspace tests on pglite: real migrations + real provider with the
 // organization plugin, mapped onto product-termed tables (mocco_workspaces).
 describe('workspace (organization plugin) on pglite', () => {
@@ -54,6 +65,7 @@ describe('workspace (organization plugin) on pglite', () => {
       headers,
     });
 
+    expect(org?.id).toBeTruthy();
     const sessions = await t.db.select().from(t.schema.sessions);
     expect(sessions[0]?.activeOrganizationId).toBe(org?.id);
   });
@@ -103,16 +115,23 @@ describe('workspace (organization plugin) on pglite', () => {
 
     await expect(
       auth.api.createOrganization({ body: { name: 'Two', slug: 'same-slug' }, headers }),
-    ).rejects.toBeTruthy();
+    ).rejects.toMatchObject({ status: 'BAD_REQUEST' });
+
+    expect(await t.db.select().from(t.schema.workspaces)).toHaveLength(1);
   });
 
   it('rejects a case-variant slug collision at the DB (lower(slug) unique)', async () => {
     const { headers } = await signUp('owner@example.com');
     await auth.api.createOrganization({ body: { name: 'One', slug: 'acme-lab' }, headers });
 
+    // via the vendor API
     await expect(
       auth.api.createOrganization({ body: { name: 'Two', slug: 'Acme-Lab' }, headers }),
     ).rejects.toBeTruthy();
+
+    // and directly against the DB, proving the lower(slug) unique index is what rejects
+    const cause = await causeOf(t.db.insert(t.schema.workspaces).values({ name: 'Three', slug: 'ACME-LAB' }));
+    expect(cause).toMatch(/mocco_workspaces_slug_lower_uq/);
 
     expect(await t.db.select().from(t.schema.workspaces)).toHaveLength(1);
   });
@@ -123,11 +142,14 @@ describe('workspace (organization plugin) on pglite', () => {
     const [ws] = await t.db.select().from(t.schema.workspaces);
     const [other] = await t.db.insert(t.schema.users).values({ email: 'other@example.com' }).returning();
 
-    await expect(
+    expect(ws?.id).toBeTruthy();
+    expect(other?.id).toBeTruthy();
+    const cause = await causeOf(
       t.db
         .insert(t.schema.members)
         .values({ organizationId: ws?.id ?? '', userId: other?.id ?? '', role: 'superadmin' }),
-    ).rejects.toThrow(); // role check constraint
+    );
+    expect(cause).toMatch(/mocco_members_role_check/);
 
     expect(await t.db.select().from(t.schema.members)).toHaveLength(1); // no row added
 
@@ -163,7 +185,7 @@ describe('workspace (organization plugin) on pglite', () => {
   it('unauthenticated createWorkspace is rejected', async () => {
     await expect(
       auth.api.createOrganization({ body: { name: 'Nope', slug: 'nope' }, headers: new Headers() }),
-    ).rejects.toBeTruthy();
+    ).rejects.toMatchObject({ status: 'UNAUTHORIZED' });
   });
 
   it('sign-up alone creates no workspace (zero-workspace contract for onboarding UI)', async () => {
