@@ -31,11 +31,11 @@ export const appRouter = router({
           // exists"), and the DB's case-insensitive lower(slug) unique index
           // (concurrent / case-variant races surface as a pg unique violation).
           const { status } = error as { status?: string };
-          const message = (error as Error).message;
-          const cause = (error as { cause?: { message?: string } }).cause?.message ?? '';
+          const { message } = error as Error;
+          const causeText = (error as { cause?: { message?: string } }).cause?.message;
           if (
             (status === 'BAD_REQUEST' && /already exists/i.test(message)) ||
-            cause.includes('mocco_workspaces_slug_lower_uq')
+            (causeText?.includes('mocco_workspaces_slug_lower_uq') ?? false)
           ) {
             throw new TRPCError({ code: 'CONFLICT', message: 'That slug is already taken.' });
           }

@@ -154,7 +154,7 @@ describe('trpcHandler over HTTP', () => {
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
     const { trpcHandler } = await import('./handler');
 
-    const health = await trpcHandler(new Request('http://local/api/trpc/health'));
+    const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);
 
     const { headers } = await provider.api.signUpEmail({
@@ -167,7 +167,7 @@ describe('trpcHandler over HTTP', () => {
       headers: new Headers({ cookie }),
     });
 
-    const res = await trpcHandler(new Request('http://local/api/trpc/workspace.list', { headers: { cookie } }));
+    const res = await trpcHandler(new Request('https://local.test/api/trpc/workspace.list', { headers: { cookie } }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       result: { data: { json: { slug: string; createdAt: unknown }[]; meta?: unknown } };
