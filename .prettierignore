@@ -1,0 +1,8 @@
+# llm-wiki (own format/frontmatter, ADRs are immutable) and prototypes are not prettier targets
+docs/
+docs/prototype/
+# Generated artifacts
+src/backend/db/migrations/
+.yarn/
+**/.next/
+**/dist/
