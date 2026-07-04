@@ -23,26 +23,29 @@ related:
 
 - Surface the original four components (GitHub App / Commit Sync UI / Approval & Policy Engine / Verify Action) as screens.
 - Make the **7 MVP gaps** from the GitLab gap analysis explicitly visible in the UI (self-approval block, approval↔dispatch separation, token binding, multi-approval rules, outdated rejection, concurrency modes, tamper-proof audit).
-- Hint at the long-term vision (ops control plane) via disabled nav items (Monitors, etc.).
 
 ## Screen list (click-through)
 
-1. **Dashboard** — connected repos, N pending approvals, recent deploys, current SHA per environment.
-2. **Deploy Queue (Commit Sync)** ★core — the queue of main commit candidates: SHA, message, author, runnable workflow, environment, approval status, run status. Vercel-deployments feel.
-3. **Run Detail / Approval** ★core — a single OrchestrationRun:
-   - State machine visualization: `Discovered → Queued → PendingApproval(blocked) → Approved → ReadyToRun → Dispatching → Dispatched → Running → Succeeded|Failed`
-   - Multi-approval rules (e.g., SRE ×2 AND Security ×1), `pending_approval_count`
-   - Self-approval block badge (triggerer/committer have the approve button disabled)
-   - Approval token card (bind: sha/env/workflow_hash, ttl, single-use)
-   - Approval↔dispatch separation (even after approval is satisfied, Dispatch is a separate button)
-   - Outdated warning (shows a rejection if this SHA is an ancestor of the currently deployed SHA)
-   - Verify result, retry / rollback buttons
-4. **Environment Policy (.mocco.yml)** — per-environment cards + raw YAML view:
-   - tier, allowed_to_deploy ↔ approvers **separated**, approval rules (N-of-M), prevent_self_approval
-   - concurrency mode (oldest_first/newest_first…), safety (prevent_outdated), preconditions, secrets_scope
-5. **Verify Action** — workflow YAML snippet (`mocco/verify@v1`) + 17-item verification checklist + an "unsafe" (Verify removed from the workflow) detection indicator.
-6. **Audit Log** — structured event timeline, hash chain badge (append-only/tamper-proof), actor/result/sha/env filters.
-7. **Settings** — GitHub App install / connected repos, policy override (org-level).
+> Updated 2026-07-04 to match the shipped prototype (the original draft predated ADR 0003's no-env reframe and the workspace group).
+
+**Governance**
+
+1. **Deploy Queue** ★core (home) — main commit candidates: SHA, message, author, workflow, gate status, run status, per-row progress steps. Vercel-deployments feel.
+2. **Run Detail** ★core — a single run:
+   - Pipeline DAG (steps + parallel fan-in) and state machine: `Discovered → Queued → PendingApproval(blocked) → Approved → ReadyToRun → Dispatched → Running → Succeeded|Failed`
+   - Deploying-commit card (author, full message, SHA, branch)
+   - Multi-resume rules (e.g., SRE ×2 AND Security ×1), self-approval block, approval token card (bind: sha/step/workflow_hash, ttl, single-use)
+   - Approval↔dispatch separation, outdated warning, per-step logs, retry/rollback/stop actions
+3. **Access** ★wedge (ADR 0002) — roles → members, GitHub permission vs Mocco authorization side-by-side (write ≠ deploy made visible).
+4. **Pipelines & Gates** — the `.mocco.yml` pipeline (steps + gates) with per-gate cards; **Concurrency** and **Verify & enforcement** as sub-tabs (process modes; 17-item checklist; per-run credential decisions).
+5. **Audit Log** — structured event timeline, hash chain badge (append-only), actor/result filters.
+6. **Settings** — GitHub App install, org policy override.
+
+**Workspace**
+
+7. **Repos** — connected repos per GitHub org, `.mocco.yml` detection, pipeline/gate counts.
+8. **Members** — workspace members and roles (owner/admin/member).
+9. **Integrations** — GitHub App, cloud OIDC, notifications.
 
 ## Non-goals (not done in the prototype)
 

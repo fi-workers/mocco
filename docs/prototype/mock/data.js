@@ -37,7 +37,6 @@ window.MOCK = {
     { role:"Owner", can:"All permissions · billing · delete workspace", count:1 },
     { role:"Admin", can:"repo links · member management · policies · Integrations", count:1 },
     { role:"Member", can:"Assigned repo governance roles only (assigned in Access)", count:4 },
-    { role:"Billing", can:"View billing/invoices only", count:0 },
   ],
 
   // External integrations (Integrations) — owned by the workspace

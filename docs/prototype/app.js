@@ -537,7 +537,7 @@ function scVerify(){
 
   <div class="card section-gap" style="padding:0"><div class="card-head" style="padding:14px 16px 10px;margin:0;border-bottom:1px solid var(--border)"><h3>Credential decisions — per run</h3><span class="right badge accent">the enforcement, logged</span></div>
     <div style="padding:10px 16px 0" class="card-sub">STS <span class="mono">AssumeRole</span> is granted only to a <b>resumed + verified</b> run. This log is where bypass actually fails — no valid token ⇒ no cloud credential ⇒ no deploy.</div>
-    <table class="tbl"><thead><tr><th>Run</th><th>Commit · env</th><th>Approval token</th><th>Verify</th><th>OIDC / STS decision</th></tr></thead><tbody>
+    <table class="tbl"><thead><tr><th>Run</th><th>Commit</th><th>Approval token</th><th>Verify</th><th>OIDC / STS decision</th></tr></thead><tbody>
     ${credentialDecisionRows()}
     </tbody></table>
     <div class="notice ok section-gap" style="margin:0 16px 14px"><span class="ic">✓</span><div><b>Trust condition holds</b> — every "granted" row had a valid token + passing verify; every "denied/withheld" row did not. Deleting the Verify step can't change this column.</div></div>
@@ -560,7 +560,7 @@ function credentialDecisionRows(){
     const vtxt = r.verify.ok?'pass':r.verify.fail?'fail':(r.verify.status||'—');
     return `<tr class="clickable" onclick="location.hash='#/run/${r.id}'">
       <td class="mono" style="font-size:12px">${r.id}</td>
-      <td><span class="sha">${r.sha}</span> <span class="muted" style="font-size:11px">${r.environment}</span></td>
+      <td><span class="sha">${r.sha}</span></td>
       <td>${r.token?'<span class="badge neutral"><span class="dot"></span>token</span>':'<span class="muted">none</span>'}</td>
       <td><span class="badge ${vcls}">${vtxt}</span></td>
       <td><span class="badge ${cls}">${label}</span></td>
