@@ -301,6 +301,9 @@ window.MOCK = {
   concurrencyQueue: {
     group: "deploy",
     holding: { runId: "run_316", sha: "a1b2c3d", since: "08:02", state: "run complete → lock released" },
+    // Deliberately one waiting run (matches live run states — no phantom rows).
+    // The three process modes are explained in the mode cards; reordering demos
+    // can return when more concurrent mock runs exist coherently.
     waiting: [
       { runId: "run_318", sha: "9f3c2a1", seq: 1, queuedAt: "09:14", note: "pending approval" },
     ],

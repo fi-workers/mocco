@@ -33,4 +33,4 @@ python3 -m http.server -d docs/prototype 8080
 
 ## Change log
 
-The prototype's evolution and the feedback folded into it are recorded in `the repo CHANGELOG`. 
+The prototype's evolution and the feedback folded into it are recorded in the repo [CHANGELOG](../../CHANGELOG.md).

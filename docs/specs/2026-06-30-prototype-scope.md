@@ -55,6 +55,6 @@ related:
 
 ## Mock data
 
-- repo: `acme/deploy-service` (fictional example), environments: production/staging/preview
+- repo: `acme/deploy-service` (fictional example)
 - 5–6 commits, a few runs (one per state machine stage), ~10 audit events
-- Stored statically in `docs/prototype/mock/data.js (static `window.MOCK` object)`
+- Stored statically in `docs/prototype/mock/data.js` (a static `window.MOCK` object)
