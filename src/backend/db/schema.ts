@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
@@ -26,6 +27,55 @@ export const users = pgTable('mocco_users', {
   updatedAt,
 });
 
+// ─────────────────────────────────────────────────────────────
+// Workspace = the auth vendor's organization plugin, mapped onto product-termed
+// tables (mocco_workspaces / mocco_members). drizzle KEYS must match the plugin's
+// field names (organizationId etc.); table & column NAMES are ours. Cross-checked
+// against the vendor CLI's generated schema. Invitations land with the invite flow.
+// ─────────────────────────────────────────────────────────────
+
+/** Workspace (vendor model: organization). */
+export const workspaces = pgTable(
+  'mocco_workspaces',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    slug: text().notNull().unique(),
+    logo: text(),
+    metadata: text(),
+    createdAt,
+  },
+  table => [
+    // The vendor's duplicate-slug pre-check is exact-match only; this closes the
+    // case-variant hole ('acme-lab' vs 'Acme-Lab') at the DB.
+    uniqueIndex('mocco_workspaces_slug_lower_uq').on(sql`lower(${table.slug})`),
+  ],
+);
+
+/** Workspace membership (vendor model: member). One row per (workspace, user). */
+export const members = pgTable(
+  'mocco_members',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text().notNull().default('member'),
+    createdAt,
+  },
+  table => [
+    // Also serves workspace-scoped lookups (composite prefix), so no extra
+    // standalone workspace_id index is needed.
+    uniqueIndex('mocco_members_workspace_user_uq').on(table.organizationId, table.userId),
+    index('mocco_members_user_id_idx').on(table.userId),
+    // MVP role set; widen via migration when dynamic roles land.
+    check('mocco_members_role_check', sql`${table.role} in ('owner', 'admin', 'member')`),
+  ],
+);
+
 /** Session. */
 export const sessions = pgTable(
   'mocco_sessions',
@@ -38,6 +88,11 @@ export const sessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    // organization plugin field (drizzle key fixed by the vendor); column speaks product terms.
+    // FK self-heals: deleting a workspace clears every session pointing at it.
+    activeOrganizationId: uuid('active_workspace_id').references(() => workspaces.id, {
+      onDelete: 'set null',
+    }),
     createdAt,
     updatedAt,
   },

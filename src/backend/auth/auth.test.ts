@@ -2,8 +2,6 @@ import { createTestDb, type TestDb } from '../db/testing/pglite';
 
 import { createProvider, type Provider } from './provider';
 
-import type { Db } from '../db/client';
-
 // Full-stack auth test on pglite: real migrations + real auth provider.
 // Catches schema/adapter drift that unit mocks would miss.
 describe('auth (email + password) on pglite', () => {
@@ -12,7 +10,7 @@ describe('auth (email + password) on pglite', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    auth = createProvider(t.db as unknown as Db, { secret: 'test-secret-not-for-prod' });
+    auth = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
   });
   afterEach(async () => {
     await t.close();
