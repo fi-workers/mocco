@@ -30,7 +30,7 @@ related:
 
 ## Implementation
 
-- `src/` — the actual code monorepo (ADR 0005 stack). `@mocco/{frontend,backend,common}`
+- `src/` — the actual code monorepo (ADR 0005 stack). `@mocco/{frontend,backend}` (`common` returns with the governance domain)
 
 ## Guides
 
