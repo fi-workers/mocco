@@ -1,0 +1,27 @@
+[http]
+
+[http.middlewares.www-redirect.redirectregex]
+permanent = true
+regex = "^https://www.mocco.work/(.*)"
+replacement = "https://mocco.work/${1}"
+
+[http.routers.mocco-www]
+rule = "Host(`www.mocco.work`)"
+service = "noop@internal"
+middlewares = ["www-redirect"]
+entryPoints = ["https"]
+[http.routers.mocco-www.tls]
+
+[http.routers.mocco]
+rule = "Host(`mocco.work`)"
+service = "mocco"
+entryPoints = ["https"]
+[http.routers.mocco.tls]
+
+[http.services.mocco.loadbalancer]
+[[http.services.mocco.loadbalancer.servers]]
+url = "http://localhost:3100"
+
+[[tls.certificates]]
+certFile = "../cert/mocco.work+1.pem"
+keyFile = "../cert/mocco.work+1-key.pem"
