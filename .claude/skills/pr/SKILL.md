@@ -56,4 +56,16 @@ yarn frontend build     # when frontend changed
 ## After merge
 
 9. `git fetch origin` and start the next slice from fresh `origin/main` (no stacked branches across merges).
-10. If review feedback recurs, promote it into a lint rule, test, or AGENTS.md line — don't rely on memory.
+
+## Feedback promotion (automatic — do not skip)
+
+Whenever the reviewer or user gives a correction, style preference, or "다시는 이러지 말자"-type note — during review or anywhere in the session — you MUST run this loop yourself, without being asked:
+
+1. **Judge**: will this plausibly apply to future PRs (convention/preference/recurring mistake)? One-off contextual fixes don't qualify.
+2. **Pick the strongest enforcing layer** that can hold the rule:
+   1. **Lint rule** (machine-enforced — best) → eslint config
+   2. **Test** (regression-proof) → jest/pglite
+   3. **AGENTS.md** (every future agent session reads it)
+   4. **This skill** (process rules) or `docs/reference/*` (domain conventions)
+3. **Apply it in the same session**: small updates ride the current PR; otherwise an immediate follow-up commit/PR.
+4. **Say what you promoted** in your reply and in the PR body (`Promoted rules: …`). Never promote silently, never drop feedback on memory alone.

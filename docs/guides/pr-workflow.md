@@ -35,6 +35,6 @@ tags: [guide, pr, workflow, process]
 
 1. Agent builds the slice on a `feat/…` / `chore/…` / `docs/…` / `ci/…` branch, runs the full harness, opens the PR with a Summary + Verified body.
 2. Maintainer reviews and merges (any merge strategy).
-3. Recurring review feedback is promoted into a lint rule, a test, or an AGENTS.md line — the process learns.
+3. **Feedback auto-promotion**: any rule-worthy review feedback is promoted by the agent, in the same session, to the strongest enforcing layer — lint rule > test > AGENTS.md > skill/docs — and announced in the PR. The process learns without anyone having to remember.
 
 See also: [AGENTS.md](../../AGENTS.md) · [frontend conventions](../reference/frontend-conventions.md) · [CI conventions](../reference/ci-conventions.md)
