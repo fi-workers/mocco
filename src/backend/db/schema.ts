@@ -12,11 +12,11 @@ const updatedAt = timestamp('updated_at')
   .$onUpdate(() => new Date());
 
 // ─────────────────────────────────────────────────────────────
-// Better Auth (GitHub OAuth login). uuid PK — with betterAuth advanced.database.generateId=false,
+// Auth tables (email+password today; social providers later). uuid PK — with betterAuth advanced.database.generateId=false,
 // ids are generated in the DB (defaultRandom). drizzle keys are camelCase (adapter mapping); columns are snake_case.
 // ─────────────────────────────────────────────────────────────
 
-/** Logged-in user (GitHub identity). */
+/** Logged-in user. */
 export const users = pgTable('mocco_users', {
   id: uuid().primaryKey().defaultRandom(),
   name: text(),

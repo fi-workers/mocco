@@ -56,7 +56,8 @@ Goal: connect repo → define gate → prove that **without approval, a producti
 | Login (email+password) | Live | Vendor-neutral auth surface; Google SSO and GitHub account-linking land as separate PRs |
 | Connect repo | Prototype | Install GitHub App → select repo → detect `.mocco.yml` → OIDC trust. Onboarding |
 | **GitHub App + Cloud OIDC** ★ | **Not drawn** | Dispatch/webhooks (App) + STS trust (OIDC). This wiring is what makes gating real |
-| Workspace + Members | Prototype | Team boundary over multiple orgs. Default WS roles (Owner/Admin/Member) |
+| Workspace model (backend) | **Live** | `mocco_workspaces`/`mocco_members`, DB-enforced invariants — see [workspace model](./workspace.md) |
+| Workspace UI + invite flow | Not drawn | client plugin + screens land together (session-type parity) |
 
 **MVP line**: connect a repo, define a gate, and a production deploy is **provably blocked** until an authorized role resumes (the credential broker proves it, recorded in the audit log). The two not-yet-drawn MVP items (`credential gating`, `GitHub App + OIDC`) were left out of the prototype because they are heavier on the backend than on screens — **without these two, "the gate is actually enforced" does not hold.**
 
