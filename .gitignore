@@ -18,5 +18,7 @@ next-env.d.ts
 infra/local/cert/*.pem
 
 # Local agent/editor settings (never commit to the public repo)
-.claude/
+# — except .claude/skills/, which is shared contributor tooling.
+.claude/*
+!.claude/skills/
 CLAUDE.local.md
