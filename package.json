@@ -19,7 +19,9 @@
     "run-frontend": "yarn frontend dev",
     "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "ci:local": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn ci:drift && yarn frontend build",
+    "ci:drift": "yarn db:generate < /dev/null && test -z \"$(git status --porcelain src/backend/db/migrations)\""
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

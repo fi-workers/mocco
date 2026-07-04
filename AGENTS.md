@@ -28,6 +28,7 @@ make docker-up                    # local Postgres 16
 yarn db:generate && yarn db:migrate
 
 yarn test                         # jest (backend) — includes pglite integration tests
+yarn ci:local                     # full CI mirror — REQUIRED green before any push (pre-push enforces)
 yarn backend lint / ts-check      # per-workspace lint & typecheck
 yarn format                       # prettier
 make dev                          # https://mocco.work (traefik → Next :3100)

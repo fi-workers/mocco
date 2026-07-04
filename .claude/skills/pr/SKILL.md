@@ -26,13 +26,13 @@ Ship exactly **one concern per PR**, in dependency order, always green. The revi
 
 ## Verify (all must pass — run them, don't assume)
 
+**Run the full CI mirror before every push — partial harnesses are not enough:**
+
 ```bash
-yarn install            # clean, no lockfile drift
-yarn lint               # backend + frontend, --max-warnings 0
-yarn backend ts-check && yarn frontend ts-check
-yarn test               # jest incl. pglite integration
-yarn frontend build     # when frontend changed
+yarn ci:local   # = install --immutable → format:check → lint(+ts) → test → migration drift → build
 ```
+
+(husky pre-push runs the same command, so a push cannot leave with a red mirror.)
 
 ## Commit & PR format
 
