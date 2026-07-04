@@ -1,37 +1,37 @@
 /* Mocco prototype — static mock data. NOT real. */
 window.MOCK = {
-  repo: { owner: "algo-care", name: "algocd", installation: "GitHub App #4821" },
+  repo: { owner: "acme", name: "deploy-service", installation: "GitHub App #4821" },
 
   // Workspace = Mocco team boundary (members·roles·integrations·billing). Groups multiple GitHub orgs/repos.
   // Separate from GitHub — only identity is linked, permissions are owned by Mocco (ADR 0002).
-  workspace: { name: "algocare-lab", slug: "algocare-lab", plan: "Team" },
+  workspace: { name: "acme-labs", slug: "acme-labs", plan: "Team" },
   workspaces: [
-    { name: "algocare-lab", slug: "algocare-lab" },
+    { name: "acme-labs", slug: "acme-labs" },
     { name: "andrea personal", slug: "andrea-personal" },
   ],
 
   // GitHub orgs linked to the workspace (App install unit)
   orgs: [
-    { login: "algo-care", appId: "#4821", installed: true, repos: 2 },
-    { login: "fi-workers", appId: "#5190", installed: true, repos: 2 },
+    { login: "acme", appId: "#4821", installed: true, repos: 2 },
+    { login: "oss-tools", appId: "#5190", installed: true, repos: 2 },
   ],
 
   // Linked repo list (topbar switcher + Repos management). Switching keeps the same screen data (click-through).
   repos: [
-    { owner:"algo-care", name:"algocd", org:"algo-care", status:"active", moccoYml:true, pipelines:1, gates:1, installation:"#4821", lastDeploy:{ sha:"a1b2c3d", at:"2 hours ago", state:"Succeeded" } },
-    { owner:"algo-care", name:"algocare-home", org:"algo-care", status:"active", moccoYml:true, pipelines:2, gates:2, installation:"#4821", lastDeploy:{ sha:"4f2a1b9", at:"yesterday", state:"Succeeded" } },
-    { owner:"fi-workers", name:"showyourtime", org:"fi-workers", status:"setup", moccoYml:false, pipelines:0, gates:0, installation:"#5190", lastDeploy:null },
-    { owner:"fi-workers", name:"checkable", org:"fi-workers", status:"paused", moccoYml:true, pipelines:1, gates:1, installation:"#5190", lastDeploy:{ sha:"c9d0e1f", at:"3 days ago", state:"Failed" } },
+    { owner:"acme", name:"deploy-service", org:"acme", status:"active", moccoYml:true, pipelines:1, gates:1, installation:"#4821", lastDeploy:{ sha:"a1b2c3d", at:"2 hours ago", state:"Succeeded" } },
+    { owner:"acme", name:"web-app", org:"acme", status:"active", moccoYml:true, pipelines:2, gates:2, installation:"#4821", lastDeploy:{ sha:"4f2a1b9", at:"yesterday", state:"Succeeded" } },
+    { owner:"oss-tools", name:"timeboard", org:"oss-tools", status:"setup", moccoYml:false, pipelines:0, gates:0, installation:"#5190", lastDeploy:null },
+    { owner:"oss-tools", name:"checklist", org:"oss-tools", status:"paused", moccoYml:true, pipelines:1, gates:1, installation:"#5190", lastDeploy:{ sha:"c9d0e1f", at:"3 days ago", state:"Failed" } },
   ],
 
   // Workspace members (WS role — separate from repo governance roles). WS Admin manages repo links, members, and integrations.
   workspaceMembers: [
-    { name:"andrea", initials:"AN", email:"andrea@algocarelab.com", gh:"@andrea", wsRole:"Owner" },
-    { name:"Minseo", initials:"MS", email:"minseo@algocarelab.com", gh:"@minseo-k", wsRole:"Admin" },
-    { name:"Sua", initials:"SU", email:"sua@algocarelab.com", gh:"@sua", wsRole:"Member" },
-    { name:"Taeyun", initials:"TY", email:"taeyun@algocarelab.com", gh:"@taeyun", wsRole:"Member" },
-    { name:"Haneul", initials:"HN", email:"haneul@algocarelab.com", gh:"@haneul", wsRole:"Member" },
-    { name:"Jihun", initials:"JH", email:"jihun@algocarelab.com", gh:"@jihun-dev", wsRole:"Member" },
+    { name:"andrea", initials:"AN", email:"andrea@example.com", gh:"@andrea-dev", wsRole:"Owner" },
+    { name:"Minseo", initials:"MS", email:"minseo@example.com", gh:"@minseo-dev", wsRole:"Admin" },
+    { name:"Sua", initials:"SU", email:"sua@example.com", gh:"@sua-dev", wsRole:"Member" },
+    { name:"Taeyun", initials:"TY", email:"taeyun@example.com", gh:"@taeyun-dev", wsRole:"Member" },
+    { name:"Haneul", initials:"HN", email:"haneul@example.com", gh:"@haneul-dev", wsRole:"Member" },
+    { name:"Jihun", initials:"JH", email:"jihun@example.com", gh:"@jihun-codes", wsRole:"Member" },
   ],
   wsRoles: [
     { role:"Owner", can:"All permissions · billing · delete workspace", count:1 },
@@ -43,14 +43,14 @@ window.MOCK = {
   // External integrations (Integrations) — owned by the workspace
   integrations: {
     github: [
-      { org:"algo-care", appId:"#4821", status:"active", repos:2, scopes:"actions:write · contents:read · checks:read" },
-      { org:"fi-workers", appId:"#5190", status:"active", repos:2, scopes:"actions:write · contents:read · checks:read" },
+      { org:"acme", appId:"#4821", status:"active", repos:2, scopes:"actions:write · contents:read · checks:read" },
+      { org:"oss-tools", appId:"#5190", status:"active", repos:2, scopes:"actions:write · contents:read · checks:read" },
     ],
     cloud: [
       { provider:"AWS STS (OIDC)", trust:"token.actions.githubusercontent.com", roles:["deploy-prod","deploy-stg"], status:"active" },
       { provider:"GCP Workload Identity", trust:"—", roles:[], status:"not configured" },
     ],
-    slack: { workspace:"algocare", channel:"#deploys", events:["approval.requested","deployment.succeeded","emergency.override"], status:"active" },
+    slack: { workspace:"acme", channel:"#deploys", events:["approval.requested","deployment.succeeded","emergency.override"], status:"active" },
   },
 
   // Core separation-of-duties numbers (write ≠ deploy)
@@ -59,19 +59,19 @@ window.MOCK = {
   // Mocco standalone permission model — separate from GitHub permissions. Only identity is linked to GitHub.
   syncMode: "Standalone", // or "GitHub team sync"
   members: [
-    { name:"andrea", initials:"AN", gh:"@andrea", ghPerm:"admin", linked:true, source:"Mocco (owner)",
+    { name:"andrea", initials:"AN", gh:"@andrea-dev", ghPerm:"admin", linked:true, source:"Mocco (owner)",
       roles:[{env:"production",role:"deployer"},{env:"staging",role:"deployer"}] },
-    { name:"Minseo", initials:"MS", gh:"@minseo-k", ghPerm:"write", linked:true, source:"synced ← @sre",
+    { name:"Minseo", initials:"MS", gh:"@minseo-dev", ghPerm:"write", linked:true, source:"synced ← @sre",
       roles:[{env:"production",role:"approver · deployer"}] },
-    { name:"Sua", initials:"SU", gh:"@sua", ghPerm:"write", linked:true, source:"synced ← @sre",
+    { name:"Sua", initials:"SU", gh:"@sua-dev", ghPerm:"write", linked:true, source:"synced ← @sre",
       roles:[{env:"production",role:"approver · deployer"}] },
-    { name:"Taeyun", initials:"TY", gh:"@taeyun", ghPerm:"write", linked:true, source:"synced ← @sre",
+    { name:"Taeyun", initials:"TY", gh:"@taeyun-dev", ghPerm:"write", linked:true, source:"synced ← @sre",
       roles:[{env:"production",role:"approver"}] },
-    { name:"Haneul", initials:"HN", gh:"@haneul", ghPerm:"write", linked:true, source:"synced ← @security",
+    { name:"Haneul", initials:"HN", gh:"@haneul-dev", ghPerm:"write", linked:true, source:"synced ← @security",
       roles:[{env:"production",role:"approver (security)"}] },
-    { name:"Jihun", initials:"JH", gh:"@jihun-dev", ghPerm:"write", linked:true, source:"Mocco",
+    { name:"Jihun", initials:"JH", gh:"@jihun-codes", ghPerm:"write", linked:true, source:"Mocco",
       roles:[{env:"production",role:"deployer"}] },
-    { name:"Doyun", initials:"DY", gh:"@doyun", ghPerm:"admin", linked:true, source:"Mocco",
+    { name:"Doyun", initials:"DY", gh:"@doyun-dev", ghPerm:"admin", linked:true, source:"Mocco",
       roles:[], note:"GitHub admin but zero Mocco deploy/approval rights — living proof that write ≠ deploy" },
     { name:"build-bot", initials:"🤖", gh:"@build-bot", ghPerm:"write", linked:true, source:"Mocco",
       roles:[], note:"denied_approvers — bots cannot resume" },

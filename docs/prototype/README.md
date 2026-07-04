@@ -11,16 +11,14 @@
 3. **Don't trust the logic.** Buttons only *pretend* to click and screens only *pretend* to transition. No approval, verification, or deploy actually happens.
 4. **It can be thrown away.** Once the design is settled, this directory is either scrapped wholesale or archived into `docs/`. Do not copy-paste code from here into the real implementation.
 
-## Structure (planned)
+## Structure
 
 ```
-prototype/
-├── README.md          # this file
-├── index.html         # entry point (screen navigation)
-├── styles/            # shared CSS (design system)
-├── screens/           # per-screen HTML
-├── mock/              # static mock data (JSON)
-└── shots/             # review screenshots
+docs/prototype/
+  index.html      # entry — open directly or serve statically
+  app.js          # hash router + renderers (all mock)
+  styles/app.css
+  mock/data.js    # window.MOCK — fictional data only
 ```
 
 ## Running
@@ -28,11 +26,11 @@ prototype/
 Static files, so no build needed. Open it locally to review:
 
 ```bash
-# from the root
-python3 -m http.server -d prototype 8080
+# from the repo root (or just open index.html directly in a browser — file:// works)
+python3 -m http.server -d docs/prototype 8080
 # → http://localhost:8080
 ```
 
 ## Change log
 
-The prototype's evolution and the feedback folded into it are recorded in `../docs/journal/`. (This directory holds only code.)
+The prototype's evolution and the feedback folded into it are recorded in `the repo CHANGELOG`. 

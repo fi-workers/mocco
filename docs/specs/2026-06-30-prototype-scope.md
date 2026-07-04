@@ -52,6 +52,6 @@ related:
 
 ## Mock data
 
-- repo: `algo-care/algocd` (dogfooding candidate), environments: production/staging/preview
+- repo: `acme/deploy-service` (fictional example), environments: production/staging/preview
 - 5–6 commits, a few runs (one per state machine stage), ~10 audit events
-- Stored statically in `prototype/mock/*.json`
+- Stored statically in `docs/prototype/mock/data.js (static `window.MOCK` object)`
