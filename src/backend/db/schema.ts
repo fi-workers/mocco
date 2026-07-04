@@ -53,6 +53,36 @@ export const workspaces = pgTable(
   ],
 );
 
+/** Workspace invitation (vendor model: invitation).
+ * The table exists because the plugin's core read path (get-full-organization)
+ * hard-joins this model — without it the primary workspace load 500s.
+ * The invite FLOW (email delivery, status enum, pending-dedupe, inviter-deletion
+ * policy) is deferred; see docs/reference/workspace.md. */
+export const invitations = pgTable(
+  'mocco_invitations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    email: text().notNull(),
+    role: text(),
+    status: text().notNull().default('pending'),
+    expiresAt: timestamp('expires_at').notNull(),
+    // Policy TBD with the invite flow: cascade means pending invites vanish
+    // with the inviter; revisit (nullable + SET NULL) when the flow lands.
+    inviterId: uuid('inviter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt,
+  },
+  table => [
+    index('mocco_invitations_workspace_id_idx').on(table.organizationId),
+    // The plugin queries invitations by email (listUserInvitations).
+    index('mocco_invitations_email_idx').on(table.email),
+  ],
+);
+
 /** Workspace membership (vendor model: member). One row per (workspace, user). */
 export const members = pgTable(
   'mocco_members',
@@ -72,8 +102,9 @@ export const members = pgTable(
     // standalone workspace_id index is needed.
     uniqueIndex('mocco_members_workspace_user_uq').on(table.organizationId, table.userId),
     index('mocco_members_user_id_idx').on(table.userId),
-    // MVP role set; widen via migration when dynamic roles land.
-    check('mocco_members_role_check', sql`${table.role} in ('owner', 'admin', 'member')`),
+    // MVP role set. The vendor may store comma-joined role subsets (e.g. 'owner,admin')
+    // via updateMemberRole — allowed; values outside the set are still rejected.
+    check('mocco_members_role_check', sql`${table.role} ~ '^(owner|admin|member)(,(owner|admin|member))*$'`),
   ],
 );
 
@@ -97,7 +128,10 @@ export const sessions = pgTable(
     createdAt,
     updatedAt,
   },
-  table => [index('mocco_sessions_user_id_idx').on(table.userId)],
+  table => [
+    index('mocco_sessions_user_id_idx').on(table.userId),
+    index('mocco_sessions_active_workspace_id_idx').on(table.activeOrganizationId),
+  ],
 );
 
 /** SSO account (per-provider tokens). */

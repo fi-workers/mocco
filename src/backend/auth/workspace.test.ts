@@ -10,7 +10,7 @@ const causeOf = async (p: Promise<unknown>): Promise<string> => {
     await p;
     return '';
   } catch (error) {
-    const {cause} = (error as { cause?: { message?: string } });
+    const { cause } = error as { cause?: { message?: string } };
     return cause?.message ?? (error as Error).message;
   }
 };
@@ -186,6 +186,41 @@ describe('workspace (organization plugin) on pglite', () => {
     await expect(
       auth.api.createOrganization({ body: { name: 'Nope', slug: 'nope' }, headers: new Headers() }),
     ).rejects.toMatchObject({ status: 'UNAUTHORIZED' });
+  });
+
+  it('getFullOrganization works (invitation model mapped for plugin reads)', async () => {
+    const { headers } = await signUp('owner@example.com');
+    await auth.api.createOrganization({ body: { name: 'Acme', slug: 'acme' }, headers });
+
+    const full = await auth.api.getFullOrganization({ headers });
+    expect(full?.slug).toBe('acme');
+    expect(full?.members).toHaveLength(1);
+    expect(full?.invitations).toHaveLength(0);
+  });
+
+  it('multi-role updates store a comma-joined subset (vendor behavior, CHECK allows)', async () => {
+    const { headers } = await signUp('owner@example.com');
+    const org = await auth.api.createOrganization({ body: { name: 'A', slug: 'a-ws' }, headers });
+    const [b] = await t.db.insert(t.schema.users).values({ email: 'b@example.com' }).returning();
+    const added = await auth.api.addMember({
+      body: { userId: b?.id ?? '', organizationId: org?.id ?? '', role: 'member' },
+    });
+
+    await auth.api.updateMemberRole({
+      body: { memberId: added?.id ?? '', role: ['admin', 'member'], organizationId: org?.id ?? '' },
+      headers,
+    });
+
+    const rows = await t.db.select().from(t.schema.members);
+    expect(rows.map(r => r.role).toSorted((x, y) => x.localeCompare(y))).toEqual(['admin,member', 'owner']);
+  });
+
+  it('slugs are normalized to lowercase on create', async () => {
+    const { headers } = await signUp('owner@example.com');
+    await auth.api.createOrganization({ body: { name: 'Mixed', slug: 'MiXeD-Slug' }, headers });
+
+    const rows = await t.db.select().from(t.schema.workspaces);
+    expect(rows[0]?.slug).toBe('mixed-slug');
   });
 
   it('sign-up alone creates no workspace (zero-workspace contract for onboarding UI)', async () => {

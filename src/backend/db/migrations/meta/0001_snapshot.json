@@ -1,5 +1,5 @@
 {
-  "id": "58ea52f8-ff26-4970-a8cd-82ab26b92731",
+  "id": "c49926cf-4314-4254-8851-4befbcabf427",
   "prevId": "4645f2c5-d6f8-4c5e-85ab-c45c2cc5ffc0",
   "version": "7",
   "dialect": "postgresql",
@@ -134,6 +134,128 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.mocco_invitations": {
+      "name": "mocco_invitations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inviter_id": {
+          "name": "inviter_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mocco_invitations_workspace_id_idx": {
+          "name": "mocco_invitations_workspace_id_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_invitations_email_idx": {
+          "name": "mocco_invitations_email_idx",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_invitations_workspace_id_mocco_workspaces_id_fk": {
+          "name": "mocco_invitations_workspace_id_mocco_workspaces_id_fk",
+          "tableFrom": "mocco_invitations",
+          "tableTo": "mocco_workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mocco_invitations_inviter_id_mocco_users_id_fk": {
+          "name": "mocco_invitations_inviter_id_mocco_users_id_fk",
+          "tableFrom": "mocco_invitations",
+          "tableTo": "mocco_users",
+          "columnsFrom": [
+            "inviter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.mocco_members": {
       "name": "mocco_members",
       "schema": "",
@@ -244,7 +366,7 @@
       "checkConstraints": {
         "mocco_members_role_check": {
           "name": "mocco_members_role_check",
-          "value": "\"mocco_members\".\"role\" in ('owner', 'admin', 'member')"
+          "value": "\"mocco_members\".\"role\" ~ '^(owner|admin|member)(,(owner|admin|member))*$'"
         }
       },
       "isRLSEnabled": false
@@ -317,6 +439,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_sessions_active_workspace_id_idx": {
+          "name": "mocco_sessions_active_workspace_id_idx",
+          "columns": [
+            {
+              "expression": "active_workspace_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
