@@ -7,7 +7,6 @@ updated: 2026-06-30
 confidence: high
 owner: andrea
 decision_date: 2026-06-30
-supersedes:
 stakeholders: [andrea]
 tags: [adr, authorization, positioning, wedge]
 related:

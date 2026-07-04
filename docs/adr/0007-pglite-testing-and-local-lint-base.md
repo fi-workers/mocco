@@ -31,3 +31,4 @@ Building the foundation slices surfaced better options than 0005 planned, and tw
 
 - 0005's rows for test-DB, lint packaging, tRPC, and `common` describe superseded or not-yet-landed plans; this ADR is the current truth.
 - If a future consumer outside this repo needs the lint config, revisit publishing.
+- Path note: the click-through prototype lives under `docs/prototype/` (0005 wrote `prototype/`; it moved when the repo went public).

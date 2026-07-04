@@ -20,4 +20,4 @@ Records the rationale whenever the wiki structure/schema/constitution (AGENTS.md
 
 - Established the initial wiki structure. Based on llm-wiki research (the owner's PKM conventions + 2025–2026 AGENTS.md/ADR best practices).
 - Decisions: AGENTS.md as single source + CLAUDE.md mirror / relative-path links / three-layer ADR·journal·CHANGELOG / 7 required frontmatter keys.
-- Research source: `../research/llm-wiki-methodology.md`
+- Research source: an internal note (not imported into the public wiki)

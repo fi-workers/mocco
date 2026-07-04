@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mocco.dev/schema/mocco.schema.json",
+  "$id": "https://mocco.club/schema/mocco.schema.json",
   "title": ".mocco.yml",
   "description": "Mocco pipeline + gate definition (draft v1). No env — ADR 0003.",
   "type": "object",

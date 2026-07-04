@@ -1,3 +1,14 @@
+---
+title: How to use this repo's docs (LLM wiki)
+type: overview
+status: active
+created: 2026-06-30
+updated: 2026-07-04
+confidence: high
+owner: andrea
+tags: [meta, wiki, howto]
+---
+
 # How to use this repo's docs/ (LLM Wiki)
 
 This folder is a knowledge base for LLM agents to read, navigate, and update efficiently across sessions. Read this document and `index.md` first before starting work.

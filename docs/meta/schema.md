@@ -14,7 +14,7 @@ related:
 
 # Frontmatter schema
 
-Every document has YAML frontmatter. 7 required keys + type-specific optional keys.
+Every document has YAML frontmatter. 8 required keys (`title`, `type`, `status`, `created`, `updated`, `confidence`, `owner`, `tags`); `related` is optional but encouraged + type-specific optional keys.
 
 ## Required keys
 
