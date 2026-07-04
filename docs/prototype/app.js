@@ -44,7 +44,6 @@ function badge(text) {
   return `<span class="badge ${map[text]||"neutral"}"><span class="dot"></span>${labels[text]||text}</span>`;
 }
 const avatar = (i)=>`<span class="avatar">${i}</span>`;
-const envDot = (e)=>`<span class="env-dot ${e==="production"?"prod":e==="staging"?"staging":"preview"}"></span>`;
 
 // GitLab-style status icon + label
 function statusIcon(state){
@@ -68,54 +67,6 @@ function toast(msg){
   clearTimeout(toastT); toastT=setTimeout(()=>t.style.opacity=0,1900);
 }
 window.proto = (msg)=>toast(msg);
-
-/* ---------- Dashboard ---------- */
-function scDashboard(){
-  const a = M.access;
-  const blocked = M.audit.filter(e=>e.result==="denied");
-  const unsafe = M.workflows.filter(w=>!w.safe);
-  return `
-  <h1 class="page-title">Dashboard</h1>
-  <p class="page-sub">${M.repo.owner}/${M.repo.name} · Deployment governance at a glance</p>
-  <div class="hero">
-    <div class="pitch">GitHub <b>write access ≠ deploy access</b><span class="sub">Of ${a.write} with write access, only ${a.deploy_prod} can deploy to prod.</span></div>
-    <div class="accs">
-      <div class="acc"><div class="n">${a.write}</div><div class="l">write access</div></div>
-      <div class="acc hl"><div class="n">${a.deploy_prod}</div><div class="l">can deploy prod</div></div>
-      <div class="acc"><div class="n">${a.approvers}</div><div class="l">can approve</div></div>
-    </div>
-  </div>
-  <div class="grid cols-4">
-    <div class="card stat"><div class="num warn">${M.commits.filter(c=>c.approval==="pending").length}</div><div class="lbl">Pending approval</div></div>
-    <div class="card stat"><div class="num ok">3</div><div class="lbl">Successful deploys today</div></div>
-    <div class="card stat"><div class="num" style="color:var(--danger)">${blocked.length}</div><div class="lbl">Blocked attempts</div></div>
-    <div class="card stat"><div class="num">${unsafe.length}</div><div class="lbl">Unsafe workflows</div></div>
-  </div>
-  <div class="grid cols-2 section-gap">
-    <div class="card">
-      <div class="card-head"><h3>Pending / blocked</h3><a class="right btn ghost sm" href="#/queue">Full queue →</a></div>
-      ${M.commits.filter(c=>["pending","bypass"].includes(c.approval)).map(c=>`
-        <div class="rule" onclick="location.hash='#/run/${c.runId}'" style="cursor:pointer">
-          ${avatar(c.initials)}
-          <div style="flex:1"><div style="font-weight:600">${c.message}</div>
-            <div class="muted" style="font-size:12px"><span class="sha">${c.sha}</span> · ${c.at}</div></div>
-          ${badge(c.approval)}
-        </div>`).join("")}
-    </div>
-    <div class="card">
-      <h3>Pipeline status</h3><div class="card-sub">pipeline: deploy</div>
-      <div class="rule">
-        <div style="flex:1" class="row-flex"><span class="sicon ok">✓</span><b>Last success</b></div>
-        <span class="sha">a1b2c3d</span><span class="muted" style="font-size:12px">run_316 · 2 hours ago</span>
-      </div>
-      <div class="rule" onclick="location.hash='#/run/run_318'" style="cursor:pointer">
-        <div style="flex:1" class="row-flex"><span class="sicon warn">▶</span><b>Awaiting gate</b> <span class="muted">approve</span></div>
-        <span class="sha">9f3c2a1</span><span class="muted" style="font-size:12px">run_318 · 8 min ago</span>
-      </div>
-      <div class="notice danger section-gap"><span class="ic">⚠︎</span><div><b>${unsafe.map(w=>w.file).join(", ")}</b> — Verify missing. Direct runs are blocked by credential gating. <a href="#/verify">Inspect →</a></div></div>
-    </div>
-  </div>`;
-}
 
 /* ---------- Deploy Queue ---------- */
 // List-row progress — mini stepper based on run.track + current step label + n/total

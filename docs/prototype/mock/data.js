@@ -7,7 +7,7 @@ window.MOCK = {
   workspace: { name: "acme-labs", slug: "acme-labs", plan: "Team" },
   workspaces: [
     { name: "acme-labs", slug: "acme-labs" },
-    { name: "andrea personal", slug: "andrea-personal" },
+    { name: "OSS Tools", slug: "oss-tools" },
   ],
 
   // GitHub orgs linked to the workspace (App install unit)
@@ -53,7 +53,7 @@ window.MOCK = {
   },
 
   // Core separation-of-duties numbers (write ≠ deploy)
-  access: { write: 12, deploy_prod: 3, approvers: 5 },
+  access: { write: 8, deploy_prod: 4, approvers: 5 },
 
   // Mocco standalone permission model — separate from GitHub permissions. Only identity is linked to GitHub.
   syncMode: "Standalone", // or "GitHub team sync"
@@ -115,22 +115,18 @@ window.MOCK = {
     ],
   },
 
-  environments: [
-    { key: "production", tier: "production", currentSha: "a1b2c3d", protected: true },
-    { key: "staging", tier: "staging", currentSha: "f7e8d90", protected: false },
-    { key: "preview", tier: "development", currentSha: "—", protected: false },
-  ],
 
   commits: [
     { sha: "9f3c2a1", message: "fix(billing): correct proration rounding error", author: "Jihun", initials: "JH", at: "8 min ago", workflows: ["deploy.yml"], env: "production", approval: "pending", run: "PendingApproval", runId: "run_318" },
     { sha: "7b1e4d8", message: "feat(api): add workspace invite token TTL", author: "andrea", initials: "AN", at: "41 min ago", workflows: ["deploy.yml"], env: "staging", approval: "noapproval", run: "Succeeded", runId: "run_317" },
     { sha: "a1b2c3d", message: "chore(deps): upgrade supabase-js to 2.51", author: "Minseo", initials: "MS", at: "2 hours ago", workflows: ["deploy.yml"], env: "production", approval: "approved", run: "Succeeded", runId: "run_316" },
+    { sha: "b7c8d9e", message: "feat(payments): add settlement batch", author: "Sua", initials: "SU", at: "3 hours ago", workflows: ["deploy.yml"], env: "production", approval: "approved", run: "Failed", runId: "run_312" },
+    { sha: "e1f2a3b", message: "chore: clean up log format", author: "Jihun", initials: "JH", at: "4 hours ago", workflows: ["deploy.yml"], env: "staging", approval: "noapproval", run: "Failed", runId: "run_311" },
     { sha: "c4d5e6f", message: "feat(auth): introduce Lucia session rotation", author: "Jihun", initials: "JH", at: "5 hours ago", workflows: ["deploy.yml"], env: "production", approval: "rejected", run: "Rejected", runId: "run_315" },
     { sha: "0a9b8c7", message: "refactor(ui): virtual scroll for commit queue", author: "andrea", initials: "AN", at: "yesterday", workflows: ["preview.yml"], env: "preview", approval: "noapproval", run: "Succeeded", runId: "run_314" },
     { sha: "d3e2f10", message: "hotfix(infra): raise health check timeout", author: "Minseo", initials: "MS", at: "yesterday", workflows: ["hotfix.yml"], env: "production", approval: "bypass", run: "Blocked", runId: "run_313" },
-    { sha: "b7c8d9e", message: "feat(payments): add settlement batch", author: "Sua", initials: "SU", at: "3 hours ago", workflows: ["deploy.yml"], env: "production", approval: "approved", run: "Failed", runId: "run_312" },
-    { sha: "e1f2a3b", message: "chore: clean up log format", author: "Jihun", initials: "JH", at: "4 hours ago", workflows: ["deploy.yml"], env: "staging", approval: "noapproval", run: "Failed", runId: "run_311" },
   ],
+
 
   // Runs in various states — click through to see different scenarios
   runs: {
@@ -148,7 +144,7 @@ window.MOCK = {
         {l:"Running",s:"future"},{l:"Succeeded",s:"future"},
       ],
       approvalRules: [
-        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun"], approved: ["Minseo"] },
+        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun","Jihun","andrea"], approved: ["Minseo"] },
         { name: "Security", required: 1, approvers: ["Haneul"], approved: [] },
       ],
       selfApprovalBlockedFor: ["Jihun"], blockReason: "Jihun is the author·committer·triggerer of this commit — self-approval blocked",
@@ -172,7 +168,7 @@ window.MOCK = {
         {l:"Running",s:"done"},{l:"Succeeded",s:"done"},
       ],
       approvalRules: [
-        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun"], approved: ["Sua","Taeyun"] },
+        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun","Jihun","andrea"], approved: ["Sua","Taeyun"] },
         { name: "Security", required: 1, approvers: ["Haneul"], approved: ["Haneul"] },
       ],
       selfApprovalBlockedFor: ["andrea"], blockReason: "Triggerer andrea cannot approve (blocked). Approvals done by Sua·Taeyun·Haneul.",
@@ -194,7 +190,7 @@ window.MOCK = {
         {l:"Rejected",s:"rejected"},
       ],
       approvalRules: [
-        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun"], approved: ["Minseo"] },
+        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun","Jihun","andrea"], approved: ["Minseo"] },
         { name: "Security", required: 1, approvers: ["Haneul"], approved: [], rejectedBy: "Haneul", reason: "session rotation rollback path unverified" },
       ],
       selfApprovalBlockedFor: ["Jihun"], blockReason: "author·committer·triggerer Jihun cannot approve",
@@ -269,7 +265,7 @@ window.MOCK = {
         {l:"Approved",s:"done"},{l:"Dispatched",s:"done"},{l:"VerifyFailed",s:"rejected"},{l:"Failed",s:"rejected"},
       ],
       approvalRules: [
-        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun"], approved: ["Minseo","Taeyun"] },
+        { name: "SRE", required: 2, approvers: ["Minseo","Sua","Taeyun","Jihun","andrea"], approved: ["Minseo","Taeyun"] },
         { name: "Security", required: 1, approvers: ["Haneul"], approved: ["Haneul"] },
       ],
       selfApprovalBlockedFor: ["andrea"], blockReason: "triggerer andrea cannot approve",
@@ -307,8 +303,6 @@ window.MOCK = {
     holding: { runId: "run_316", sha: "a1b2c3d", since: "08:02", state: "run complete → lock released" },
     waiting: [
       { runId: "run_318", sha: "9f3c2a1", seq: 1, queuedAt: "09:14", note: "pending approval" },
-      { runId: "run_312", sha: "b7c8d9e", seq: 2, queuedAt: "09:20", note: "approved, waiting for lock" },
-      { runId: "run_320", sha: "c9d0e1f", seq: 3, queuedAt: "09:25", note: "pending approval (latest)" },
     ],
     modes: {
       oldest_first: "in queue-entry order (1→2→3). Guarantees release order. Safe but slow.",
@@ -331,41 +325,6 @@ window.MOCK = {
     note: "Emergency path for late-night incidents or absent approvers. Every use is flagged red via emergency.override + a mandatory post-hoc review.",
   },
 
-  policy: {
-    production: {
-      tier: "production",
-      allowed_to_deploy: "teams: sre · users: andrea",
-      approval: "rules: sre 2 AND security 1",
-      prevent_self_approval: "true (author·committer·triggerer)",
-      denied: "build-bot",
-      concurrency: "oldest_first", prevent_outdated: "reject", rollback: "enabled (outdated exempt · approval required)",
-      preconditions: ["merged_to: main", "status checks: ci/test, ci/lint", "code owner review required"],
-      secrets: "expose: PROD_DB_URL, PROD_API_KEY · only_on_approved: true",
-      oidc: "deploy-prod role, STS only for approved runs",
-    },
-    staging: {
-      tier: "staging",
-      allowed_to_deploy: "teams: developers",
-      approval: "required_approvals: 0 (no approval)",
-      prevent_self_approval: "n/a",
-      denied: "—",
-      concurrency: "newest_first", prevent_outdated: "skip", rollback: "enabled",
-      preconditions: ["merged_to: main"],
-      secrets: "expose: STG_DB_URL · only_on_approved: false",
-      oidc: "deploy-stg role",
-    },
-    preview: {
-      tier: "development",
-      allowed_to_deploy: "auto (trigger automatic)",
-      approval: "0 (auto deploy)",
-      prevent_self_approval: "n/a",
-      denied: "—",
-      concurrency: "newest_first (per-commit group)", prevent_outdated: "skip", rollback: "—",
-      preconditions: ["—"],
-      secrets: "prod credentials not used",
-      oidc: "not used",
-    },
-  },
 
   verifyChecklist: [
     "run exists · executable", "repo match", "workflow match", "target step match",
@@ -386,7 +345,7 @@ window.MOCK = {
   // append-only audit — monotonically increasing time, prev_hash chain
   audit: [
     { day:"yesterday", ts:"18:20:—", actor:"andrea", type:"user", action:"policy.changed", env:"production", sha:"—", result:"ok", reason:"required_approvals 1→2" },
-    { day:"yesterday", ts:"21:05:33", actor:"Minseo", type:"user", action:"emergency.override", env:"production", sha:"d3e2f10", result:"denied", reason:"ran hotfix.yml directly — no valid token, OIDC denied", emph:true },
+    { day:"yesterday", ts:"21:05:33", actor:"Minseo", type:"user", action:"deployment.bypass_blocked", env:"production", sha:"d3e2f10", result:"denied", reason:"ran hotfix.yml directly — no valid token, OIDC denied", emph:true },
     { day:"today", ts:"06:40:00", actor:"Haneul", type:"user", action:"approval.rejected", env:"production", sha:"c4d5e6f", result:"ok", reason:"session rotation rollback path unverified" },
     { day:"today", ts:"08:01:55", actor:"andrea", type:"user", action:"deployment.requested", env:"production", sha:"a1b2c3d", result:"ok", reason:"" },
     { day:"today", ts:"08:02:10", actor:"github-app", type:"github-app", action:"deployment.dispatched", env:"production", sha:"a1b2c3d", result:"ok", reason:"token tok_a1b2 issued" },
