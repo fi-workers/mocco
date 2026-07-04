@@ -22,6 +22,10 @@ export default [
               group: ['better-auth', 'better-auth/*'],
               message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/index.ts).',
             },
+            {
+              group: ['**/auth/testing', '*/auth/testing'],
+              message: 'auth/testing is a test-only seam. Production code uses the neutral surface (auth/index.ts).',
+            },
           ],
         },
       ],
@@ -29,5 +33,10 @@ export default [
   },
   airbnbPlugins.node,
   ...airbnb.node.recommended,
+  {
+    // Tests may use the auth/testing seam (and, via it, the provider) to bind pglite.
+    files: ['**/*.{test,spec}.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
   prettier,
 ];

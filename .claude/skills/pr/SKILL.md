@@ -22,6 +22,7 @@ Ship exactly **one concern per PR**, in dependency order, always green. The revi
    - Each schema change ships its own drizzle migration (history tracks PR order).
    - New third-party services go behind a vendor-neutral wrapper (see `src/backend/auth/provider.ts`).
    - Behavior changes update the matching `docs/reference/` page in the same PR.
+   - **Scripted edits must assert their target** (e.g. `assert old in s` before replace) and be verified with a grep after — a silent replace-miss once shipped a commit whose message claimed a change that never landed.
    - **Stage explicit paths only — never `git add -A`/`git add .`.** The shared working tree can contain unrelated files (other sessions' notes, scratch work); a blanket add once swept a foreign research note into a public PR and required a history rewrite.
 
 ## Verify (all must pass — run them, don't assume)
