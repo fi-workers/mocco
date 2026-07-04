@@ -23,3 +23,4 @@ related:
 | [0006](./0006-domains-mocco-club-prod-mocco-work-local.md) | Domains — prod mocco.club, local mocco.work | accepted | 2026-07-01 |
 
 > Add new decisions as `{NNNN}-{imperative-kebab}.md`. Reversals become a new ADR + `superseded_by` on the old one. No after-the-fact edits to the body.
+- [0007 — pglite for tests, local lint base (amends 0005)](./0007-pglite-testing-and-local-lint-base.md)

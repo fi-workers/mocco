@@ -26,6 +26,7 @@ related:
 - [ADR index](./adr/README.md)
 - [0001 — Name the product Mocco](./adr/0001-name-the-product-mocco.md)
 - [0002 — Mocco is an independent authorization layer](./adr/0002-mocco-is-an-independent-authorization-layer.md)
+- [0007 — pglite tests, local lint base (amends 0005)](./adr/0007-pglite-testing-and-local-lint-base.md)
 
 ## Implementation
 

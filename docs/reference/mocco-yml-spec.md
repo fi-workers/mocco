@@ -96,7 +96,7 @@ audit: { hash_chain: true }
 ## Design decisions (draft, subject to change)
 
 1. **roles don't carry membership in the file.** `resume` references role **names only**. The role→people mapping is managed in Access (a separate store) — membership changes often and isn't subject to code review.
-2. **credentials are declared on the step** (need), **the gate controls the flow**, **the broker enforces** (not issued if the preceding gate isn't resumed). → expresses "the gate guards the credentials" as data.
+2. **credentials are declared on the step** (need), **the gate controls the flow**, **the broker enforces** (not issued if the preceding gate isn't resumed). → expresses "the gate guards the credentials" as data. Note: [ADR 0003](../adr/0003-core-model-is-pause-resume-gates-no-env.md) words this as the credential "binding to the gate" — same enforcement semantics, different placement in the file format; to be reconciled when the governance phase implements the broker (open question 2).
 3. **executor is specified per step.** All GitHub-specific options go in `with`. The core schema has no GitHub words (`workflow` is an adapter key inside `with`).
 4. **No env key** (ADR 0003).
 

@@ -24,8 +24,8 @@ Ported from the house pattern (showyourtime's `syt_`).
   - `createdAt = timestamp('created_at').notNull().defaultNow()`
   - `updatedAt = timestamp('updated_at').notNull().defaultNow().$onUpdate(() => new Date())`
 - **id: `uuid().primaryKey().defaultRandom()`** — non-sequential (guards against token/audit/URL exposure). *The house uses integer identity, but Mocco uses uuid given its token/audit nature.*
-  - Exception: `mocco_audit_log` uses a `bigserial seq` PK (for append-only monotonic ordering).
-- **Index names: `mocco_<table>_<col>_idx`** (e.g., `mocco_runs_state_idx`).
+  - Exception: `mocco_audit_log (governance phase)` uses a `bigserial seq` PK (for append-only monotonic ordering).
+- **Index names**: `mocco_<table>_<col>_idx`; unique indexes use `mocco_<table>_<cols>_uq` (e.g. `mocco_members_workspace_user_uq`). Historical exception: `mocco_accounts_provider_account_idx` is unique but `_idx`-named — left as-is to avoid migration churn.
 - **Table export names: plural lowercase** (`runs`, `roles`) — convenient for drizzle relational queries.
 
 ## Migrations
