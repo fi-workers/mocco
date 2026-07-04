@@ -92,6 +92,10 @@ export function createBaseConfig({ tsconfigRootDir }) {
         '@typescript-eslint/no-non-null-assertion': 'error',
         '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
         '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
+        // Exceptions must be catchable where they're awaited, and async frames must
+        // survive in stack traces — always `return await`, never bare `return promise`.
+        'no-return-await': 'off',
+        '@typescript-eslint/return-await': ['error', 'always'],
         'unicorn/prevent-abbreviations': 'off',
         'unicorn/no-null': 'off',
         'unicorn/filename-case': 'off',
