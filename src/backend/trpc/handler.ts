@@ -1,7 +1,7 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
 import { getAuth } from '../auth/instance';
-import { db } from '../db/client';
+import { getDb } from '../db/client';
 
 import { appRouter } from './router';
 
@@ -27,5 +27,5 @@ export function createTrpcHandler(deps: { db: Db; auth: AuthService }) {
 
 /** Mounted by Next at app/api/trpc/[trpc]/route.ts. */
 export function trpcHandler(request: Request): Promise<Response> {
-  return createTrpcHandler({ db, auth: getAuth() })(request);
+  return createTrpcHandler({ db: getDb(), auth: getAuth() })(request);
 }
