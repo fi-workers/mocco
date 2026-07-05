@@ -1,52 +1,24 @@
+import { workspaceCreateInputSchema, workspaceMemberSchema, workspaceSchema } from '@mocco/common/workspace';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { router, publicProcedure, protectedProcedure } from './trpc';
-
-// Parse, don't validate: slug is constrained here AND case-insensitively unique at the DB.
-const slugSchema = z
-  .string()
-  .min(2)
-  .max(48)
-  .regex(/^[a-z0-9-]+$/, 'lowercase letters, digits and dashes only');
-
-// Egress filter: .output() schemas strip vendor-side fields (e.g. metadata) and
-// normalize shapes before anything crosses the wire — the auth service returns
-// vendor-compatible rows untouched (runtime-probed: raw rows DO carry metadata).
-const workspaceOutput = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-  // Vendor emits `string | null | undefined`; the wire shape is `string | null`.
-  logo: z
-    .string()
-    .nullish()
-    .transform(value => value ?? null),
-  createdAt: z.date(),
-});
-
-const memberOutput = z.object({
-  id: z.string(),
-  userId: z.string(),
-  role: z.string(),
-  createdAt: z.date(),
-});
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true })),
 
   workspace: router({
     list: protectedProcedure
-      .output(z.array(workspaceOutput))
+      .output(z.array(workspaceSchema))
       .query(async ({ ctx }) => await ctx.auth.listWorkspaces(ctx.headers)),
 
     active: protectedProcedure
-      .output(workspaceOutput.extend({ members: z.array(memberOutput) }).nullable())
+      .output(workspaceSchema.extend({ members: z.array(workspaceMemberSchema) }).nullable())
       .query(async ({ ctx }) => await ctx.auth.getActiveWorkspace(ctx.headers)),
 
     create: protectedProcedure
-      .input(z.object({ name: z.string().min(1).max(80), slug: slugSchema }))
-      .output(workspaceOutput)
+      .input(workspaceCreateInputSchema)
+      .output(workspaceSchema)
       .mutation(async ({ ctx, input }) => {
         try {
           return await ctx.auth.createWorkspace(ctx.headers, input);
