@@ -14,11 +14,14 @@ export const workspaceCreateInputSchema = z.object({
 export type WorkspaceCreateInput = z.infer<typeof workspaceCreateInputSchema>;
 
 /**
- * Workspace shapes, defined once as zod schemas (the single type source):
- * - z.input (*Row) — the vendor-compatible pre-parse shape the backend returns
- *   internally (in-process consumers are trusted).
- * - z.output — the wire shape after the tRPC .output() egress filter strips
- *   unknown vendor fields and normalizes (e.g. logo → string | null).
+ * Workspace shapes, defined once as zod schemas (the single type source).
+ * The schemas are the tRPC .output() egress filter: they strip unknown vendor
+ * fields and normalize (e.g. logo → string | null). The *Row types (z.input)
+ * annotate what the services return internally — the vendor-API shape, which
+ * is deliberately NOT the drizzle row (the vendor parses `metadata` text into
+ * an object and declares optionals like `logo?: string | null`, so DB row
+ * types don't fit). Wire types are inferred by clients from the router
+ * (RouterOutputs), so no z.output aliases are exported.
  */
 export const workspaceSchema = z.object({
   id: z.string(),
@@ -31,7 +34,6 @@ export const workspaceSchema = z.object({
   createdAt: z.date(),
 });
 export type WorkspaceRow = z.input<typeof workspaceSchema>;
-export type Workspace = z.output<typeof workspaceSchema>;
 
 export const workspaceMemberSchema = z.object({
   id: z.string(),
@@ -40,4 +42,3 @@ export const workspaceMemberSchema = z.object({
   createdAt: z.date(),
 });
 export type WorkspaceMemberRow = z.input<typeof workspaceMemberSchema>;
-export type WorkspaceMember = z.output<typeof workspaceMemberSchema>;
