@@ -43,20 +43,15 @@ jobs:
         run: yarn install --immutable
         env:
           YARN_ENABLE_SCRIPTS: 'false'
+      # Every step below runs a root package.json script — the exact same
+      # commands `yarn ci:local` (and the pre-push hook) run locally.
       - name: Format check
         run: yarn format:check
-      - name: Lint + typecheck (backend, frontend)
+      - name: Lint + typecheck (eslint, tsc, react-doctor)
         run: yarn lint
       - name: Test (jest + pglite integration)
         run: yarn test
       - name: Migration drift check (schema.ts must match committed migrations)
-        run: |
-          # stdin closed: an ambiguous rename would otherwise prompt and hang until timeout
-          yarn db:generate < /dev/null
-          test -z "$(git status --porcelain src/backend/db/migrations)" || {
-            echo '::error::drizzle migrations out of sync with schema.ts — run yarn db:generate and commit the result'
-            git status --porcelain src/backend/db/migrations
-            exit 1
-          }
+        run: yarn ci:drift
       - name: Build (Next.js)
-        run: yarn frontend build
+        run: yarn build
