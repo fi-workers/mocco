@@ -6,7 +6,7 @@ export default [
   ...createBaseConfig({ tsconfigRootDir: import.meta.dirname }),
   {
     // Machine-enforced vendor isolation: only auth/ may touch the provider.
-    // Everything else consumes the neutral surface (auth/session.ts, auth/workspaces.ts).
+    // Everything else consumes the neutral surface (auth/service.ts).
     files: ['**/*.ts'],
     ignores: ['auth/**'],
     rules: {
@@ -16,18 +16,11 @@ export default [
           patterns: [
             {
               group: ['**/auth/provider', '*/auth/provider'],
-              message:
-                'Import the neutral auth surface (auth/session.ts, auth/workspaces.ts) instead of the vendor provider.',
+              message: 'Import the neutral auth surface (auth/service.ts) instead of the vendor provider.',
             },
             {
               group: ['better-auth', 'better-auth/*'],
-              message:
-                'The auth vendor is only importable inside auth/. Use the neutral surface (auth/session.ts, auth/workspaces.ts).',
-            },
-            {
-              group: ['**/auth/testing', '*/auth/testing'],
-              message:
-                'auth/testing is a test-only seam. Production code uses the neutral surface (auth/session.ts, auth/workspaces.ts).',
+              message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/service.ts).',
             },
           ],
         },
@@ -37,7 +30,7 @@ export default [
   airbnbPlugins.node,
   ...airbnb.node.recommended,
   {
-    // Tests may use the auth/testing seam (and, via it, the provider) to bind pglite.
+    // Tests may import the provider directly to probe vendor behavior on pglite.
     files: ['**/*.{test,spec}.ts'],
     rules: { 'no-restricted-imports': 'off' },
   },

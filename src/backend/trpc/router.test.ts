@@ -1,42 +1,44 @@
-import { createTestProvider, setProviderForTesting, type Provider } from '../auth/testing';
+import { createAuthService, type AuthService } from '../auth/service';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
 
+import { createTrpcHandler } from './handler';
 import { appRouter } from './router';
 
 import type { Context } from './trpc';
 import type { Db } from '../db/client';
 
-// Full-stack tRPC tests on pglite: real migrations + real provider + real router.
-// NOTE: setProviderForTesting mutates a module-level singleton — these tests must
-// stay serial (no it.concurrent).
+/** Sign up through the production auth handler (HTTP) and keep the session cookie. */
+const signUpViaHttp = async (auth: AuthService, email: string) => {
+  const response = await auth.handler(
+    new Request('https://local.test/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'fixture-password-1', name: 'fixture-user' }),
+    }),
+  );
+  return new Headers({ cookie: response.headers.get('set-cookie') ?? '' });
+};
+
+// Full-stack tRPC tests on pglite: real migrations + real auth service + real
+// router. No test seams — tests compose the same factories production uses.
 describe('tRPC workspace router on pglite', () => {
   let t: TestDb;
-  let provider: Provider;
-
-  const signUpHeaders = async (email: string) => {
-    const { headers } = await provider.api.signUpEmail({
-      body: { email, password: 'fixture-password-1', name: 'fixture-user' },
-      returnHeaders: true,
-    });
-    return new Headers({ cookie: headers.get('set-cookie') ?? '' });
-  };
+  let auth: AuthService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ db: t.db as unknown as Db, session, headers });
+    appRouter.createCaller({ db: t.db as unknown as Db, auth, session, headers });
 
   const signedInCaller = async (email: string) => {
-    const headers = await signUpHeaders(email);
-    const session = await provider.api.getSession({ headers });
+    const headers = await signUpViaHttp(auth, email);
+    const session = await auth.getSession(headers);
     return caller(headers, session);
   };
 
   beforeEach(async () => {
     t = await createTestDb();
-    provider = createTestProvider(t.db, { secret: 'test-secret-not-for-prod' });
-    setProviderForTesting(provider);
+    auth = createAuthService(t.db, { secret: 'test-secret-not-for-prod' });
   });
   afterEach(async () => {
-    setProviderForTesting(undefined);
     await t.close();
   });
 
@@ -56,6 +58,10 @@ describe('tRPC workspace router on pglite', () => {
 
     const ws = await api.workspace.create({ name: 'Acme Lab', slug: 'acme-lab' });
     expect(ws.slug).toBe('acme-lab');
+    // Egress contract: raw vendor rows carry `metadata` (probe-verified); the
+    // .output() schema strips it and normalizes logo to `string | null`.
+    expect(ws).not.toHaveProperty('metadata');
+    expect(ws.logo).toBeNull();
 
     const all = await api.workspace.list();
     expect(all).toHaveLength(1);
@@ -139,33 +145,25 @@ describe('tRPC workspace router on pglite', () => {
 // the neutral getSession, and the superjson wire format (Dates revive).
 describe('trpcHandler over HTTP', () => {
   let t: TestDb;
-  let provider: Provider;
+  let auth: AuthService;
 
   beforeEach(async () => {
     t = await createTestDb();
-    provider = createTestProvider(t.db, { secret: 'test-secret-not-for-prod' });
-    setProviderForTesting(provider);
+    auth = createAuthService(t.db, { secret: 'test-secret-not-for-prod' });
   });
   afterEach(async () => {
-    setProviderForTesting(undefined);
     await t.close();
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const { trpcHandler } = await import('./handler');
+    const trpcHandler = createTrpcHandler({ db: t.db as unknown as Db, auth });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);
 
-    const { headers } = await provider.api.signUpEmail({
-      body: { email: 'wire@example.com', password: 'fixture-password-1', name: 'u' },
-      returnHeaders: true,
-    });
-    const cookie = headers.get('set-cookie') ?? '';
-    await provider.api.createOrganization({
-      body: { name: 'Wire', slug: 'wire-ws' },
-      headers: new Headers({ cookie }),
-    });
+    const sessionHeaders = await signUpViaHttp(auth, 'wire@example.com');
+    const cookie = sessionHeaders.get('cookie') ?? '';
+    await auth.createWorkspace(sessionHeaders, { name: 'Wire', slug: 'wire-ws' });
 
     const res = await trpcHandler(new Request('https://local.test/api/trpc/workspace.list', { headers: { cookie } }));
     expect(res.status).toBe(200);

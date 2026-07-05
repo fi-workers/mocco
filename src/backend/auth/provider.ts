@@ -1,11 +1,10 @@
 // The ONLY file that imports the auth vendor. Everything else consumes the
-// neutral surface in ./index.ts, so the vendor can be swapped by rewriting
+// neutral surface (./service.ts), so the vendor can be swapped by rewriting
 // this file alone (plus the client wrapper on the frontend).
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization } from 'better-auth/plugins';
 
-import { db as defaultDb } from '../db/client';
 import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../db/schema';
 
 export interface AuthOptions {
@@ -16,7 +15,7 @@ export interface AuthOptions {
 }
 
 /** Any drizzle database the adapter accepts (node-postgres in prod, pglite in tests). */
-type AdapterDb = Parameters<typeof drizzleAdapter>[0];
+export type AdapterDb = Parameters<typeof drizzleAdapter>[0];
 
 /** Factory — lets tests run the full auth stack against an isolated (pglite) DB. */
 export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
@@ -62,21 +61,3 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
 }
 
 export type Provider = ReturnType<typeof createProvider>;
-
-const state: { provider?: Provider } = {};
-
-/** Test wiring only: point the default instance at an isolated (pglite) provider. */
-export function setProviderForTesting(provider: Provider | undefined): void {
-  state.provider = provider;
-}
-
-/** Default instance bound to the app DB. Created lazily so builds don't need env. */
-export function getProvider(): Provider {
-  if (!state.provider) {
-    state.provider = createProvider(defaultDb, {
-      secret: process.env.AUTH_SECRET,
-      baseUrl: process.env.AUTH_URL,
-    });
-  }
-  return state.provider;
-}
