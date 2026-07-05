@@ -1933,6 +1933,7 @@ __metadata:
   resolution: "@mocco/backend@workspace:src/backend"
   dependencies:
     "@electric-sql/pglite": "npm:0.5.4"
+    "@mocco/common": "workspace:*"
     "@trpc/server": "npm:11.18.0"
     "@types/jest": "npm:30.0.0"
     "@types/pg": "npm:8.20.0"
@@ -1943,6 +1944,16 @@ __metadata:
     pg: "npm:8.22.0"
     superjson: "npm:2.2.6"
     ts-jest: "npm:29.4.11"
+    typescript: "npm:5.9.3"
+    zod: "npm:4.1.13"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/common@workspace:*, @mocco/common@workspace:src/common":
+  version: 0.0.0-use.local
+  resolution: "@mocco/common@workspace:src/common"
+  dependencies:
+    eslint: "npm:10.6.0"
     typescript: "npm:5.9.3"
     zod: "npm:4.1.13"
   languageName: unknown
