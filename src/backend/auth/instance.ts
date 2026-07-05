@@ -3,9 +3,9 @@
 import { getEnv } from '../config/env';
 import { getDb } from '../db/client';
 
-import { createAuthService, type AuthService } from './AuthService';
+import { AuthService } from './AuthService';
 import { createProvider } from './provider';
-import { createWorkspaceService, type WorkspaceService } from './WorkspaceService';
+import { WorkspaceService } from './WorkspaceService';
 
 export interface Services {
   auth: AuthService;
@@ -18,7 +18,7 @@ export function getServices(): Services {
   if (!state.services) {
     const env = getEnv();
     const provider = createProvider(getDb(), { secret: env.AUTH_SECRET, baseUrl: env.AUTH_URL });
-    state.services = { auth: createAuthService(provider), workspace: createWorkspaceService(provider) };
+    state.services = { auth: new AuthService(provider), workspace: new WorkspaceService(provider) };
   }
   return state.services;
 }

@@ -1,6 +1,6 @@
-import { createAuthService, type AuthService } from '../auth/AuthService';
+import { AuthService } from '../auth/AuthService';
 import { createProvider } from '../auth/provider';
-import { createWorkspaceService, type WorkspaceService } from '../auth/WorkspaceService';
+import { WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
 
 import { createTrpcHandler } from './handler';
@@ -40,8 +40,8 @@ describe('tRPC workspace router on pglite', () => {
   beforeEach(async () => {
     t = await createTestDb();
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
-    auth = createAuthService(provider);
-    workspace = createWorkspaceService(provider);
+    auth = new AuthService(provider);
+    workspace = new WorkspaceService(provider);
   });
   afterEach(async () => {
     await t.close();
@@ -156,8 +156,8 @@ describe('trpcHandler over HTTP', () => {
   beforeEach(async () => {
     t = await createTestDb();
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
-    auth = createAuthService(provider);
-    workspace = createWorkspaceService(provider);
+    auth = new AuthService(provider);
+    workspace = new WorkspaceService(provider);
   });
   afterEach(async () => {
     await t.close();
