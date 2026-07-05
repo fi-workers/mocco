@@ -1,44 +1,38 @@
 // Neutral workspace surface — no vendor names leave this directory.
-// Wraps the vendor's organization API; consumed by the tRPC layer.
+// Vendor responses are parsed with zod at the boundary (parse, don't convert):
+// unknown vendor fields are stripped, shape drift fails loudly here instead of
+// leaking a wrong shape downstream.
+import { z } from 'zod';
+
 import { getProvider } from './provider';
 
+const workspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  // Vendor emits `string | null | undefined`; normalize to `string | null`.
+  logo: z
+    .string()
+    .nullish()
+    .transform(value => value ?? null),
+  createdAt: z.date(),
+});
+
+const memberSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  role: z.string(),
+  createdAt: z.date(),
+});
+
 /** Workspace shape exposed to the rest of the codebase. */
-export interface Workspace {
-  id: string;
-  name: string;
-  slug: string;
-  logo: string | null;
-  createdAt: Date;
-}
-
-export interface WorkspaceMember {
-  id: string;
-  userId: string;
-  role: string;
-  createdAt: Date;
-}
-
-function toWorkspace(org: {
-  id: string;
-  name: string;
-  slug: string;
-  // eslint-disable-next-line sonarjs/no-redundant-optional -- vendor type is `string | null | undefined`
-  logo?: string | null;
-  createdAt: Date;
-}): Workspace {
-  return {
-    id: org.id,
-    name: org.name,
-    slug: org.slug,
-    logo: org.logo ?? null,
-    createdAt: org.createdAt,
-  };
-}
+export type Workspace = z.infer<typeof workspaceSchema>;
+export type WorkspaceMember = z.infer<typeof memberSchema>;
 
 /** Workspaces the current user belongs to. */
 export async function listWorkspaces(headers: Headers): Promise<Workspace[]> {
   const orgs = await getProvider().api.listOrganizations({ headers });
-  return orgs.map(org => toWorkspace(org));
+  return z.array(workspaceSchema).parse(orgs);
 }
 
 /** Create a workspace; the creator becomes its owner and it becomes session-active. */
@@ -47,7 +41,7 @@ export async function createWorkspace(headers: Headers, input: { name: string; s
   if (!org) {
     throw new Error('workspace creation returned nothing');
   }
-  return toWorkspace(org);
+  return workspaceSchema.parse(org);
 }
 
 /** Switch the session-active workspace (must be a member). */
@@ -65,13 +59,5 @@ export async function getActiveWorkspace(
   if (!full) {
     return null;
   }
-  return {
-    ...toWorkspace(full),
-    members: full.members.map(m => ({
-      id: m.id,
-      userId: m.userId,
-      role: m.role,
-      createdAt: m.createdAt,
-    })),
-  };
+  return workspaceSchema.extend({ members: z.array(memberSchema) }).parse(full);
 }
