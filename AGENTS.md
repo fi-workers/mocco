@@ -41,7 +41,8 @@ Tests must pass without docker: integration tests run on **pglite** (in-memory W
 - TypeScript strict; ESLint 10 flat config (airbnb-extended + typescript-eslint strictTypeChecked + unicorn + sonarjs) with `--max-warnings 0`; prettier formats everything.
 - **All content in English** — code, comments, docs, commit messages, PR bodies.
 - **Dependencies are pinned exactly** (no `^`/`~`). `yarn.lock` contains only the workspaces that exist on the branch.
-- **Vendor isolation**: third-party services are wrapped behind neutral surfaces. Example: only `src/backend/auth/provider.ts` may import the auth library; everything else uses `authHandler`/`getSession` from `src/backend/auth`. Follow this pattern for new vendors. Env var names are ours (`AUTH_SECRET`), never vendor-branded.
+- **Vendor isolation**: third-party services are wrapped behind neutral surfaces. Example: only `src/backend/auth/provider.ts` may import the auth library; everything else uses `authHandler`/`getSession` from `src/backend/auth/session.ts`. Follow this pattern for new vendors. Env var names are ours (`AUTH_SECRET`), never vendor-branded.
+- **No index/barrel files** (lint-enforced): never create `index.ts` re-export hubs (FSD-style). Name modules concretely and import the concrete path; cross-package consumers go through explicit `package.json` `exports` subpaths (e.g. `@mocco/backend/trpc/handler`).
 
 ## PR conventions
 

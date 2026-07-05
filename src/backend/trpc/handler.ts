@@ -1,6 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
-import { getSession } from '../auth';
+import { getSession } from '../auth/session';
 import { db } from '../db/client';
 
 import { appRouter } from './router';
