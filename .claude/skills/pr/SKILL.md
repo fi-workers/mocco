@@ -24,6 +24,7 @@ Ship exactly **one concern per PR**, in dependency order, always green. The revi
    - Behavior changes update the matching `docs/reference/` page in the same PR.
    - **Scripted edits must assert their target** (e.g. `assert old in s` before replace) and be verified with a grep after — a silent replace-miss once shipped a commit whose message claimed a change that never landed.
    - **Stage explicit paths only — never `git add -A`/`git add .`.** The shared working tree can contain unrelated files (other sessions' notes, scratch work); a blanket add once swept a foreign research note into a public PR and required a history rewrite.
+   - **Verify the commit actually contains everything: `git status --porcelain` must be empty (or exactly the intended leftovers) AFTER committing, before pushing.** `git add` aborts ALL paths when any one pathspec fails (e.g. a file already staged as deleted) — a failed add once pushed a deletions-only commit whose message described a full refactor.
 
 ## Verify (all must pass — run them, don't assume)
 
