@@ -42,7 +42,7 @@ Tests must pass without docker: integration tests run on **pglite** (in-memory W
 - **All content in English** — code, comments, docs, commit messages, PR bodies.
 - **Dependencies are pinned exactly** (no `^`/`~`). `yarn.lock` contains only the workspaces that exist on the branch.
 - **Vendor isolation**: third-party services are wrapped behind neutral surfaces. Example: only `src/backend/auth/provider.ts` may import the auth library; everything else uses `authHandler`/`getSession` from `src/backend/auth/session.ts`. Follow this pattern for new vendors. Env var names are ours (`AUTH_SECRET`), never vendor-branded.
-- **No index/barrel files** (lint-enforced): never create `index.ts` re-export hubs (FSD-style). Name modules concretely and import the concrete path; cross-package consumers go through explicit `package.json` `exports` subpaths (e.g. `@mocco/backend/auth/session`).
+- **No index/barrel files** (lint-enforced): never create `index.ts` re-export hubs (FSD-style). Name modules concretely and import the concrete path; cross-package consumers go through explicit `package.json` `exports` subpaths (e.g. `@mocco/backend/trpc/handler`).
 - **Env access is centralized** (lint-enforced in the backend): `src/backend/config/env.ts` is the only `process.env` reader — a lazy, zod-validated surface (`getEnv()`). Never read `process.env` inline; add new vars to the schema.
 
 ## PR conventions

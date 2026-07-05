@@ -1,7 +1,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
-import type { Session } from '../auth';
+import type { Session } from '../auth/session';
 import type { Db } from '../db/client';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */

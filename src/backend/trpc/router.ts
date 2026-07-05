@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { createWorkspace, getActiveWorkspace, listWorkspaces, setActiveWorkspace } from '../auth';
+import { createWorkspace, getActiveWorkspace, listWorkspaces, setActiveWorkspace } from '../auth/workspaces';
 
 import { router, publicProcedure, protectedProcedure } from './trpc';
 
