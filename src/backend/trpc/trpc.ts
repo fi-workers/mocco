@@ -1,15 +1,17 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
-import type { AuthService } from '../auth/service';
+import type { AuthService } from '../auth/AuthService';
+import type { WorkspaceService } from '../auth/WorkspaceService';
 import type { Db } from '../db/client';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */
 export interface Context {
   db: Db;
-  /** Injected auth service (production instance or a per-test pglite one). */
+  /** Injected services (production instances or per-test pglite ones). */
   auth: AuthService;
+  workspace: WorkspaceService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
