@@ -47,7 +47,7 @@ jobs:
         run: yarn format:check
       - name: Lint + typecheck (backend, frontend)
         run: yarn lint
-      - name: Test (jest + pglite integration)
+      - name: Test (vitest + pglite integration)
         run: yarn test
       - name: Migration drift check (schema.ts must match committed migrations)
         run: |

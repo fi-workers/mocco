@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "ts-check": "tsc --noEmit",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "vitest run"
   },
   "dependencies": {
     "better-auth": "1.6.23",
@@ -17,12 +17,10 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
-    "@types/jest": "30.0.0",
     "@types/pg": "8.20.0",
     "eslint": "10.6.0",
-    "jest": "30.4.2",
-    "ts-jest": "29.4.11",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   },
   "engines": {
     "node": ">=22"
