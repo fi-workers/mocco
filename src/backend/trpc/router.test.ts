@@ -1,4 +1,6 @@
-import { createAuthService, type AuthService } from '../auth/service';
+import { createAuthService, type AuthService } from '../auth/AuthService';
+import { createProvider } from '../auth/provider';
+import { createWorkspaceService, type WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
 
 import { createTrpcHandler } from './handler';
@@ -24,9 +26,10 @@ const signUpViaHttp = async (auth: AuthService, email: string) => {
 describe('tRPC workspace router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
+  let workspace: WorkspaceService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ db: t.db as unknown as Db, auth, session, headers });
+    appRouter.createCaller({ db: t.db as unknown as Db, auth, workspace, session, headers });
 
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
@@ -36,7 +39,9 @@ describe('tRPC workspace router on pglite', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    auth = createAuthService(t.db, { secret: 'test-secret-not-for-prod' });
+    const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    auth = createAuthService(provider);
+    workspace = createWorkspaceService(provider);
   });
   afterEach(async () => {
     await t.close();
@@ -146,24 +151,27 @@ describe('tRPC workspace router on pglite', () => {
 describe('trpcHandler over HTTP', () => {
   let t: TestDb;
   let auth: AuthService;
+  let workspace: WorkspaceService;
 
   beforeEach(async () => {
     t = await createTestDb();
-    auth = createAuthService(t.db, { secret: 'test-secret-not-for-prod' });
+    const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    auth = createAuthService(provider);
+    workspace = createWorkspaceService(provider);
   });
   afterEach(async () => {
     await t.close();
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const trpcHandler = createTrpcHandler({ db: t.db as unknown as Db, auth });
+    const trpcHandler = createTrpcHandler({ db: t.db as unknown as Db, auth, workspace });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);
 
     const sessionHeaders = await signUpViaHttp(auth, 'wire@example.com');
     const cookie = sessionHeaders.get('cookie') ?? '';
-    await auth.createWorkspace(sessionHeaders, { name: 'Wire', slug: 'wire-ws' });
+    await workspace.create(sessionHeaders, { name: 'Wire', slug: 'wire-ws' });
 
     const res = await trpcHandler(new Request('https://local.test/api/trpc/workspace.list', { headers: { cookie } }));
     expect(res.status).toBe(200);

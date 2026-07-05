@@ -10,18 +10,18 @@ export const appRouter = router({
   workspace: router({
     list: protectedProcedure
       .output(z.array(workspaceSchema))
-      .query(async ({ ctx }) => await ctx.auth.listWorkspaces(ctx.headers)),
+      .query(async ({ ctx }) => await ctx.workspace.list(ctx.headers)),
 
     active: protectedProcedure
       .output(workspaceSchema.extend({ members: z.array(workspaceMemberSchema) }).nullable())
-      .query(async ({ ctx }) => await ctx.auth.getActiveWorkspace(ctx.headers)),
+      .query(async ({ ctx }) => await ctx.workspace.getActive(ctx.headers)),
 
     create: protectedProcedure
       .input(workspaceCreateInputSchema)
       .output(workspaceSchema)
       .mutation(async ({ ctx, input }) => {
         try {
-          return await ctx.auth.createWorkspace(ctx.headers, input);
+          return await ctx.workspace.create(ctx.headers, input);
         } catch (error) {
           // Map ONLY duplicate-slug rejections; anything else re-throws untouched.
           // Two sources: the vendor's exact-match pre-check (BAD_REQUEST "already
@@ -41,7 +41,7 @@ export const appRouter = router({
       }),
 
     setActive: protectedProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
-      await ctx.auth.setActiveWorkspace(ctx.headers, input.workspaceId);
+      await ctx.workspace.setActive(ctx.headers, input.workspaceId);
       return { ok: true } as const;
     }),
   }),
