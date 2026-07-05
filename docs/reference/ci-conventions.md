@@ -3,7 +3,7 @@ title: CI conventions (supply-chain hardening)
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-07-04
+updated: 2026-07-05
 confidence: high
 owner: andrea
 tags: [reference, ci, security, supply-chain, github-actions]
@@ -25,6 +25,6 @@ tags: [reference, ci, security, supply-chain, github-actions]
 
 ## Initial workflows (the CI PR)
 
-- `ci.yml` — on `pull_request` + `merge_group` + `push` to main: install (immutable, dependency scripts disabled) → format check → lint (backend+frontend, incl. ts-check) → test (pglite) → migration-drift check → frontend build. No secrets, `permissions: contents: read`, SHA-pinned actions, `pr-` scoped cache (or none).
+- `ci.yml` — on `pull_request` + `merge_group` + `push` to main. Each step (format:check · lint-backend · lint-frontend · lint-react-doctor · test · ci:drift · build) is its own matrix job: parallel, `fail-fast: false` (isolated), individually re-runnable; every leg runs the same root package.json script that `yarn ci:local` composes locally. A `ci` gate job (`needs: step`) is the single required check. No secrets, `permissions: contents: read`, SHA-pinned actions, `pr-` scoped cache (or none).
 - Publishing/release workflows do not exist yet; when they do, they follow rules 3–5 and get their own review.
 - **Required checks**: after `ci.yml` lands, branch protection on `main` must require the `ci` check (checks that only advise don't gate — write ≠ deploy applies to us too).

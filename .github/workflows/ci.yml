@@ -1,4 +1,9 @@
-# CI — format · lint · typecheck · test (pglite, docker-free) · build.
+# CI — every step is its own matrix job: parallel, isolated (fail-fast off, one
+# red step never cancels the rest), individually re-runnable. Each leg runs the
+# exact root package.json script that `yarn ci:local` (pre-push) composes
+# locally — one source of truth, two schedulers.
+# The `ci` gate job is the single required check for branch protection.
+#
 # Supply-chain rules (docs/reference/ci-conventions.md):
 # - third-party actions pinned to commit SHAs (tags verified via ls-remote)
 # - plain `pull_request` only (never pull_request_target with checkout)
@@ -27,9 +32,21 @@ env:
   NEXT_TELEMETRY_DISABLED: '1'
 
 jobs:
-  ci:
+  step:
+    name: ${{ matrix.step }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        step:
+          - format:check
+          - lint-backend
+          - lint-frontend
+          - lint-react-doctor
+          - test
+          - ci:drift
+          - build
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -43,15 +60,16 @@ jobs:
         run: yarn install --immutable
         env:
           YARN_ENABLE_SCRIPTS: 'false'
-      # Every step below runs a root package.json script — the exact same
-      # commands `yarn ci:local` (and the pre-push hook) run locally.
-      - name: Format check
-        run: yarn format:check
-      - name: Lint + typecheck (eslint, tsc, react-doctor)
-        run: yarn lint
-      - name: Test (jest + pglite integration)
-        run: yarn test
-      - name: Migration drift check (schema.ts must match committed migrations)
-        run: yarn ci:drift
-      - name: Build (Next.js)
-        run: yarn build
+      # matrix.step values are the static list above — never derived from the PR.
+      - name: yarn ${{ matrix.step }}
+        run: yarn ${{ matrix.step }}
+
+  ci:
+    # Branch-protection gate: the one required check, green only when every leg is.
+    needs: step
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All steps succeeded
+        run: '[ "${{ needs.step.result }}" = "success" ]'
