@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./auth/session": "./auth/session.ts",
+    "./auth/instance": "./auth/instance.ts",
     "./trpc/handler": "./trpc/handler.ts",
     "./trpc/router": "./trpc/router.ts"
   },

@@ -1,12 +1,14 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
-import type { Session } from '../auth/session';
+import type { AuthService, Session } from '../auth/service';
 import type { Db } from '../db/client';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */
 export interface Context {
   db: Db;
+  /** Injected auth service (production instance or a per-test pglite one). */
+  auth: AuthService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
