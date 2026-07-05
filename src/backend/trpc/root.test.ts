@@ -4,7 +4,7 @@ import { WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
 
 import { createTrpcHandler } from './handler';
-import { appRouter } from './router';
+import { appRouter } from './root';
 
 import type { Context } from './trpc';
 import type { Db } from '../db/client';

@@ -3,7 +3,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { getServices, type Services } from '../auth/instance';
 import { getDb } from '../db/client';
 
-import { appRouter } from './router';
+import { appRouter } from './root';
 
 import type { Context } from './trpc';
 import type { Db } from '../db/client';

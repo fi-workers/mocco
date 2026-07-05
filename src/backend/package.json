@@ -6,7 +6,7 @@
   "exports": {
     "./auth/instance": "./auth/instance.ts",
     "./trpc/handler": "./trpc/handler.ts",
-    "./trpc/router": "./trpc/router.ts"
+    "./trpc/root": "./trpc/root.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
