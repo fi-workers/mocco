@@ -1,4 +1,5 @@
 import { AuthService } from '../auth/AuthService';
+import { SlugTakenError } from '../auth/errors';
 import { createProvider } from '../auth/provider';
 import { WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
@@ -101,6 +102,17 @@ describe('tRPC workspace router on pglite', () => {
       code: 'BAD_REQUEST', // below min length 2
     });
     await expect(api.workspace.list()).resolves.toHaveLength(0); // vendor never reached, no rows
+  });
+
+  it('the service surfaces duplicate slugs as SlugTakenError (vendor pre-check and DB index paths)', async () => {
+    const headers = await signUpViaHttp(auth, 'service@example.com');
+    await workspace.create(headers, { name: 'One', slug: 'same' });
+    // Vendor exact-match pre-check path.
+    await expect(workspace.create(headers, { name: 'Two', slug: 'same' })).rejects.toBeInstanceOf(SlugTakenError);
+    // Case-variant race path: bypass the pre-check with an uppercase row so the
+    // lowercase create collides on the DB lower(slug) unique index instead.
+    await t.db.insert(t.schema.workspaces).values({ name: 'Taken', slug: 'TAKEN' });
+    await expect(workspace.create(headers, { name: 'Mine', slug: 'taken' })).rejects.toBeInstanceOf(SlugTakenError);
   });
 
   it('duplicate slug maps to CONFLICT with a friendly message', async () => {
