@@ -10,12 +10,12 @@ export class AuthService {
   constructor(private readonly provider: Provider) {}
 
   /** Fetch-standard handler (Request → Response) for the auth routes. */
-  handler(request: Request): Promise<Response> {
-    return this.provider.handler(request);
+  async handler(request: Request): Promise<Response> {
+    return await this.provider.handler(request);
   }
 
   /** Read the current session from request headers (cookie-based). */
-  getSession(headers: Headers): Promise<Session | null> {
-    return this.provider.api.getSession({ headers });
+  async getSession(headers: Headers): Promise<Session | null> {
+    return await this.provider.api.getSession({ headers });
   }
 }

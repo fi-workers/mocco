@@ -10,8 +10,8 @@ import type { Db } from '../db/client';
 
 /** DI factory — production binds it below; tests bind it to pglite. */
 export function createTrpcHandler(deps: { db: Db } & Services) {
-  return (request: Request): Promise<Response> =>
-    fetchRequestHandler({
+  return async (request: Request): Promise<Response> =>
+    await fetchRequestHandler({
       endpoint: '/api/trpc',
       req: request,
       router: appRouter,
@@ -26,6 +26,6 @@ export function createTrpcHandler(deps: { db: Db } & Services) {
 }
 
 /** Mounted by Next at app/api/trpc/[trpc]/route.ts. */
-export function trpcHandler(request: Request): Promise<Response> {
-  return createTrpcHandler({ db: getDb(), ...getServices() })(request);
+export async function trpcHandler(request: Request): Promise<Response> {
+  return await createTrpcHandler({ db: getDb(), ...getServices() })(request);
 }

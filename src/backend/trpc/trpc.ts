@@ -23,9 +23,9 @@ export const { router } = t;
 export const publicProcedure = t.procedure;
 
 /** Requires a signed-in user; narrows ctx.session to non-null. */
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!ctx.session) {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
-  return next({ ctx: { ...ctx, session: ctx.session } });
+  return await next({ ctx: { ...ctx, session: ctx.session } });
 });
