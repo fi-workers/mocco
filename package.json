@@ -21,8 +21,8 @@
     "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "ci:local": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn ci:drift && yarn build",
-    "ci:drift": "sh scripts/drift-check.sh"
+    "verify": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn db:drift && yarn build",
+    "db:drift": "sh scripts/drift-check.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

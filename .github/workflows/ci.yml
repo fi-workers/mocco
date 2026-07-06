@@ -1,6 +1,6 @@
 # CI — every step is its own matrix job: parallel, isolated (fail-fast off, one
 # red step never cancels the rest), individually re-runnable. Each leg runs the
-# exact root package.json script that `yarn ci:local` (pre-push) composes
+# exact root package.json script that `yarn verify` (pre-push) composes
 # locally — one source of truth, two schedulers.
 # The `ci` gate job is the single required check for branch protection.
 #
@@ -44,7 +44,7 @@ jobs:
           - lint-backend
           - lint-frontend
           - test
-          - ci:drift
+          - db:drift
           - build
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

@@ -1,4 +1,4 @@
-# A dirty tree here means the outgoing commits do NOT contain what ci:local is
+# A dirty tree here means the outgoing commits do NOT contain what verify is
 # about to validate — the working tree, not the commits, is what gets tested.
 # (Twice this session a failed `git add` pushed a deletions-only commit while
 # the tree was green.) Block until the tree matches HEAD.
@@ -7,4 +7,4 @@ if [ -n "$(git status --porcelain)" ]; then
   git status --porcelain >&2
   exit 1
 fi
-yarn ci:local
+yarn verify

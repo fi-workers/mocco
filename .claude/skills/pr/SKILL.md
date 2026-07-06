@@ -31,7 +31,7 @@ Ship exactly **one concern per PR**, in dependency order, always green. The revi
 **Run the full CI mirror before every push — partial harnesses are not enough:**
 
 ```bash
-yarn ci:local   # = install --immutable → format:check → lint(+ts) → test → migration drift → build
+yarn verify     # = install --immutable → format:check → lint(+ts) → test → migration drift → build
 ```
 
 (husky pre-push runs the same command, so a push cannot leave with a red mirror.)

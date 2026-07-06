@@ -1,6 +1,6 @@
 #!/bin/sh
 # Migration drift check — schema.ts must match the committed migrations.
-# Single source of truth for CI and local (`yarn ci:drift` runs this).
+# Single source of truth for CI and local (`yarn db:drift` runs this).
 set -eu
 
 # stdin closed: an ambiguous rename would otherwise prompt and hang until timeout
