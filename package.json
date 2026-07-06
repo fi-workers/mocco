@@ -12,6 +12,7 @@
     "lint-backend": "yarn backend lint && yarn backend ts-check",
     "lint-frontend": "yarn frontend lint && yarn frontend ts-check",
     "test": "yarn backend test",
+    "build": "yarn frontend build",
     "dev": "concurrently -c 'bgGreen.bold,bgBlue.bold' 'yarn:run-frontend' 'yarn:run-traefik'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -20,8 +21,8 @@
     "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "ci:local": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn ci:drift && yarn frontend build",
-    "ci:drift": "yarn db:generate < /dev/null && test -z \"$(git status --porcelain src/backend/db/migrations)\""
+    "ci:local": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn ci:drift && yarn build",
+    "ci:drift": "sh scripts/drift-check.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
