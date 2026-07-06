@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { createTestDb, type TestDb } from './testing/pglite';
 
 // Docker-free PGlite (WASM Postgres) integration test. Each test gets a fresh isolated DB.

@@ -65,7 +65,7 @@ Whenever the reviewer or user gives a correction, style preference, or "다시�
 1. **Judge**: will this plausibly apply to future PRs (convention/preference/recurring mistake)? One-off contextual fixes don't qualify.
 2. **Pick the strongest enforcing layer** that can hold the rule:
    1. **Lint rule** (machine-enforced — best) → eslint config
-   2. **Test** (regression-proof) → jest/pglite
+   2. **Test** (regression-proof) → vitest/pglite
    3. **AGENTS.md** (every future agent session reads it)
    4. **This skill** (process rules) or `docs/reference/*` (domain conventions)
 3. **Apply it in the same session**: small updates ride the current PR; otherwise an immediate follow-up commit/PR.

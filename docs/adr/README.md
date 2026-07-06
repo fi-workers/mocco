@@ -24,3 +24,4 @@ related:
 
 > Add new decisions as `{NNNN}-{imperative-kebab}.md`. Reversals become a new ADR + `superseded_by` on the old one. No after-the-fact edits to the body.
 - [0007 — pglite for tests, local lint base (amends 0005)](./0007-pglite-testing-and-local-lint-base.md)
+- [0008 — vitest replaces jest (amends 0005/0007)](./0008-vitest-replaces-jest.md)
