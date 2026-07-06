@@ -119,6 +119,22 @@ export function createBaseConfig({ tsconfigRootDir }) {
     },
     { files: ['**/*.{js,mjs,cjs}', '**/*.config.{js,mjs,cjs,ts}'], ...tseslint.configs.disableTypeChecked },
 
+    // No index/barrel files (FSD-style re-export hubs): they hide the real module
+    // graph and defeat direct imports. Name modules concretely; consumers import
+    // the concrete path (cross-package via explicit package.json "exports" subpaths).
+    {
+      files: ['**/index.{ts,tsx,mts,cts}'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector: 'Program',
+            message: 'No index.ts files — name the module concretely and import it directly (no barrels).',
+          },
+        ],
+      },
+    },
+
     // Test files and test-support helpers may use devDependencies (test-only packages like pglite),
     // and fixture credentials are not real secrets.
     {
