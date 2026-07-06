@@ -1,1 +1,10 @@
-yarn test
+# A dirty tree here means the outgoing commits do NOT contain what verify is
+# about to validate — the working tree, not the commits, is what gets tested.
+# (Twice this session a failed `git add` pushed a deletions-only commit while
+# the tree was green.) Block until the tree matches HEAD.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "pre-push: working tree is dirty — commit or stash everything first:" >&2
+  git status --porcelain >&2
+  exit 1
+fi
+yarn verify
