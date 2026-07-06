@@ -7,11 +7,11 @@ export type Session = Provider['$Infer']['Session'];
 export type AuthUser = Session['user'];
 
 /** Fetch-standard handler (Request → Response) for the auth routes. */
-export function authHandler(request: Request): Promise<Response> {
-  return getProvider().handler(request);
+export async function authHandler(request: Request): Promise<Response> {
+  return await getProvider().handler(request);
 }
 
 /** Read the current session from request headers (cookie-based). */
-export function getSession(headers: Headers): Promise<Session | null> {
-  return getProvider().api.getSession({ headers });
+export async function getSession(headers: Headers): Promise<Session | null> {
+  return await getProvider().api.getSession({ headers });
 }

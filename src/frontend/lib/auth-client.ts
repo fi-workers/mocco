@@ -7,14 +7,14 @@ const client = createAuthClient();
 
 export const { useSession } = client;
 
-export function signUp(input: { email: string; password: string; name: string }) {
-  return client.signUp.email(input);
+export async function signUp(input: { email: string; password: string; name: string }) {
+  return await client.signUp.email(input);
 }
 
-export function signIn(input: { email: string; password: string }) {
-  return client.signIn.email(input);
+export async function signIn(input: { email: string; password: string }) {
+  return await client.signIn.email(input);
 }
 
-export function signOut() {
-  return client.signOut();
+export async function signOut() {
+  return await client.signOut();
 }

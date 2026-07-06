@@ -94,8 +94,11 @@ export function createBaseConfig({ tsconfigRootDir }) {
         '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
         // Exceptions must be catchable where they're awaited, and async frames must
         // survive in stack traces — always `return await`, never bare `return promise`.
+        // promise-function-async closes the loophole: a non-async function returning
+        // a promise would silently escape the return-await rule.
         'no-return-await': 'off',
         '@typescript-eslint/return-await': ['error', 'always'],
+        '@typescript-eslint/promise-function-async': 'error',
         'unicorn/prevent-abbreviations': 'off',
         'unicorn/no-null': 'off',
         'unicorn/filename-case': 'off',
