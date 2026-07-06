@@ -1,5 +1,5 @@
 // The ONLY file that imports the auth vendor. Everything else consumes the
-// neutral surface in ./index.ts, so the vendor can be swapped by rewriting
+// neutral surface in ./session.ts, so the vendor can be swapped by rewriting
 // this file alone (plus the client wrapper on the frontend).
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';

@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./index.ts",
+  "exports": {
+    "./auth/session": "./auth/session.ts"
+  },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
     "ts-check": "tsc --noEmit",
