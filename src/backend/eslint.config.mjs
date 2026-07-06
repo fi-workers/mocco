@@ -27,6 +27,21 @@ export default [
       ],
     },
   },
+  {
+    // Env access is centralized: config/env.ts is the only process.env reader
+    // (zod-parsed, lazy). Never read process.env inline.
+    files: ['**/*.ts'],
+    ignores: ['config/env.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.object.name='process'][object.property.name='env']",
+          message: 'Read env through getEnv() (config/env.ts) — the single, zod-validated env surface.',
+        },
+      ],
+    },
+  },
   airbnbPlugins.node,
   ...airbnb.node.recommended,
   prettier,

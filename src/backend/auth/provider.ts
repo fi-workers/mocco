@@ -5,7 +5,8 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization } from 'better-auth/plugins';
 
-import { db as defaultDb } from '../db/client';
+import { getEnv } from '../config/env';
+import { getDb } from '../db/client';
 import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../db/schema';
 
 export interface AuthOptions {
@@ -68,10 +69,8 @@ const state: { provider?: Provider } = {};
 /** Default instance bound to the app DB. Created lazily so builds don't need env. */
 export function getProvider(): Provider {
   if (!state.provider) {
-    state.provider = createProvider(defaultDb, {
-      secret: process.env.AUTH_SECRET,
-      baseUrl: process.env.AUTH_URL,
-    });
+    const env = getEnv();
+    state.provider = createProvider(getDb(), { secret: env.AUTH_SECRET, baseUrl: env.AUTH_URL });
   }
   return state.provider;
 }
