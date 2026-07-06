@@ -41,6 +41,7 @@ jobs:
       matrix:
         step:
           - format:check
+          - lint-common
           - lint-backend
           - lint-frontend
           - test

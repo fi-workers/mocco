@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { AuthService } from '../auth/AuthService';
 import { SlugTakenError } from '../auth/errors';
 import { createProvider } from '../auth/provider';
