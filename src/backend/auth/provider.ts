@@ -44,19 +44,9 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
     },
     // Workspace = organization plugin (members, roles). The invitation MODEL is
     // mapped for plugin compatibility; the invite FLOW ships later. Teams/dynamic
-    // roles come later.
-    plugins: [
-      organization({
-        organizationHooks: {
-          // Slugs are case-insensitively unique at the DB (lower(slug) index);
-          // normalize on create so stored slugs are always lowercase and the
-          // vendor's exact-match duplicate pre-check stays meaningful.
-          beforeCreateOrganization: async ({ organization: org }) => ({
-            data: { ...org, slug: org.slug?.toLowerCase() },
-          }),
-        },
-      }),
-    ],
+    // roles come later. The plugin requires a unique slug; WorkspaceService fills
+    // it with a system uuid, so no create-time slug hook is needed.
+    plugins: [organization()],
   });
 }
 

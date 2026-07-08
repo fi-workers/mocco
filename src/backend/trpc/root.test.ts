@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '../auth/AuthService';
-import { SlugTakenError } from '../auth/errors';
 import { createProvider } from '../auth/provider';
 import { WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
@@ -57,24 +56,26 @@ describe('tRPC workspace router on pglite', () => {
 
   it('a fresh user has no workspaces and no active workspace (null contract)', async () => {
     const api = await signedInCaller('fresh@example.com');
-    await expect(api.workspace.list()).resolves.toHaveLength(0);
-    await expect(api.workspace.active()).resolves.toBeNull();
+    await expect(api.workspace.list()).resolves.toEqual({ workspaces: [] });
+    await expect(api.workspace.active()).resolves.toEqual({ workspace: null });
   });
 
   it('create → list → active round-trip', async () => {
     const api = await signedInCaller('owner@example.com');
 
-    const ws = await api.workspace.create({ name: 'Acme Lab', slug: 'acme-lab' });
-    expect(ws.slug).toBe('acme-lab');
-    // Egress contract: raw vendor rows carry `metadata` (probe-verified); the
-    // .output() schema strips it and normalizes logo to `string | null`.
+    const { workspace: ws } = await api.workspace.create({ name: 'Acme Lab' });
+    expect(ws.name).toBe('Acme Lab');
+    // Egress contract: raw vendor rows carry `metadata` and the system slug
+    // (probe-verified); the .output() schema strips both and normalizes logo
+    // to `string | null`. The slug is a vendor-internal token, never on the wire.
     expect(ws).not.toHaveProperty('metadata');
+    expect(ws).not.toHaveProperty('slug');
     expect(ws.logo).toBeNull();
 
-    const all = await api.workspace.list();
-    expect(all).toHaveLength(1);
+    const { workspaces } = await api.workspace.list();
+    expect(workspaces).toHaveLength(1);
 
-    const active = await api.workspace.active();
+    const { workspace: active } = await api.workspace.active();
     expect(active?.id).toBe(ws.id);
     expect(active?.members).toHaveLength(1);
     expect(active?.members[0]?.role).toBe('owner');
@@ -82,78 +83,46 @@ describe('tRPC workspace router on pglite', () => {
 
   it('setActive switches between two workspaces', async () => {
     const api = await signedInCaller('owner@example.com');
-    const first = await api.workspace.create({ name: 'A', slug: 'a-ws' });
-    const second = await api.workspace.create({ name: 'B', slug: 'b-ws' });
+    const { workspace: first } = await api.workspace.create({ name: 'A' });
+    const { workspace: second } = await api.workspace.create({ name: 'B' });
 
     const switched = await api.workspace.setActive({ workspaceId: first.id });
     expect(switched).toEqual({ ok: true });
     const activeFirst = await api.workspace.active();
-    expect(activeFirst?.id).toBe(first.id);
+    expect(activeFirst.workspace?.id).toBe(first.id);
 
     await api.workspace.setActive({ workspaceId: second.id });
     const activeSecond = await api.workspace.active();
-    expect(activeSecond?.id).toBe(second.id);
+    expect(activeSecond.workspace?.id).toBe(second.id);
   });
 
-  it('slug is parsed at the boundary (uppercase rejected before the vendor)', async () => {
+  it('two workspaces can share a name — the slug is a system-generated uuid, so there is no collision', async () => {
     const api = await signedInCaller('owner@example.com');
-    await expect(api.workspace.create({ name: 'X', slug: 'Not-Lower' })).rejects.toMatchObject({
-      code: 'BAD_REQUEST',
-    });
-    await expect(api.workspace.create({ name: 'X', slug: 'a' })).rejects.toMatchObject({
-      code: 'BAD_REQUEST', // below min length 2
-    });
-    await expect(api.workspace.list()).resolves.toHaveLength(0); // vendor never reached, no rows
-  });
-
-  it('the service surfaces duplicate slugs as SlugTakenError (vendor pre-check and DB index paths)', async () => {
-    const headers = await signUpViaHttp(auth, 'service@example.com');
-    await workspace.create(headers, { name: 'One', slug: 'same' });
-    // Vendor exact-match pre-check path.
-    await expect(workspace.create(headers, { name: 'Two', slug: 'same' })).rejects.toBeInstanceOf(SlugTakenError);
-    // Case-variant race path: bypass the pre-check with an uppercase row so the
-    // lowercase create collides on the DB lower(slug) unique index instead.
-    await t.db.insert(t.schema.workspaces).values({ name: 'Taken', slug: 'TAKEN' });
-    await expect(workspace.create(headers, { name: 'Mine', slug: 'taken' })).rejects.toBeInstanceOf(SlugTakenError);
-  });
-
-  it('duplicate slug maps to CONFLICT with a friendly message', async () => {
-    const api = await signedInCaller('owner@example.com');
-    await api.workspace.create({ name: 'One', slug: 'same' });
-    await expect(api.workspace.create({ name: 'Two', slug: 'same' })).rejects.toMatchObject({
-      code: 'CONFLICT',
-      message: 'That slug is already taken.',
-    });
+    const { workspace: first } = await api.workspace.create({ name: 'Same Name' });
+    const { workspace: second } = await api.workspace.create({ name: 'Same Name' });
+    expect(second.id).not.toBe(first.id);
+    const { workspaces } = await api.workspace.list();
+    expect(workspaces).toHaveLength(2);
   });
 
   it('a non-member cannot set a foreign workspace active', async () => {
     const owner = await signedInCaller('owner@example.com');
-    const ws = await owner.workspace.create({ name: 'Private', slug: 'private-ws' });
+    const { workspace: ws } = await owner.workspace.create({ name: 'Private' });
 
     const stranger = await signedInCaller('stranger@example.com');
     await expect(stranger.workspace.setActive({ workspaceId: ws.id })).rejects.toMatchObject({
       message: expect.stringMatching(/not a member/i) as string, // vendor FORBIDDEN
     });
-    await expect(stranger.workspace.active()).resolves.toBeNull();
+    await expect(stranger.workspace.active()).resolves.toEqual({ workspace: null });
 
     // owner unaffected — still the only session pointing at the workspace
     const ownerActive = await owner.workspace.active();
-    expect(ownerActive?.id).toBe(ws.id);
-  });
-
-  it('a case-variant race hitting the DB index still maps to CONFLICT', async () => {
-    const api = await signedInCaller('owner@example.com');
-    // Bypass zod+vendor pre-check by inserting an uppercase slug directly; the
-    // router's lowercase create then collides on lower(slug) → pg 23505 → CONFLICT.
-    await t.db.insert(t.schema.workspaces).values({ name: 'Taken', slug: 'TAKEN' });
-    await expect(api.workspace.create({ name: 'Mine', slug: 'taken' })).rejects.toMatchObject({
-      code: 'CONFLICT',
-    });
+    expect(ownerActive.workspace?.id).toBe(ws.id);
   });
 
   it('setActive with a valid-but-nonexistent uuid is rejected', async () => {
     const api = await signedInCaller('owner@example.com');
-    await api.workspace.create({ name: 'Mine', slug: 'mine' });
+    await api.workspace.create({ name: 'Mine' });
     await expect(
       api.workspace.setActive({ workspaceId: '00000000-0000-4000-8000-000000000000' }),
     ).rejects.toMatchObject({ message: expect.stringMatching(/not a member/i) as string });
@@ -185,14 +154,14 @@ describe('trpcHandler over HTTP', () => {
 
     const sessionHeaders = await signUpViaHttp(auth, 'wire@example.com');
     const cookie = sessionHeaders.get('cookie') ?? '';
-    await workspace.create(sessionHeaders, { name: 'Wire', slug: 'wire-ws' });
+    await workspace.create(sessionHeaders, { name: 'Wire' });
 
     const res = await trpcHandler(new Request('https://local.test/api/trpc/workspace.list', { headers: { cookie } }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      result: { data: { json: { slug: string; createdAt: unknown }[]; meta?: unknown } };
+      result: { data: { json: { workspaces: { name: string; createdAt: unknown }[] }; meta?: unknown } };
     };
-    expect(body.result.data.json[0]?.slug).toBe('wire-ws');
+    expect(body.result.data.json.workspaces[0]?.name).toBe('Wire');
     expect(body.result.data.meta).toBeDefined(); // superjson envelope carrying the Date
   });
 });

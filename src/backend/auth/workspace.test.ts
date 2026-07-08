@@ -110,33 +110,6 @@ describe('workspace (organization plugin) on pglite', () => {
     expect(await t.db.select().from(t.schema.members)).toHaveLength(1); // still just the owner row
   });
 
-  it('rejects an exact duplicate slug', async () => {
-    const { headers } = await signUp('owner@example.com');
-    await auth.api.createOrganization({ body: { name: 'One', slug: 'same-slug' }, headers });
-
-    await expect(
-      auth.api.createOrganization({ body: { name: 'Two', slug: 'same-slug' }, headers }),
-    ).rejects.toMatchObject({ status: 'BAD_REQUEST' });
-
-    expect(await t.db.select().from(t.schema.workspaces)).toHaveLength(1);
-  });
-
-  it('rejects a case-variant slug collision at the DB (lower(slug) unique)', async () => {
-    const { headers } = await signUp('owner@example.com');
-    await auth.api.createOrganization({ body: { name: 'One', slug: 'acme-lab' }, headers });
-
-    // via the vendor API
-    await expect(
-      auth.api.createOrganization({ body: { name: 'Two', slug: 'Acme-Lab' }, headers }),
-    ).rejects.toBeTruthy();
-
-    // and directly against the DB, proving the lower(slug) unique index is what rejects
-    const cause = await causeOf(t.db.insert(t.schema.workspaces).values({ name: 'Three', slug: 'ACME-LAB' }));
-    expect(cause).toMatch(/mocco_workspaces_slug_lower_uq/);
-
-    expect(await t.db.select().from(t.schema.workspaces)).toHaveLength(1);
-  });
-
   it('rejects roles outside owner/admin/member (DB check)', async () => {
     const { user, headers } = await signUp('owner@example.com');
     await auth.api.createOrganization({ body: { name: 'Acme', slug: 'acme' }, headers });
@@ -215,14 +188,6 @@ describe('workspace (organization plugin) on pglite', () => {
     const rows = await t.db.select().from(t.schema.members);
     expect(rows).toHaveLength(2); // exactly owner + the updated member, no duplicates
     expect(new Set(rows.map(r => r.role))).toEqual(new Set(['owner', 'admin,member']));
-  });
-
-  it('slugs are normalized to lowercase on create', async () => {
-    const { headers } = await signUp('owner@example.com');
-    await auth.api.createOrganization({ body: { name: 'Mixed', slug: 'MiXeD-Slug' }, headers });
-
-    const rows = await t.db.select().from(t.schema.workspaces);
-    expect(rows[0]?.slug).toBe('mixed-slug');
   });
 
   it('sign-up alone creates no workspace (zero-workspace contract for onboarding UI)', async () => {
