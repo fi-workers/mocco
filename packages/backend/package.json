@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./auth/instance": "./auth/instance.ts",
-    "./trpc/handler": "./trpc/handler.ts",
-    "./trpc/root": "./trpc/root.ts",
-    "./trpc/trpc": "./trpc/trpc.ts"
+    "./auth/instance": "./src/auth/instance.ts",
+    "./trpc/handler": "./src/trpc/handler.ts",
+    "./trpc/root": "./src/trpc/root.ts",
+    "./trpc/trpc": "./src/trpc/trpc.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",

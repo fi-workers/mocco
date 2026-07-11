@@ -11,7 +11,7 @@ tags: [reference, frontend, nextjs, react, performance, lint]
 
 # Frontend conventions (Next.js Pages Router)
 
-> How `src/frontend` is written. The app uses the **Pages Router** (`pages/`) — see [ADR 0009](../adr/0009-frontend-uses-the-pages-router.md). Lint enforces most of this; the rest is convention.
+> How `packages/frontend` is written. The app uses the **Pages Router** (`pages/`) — see [ADR 0009](../adr/0009-frontend-uses-the-pages-router.md). Lint enforces most of this; the rest is convention.
 
 ## Adopted patterns
 

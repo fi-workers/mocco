@@ -27,9 +27,9 @@ Mocco is self-hostable. Requirements: Node 22+ and Postgres — login is email+p
 ## Structure
 
 ```
-src/frontend/   @mocco/frontend  Next.js UI (app/api mounts the backend)
-src/backend/    @mocco/backend   domain · db (Drizzle) · tRPC · handlers
-src/common/     @mocco/common    shared zod schemas & types
+packages/frontend/src/   @mocco/frontend  Next.js UI (app/api mounts the backend)
+packages/backend/src/    @mocco/backend   domain · db (Drizzle) · tRPC · handlers
+packages/common/src/     @mocco/common    shared zod schemas & types
 docs/           llm-wiki (ADRs · concepts · guides) — start at docs/index.md
 docs/prototype/ non-functional click-through (design validation)
 ```

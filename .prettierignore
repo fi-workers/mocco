@@ -2,7 +2,7 @@
 docs/
 docs/prototype/
 # Generated artifacts
-src/backend/db/migrations/
+packages/backend/src/db/migrations/
 .yarn/
 **/.next/
 **/dist/
