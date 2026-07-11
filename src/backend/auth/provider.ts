@@ -3,6 +3,7 @@
 // this file alone (plus the client wrapper on the frontend).
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { toNodeHandler } from 'better-auth/node';
 import { organization } from 'better-auth/plugins';
 
 import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../db/schema';
@@ -51,3 +52,11 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
 }
 
 export type Provider = ReturnType<typeof createProvider>;
+
+/** Node-style (req, res) handler for the auth routes — for Pages Router API
+ * routes, which are Node handlers rather than Web-standard. The vendor's own
+ * bridge (tested cookie/body/stream handling) stays behind this boundary. */
+export function toNodeAuthHandler(provider: Provider) {
+  return toNodeHandler(provider);
+}
+export type NodeAuthHandler = ReturnType<typeof toNodeAuthHandler>;

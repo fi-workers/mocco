@@ -1,7 +1,5 @@
-'use client';
-
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/router';
 import { useState } from 'react';
 
 import { signIn, signUp, useSession } from '../lib/auth-client';
@@ -30,7 +28,7 @@ export default function Home() {
       setLoading(false);
       return;
     }
-    router.push('/account');
+    await router.push('/account');
   };
 
   let card;
@@ -54,6 +52,7 @@ export default function Home() {
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Name"
+            aria-label="Name"
             className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
           />
         )}
@@ -63,6 +62,7 @@ export default function Home() {
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder="Email"
+          aria-label="Email"
           className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
         />
         <input
@@ -72,6 +72,7 @@ export default function Home() {
           value={password}
           onChange={e => setPassword(e.target.value)}
           placeholder="Password (8+ characters)"
+          aria-label="Password"
           className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}

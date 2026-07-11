@@ -59,8 +59,8 @@ Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md) — or
 - Conventional-commit style titles (`feat:`, `chore:`, `docs:`, `ci:`).
 - Each schema change ships its own drizzle migration; migration history tracks PR order.
 - Update the relevant `docs/reference/` page when behavior changes; ADR bodies are immutable (supersede with a new ADR).
-- Frontend code follows [docs/reference/frontend-conventions.md](./docs/reference/frontend-conventions.md) — RSC-first, `'use client'` at leaves, no waterfalls, bundle discipline; lint enforces Next CWV + jsx-a11y strict + @eslint-react type-checked.
-- **React Compiler is ON** — never hand-write `useMemo`/`useCallback`/`React.memo`. Name effect callbacks (`useEffect(function syncX() {…})`).
+- Frontend code follows [docs/reference/frontend-conventions.md](./docs/reference/frontend-conventions.md) — **Pages Router** (`pages/`, see [ADR 0009](./docs/adr/0009-frontend-uses-the-pages-router.md)): server data + auth gates via `getServerSideProps`, client components with a vanilla tRPC client, bundle discipline; lint enforces Next CWV + jsx-a11y strict + @eslint-react type-checked.
+- **React Compiler is ON** — never hand-write `useMemo`/`useCallback`/`React.memo`. Effect callbacks are arrow functions (lint's `prefer-arrow-callback`); prefer server data (`getServerSideProps`) over load-in-`useEffect` so `set-state-in-effect` never trips.
 - **Parse, don't validate**: external data (API/webhook/URL/storage) crosses boundaries only via zod `safeParse`; domain ids use `.brand<'GitSha'>()`-style branded types; `as` only inside parsers.
 - **URL is state**: shareable view state (filters/tabs/ranges) lives in `searchParams`, not component state.
 - CI workflows follow [docs/reference/ci-conventions.md](./docs/reference/ci-conventions.md) — SHA-pinned actions, no `pull_request_target`, no cross-boundary caches, minimal `permissions`.

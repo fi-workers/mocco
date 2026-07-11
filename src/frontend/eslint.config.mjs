@@ -31,11 +31,17 @@ export default [
   },
   {
     // App sources only (config files have no type info → exclude type-aware rules)
-    files: ['app/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
+    files: ['pages/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}', 'lib/**/*.{ts,tsx}'],
     rules: {
       // Allow async functions in React event handlers (onClick etc.) — idiomatic pattern.
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
     },
+  },
+  {
+    // Pages Router route files are named by the router — `pages/index.tsx` is the
+    // home route, not a re-export barrel. Exempt route index files from the ban.
+    files: ['pages/**/index.{ts,tsx}'],
+    rules: { 'no-restricted-syntax': 'off' },
   },
   prettier,
 ];

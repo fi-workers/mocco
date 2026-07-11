@@ -3,11 +3,17 @@
 // flows in as a value, so tests bind pglite through the same constructor
 // production uses. Explicit return types pin the neutral shapes from
 // @mocco/common so vendor type inference cannot leak.
-import type { Provider } from './provider';
+import { toNodeAuthHandler, type NodeAuthHandler, type Provider } from './provider';
+
 import type { Session } from '@mocco/common/auth';
 
 export class AuthService {
-  constructor(private readonly provider: Provider) {}
+  /** Node-style (req, res) handler for Pages Router API routes. */
+  readonly nodeHandler: NodeAuthHandler;
+
+  constructor(private readonly provider: Provider) {
+    this.nodeHandler = toNodeAuthHandler(provider);
+  }
 
   /** Fetch-standard handler (Request → Response) for the auth routes. */
   async handler(request: Request): Promise<Response> {
