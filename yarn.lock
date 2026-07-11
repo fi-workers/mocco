@@ -1452,13 +1452,26 @@ __metadata:
   resolution: "@mocco/backend@workspace:src/backend"
   dependencies:
     "@electric-sql/pglite": "npm:0.5.4"
+    "@mocco/common": "workspace:*"
+    "@trpc/server": "npm:11.18.0"
     "@types/pg": "npm:8.20.0"
     better-auth: "npm:1.6.23"
     drizzle-orm: "npm:0.45.2"
     eslint: "npm:10.6.0"
     pg: "npm:8.22.0"
+    superjson: "npm:2.2.6"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
+    zod: "npm:4.1.13"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/common@workspace:*, @mocco/common@workspace:src/common":
+  version: 0.0.0-use.local
+  resolution: "@mocco/common@workspace:src/common"
+  dependencies:
+    eslint: "npm:10.6.0"
+    typescript: "npm:5.9.3"
     zod: "npm:4.1.13"
   languageName: unknown
   linkType: soft
@@ -1941,6 +1954,17 @@ __metadata:
     postcss: "npm:^8.4.41"
     tailwindcss: "npm:4.1.17"
   checksum: 10/127d93fdb4a23efb4f17c188e49077597c4a1509a0bf2a1949544670a2d2b5630ad826e387ec757fbf9bba5b92c96f177bc2a6d46fc4654920d3b38046f4faaf
+  languageName: node
+  linkType: hard
+
+"@trpc/server@npm:11.18.0":
+  version: 11.18.0
+  resolution: "@trpc/server@npm:11.18.0"
+  peerDependencies:
+    typescript: ">=5.7.2"
+  bin:
+    intent: bin/intent.js
+  checksum: 10/a633cc8ef1296eb99ab742a97a563056fe31320fbca2ed2e97dce4af06168080cfd4fe12923857d5fb622660009ddeba4361ff37f97226369126a26836800806
   languageName: node
   linkType: hard
 
@@ -3074,6 +3098,15 @@ __metadata:
   version: 2.0.0
   resolution: "convert-source-map@npm:2.0.0"
   checksum: 10/c987be3ec061348cdb3c2bfb924bec86dea1eacad10550a85ca23edb0fe3556c3a61c7399114f3331ccb3499d7fd0285ab24566e5745929412983494c3926e15
+  languageName: node
+  linkType: hard
+
+"copy-anything@npm:^4":
+  version: 4.0.5
+  resolution: "copy-anything@npm:4.0.5"
+  dependencies:
+    is-what: "npm:^5.2.0"
+  checksum: 10/1ee7e6f55c1016a47871ecd09aa765ca825c1ec89c46e6f58686016c80c6fe3d36452a6010d8498c766ea5d60bc5d892d9511b41310a7355b48ac10b39c90c9a
   languageName: node
   linkType: hard
 
@@ -5133,6 +5166,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"is-what@npm:^5.2.0":
+  version: 5.5.0
+  resolution: "is-what@npm:5.5.0"
+  checksum: 10/d53a6ea1aebf953f3bcf711a28e8463bfe79fc0e4e87575d77c692a30fd3d98f87b88d4c006c06753bf85f771c9d2c1d05b2c6b03c246883261fe190526195d9
+  languageName: node
+  linkType: hard
+
 "isarray@npm:^2.0.5":
   version: 2.0.5
   resolution: "isarray@npm:2.0.5"
@@ -7036,6 +7076,15 @@ __metadata:
     babel-plugin-macros:
       optional: true
   checksum: 10/ba01200e8227fe1441a719c2e7da96c8aa7ef61d14211d1500e1abce12efa118479bcb6e7e12beecb9e1db76432caad2f4e01bbc0c9be21c134b088a4ca5ffe0
+  languageName: node
+  linkType: hard
+
+"superjson@npm:2.2.6":
+  version: 2.2.6
+  resolution: "superjson@npm:2.2.6"
+  dependencies:
+    copy-anything: "npm:^4"
+  checksum: 10/7bb6446b70e8a37ec9aa2f2d08295ae4e7e8268b86c89d83a306b3798cd0cc60d89016c0c5fa83b558db23e8de8863c585a4cf52d18c4834c48bad7d2b6ee25b
   languageName: node
   linkType: hard
 

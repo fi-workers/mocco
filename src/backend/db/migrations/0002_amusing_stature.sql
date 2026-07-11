@@ -1,0 +1,1 @@
+DROP INDEX "mocco_workspaces_slug_lower_uq";

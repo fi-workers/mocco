@@ -35,23 +35,17 @@ export const users = pgTable('mocco_users', {
 // ─────────────────────────────────────────────────────────────
 
 /** Workspace (vendor model: organization). */
-export const workspaces = pgTable(
-  'mocco_workspaces',
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    name: text().notNull(),
-    // uniqueness is the case-insensitive index below (subsumes exact uniqueness)
-    slug: text().notNull(),
-    logo: text(),
-    metadata: text(),
-    createdAt,
-  },
-  table => [
-    // The vendor's duplicate-slug pre-check is exact-match only; this closes the
-    // case-variant hole ('acme-lab' vs 'Acme-Lab') at the DB.
-    uniqueIndex('mocco_workspaces_slug_lower_uq').on(sql`lower(${table.slug})`),
-  ],
-);
+export const workspaces = pgTable('mocco_workspaces', {
+  id: uuid().primaryKey().defaultRandom(),
+  name: text().notNull(),
+  // The vendor requires a non-empty slug, but Mocco has no product use for one:
+  // WorkspaceService fills it with a system uuid. It is addressed by nothing —
+  // no uniqueness constraint, since a v4 uuid never collides.
+  slug: text().notNull(),
+  logo: text(),
+  metadata: text(),
+  createdAt,
+});
 
 /** Workspace invitation (vendor model: invitation).
  * The table exists because the plugin's core read path (get-full-organization)

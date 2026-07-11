@@ -1,12 +1,10 @@
 // The ONLY file that imports the auth vendor. Everything else consumes the
-// neutral surface in ./session.ts, so the vendor can be swapped by rewriting
+// neutral surface (./service.ts), so the vendor can be swapped by rewriting
 // this file alone (plus the client wrapper on the frontend).
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { organization } from 'better-auth/plugins';
 
-import { getEnv } from '../config/env';
-import { getDb } from '../db/client';
 import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../db/schema';
 
 export interface AuthOptions {
@@ -17,7 +15,7 @@ export interface AuthOptions {
 }
 
 /** Any drizzle database the adapter accepts (node-postgres in prod, pglite in tests). */
-type AdapterDb = Parameters<typeof drizzleAdapter>[0];
+export type AdapterDb = Parameters<typeof drizzleAdapter>[0];
 
 /** Factory — lets tests run the full auth stack against an isolated (pglite) DB. */
 export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
@@ -46,31 +44,10 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
     },
     // Workspace = organization plugin (members, roles). The invitation MODEL is
     // mapped for plugin compatibility; the invite FLOW ships later. Teams/dynamic
-    // roles come later.
-    plugins: [
-      organization({
-        organizationHooks: {
-          // Slugs are case-insensitively unique at the DB (lower(slug) index);
-          // normalize on create so stored slugs are always lowercase and the
-          // vendor's exact-match duplicate pre-check stays meaningful.
-          beforeCreateOrganization: async ({ organization: org }) => ({
-            data: { ...org, slug: org.slug?.toLowerCase() },
-          }),
-        },
-      }),
-    ],
+    // roles come later. The plugin requires a unique slug; WorkspaceService fills
+    // it with a system uuid, so no create-time slug hook is needed.
+    plugins: [organization()],
   });
 }
 
 export type Provider = ReturnType<typeof createProvider>;
-
-const state: { provider?: Provider } = {};
-
-/** Default instance bound to the app DB. Created lazily so builds don't need env. */
-export function getProvider(): Provider {
-  if (!state.provider) {
-    const env = getEnv();
-    state.provider = createProvider(getDb(), { secret: env.AUTH_SECRET, baseUrl: env.AUTH_URL });
-  }
-  return state.provider;
-}

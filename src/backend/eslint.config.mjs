@@ -6,7 +6,7 @@ export default [
   ...createBaseConfig({ tsconfigRootDir: import.meta.dirname }),
   {
     // Machine-enforced vendor isolation: only auth/ may touch the provider.
-    // Everything else consumes the neutral surface (auth/session.ts).
+    // Everything else consumes the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).
     files: ['**/*.ts'],
     ignores: ['auth/**'],
     rules: {
@@ -16,11 +16,13 @@ export default [
           patterns: [
             {
               group: ['**/auth/provider', '*/auth/provider'],
-              message: 'Import the neutral auth surface (auth/session.ts) instead of the vendor provider.',
+              message:
+                'Import the neutral auth surface (auth/AuthService.ts, auth/WorkspaceService.ts) instead of the vendor provider.',
             },
             {
               group: ['better-auth', 'better-auth/*'],
-              message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/session.ts).',
+              message:
+                'The auth vendor is only importable inside auth/. Use the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).',
             },
           ],
         },
@@ -44,5 +46,10 @@ export default [
   },
   airbnbPlugins.node,
   ...airbnb.node.recommended,
+  {
+    // Tests may import the provider directly to probe vendor behavior on pglite.
+    files: ['**/*.{test,spec}.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
   prettier,
 ];

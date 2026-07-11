@@ -15,6 +15,13 @@
       "when": 1783177252345,
       "tag": "0001_sharp_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783515396147,
+      "tag": "0002_amusing_stature",
+      "breakpoints": true
     }
   ]
 }
