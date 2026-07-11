@@ -1508,6 +1508,7 @@ __metadata:
     superjson: "npm:2.2.6"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
+    yaml: "npm:2.9.0"
     zod: "npm:4.1.13"
   languageName: unknown
   linkType: soft
@@ -9327,7 +9328,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"yaml@npm:^2.8.2, yaml@npm:^2.8.3, yaml@npm:^2.9.0":
+"yaml@npm:2.9.0, yaml@npm:^2.8.2, yaml@npm:^2.8.3, yaml@npm:^2.9.0":
   version: 2.9.0
   resolution: "yaml@npm:2.9.0"
   bin:
