@@ -49,11 +49,19 @@ yarn verify     # = install --immutable → format:check → lint(+ts) → test 
 
    <what this slice is, 2-6 bullets — say what's intentionally NOT here>
 
+   ## Why
+
+   <why this change is worth making (the problem it solves, the benefit) and why
+   THIS approach over the alternatives you weighed; name the trade-offs. Link an
+   ADR for larger decisions. The reviewer should not have to reconstruct the
+   rationale from the diff — explain it without being asked.>
+
    ## Verified
 
    <the actual harness results: test counts, build, lint>
    ```
-   Title = the commit subject. Keep PR bodies free of session links too.
+   Title = the commit subject. Keep PR bodies free of session links too. For a
+   genuinely trivial slice the Why can be one line, but never omit it.
 8. Tell the user the PR URL and wait for their review/merge signal before starting the next slice.
 
 ## After merge

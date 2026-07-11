@@ -54,6 +54,7 @@ Tests must pass without docker: integration tests run on **pglite** (in-memory W
 Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md) — or invoke the `/pr` skill (`.claude/skills/pr/SKILL.md`), which is the executable version.
 
 - **Small PRs, one concern each**, in dependency order. Keep every PR installable and green on a fresh clone.
+- **PR bodies explain the _why_, not just the _what_** — a `## Why` section covering the problem solved, the benefit, why this approach over alternatives, and the trade-offs (link an ADR for larger decisions). The reviewer should never have to reconstruct the rationale from the diff. See the body shape in the `/pr` skill.
 - **Stage explicit paths only** — never `git add -A`/`git add .`; the shared working tree may hold unrelated files.
 - **Feedback auto-promotion**: when review feedback states or implies a reusable rule, the agent must promote it immediately to the strongest layer — lint rule > test > AGENTS.md > skill/docs — in the same session, and say so. Don't rely on memory.
 - Conventional-commit style titles (`feat:`, `chore:`, `docs:`, `ci:`).
