@@ -9,7 +9,6 @@ import { createTrpcHandler } from './handler';
 import { appRouter } from './root';
 
 import type { Context } from './trpc';
-import type { Db } from '../db/client';
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
 const signUpViaHttp = async (auth: AuthService, email: string) => {
@@ -31,7 +30,7 @@ describe('tRPC workspace router on pglite', () => {
   let workspace: WorkspaceService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ db: t.db as unknown as Db, auth, workspace, session, headers });
+    appRouter.createCaller({ auth, workspace, session, headers });
 
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
@@ -147,7 +146,7 @@ describe('trpcHandler over HTTP', () => {
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const trpcHandler = createTrpcHandler({ db: t.db as unknown as Db, auth, workspace });
+    const trpcHandler = createTrpcHandler({ auth, workspace });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);

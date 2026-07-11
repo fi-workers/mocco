@@ -25,14 +25,10 @@ export class WorkspaceService {
    * genuinely unexpected and propagates untouched.
    */
   async create(headers: Headers, input: WorkspaceCreateInput) {
-    const org = await this.provider.api.createOrganization({
+    return await this.provider.api.createOrganization({
       body: { ...input, slug: randomUUID() },
       headers,
     });
-    if (!org) {
-      throw new Error('workspace creation returned nothing');
-    }
-    return org;
   }
 
   /** Switch the session-active workspace (must be a member). */

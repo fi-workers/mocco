@@ -3,12 +3,10 @@ import superjson from 'superjson';
 
 import type { AuthService } from '../auth/AuthService';
 import type { WorkspaceService } from '../auth/WorkspaceService';
-import type { Db } from '../db/client';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */
 export interface Context {
-  db: Db;
   /** Injected services (production instances or per-test pglite ones). */
   auth: AuthService;
   workspace: WorkspaceService;
