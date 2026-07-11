@@ -44,6 +44,7 @@ jobs:
           - lint-common
           - lint-backend
           - lint-frontend
+          - lint-react-doctor
           - test
           - db:drift
           - build
