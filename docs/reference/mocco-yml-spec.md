@@ -20,6 +20,8 @@ related:
 > **This is not a GitHub Actions workflow file.** GitHub workflows (`.github/workflows/*.yml`) are owned by the team, and we only **reference** them from a step.
 > Validation schema: [`mocco.schema.json`](./mocco.schema.json) (JSON Schema draft 2020-12).
 
+> **Schema coverage note:** `mocco.schema.json` is generated from `moccoConfigSchema` (`packages/common/src/mocco-config.ts`, the single type source) via `yarn schema:gen`, and CI enforces no drift between the two. Today that zod schema covers **v1 basics only** — `version` / `pipeline` / `steps` (with `run` / `executor` / `with`). The `gate`, `credential`, `concurrency`, `safety`, `preconditions`, and `audit` fields shown below are the **target format landing in later slices** and are not yet in the generated schema — so the full example below will not validate against `mocco.schema.json` yet. This is intentional; this doc describes the target shape, the schema tracks what's actually implemented.
+
 ## Full example
 
 ```yaml
