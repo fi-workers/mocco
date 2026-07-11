@@ -22,3 +22,9 @@ infra/local/cert/*.pem
 .claude/*
 !.claude/skills/
 CLAUDE.local.md
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
