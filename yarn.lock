@@ -1530,6 +1530,8 @@ __metadata:
     "@mocco/backend": "workspace:*"
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@tailwindcss/postcss": "npm:4.1.17"
+    "@trpc/client": "npm:11.18.0"
+    "@trpc/server": "npm:11.18.0"
     "@types/node": "npm:22.20.0"
     "@types/react": "npm:19.2.1"
     "@types/react-dom": "npm:19.2.1"
@@ -1541,6 +1543,7 @@ __metadata:
     react: "npm:19.2.1"
     react-doctor: "npm:0.7.1"
     react-dom: "npm:19.2.1"
+    superjson: "npm:2.2.6"
     tailwindcss: "npm:4.1.17"
     typescript: "npm:5.9.3"
   languageName: unknown
@@ -2749,6 +2752,18 @@ __metadata:
     postcss: "npm:^8.4.41"
     tailwindcss: "npm:4.1.17"
   checksum: 10/127d93fdb4a23efb4f17c188e49077597c4a1509a0bf2a1949544670a2d2b5630ad826e387ec757fbf9bba5b92c96f177bc2a6d46fc4654920d3b38046f4faaf
+  languageName: node
+  linkType: hard
+
+"@trpc/client@npm:11.18.0":
+  version: 11.18.0
+  resolution: "@trpc/client@npm:11.18.0"
+  peerDependencies:
+    "@trpc/server": 11.18.0
+    typescript: ">=5.7.2"
+  bin:
+    intent: bin/intent.js
+  checksum: 10/a2763774023834305ed645a37542d9bb96f33389587feee86202b1323ae80313e429a4db782b54af6ccd3a42b979dd551a07fb5ad1e8246f0adc8c9d798e7384
   languageName: node
   linkType: hard
 

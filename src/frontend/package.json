@@ -13,10 +13,13 @@
   },
   "dependencies": {
     "@mocco/backend": "workspace:*",
+    "@trpc/client": "11.18.0",
+    "@trpc/server": "11.18.0",
     "better-auth": "1.6.23",
     "next": "16.2.10",
     "react": "19.2.1",
-    "react-dom": "19.2.1"
+    "react-dom": "19.2.1",
+    "superjson": "2.2.6"
   },
   "devDependencies": {
     "@eslint-react/eslint-plugin": "5.10.4",
