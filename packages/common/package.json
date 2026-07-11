@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./auth": "./auth.ts",
-    "./workspace": "./workspace.ts"
+    "./auth": "./src/auth.ts",
+    "./workspace": "./src/workspace.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",

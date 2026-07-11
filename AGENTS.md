@@ -9,15 +9,15 @@ Mocco is a **deploy governance control plane** on top of GitHub Actions. Core id
 ## Structure
 
 ```
-src/backend/    @mocco/backend   domain · db (Drizzle/Postgres) · auth · handlers
-src/frontend/   @mocco/frontend  Next.js UI (app/api mounts the backend)
-src/common/     @mocco/common    shared types & zod schemas (not landed yet)
-docs/           llm-wiki: ADRs (immutable) · concepts · guides · reference · meta
-docs/prototype/ non-functional click-through (design reference, plain HTML/JS)
-infra/local/    traefik + mkcert for https://mocco.work local dev
+packages/backend/   @mocco/backend   src/ — domain · db (Drizzle/Postgres) · auth · trpc
+packages/frontend/  @mocco/frontend  src/ — Next.js Pages Router UI (pages/api mounts the backend)
+packages/common/    @mocco/common    src/ — shared types & zod schemas
+docs/               llm-wiki: ADRs (immutable) · concepts · guides · reference · meta
+docs/prototype/     non-functional click-through (design reference, plain HTML/JS)
+infra/local/        traefik + mkcert for https://mocco.work local dev
 ```
 
-- Monorepo: yarn 4 workspaces, Node 22 (`.nvmrc`).
+- Monorepo: yarn 4 workspaces (`packages/*`), Node 22 (`.nvmrc`). Each package keeps config at its root and source under `src/`.
 - DB tables use the `mocco_` prefix; uuid PKs are generated in the DB (`defaultRandom()`).
 
 ## Setup & commands
@@ -34,17 +34,17 @@ yarn format                       # prettier
 make dev                          # https://mocco.work (traefik → Next :3100)
 ```
 
-Tests must pass without docker: integration tests run on **pglite** (in-memory WASM Postgres) via `src/backend/db/testing/pglite.ts`, applying the real migrations. Prefer extending those over mocking the DB.
+Tests must pass without docker: integration tests run on **pglite** (in-memory WASM Postgres) via `packages/backend/src/db/testing/pglite.ts`, applying the real migrations. Prefer extending those over mocking the DB.
 
 ## Code style
 
 - TypeScript strict; ESLint 10 flat config (airbnb-extended + typescript-eslint strictTypeChecked + unicorn + sonarjs) with `--max-warnings 0`; prettier formats everything.
 - **All content in English** — code, comments, docs, commit messages, PR bodies.
 - **Dependencies are pinned exactly** (no `^`/`~`). `yarn.lock` contains only the workspaces that exist on the branch.
-- **Vendor isolation**: third-party services are wrapped behind neutral surfaces. Example: only `src/backend/auth/provider.ts` may import the auth library; everything else consumes the neutral services (`src/backend/auth/AuthService.ts`, `src/backend/auth/WorkspaceService.ts` — one cohesive file per service). Follow this pattern for new vendors. Env var names are ours (`AUTH_SECRET`), never vendor-branded.
+- **Vendor isolation**: third-party services are wrapped behind neutral surfaces. Example: only `packages/backend/src/auth/provider.ts` may import the auth library; everything else consumes the neutral services (`packages/backend/src/auth/AuthService.ts`, `packages/backend/src/auth/WorkspaceService.ts` — one cohesive file per service). Follow this pattern for new vendors. Env var names are ours (`AUTH_SECRET`), never vendor-branded.
 - **API surfaces are thin adapters over services**: the frontend↔backend surface is tRPC (`/api/trpc`); the vendor auth surface is better-auth's own fetch handler (`/api/auth/[...all]`). A transport (a tRPC router, or a future REST route) carries no business logic — it parses at the boundary and delegates to the domain service, so no logic is duplicated across surfaces. Never expose tRPC to external/third-party consumers: external inbound (GitHub webhooks, any public API) gets its own REST surface, added when the need is real (E2b), and only a genuine public API is versioned (`/v1`) — webhooks are not.
 - **Vendor failures become domain errors at the service**: interpreting vendor/DB error shapes (status codes, messages, pg constraint names) happens inside the service that owns the vendor boundary, which throws a domain error class colocated with the service (its own `errors.ts`) carrying the original as `cause`. Routers map domain errors to transport codes via `instanceof` only — never sniff vendor error strings outside the service. (No live instance today — the workspace slug is a system uuid, so it has no user-facing collision; the pattern lands with the first domain that interprets a real vendor failure.)
-- **Env access is centralized** (lint-enforced in the backend): `src/backend/config/env.ts` is the only `process.env` reader — a lazy, zod-validated surface (`getEnv()`). Never read `process.env` inline; add new vars to the schema.
+- **Env access is centralized** (lint-enforced in the backend): `packages/backend/src/config/env.ts` is the only `process.env` reader — a lazy, zod-validated surface (`getEnv()`). Never read `process.env` inline; add new vars to the schema.
 - **No test-only code in production modules**: no `*ForTesting` hooks, seams, or swappable singletons. Services are constructor-injected classes (`new AuthService(provider)`, `new WorkspaceService(provider)`); a composition root binds them once (`auth/instance.ts`), and tests construct the same classes over pglite. Never static classes importing singletons — explicit constructor arguments are the seam; hoisted module-mocking (`vi.mock`) is not a substitute (ADR 0008). If a test can't reach something, fix the design (inject the dependency), don't add a seam.
 - **Derive types from values** (has-a, not is-a): prefer `z.infer` / `ReturnType<typeof factory>` over hand-maintained parallel interfaces. Write explicit type annotations only where they pin a boundary (e.g. neutral return types inside `auth/service.ts` that stop vendor inference from leaking).
 - **No index/barrel files** (lint-enforced): never create `index.ts` re-export hubs (FSD-style). Name modules concretely and import the concrete path; cross-package consumers go through explicit `package.json` `exports` subpaths (e.g. `@mocco/backend/trpc/handler`).

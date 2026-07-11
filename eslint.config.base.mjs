@@ -50,7 +50,7 @@ export function createBaseConfig({ tsconfigRootDir }) {
     {
       settings: {
         'import-x/resolver-next': [
-          createTypeScriptImportResolver({ alwaysTryTypes: true, project: ['src/*/tsconfig.json'] }),
+          createTypeScriptImportResolver({ alwaysTryTypes: true, project: ['packages/*/tsconfig.json'] }),
         ],
       },
     },

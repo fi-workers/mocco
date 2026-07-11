@@ -8,7 +8,7 @@ export default [
     // Machine-enforced vendor isolation: only auth/ may touch the provider.
     // Everything else consumes the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).
     files: ['**/*.ts'],
-    ignores: ['auth/**'],
+    ignores: ['src/auth/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -33,7 +33,7 @@ export default [
     // Env access is centralized: config/env.ts is the only process.env reader
     // (zod-parsed, lazy). Never read process.env inline.
     files: ['**/*.ts'],
-    ignores: ['config/env.ts'],
+    ignores: ['src/config/env.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',
