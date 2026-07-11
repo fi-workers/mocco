@@ -1,4 +1,4 @@
-.PHONY: help initialize application certs hosts dev run-frontend run-traefik docker-up docker-down docker-logs migrate lint test
+.PHONY: help initialize application certs hosts dev run-frontend run-traefik docker-up docker-down docker-logs migrate lint test e2e
 
 help: ## List commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -32,3 +32,8 @@ migrate: ## DB migration
 	@yarn db:migrate
 lint: ; @yarn lint
 test: ; @yarn test
+
+e2e: ## Playwright e2e (needs local Postgres)
+	@docker compose up -d postgres
+	@yarn db:migrate
+	@yarn e2e test

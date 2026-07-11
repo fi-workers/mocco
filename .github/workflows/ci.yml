@@ -45,6 +45,7 @@ jobs:
           - lint-backend
           - lint-frontend
           - lint-react-doctor
+          - lint-e2e
           - test
           - db:drift
           - build
@@ -65,12 +66,57 @@ jobs:
       - name: yarn ${{ matrix.step }}
         run: yarn ${{ matrix.step }}
 
+  e2e:
+    # Playwright against the real server + a real Postgres (node-postgres, not
+    # the pglite the unit tests use) — the session cookie round-trip. Its own job
+    # because it needs a service container + a browser, unlike the uniform matrix.
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres@sha256:5c855ad7b85e68e48a62f34662853f38b57c1c1d80f3a927ab58034fd6d31c5e
+        env:
+          POSTGRES_USER: mocco
+          POSTGRES_PASSWORD: mocco
+          POSTGRES_DB: mocco
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mocco -d mocco"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://mocco:mocco@localhost:5432/mocco
+      # Ephemeral signing key for throwaway test sessions — not a real secret.
+      AUTH_SECRET: e2e-ephemeral-secret-not-for-prod
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Enable corepack (yarn is integrity-pinned via packageManager)
+        run: corepack enable
+      - name: Install (immutable, dependency lifecycle scripts disabled)
+        run: yarn install --immutable
+        env:
+          YARN_ENABLE_SCRIPTS: 'false'
+      - name: Apply migrations
+        run: yarn db:migrate
+      - name: Install the Playwright browser (chromium only; version pinned in package.json)
+        run: yarn e2e exec playwright install --with-deps chromium
+      - name: e2e (Playwright builds + starts the app, then drives it)
+        run: yarn e2e test
+
   ci:
     # Branch-protection gate: the one required check, green only when every leg is.
-    needs: step
+    needs: [step, e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: All steps succeeded
-        run: '[ "${{ needs.step.result }}" = "success" ]'
+      - name: All checks succeeded
+        run: '[ "${{ needs.step.result }}" = "success" ] && [ "${{ needs.e2e.result }}" = "success" ]'
