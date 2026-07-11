@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./auth": "./src/auth.ts",
+    "./mocco-config": "./src/mocco-config.ts",
     "./workspace": "./src/workspace.ts"
   },
   "scripts": {
