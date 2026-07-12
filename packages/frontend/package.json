@@ -12,7 +12,9 @@
     "test": "echo 'component/e2e (TODO)' "
   },
   "dependencies": {
+    "@hookform/resolvers": "5.4.0",
     "@mocco/backend": "workspace:*",
+    "@mocco/common": "workspace:*",
     "@sentry/nextjs": "10.65.0",
     "@trpc/client": "11.18.0",
     "@trpc/server": "11.18.0",
@@ -20,6 +22,7 @@
     "next": "16.2.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "react-hook-form": "7.81.0",
     "superjson": "2.2.6"
   },
   "devDependencies": {
