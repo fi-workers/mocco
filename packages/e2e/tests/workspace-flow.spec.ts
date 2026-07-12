@@ -11,7 +11,7 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   const password = 'e2e-password-123';
 
   // --- Sign up ---
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByRole('button', { name: 'No account? Create one' }).click();
   await page.getByLabel('Name').fill('E2E User');
   await page.getByLabel('Email').fill(email);
@@ -44,7 +44,7 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/account');
-  await expect(page).toHaveURL(/\/$/); // getServerSideProps redirects — no session
+  await expect(page).toHaveURL(/\/login$/); // getServerSideProps redirects — no session
 
   // --- Sign back in: both workspaces persisted ---
   await page.getByLabel('Email').fill(email);

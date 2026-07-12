@@ -1,113 +1,42 @@
 import Link from 'next/link';
-import { useRouter } from 'next/router';
-import { useState } from 'react';
 
-import Button from '../components/button';
-import { signIn, signUp, useSession } from '../lib/auth-client';
-
-type Mode = 'sign-in' | 'sign-up';
-
+// Public landing page. Auth lives at /login (reached from the nav or the CTA).
 export default function Home() {
-  const router = useRouter();
-  const { data: session, isPending } = useSession();
-  const [mode, setMode] = useState<Mode>('sign-in');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const submitLabel = mode === 'sign-up' ? 'Create account' : 'Sign in';
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-    const result = mode === 'sign-up' ? await signUp({ email, password, name }) : await signIn({ email, password });
-    if (result.error) {
-      setError(result.error.message ?? 'Something went wrong');
-      setLoading(false);
-      return;
-    }
-    await router.push('/account');
-  };
-
-  let card;
-  if (isPending) {
-    card = <div className="h-11 animate-pulse rounded-lg bg-neutral-100" />;
-  } else if (session) {
-    card = (
-      <Link
-        href="/account"
-        className="flex h-11 w-full items-center justify-center rounded-lg bg-violet-600 text-sm font-medium text-white transition hover:bg-violet-700">
-        Continue as {session.user.name ?? session.user.email} →
-      </Link>
-    );
-  } else {
-    card = (
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        {mode === 'sign-up' && (
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Name"
-            aria-label="Name"
-            className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-          />
-        )}
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="Email"
-          aria-label="Email"
-          className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-        />
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Password (8+ characters)"
-          aria-label="Password"
-          className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" variant="neutral" pending={loading} className="h-11 w-full text-sm">
-          {loading ? 'Working…' : submitLabel}
-        </Button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
-            setError(null);
-          }}
-          className="text-sm text-neutral-500 hover:text-neutral-800">
-          {mode === 'sign-in' ? 'No account? Create one' : 'Have an account? Sign in'}
-        </button>
-      </form>
-    );
-  }
-
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
-      <div className="max-w-md text-center">
-        <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-lg font-bold text-white">
-          M
+    <main className="flex min-h-screen flex-col">
+      <nav className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold text-white">
+            M
+          </span>
+          <span className="font-semibold tracking-tight">Mocco</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">Mocco</h1>
-        <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-          Deploy governance control plane on top of GitHub Actions.
-          <br />
-          write ≠ deploy — gates pause pipelines until the right role resumes them.
-        </p>
-      </div>
+        <Link href="/login" className="text-sm font-medium text-neutral-700 transition hover:text-neutral-950">
+          Log in
+        </Link>
+      </nav>
 
-      <div className="w-full max-w-xs">{card}</div>
+      <section className="flex flex-1 flex-col items-center justify-center gap-8 px-6 text-center">
+        <div className="max-w-xl">
+          <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl">Write ≠ deploy.</h1>
+          <p className="mx-auto mt-5 max-w-lg text-pretty leading-relaxed text-neutral-500">
+            Mocco is a deploy governance control plane on top of GitHub Actions. Pipelines pause at gates, and only an
+            authorized role can resume them — production can&apos;t ship without a verified, approved run.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/login"
+            className="inline-flex h-11 items-center rounded-lg bg-violet-600 px-5 text-sm font-medium text-white transition hover:bg-violet-700">
+            Get started
+          </Link>
+          <a
+            href="https://github.com/fi-workers/mocco"
+            className="inline-flex h-11 items-center rounded-lg border border-neutral-200 px-5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50">
+            GitHub
+          </a>
+        </div>
+      </section>
     </main>
   );
 }

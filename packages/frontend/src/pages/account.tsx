@@ -18,7 +18,7 @@ export const getServerSideProps = (async ({ req }) => {
   const headers = headersFromNode(req.headers);
   const session = await auth.getSession(headers);
   if (!session) {
-    return { redirect: { destination: '/', permanent: false } };
+    return { redirect: { destination: '/login', permanent: false } };
   }
 
   const caller = appRouter.createCaller({ auth, workspace, session, headers });
