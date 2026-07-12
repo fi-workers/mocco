@@ -47,6 +47,13 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await expect(page).toHaveURL(dashboardUrl);
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
+  // --- Rename via Settings; the switcher label follows ---
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+\/settings$/);
+  await page.getByLabel('Workspace name').fill('Acme Labs');
+  await page.getByRole('button', { name: 'Rename' }).click();
+  await expect(page.getByRole('button', { name: 'Acme Labs' })).toBeVisible();
+
   // --- Sign out (via the account menu): session cleared, /workspaces is gated ---
   await page.getByRole('button', { name: 'Open account menu' }).click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
@@ -59,7 +66,7 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(dashboardUrl);
-  await page.getByRole('button', { name: /Acme Lab|Beta Co/ }).click();
-  await expect(page.getByRole('menuitem', { name: 'Acme Lab' })).toBeVisible();
+  await page.getByRole('button', { name: /Acme Labs|Beta Co/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Acme Labs' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Beta Co' })).toBeVisible();
 });
