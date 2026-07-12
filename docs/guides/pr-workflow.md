@@ -27,7 +27,7 @@ tags: [guide, pr, workflow, process]
 | English only (code, comments, docs, commits) | public OSS |
 | Dependencies pinned exactly; lockfile matches the branch's workspaces | supply-chain + reviewable dep changes |
 | One drizzle migration per schema change, in PR order | migration history mirrors product history |
-| Vendors behind neutral wrappers (env names ours, one import site) | replaceability (see `packages/backend/src/auth/`) |
+| Vendors behind neutral wrappers (env names ours, one import site) | replaceability (see `packages/backend/src/domain/auth/`) |
 | Behavior changes update `docs/reference/` in the same PR | wiki stays truthful |
 | No session links in commits/PRs; `Co-Authored-By` attribution stays | clean public history |
 

@@ -4,8 +4,8 @@
 import { moccoConfigSchema } from '@mocco/common/mocco-config';
 import { z } from 'zod';
 
-import { MoccoConfigParser } from '../../pipeline/MoccoConfigParser';
-import { decodeYaml } from '../../pipeline/yaml/decode';
+import { MoccoConfigParser } from '../../../domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '../../../domain/pipeline/yaml/decode';
 import { protectedProcedure, router } from '../trpc';
 
 // Stateless (no DB, no vendor instance) — a plain domain object, constructed once.

@@ -6,7 +6,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { toNodeHandler } from 'better-auth/node';
 import { organization } from 'better-auth/plugins';
 
-import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../db/schema';
+import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../../infra/db/schema';
 
 export interface AuthOptions {
   /** Session signing secret. */

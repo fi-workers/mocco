@@ -1,7 +1,7 @@
 // Production composition root — the one place the app DB binds to the vendor
 // provider and the services wrap it. Lazy so builds don't need env at import.
-import { getEnv } from '../config/env';
-import { getDb } from '../db/client';
+import { getEnv } from '../../infra/config/env';
+import { getDb } from '../../infra/db/client';
 
 import { AuthService } from './AuthService';
 import { createProvider } from './provider';

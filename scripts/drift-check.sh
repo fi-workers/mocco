@@ -6,7 +6,7 @@ set -eu
 # stdin closed: an ambiguous rename would otherwise prompt and hang until timeout
 yarn db:generate < /dev/null
 
-drift="$(git status --porcelain packages/backend/src/db/migrations)"
+drift="$(git status --porcelain packages/backend/src/infra/db/migrations)"
 if [ -n "$drift" ]; then
   echo "::error::drizzle migrations out of sync with schema.ts — run 'yarn db:generate' and commit the result" >&2
   echo "$drift" >&2
