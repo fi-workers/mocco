@@ -2,8 +2,9 @@ import { useRouter } from 'next/router';
 
 import AppShell from '@/components/app-shell';
 import WorkspaceLayout from '@/components/workspace-layout';
+import WorkspaceSettings from '@/components/workspace-settings';
 
-// Workspace settings (placeholder — rename/delete lands with the update mutations).
+// Workspace settings (rename + delete), client-rendered inside the workspace frame.
 export default function WorkspaceSettingsPage() {
   const router = useRouter();
   const id = typeof router.query.id === 'string' ? router.query.id : null;
@@ -12,10 +13,7 @@ export default function WorkspaceSettingsPage() {
     <AppShell>
       {id ? (
         <WorkspaceLayout workspaceId={id} active="settings">
-          <div className="flex flex-col gap-4">
-            <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-            <p className="text-sm text-muted-foreground">Renaming and deleting this workspace lands here soon.</p>
-          </div>
+          <WorkspaceSettings workspaceId={id} />
         </WorkspaceLayout>
       ) : null}
     </AppShell>

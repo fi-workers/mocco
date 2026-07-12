@@ -4,6 +4,9 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
+import { WorkspaceNotFoundError } from './errors';
+import { isAPIError } from './provider';
+
 import type { Provider } from './provider';
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 
@@ -34,6 +37,35 @@ export class WorkspaceService {
   /** Switch the session-active workspace (must be a member). */
   async setActive(headers: Headers, workspaceId: string): Promise<void> {
     await this.provider.api.setActiveOrganization({ body: { organizationId: workspaceId }, headers });
+  }
+
+  /** Rename a workspace (must have permission in it). */
+  async update(headers: Headers, workspaceId: string, input: WorkspaceCreateInput) {
+    let workspace;
+    try {
+      workspace = await this.provider.api.updateOrganization({
+        body: { organizationId: workspaceId, data: input },
+        headers,
+      });
+    } catch (error) {
+      // The org plugin throws an APIError when the workspace is missing or isn't
+      // the caller's — interpret that vendor failure as the domain error the
+      // router maps to NOT_FOUND (a genuine internal error propagates untouched).
+      if (isAPIError(error)) {
+        throw new WorkspaceNotFoundError(workspaceId, { cause: error });
+      }
+      throw error;
+    }
+    // Defensive: the vendor's type admits null even though it throws in practice.
+    if (!workspace) {
+      throw new WorkspaceNotFoundError(workspaceId);
+    }
+    return workspace;
+  }
+
+  /** Delete a workspace (owner only). */
+  async delete(headers: Headers, workspaceId: string): Promise<void> {
+    await this.provider.api.deleteOrganization({ body: { organizationId: workspaceId }, headers });
   }
 
   /**

@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
+
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
 
+import { WorkspaceNotFoundError } from './errors';
 import { createProvider, type Provider } from './provider';
+import { WorkspaceService } from './WorkspaceService';
 
 /** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
 const causeOf = async (p: Promise<unknown>): Promise<string> => {
@@ -69,6 +73,17 @@ describe('workspace (organization plugin) on pglite', () => {
     expect(org?.id).toBeTruthy();
     const sessions = await t.db.select().from(t.schema.sessions);
     expect(sessions[0]?.activeOrganizationId).toBe(org?.id);
+  });
+
+  it('update on a workspace the caller cannot touch throws WorkspaceNotFoundError', async () => {
+    const { headers } = await signUp('owner@example.com');
+    const service = new WorkspaceService(auth);
+
+    // A workspace the user has no membership of — the plugin returns null, which
+    // the service turns into the domain error the router maps to NOT_FOUND.
+    await expect(service.update(headers, randomUUID(), { name: 'Renamed' })).rejects.toBeInstanceOf(
+      WorkspaceNotFoundError,
+    );
   });
 
   it('deleting the active workspace clears the session pointer (FK set null)', async () => {
