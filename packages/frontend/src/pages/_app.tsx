@@ -1,5 +1,7 @@
 import Head from 'next/head';
 
+import EnvironmentRibbon from '../components/environment-ribbon';
+
 import '../styles/globals.css';
 
 import type { AppProps } from 'next/app';
@@ -12,6 +14,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="description" content="Pipeline governance control plane" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+      <EnvironmentRibbon />
       <Component {...pageProps} />
     </>
   );
