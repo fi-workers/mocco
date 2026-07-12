@@ -27,7 +27,7 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByLabel('Workspace name').fill('Acme Lab');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(dashboardUrl);
-  await expect(page.getByRole('heading', { name: 'Acme Lab' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Members' })).toBeVisible(); // workspace left nav
   await expect(page.getByRole('heading', { name: 'No repositories yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
@@ -39,13 +39,13 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByLabel('Workspace name').fill('Beta Co');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(dashboardUrl);
-  await expect(page.getByRole('heading', { name: 'Beta Co' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Beta Co' })).toBeVisible(); // switcher label
 
   // --- Switch back to Acme through the switcher ---
   await page.getByRole('button', { name: 'Beta Co' }).click();
   await page.getByRole('menuitem', { name: 'Acme Lab' }).click();
   await expect(page).toHaveURL(dashboardUrl);
-  await expect(page.getByRole('heading', { name: 'Acme Lab' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
   // --- Sign out (via the account menu): session cleared, /workspaces is gated ---
   await page.getByRole('button', { name: 'Open account menu' }).click();
