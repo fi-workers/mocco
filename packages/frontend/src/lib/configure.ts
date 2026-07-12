@@ -41,4 +41,8 @@ export class Configure {
     fromExplicit(process.env.NEXT_PUBLIC_ENVIRONMENT) ??
     fromVercel(process.env.NEXT_PUBLIC_VERCEL_ENV) ??
     Environments.Local;
+
+  // Client-side Sentry DSN (empty → Sentry is a no-op). The server reads
+  // SENTRY_DSN directly in instrumentation.ts.
+  static readonly SentryDsn: string = process.env.NEXT_PUBLIC_SENTRY_DSN ?? '';
 }

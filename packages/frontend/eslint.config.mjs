@@ -38,6 +38,26 @@ export default [
     },
   },
   {
+    // Machine-enforced vendor isolation: only lib/monitoring.ts imports the Sentry
+    // vendor. Everything else uses the neutral Monitoring surface, so the vendor
+    // (or Next) can be swapped by rewriting that one file.
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['src/lib/monitoring.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@sentry/*'],
+              message: 'Import the neutral Monitoring surface (lib/monitoring.ts), not the Sentry vendor.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Pages Router route files are named by the router — `pages/index.tsx` is the
     // home route, not a re-export barrel. Exempt route index files from the ban.
     files: ['src/pages/**/index.{ts,tsx}'],
