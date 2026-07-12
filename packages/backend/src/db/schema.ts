@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex, check, jsonb } from 'drizzle-orm/pg-core';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
@@ -160,3 +160,47 @@ export const verifications = pgTable('mocco_verifications', {
   createdAt,
   updatedAt,
 });
+
+// ─────────────────────────────────────────────────────────────
+// Pipelines. A `.mocco.yml` is stored as an immutable version snapshot;
+// a run (later) pins one pipeline version. The service that writes these
+// (parse/validate/hash) lands in a later task — this is schema only.
+// ─────────────────────────────────────────────────────────────
+
+/** A pipeline's stable identity within a workspace. */
+export const pipelines = pgTable(
+  'mocco_pipelines',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // repoId lands in slice 3 (GitHub connect); pipelines are pasted/uploaded until then.
+    name: text().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  table => [uniqueIndex('mocco_pipelines_workspace_name_uq').on(table.workspaceId, table.name)],
+);
+
+/** An immutable snapshot of one parsed .mocco.yml. A run (later) pins one of these. */
+export const pipelineVersions = pgTable(
+  'mocco_pipeline_versions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    pipelineId: uuid('pipeline_id')
+      .notNull()
+      .references(() => pipelines.id, { onDelete: 'cascade' }),
+    rawYaml: text('raw_yaml').notNull(),
+    definition: jsonb().notNull(), // the parsed, zod-validated MoccoConfig
+    contentHash: text('content_hash').notNull(), // sha-256 of canonical(definition)
+    createdAt,
+  },
+  table => [
+    uniqueIndex('mocco_pipeline_versions_pipeline_hash_uq').on(table.pipelineId, table.contentHash),
+    index('mocco_pipeline_versions_pipeline_id_idx').on(table.pipelineId),
+  ],
+);
