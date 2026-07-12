@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import Button from '../components/button';
 import { signIn, signUp, useSession } from '../lib/auth-client';
 
 type Mode = 'sign-in' | 'sign-up';
@@ -76,12 +77,9 @@ export default function Home() {
           className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex h-11 w-full items-center justify-center rounded-lg bg-neutral-900 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50">
+        <Button type="submit" variant="neutral" pending={loading} className="h-11 w-full text-sm">
           {loading ? 'Working…' : submitLabel}
-        </button>
+        </Button>
         <button
           type="button"
           onClick={() => {
