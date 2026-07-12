@@ -15,4 +15,11 @@ export default createNextApiHandler({
     const headers = headersFromNode(req.headers);
     return { auth, workspace, session: await auth.getSession(headers), headers };
   },
+  // The client only ever sees the masked message (errorFormatter); keep the real
+  // internal error visible server-side. Structured Sentry capture hooks in here.
+  onError: ({ error, path }) => {
+    if (error.code === 'INTERNAL_SERVER_ERROR') {
+      console.error(`tRPC ${path ?? '<no-path>'}:`, error);
+    }
+  },
 });

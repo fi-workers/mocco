@@ -15,7 +15,21 @@ export interface Context {
   headers: Headers;
 }
 
-const t = initTRPC.context<Context>().create({ transformer: superjson });
+/** Mask internal errors before they reach the client: an uncaught throw surfaces
+ * as INTERNAL_SERVER_ERROR whose message is the raw cause (SQL, vendor detail) —
+ * replace it with a generic message. Explicit domain errors (BAD_REQUEST,
+ * UNAUTHORIZED, …) keep their message. Pure, so it is unit-tested directly. */
+export function maskInternalError<S extends { message: string }>(shape: S, code: string): S {
+  if (code === 'INTERNAL_SERVER_ERROR') {
+    return { ...shape, message: 'Internal server error' };
+  }
+  return shape;
+}
+
+const t = initTRPC.context<Context>().create({
+  transformer: superjson,
+  errorFormatter: ({ shape, error }) => maskInternalError(shape, error.code),
+});
 
 export const { router } = t;
 export const publicProcedure = t.procedure;
