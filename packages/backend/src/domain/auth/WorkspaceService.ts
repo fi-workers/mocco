@@ -4,6 +4,9 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
+import { WorkspaceNotFoundError } from './errors';
+import { isAPIError } from './provider';
+
 import type { Provider } from './provider';
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 
@@ -38,14 +41,24 @@ export class WorkspaceService {
 
   /** Rename a workspace (must have permission in it). */
   async update(headers: Headers, workspaceId: string, input: WorkspaceCreateInput) {
-    const workspace = await this.provider.api.updateOrganization({
-      body: { organizationId: workspaceId, data: input },
-      headers,
-    });
-    // The vendor returns null for a workspace that doesn't exist or the caller
-    // can't touch — surface it rather than parse null at the egress boundary.
+    let workspace;
+    try {
+      workspace = await this.provider.api.updateOrganization({
+        body: { organizationId: workspaceId, data: input },
+        headers,
+      });
+    } catch (error) {
+      // The org plugin throws an APIError when the workspace is missing or isn't
+      // the caller's — interpret that vendor failure as the domain error the
+      // router maps to NOT_FOUND (a genuine internal error propagates untouched).
+      if (isAPIError(error)) {
+        throw new WorkspaceNotFoundError(workspaceId, { cause: error });
+      }
+      throw error;
+    }
+    // Defensive: the vendor's type admits null even though it throws in practice.
     if (!workspace) {
-      throw new Error(`Workspace ${workspaceId} could not be updated`);
+      throw new WorkspaceNotFoundError(workspaceId);
     }
     return workspace;
   }

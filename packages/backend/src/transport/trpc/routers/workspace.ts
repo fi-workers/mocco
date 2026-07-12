@@ -1,8 +1,10 @@
 // Workspace domain router — thin by convention: parse at the boundary (zod
 // from @mocco/common), delegate to the injected service, map domain errors.
 import { workspaceCreateInputSchema, workspaceMemberSchema, workspaceSchema } from '@mocco/common/workspace';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import { WorkspaceNotFoundError } from '../../../domain/auth/errors';
 import { router, protectedProcedure } from '../trpc';
 
 export const workspaceRouter = router({
@@ -27,9 +29,16 @@ export const workspaceRouter = router({
   update: protectedProcedure
     .input(workspaceCreateInputSchema.extend({ workspaceId: z.uuid() }))
     .output(z.object({ workspace: workspaceSchema }))
-    .mutation(async ({ ctx, input }) => ({
-      workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }),
-    })),
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return { workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }) };
+      } catch (error) {
+        if (error instanceof WorkspaceNotFoundError) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: error.message, cause: error });
+        }
+        throw error;
+      }
+    }),
 
   delete: protectedProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
     await ctx.workspace.delete(ctx.headers, input.workspaceId);
