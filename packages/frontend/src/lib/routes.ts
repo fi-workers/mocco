@@ -8,7 +8,6 @@ export const Routes = {
   signOut: '/auth/sign-out',
   workspaces: '/workspaces',
   account: '/account',
-  pipelinePreview: '/pipelines/new',
 } as const;
 
 export type Route = (typeof Routes)[keyof typeof Routes];
