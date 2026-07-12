@@ -48,6 +48,7 @@ test('define a pipeline from .mocco.yml, view it, and see inline errors on an in
   await page.goto('/pipelines/new');
   await page.getByLabel('mocco.yml').fill(invalidYaml);
   await page.getByRole('button', { name: 'Submit pipeline' }).click();
-  await expect(page.getByText('invalid .mocco.yml')).toBeVisible();
+  // the specific parse issue surfaces inline (path-prefixed), not a generic string
+  await expect(page.getByText(/steps/)).toBeVisible();
   await expect(page).toHaveURL(/\/pipelines\/new$/);
 });

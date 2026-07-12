@@ -44,7 +44,7 @@ export class PipelineService {
    */
   async submit(workspaceId: string, source: string) {
     const parsed = this.parser.parse(source);
-    if (!parsed.ok) throw new MoccoConfigSchemaError();
+    if (!parsed.ok) throw new MoccoConfigSchemaError(parsed.issues);
     const { config: definition } = parsed;
     const contentHash = createHash('sha256').update(JSON.stringify(definition)).digest('hex');
 

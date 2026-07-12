@@ -10,10 +10,19 @@ export class MoccoConfigYamlError extends Error {
   }
 }
 
-/** Domain error for a config that fails the `.mocco.yml` schema. */
+/** Domain error for a config that fails YAML decoding or the `.mocco.yml` schema.
+ * Carries the parser's issues so the router (and the UI) can show the specific
+ * problems inline — "the parse error IS the UX" (spec §11). */
 export class MoccoConfigSchemaError extends Error {
-  constructor(message = 'invalid .mocco.yml') {
-    super(message);
+  readonly issues: readonly { path: string; message: string }[];
+
+  constructor(issues: readonly { path: string; message: string }[] = []) {
+    super(
+      issues.length > 0
+        ? issues.map(issue => `${issue.path || 'root'}: ${issue.message}`).join('; ')
+        : 'invalid .mocco.yml',
+    );
     this.name = 'MoccoConfigSchemaError';
+    this.issues = issues;
   }
 }
