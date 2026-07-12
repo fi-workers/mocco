@@ -6,6 +6,7 @@ export const Routes = {
   signIn: '/auth/sign-in',
   signUp: '/auth/sign-up',
   signOut: '/auth/sign-out',
+  onboarding: '/onboarding',
   account: '/account',
   pipelinePreview: '/pipelines/new',
 } as const;

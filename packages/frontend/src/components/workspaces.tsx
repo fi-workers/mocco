@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { trpc } from '../lib/trpc';
 
 import Button from './button';
+import WorkspaceCreateForm from './workspace-create-form';
 
 interface WorkspaceItem {
   id: string;
@@ -14,12 +15,14 @@ interface Props {
   initialActiveId: string | null;
 }
 
+// The account-page workspace manager: list, switch active, and add another.
+// A user with no workspace never reaches here — the shell sends them to
+// /onboarding, so this always renders at least one workspace.
 export default function Workspaces({ initialWorkspaces, initialActiveId }: Props) {
   // Initial data comes from the server (getServerSideProps) — no load effect.
   const [workspaces, setWorkspaces] = useState(initialWorkspaces);
   const [activeId, setActiveId] = useState(initialActiveId);
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Which workspace's Switch is mid-activation — so only that row spins, not all.
@@ -30,22 +33,6 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
     const [list, active] = await Promise.all([trpc.workspace.list.query(), trpc.workspace.active.query()]);
     setWorkspaces(list.workspaces.map(ws => ({ id: ws.id, name: ws.name })));
     setActiveId(active.workspace?.id ?? null);
-  };
-
-  const handleCreate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    // No try/finally: React Compiler can't optimize components containing `finally` clauses.
-    try {
-      await trpc.workspace.create.mutate({ name });
-      setName('');
-      setCreating(false);
-      await refresh();
-    } catch (createError) {
-      setError((createError as Error).message);
-    }
-    setBusy(false);
   };
 
   const handleActivate = async (workspaceId: string) => {
@@ -61,52 +48,6 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
     setBusy(false);
     setActivatingId(null);
   };
-
-  const creationForm = (
-    <form onSubmit={handleCreate} className="flex flex-col gap-3 rounded-xl border border-neutral-200 p-4">
-      <input
-        type="text"
-        required
-        maxLength={80}
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Workspace name"
-        aria-label="Workspace name"
-        className="h-10 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-      />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex gap-2">
-        <Button type="submit" pending={busy} className="h-10 flex-1 text-sm">
-          {busy ? 'Creating…' : 'Create workspace'}
-        </Button>
-        {workspaces.length > 0 && (
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => {
-              setCreating(false);
-              setError(null);
-            }}
-            className="h-10 px-4 text-sm">
-            Cancel
-          </Button>
-        )}
-      </div>
-    </form>
-  );
-
-  // Zero-workspace onboarding — the contract: sign-up creates no workspace.
-  if (workspaces.length === 0) {
-    return (
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-neutral-700">Create your first workspace</h2>
-        <p className="text-sm text-neutral-500">
-          A workspace is your team boundary — repos, members and deploy governance live inside it.
-        </p>
-        {creationForm}
-      </section>
-    );
-  }
 
   return (
     <section className="flex flex-col gap-3">
@@ -151,7 +92,15 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
         })}
       </ul>
 
-      {creating && creationForm}
+      {creating && (
+        <WorkspaceCreateForm
+          onCreated={async () => {
+            setCreating(false);
+            await refresh();
+          }}
+          onCancel={() => setCreating(false)}
+        />
+      )}
       {error && !creating && <p className="text-sm text-red-600">{error}</p>}
     </section>
   );

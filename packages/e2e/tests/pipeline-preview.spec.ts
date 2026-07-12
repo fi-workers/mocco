@@ -8,12 +8,15 @@ test('preview a valid .mocco.yml, and see inline issues on an invalid one', asyn
   const email = `e2e-${randomUUID()}@example.com`;
   const password = 'e2e-password-123';
 
-  // Sign up (a session is all the preview needs — no workspace required).
+  // Sign up → onboarding: a fresh user creates a workspace before using the app.
   await page.goto('/auth/sign-up');
   await page.getByLabel('Name').fill('E2E User');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await page.getByLabel('Workspace name').fill('E2E Workspace');
+  await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(/\/account$/);
 
   // Valid config → the parsed pipeline + step labels render.
