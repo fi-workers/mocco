@@ -14,7 +14,7 @@ import type { GetServerSideProps } from 'next';
 export const getServerSideProps = (async ({ req }) => {
   const session = await getServices().auth.getSession(headersFromNode(req.headers));
   if (!session) {
-    return { redirect: { destination: '/', permanent: false } };
+    return { redirect: { destination: '/auth/sign-in', permanent: false } };
   }
   return { props: {} };
 }) satisfies GetServerSideProps;
