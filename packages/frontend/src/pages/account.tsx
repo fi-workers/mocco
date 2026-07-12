@@ -1,6 +1,6 @@
 import { appRouter } from '@mocco/backend/trpc/root';
-import Link from 'next/link';
 
+import AppShell from '../components/app-shell';
 import Workspaces from '../components/workspaces';
 import { withAuth } from '../lib/with-auth';
 
@@ -26,26 +26,8 @@ export default function AccountPage({
   activeId,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-6">
-      <h1 className="text-xl font-bold tracking-tight">Account</h1>
-
-      <div className="flex items-center gap-4 rounded-xl border border-neutral-200 p-5">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600 font-semibold text-white">
-          {user.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0">
-          <div className="truncate font-medium">{user.name}</div>
-          <div className="truncate text-sm text-neutral-500">{user.email}</div>
-        </div>
-      </div>
-
+    <AppShell user={user}>
       <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
-
-      <Link
-        href="/auth/sign-out"
-        className="inline-flex h-11 items-center justify-center rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50">
-        Sign out
-      </Link>
-    </main>
+    </AppShell>
   );
 }
