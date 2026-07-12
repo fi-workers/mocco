@@ -4,48 +4,27 @@ import { trpc } from '../lib/trpc';
 
 import Button from './button';
 import WorkspaceForm from './workspace-form';
+import { useWorkspaces } from './workspace-provider';
 
-interface WorkspaceItem {
-  id: string;
-  name: string;
-}
-
-interface Props {
-  initialWorkspaces: WorkspaceItem[];
-  initialActiveId: string | null;
-}
-
-// The account-page workspace manager: list, switch active, and add another.
-// Only rendered when at least one workspace exists — the account page shows its
-// own focused create view for the empty (first-run) case.
-export default function Workspaces({ initialWorkspaces, initialActiveId }: Props) {
-  // Initial data comes from the server (getServerSideProps) — no load effect.
-  const [workspaces, setWorkspaces] = useState(initialWorkspaces);
-  const [activeId, setActiveId] = useState(initialActiveId);
+// The workspaces list page's manager: list, switch active, and add another. State
+// comes from the WorkspaceProvider, so the sidebar switcher stays in sync. Only
+// rendered when at least one workspace exists (the empty first-run is a focused
+// create view on the page itself).
+export default function Workspaces() {
+  const { workspaces, activeId, setActive, refresh } = useWorkspaces();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Which workspace's Switch is mid-activation — so only that row spins, not all.
+  // Which workspace's Switch is mid-activation — so only that row spins.
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
-  const refresh = async () => {
-    // Envelopes are the wire contract (#15): list → { workspaces }, active → { workspace }.
-    const [list, active] = await Promise.all([trpc.workspace.list.query(), trpc.workspace.active.query()]);
-    setWorkspaces(list.workspaces.map(ws => ({ id: ws.id, name: ws.name })));
-    setActiveId(active.workspace?.id ?? null);
-  };
-
   const handleActivate = async (workspaceId: string) => {
-    setBusy(true);
     setActivatingId(workspaceId);
     setError(null);
     try {
-      await trpc.workspace.setActive.mutate({ workspaceId });
-      await refresh();
+      await setActive(workspaceId);
     } catch (activateError) {
       setError((activateError as Error).message);
     }
-    setBusy(false);
     setActivatingId(null);
   };
 
@@ -78,7 +57,7 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
               ) : (
                 <Button
                   variant="secondary"
-                  disabled={busy}
+                  disabled={activatingId !== null}
                   pending={activatingId === ws.id}
                   onClick={async () => {
                     await handleActivate(ws.id);

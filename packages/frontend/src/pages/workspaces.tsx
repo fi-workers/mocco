@@ -41,7 +41,7 @@ export default function WorkspacesPage({ user, workspaces, activeId }: ShellProp
 
   return (
     <AppShell user={user} workspaces={workspaces} activeId={activeId}>
-      <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
+      <Workspaces />
     </AppShell>
   );
 }
