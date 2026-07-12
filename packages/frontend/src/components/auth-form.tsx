@@ -39,7 +39,7 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       setError('root', { message: result.error.message ?? 'Something went wrong' });
       return;
     }
-    await router.push(Routes.account);
+    await router.push(Routes.workspaces);
   });
 
   return (

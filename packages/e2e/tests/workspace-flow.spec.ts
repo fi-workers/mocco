@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 
 // Full session round-trip against the real server + Postgres: sign up →
 // zero-workspace onboarding → create → switch active → sign out (session
-// cleared, /account gated) → sign back in (workspaces persist). This is the
+// cleared, /workspaces gated) → sign back in (workspaces persist). This is the
 // cookie/session path the pglite unit tests cannot exercise.
 test('sign up, onboard, create + switch workspaces, sign out and back in', async ({ page }) => {
   const email = `e2e-${randomUUID()}@example.com`;
@@ -18,7 +18,7 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   await page.getByRole('button', { name: 'Create account' }).click();
 
   // --- First run: the account page shows its empty state (no workspace yet) ---
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByRole('heading', { name: 'Create your first workspace' })).toBeVisible();
 
   // --- Create the first workspace → the app appears, it's active ---
@@ -39,17 +39,17 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   await acmeRow.getByRole('button', { name: 'Switch' }).click();
   await expect(acmeRow.getByText('Active', { exact: true })).toBeVisible();
 
-  // --- Sign out: session cleared, /account is gated ---
+  // --- Sign out: session cleared, /workspaces is gated ---
   await page.getByRole('link', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.goto('/account');
+  await page.goto('/workspaces');
   await expect(page).toHaveURL(/\/auth\/sign-in$/); // getServerSideProps redirects — no session
 
   // --- Sign back in: both workspaces persisted ---
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.locator('li', { hasText: 'Acme Lab' })).toBeVisible();
   await expect(page.locator('li', { hasText: 'Beta Co' })).toBeVisible();
 });

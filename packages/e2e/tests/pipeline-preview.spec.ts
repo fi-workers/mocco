@@ -15,7 +15,7 @@ test('preview a valid .mocco.yml, and see inline issues on an invalid one', asyn
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page).toHaveURL(/\/account$/);
+  await expect(page).toHaveURL(/\/workspaces$/);
   await page.getByLabel('Workspace name').fill('E2E Workspace');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page.locator('li', { hasText: 'E2E Workspace' })).toBeVisible();
