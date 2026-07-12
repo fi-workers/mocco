@@ -1,11 +1,8 @@
 import { getServices } from '@mocco/backend/auth/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
-import { useRouter } from 'next/router';
-import { useState } from 'react';
+import Link from 'next/link';
 
-import Button from '../components/button';
 import Workspaces from '../components/workspaces';
-import { signOut } from '../lib/auth-client';
 import { headersFromNode } from '../lib/node-headers';
 
 import type { GetServerSideProps, InferGetServerSidePropsType } from 'next';
@@ -18,7 +15,7 @@ export const getServerSideProps = (async ({ req }) => {
   const headers = headersFromNode(req.headers);
   const session = await auth.getSession(headers);
   if (!session) {
-    return { redirect: { destination: '/login', permanent: false } };
+    return { redirect: { destination: '/auth/sign-in', permanent: false } };
   }
 
   const caller = appRouter.createCaller({ auth, workspace, session, headers });
@@ -37,19 +34,6 @@ export default function AccountPage({
   workspaces,
   activeId,
 }: InferGetServerSidePropsType<typeof getServerSideProps>) {
-  const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOut();
-      await router.replace('/');
-    } catch {
-      setSigningOut(false);
-    }
-  };
-
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-6">
       <h1 className="text-xl font-bold tracking-tight">Account</h1>
@@ -66,9 +50,11 @@ export default function AccountPage({
 
       <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
 
-      <Button variant="secondary" pending={signingOut} onClick={handleSignOut} className="h-11 text-sm">
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </Button>
+      <Link
+        href="/auth/sign-out"
+        className="inline-flex h-11 items-center justify-center rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50">
+        Sign out
+      </Link>
     </main>
   );
 }

@@ -9,8 +9,7 @@ test('preview a valid .mocco.yml, and see inline issues on an invalid one', asyn
   const password = 'e2e-password-123';
 
   // Sign up (a session is all the preview needs — no workspace required).
-  await page.goto('/login');
-  await page.getByRole('button', { name: 'No account? Create one' }).click();
+  await page.goto('/auth/sign-up');
   await page.getByLabel('Name').fill('E2E User');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);

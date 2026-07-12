@@ -11,7 +11,7 @@ export default function Home() {
           </span>
           <span className="font-semibold tracking-tight">Mocco</span>
         </div>
-        <Link href="/login" className="text-sm font-medium text-neutral-700 transition hover:text-neutral-950">
+        <Link href="/auth/sign-in" className="text-sm font-medium text-neutral-700 transition hover:text-neutral-950">
           Log in
         </Link>
       </nav>
@@ -26,7 +26,7 @@ export default function Home() {
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
-            href="/login"
+            href="/auth/sign-up"
             className="inline-flex h-11 items-center rounded-lg bg-violet-600 px-5 text-sm font-medium text-white transition hover:bg-violet-700">
             Get started
           </Link>
