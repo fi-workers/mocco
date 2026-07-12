@@ -14,7 +14,9 @@ describe('MoccoConfigParser', () => {
   it('parses a valid config', () => {
     const r = parser.parse(good);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.config.pipeline).toBe('deploy');
+    if (r.ok) {
+      expect(r.config.pipeline).toBe('deploy');
+    }
   });
   it('reports YAML syntax errors with a line', () => {
     const r = parser.parse('version: 1\n  bad: [');

@@ -6,6 +6,20 @@ import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
 
+// Shared no-restricted-syntax selectors: airbnb's set (arrays don't merge, so
+// re-declared wherever a package overrides no-restricted-syntax) plus a TS enum
+// ban — use an `as const` object with a derived union type instead (see AGENTS.md).
+export const restrictedSyntax = [
+  { selector: 'ForInStatement', message: 'for..in iterates the prototype chain — use Object.{keys,values,entries}.' },
+  { selector: 'ForOfStatement', message: 'Prefer array iteration (.map/.filter/.flatMap) over for..of.' },
+  { selector: 'LabeledStatement', message: 'Labels are a form of GOTO — avoid them.' },
+  { selector: 'WithStatement', message: '`with` is disallowed in strict mode.' },
+  {
+    selector: 'TSEnumDeclaration',
+    message: 'No TS enum — use an `as const` object with a derived union type (see AGENTS.md).',
+  },
+];
+
 /** @param {{ tsconfigRootDir: string }} o @returns {import('eslint').Linter.Config[]} */
 export function createBaseConfig({ tsconfigRootDir }) {
   return [
@@ -60,6 +74,7 @@ export function createBaseConfig({ tsconfigRootDir }) {
         'no-plusplus': 'off',
         'no-underscore-dangle': 'off',
         curly: ['error', 'all'],
+        'no-restricted-syntax': ['error', ...restrictedSyntax],
         eqeqeq: ['error', 'always', { null: 'ignore' }],
         'prefer-const': 'error',
         'no-console': ['warn', { allow: ['warn', 'error'] }],
@@ -171,3 +186,12 @@ export function createBaseConfig({ tsconfigRootDir }) {
     },
   ];
 }
+
+// Re-enable `curly` AFTER prettier — eslint-config-prettier disables it, which
+// silently undid the base `curly: ['error', 'all']`. Braces on every control
+// statement. (The enum ban lives in the base rules block; prettier leaves
+// no-restricted-syntax alone.) Each package spreads this last, after `prettier`.
+export const houseStyle = {
+  files: ['**/*.{ts,tsx,mts,cts}'],
+  rules: { curly: ['error', 'all'] },
+};

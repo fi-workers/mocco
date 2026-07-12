@@ -40,7 +40,9 @@ export class MoccoConfigParser {
     }
 
     const result = moccoConfigSchema.safeParse(value);
-    if (result.success) return { ok: true, config: result.data };
+    if (result.success) {
+      return { ok: true, config: result.data };
+    }
 
     return {
       ok: false,
