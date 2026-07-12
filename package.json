@@ -26,8 +26,10 @@
     "run-traefik": "cd infra/local/traefik && traefik --configFile=traefik.toml",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn db:drift && yarn build",
-    "db:drift": "sh scripts/drift-check.sh"
+    "verify": "yarn install --immutable && yarn format:check && yarn lint && yarn test && yarn db:drift && yarn schema:drift && yarn build",
+    "db:drift": "sh scripts/drift-check.sh",
+    "schema:gen": "tsx scripts/gen-mocco-schema.ts",
+    "schema:drift": "yarn schema:gen && git diff --exit-code docs/reference/mocco.schema.json"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

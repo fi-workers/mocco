@@ -126,6 +126,30 @@ describe('tRPC workspace router on pglite', () => {
       api.workspace.setActive({ workspaceId: '00000000-0000-4000-8000-000000000000' }),
     ).rejects.toMatchObject({ message: expect.stringMatching(/not a member/i) as string });
   });
+
+  it('pipeline.preview parses a valid .mocco.yml (no persistence)', async () => {
+    const api = await signedInCaller('preview@example.com');
+    const result = await api.pipeline.preview({
+      source: 'version: 1\npipeline: deploy\nsteps:\n  - run: build\n    executor: generic',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.pipeline).toBe('deploy');
+      expect(result.config.steps).toHaveLength(1);
+    }
+  });
+
+  it('pipeline.preview reports issues for an invalid config', async () => {
+    const api = await signedInCaller('preview@example.com');
+    const result = await api.pipeline.preview({ source: 'version: 1\npipeline: p\nsteps: []' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues.some(issue => issue.path.startsWith('steps'))).toBe(true);
+  });
+
+  it('pipeline.preview requires a session', async () => {
+    const anonymous = caller(new Headers(), null);
+    await expect(anonymous.pipeline.preview({ source: 'version: 1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
 });
 
 // HTTP-level: the mounted handler with a real Request — exercises createContext,
