@@ -1,23 +1,14 @@
-import { getServices } from '@mocco/backend/auth/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import Link from 'next/link';
 
 import Workspaces from '../components/workspaces';
-import { headersFromNode } from '../lib/node-headers';
+import { withAuth } from '../lib/with-auth';
 
-import type { GetServerSideProps, InferGetServerSidePropsType } from 'next';
+import type { InferGetServerSidePropsType } from 'next';
 
-// Server-side auth gate + initial data (the Pages Router idiom — no client-side
-// redirect). Unauthenticated requests never render the page; authenticated ones
-// arrive with their workspaces already loaded.
-export const getServerSideProps = (async ({ req }) => {
-  const { auth, workspace } = getServices();
-  const headers = headersFromNode(req.headers);
-  const session = await auth.getSession(headers);
-  if (!session) {
-    return { redirect: { destination: '/auth/sign-in', permanent: false } };
-  }
-
+// Auth-guarded (withAuth): authenticated requests arrive with their workspaces
+// already loaded; unauthenticated ones are redirected before this runs.
+export const getServerSideProps = withAuth(async (_context, { auth, workspace, session, headers }) => {
   const caller = appRouter.createCaller({ auth, workspace, session, headers });
   const [list, active] = await Promise.all([caller.workspace.list(), caller.workspace.active()]);
   return {
@@ -27,7 +18,7 @@ export const getServerSideProps = (async ({ req }) => {
       activeId: active.workspace?.id ?? null,
     },
   };
-}) satisfies GetServerSideProps;
+});
 
 export default function AccountPage({
   user,
