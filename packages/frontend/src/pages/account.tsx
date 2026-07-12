@@ -3,6 +3,7 @@ import { appRouter } from '@mocco/backend/trpc/root';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import Button from '../components/button';
 import Workspaces from '../components/workspaces';
 import { signOut } from '../lib/auth-client';
 import { headersFromNode } from '../lib/node-headers';
@@ -63,13 +64,9 @@ export default function AccountPage({
 
       <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
 
-      <button
-        type="button"
-        onClick={handleSignOut}
-        disabled={signingOut}
-        className="h-11 rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50">
+      <Button variant="secondary" pending={signingOut} onClick={handleSignOut} className="h-11 text-sm">
         {signingOut ? 'Signing out…' : 'Sign out'}
-      </button>
+      </Button>
     </main>
   );
 }

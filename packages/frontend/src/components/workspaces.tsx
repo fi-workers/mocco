@@ -2,6 +2,8 @@ import { useState } from 'react';
 
 import { trpc } from '../lib/trpc';
 
+import Button from './button';
+
 interface WorkspaceItem {
   id: string;
   name: string;
@@ -20,6 +22,8 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Which workspace's Switch is mid-activation — so only that row spins, not all.
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const refresh = async () => {
     // Envelopes are the wire contract (#15): list → { workspaces }, active → { workspace }.
@@ -46,6 +50,7 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
 
   const handleActivate = async (workspaceId: string) => {
     setBusy(true);
+    setActivatingId(workspaceId);
     setError(null);
     try {
       await trpc.workspace.setActive.mutate({ workspaceId });
@@ -54,6 +59,7 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
       setError((activateError as Error).message);
     }
     setBusy(false);
+    setActivatingId(null);
   };
 
   const creationForm = (
@@ -70,22 +76,20 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
       />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          className="h-10 flex-1 rounded-lg bg-violet-600 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-50">
+        <Button type="submit" pending={busy} className="h-10 flex-1 text-sm">
           {busy ? 'Creating…' : 'Create workspace'}
-        </button>
+        </Button>
         {workspaces.length > 0 && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            disabled={busy}
             onClick={() => {
               setCreating(false);
               setError(null);
             }}
-            className="h-10 rounded-lg border border-neutral-200 px-4 text-sm text-neutral-600 hover:bg-neutral-50">
+            className="h-10 px-4 text-sm">
             Cancel
-          </button>
+          </Button>
         )}
       </div>
     </form>
@@ -109,12 +113,9 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-neutral-700">Workspaces</h2>
         {!creating && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="text-sm font-medium text-violet-700 hover:text-violet-900">
+          <Button variant="ghost" onClick={() => setCreating(true)} className="text-sm">
             + New workspace
-          </button>
+          </Button>
         )}
       </div>
 
@@ -134,15 +135,16 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
                   Active
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   disabled={busy}
+                  pending={activatingId === ws.id}
                   onClick={async () => {
                     await handleActivate(ws.id);
                   }}
-                  className="rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
+                  className="px-3 py-1.5 text-xs">
                   Switch
-                </button>
+                </Button>
               )}
             </li>
           );

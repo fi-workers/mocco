@@ -1,6 +1,7 @@
 import { getServices } from '@mocco/backend/auth/instance';
 import { useState } from 'react';
 
+import Button from '../../components/button';
 import PipelineSteps from '../../components/pipeline-steps';
 import { headersFromNode } from '../../lib/node-headers';
 import { trpc } from '../../lib/trpc';
@@ -49,12 +50,9 @@ export default function NewPipelinePage() {
           placeholder={'version: 1\npipeline: deploy\nsteps:\n  - run: build\n    executor: generic'}
           className="rounded-lg border border-neutral-200 p-3 font-mono text-sm outline-none focus:border-violet-500"
         />
-        <button
-          type="submit"
-          disabled={busy}
-          className="h-10 self-start rounded-lg bg-violet-600 px-4 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-50">
+        <Button type="submit" pending={busy} className="h-10 self-start px-4 text-sm">
           {busy ? 'Parsing…' : 'Preview'}
-        </button>
+        </Button>
       </form>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
