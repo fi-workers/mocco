@@ -1,9 +1,11 @@
+import { Configure } from './lib/configure';
 import { Monitoring } from './lib/monitoring';
 
-// Server-side monitoring init (Next auto-loads this file). An empty DSN makes it
-// a no-op, so builds and local dev without SENTRY_DSN are unaffected.
+// Server-side monitoring init (Next auto-loads this file). The DSN is not secret
+// (it ships in the client bundle), so server and client share the one value via
+// Configure — no separate SENTRY_DSN needed. Empty DSN → no-op.
 export function register(): void {
-  Monitoring.init(process.env.SENTRY_DSN, process.env.VERCEL_ENV ?? 'development');
+  Monitoring.init(Configure.SentryDsn, Configure.Environment);
 }
 
 // Report errors thrown during server request handling (Next's onRequestError hook).
