@@ -3,6 +3,8 @@ docs/
 docs/prototype/
 # Generated artifacts
 packages/backend/src/infra/db/migrations/
+# Static assets (favicons, manifest) — served verbatim, not prettier targets
+packages/frontend/public/
 .yarn/
 **/.next/
 **/dist/
