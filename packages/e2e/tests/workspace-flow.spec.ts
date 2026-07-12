@@ -31,6 +31,12 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await expect(page.getByRole('heading', { name: 'No repositories yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
+  // --- Members: the creator is listed ---
+  await page.getByRole('link', { name: 'Members' }).click();
+  await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+\/members$/);
+  await expect(page.getByText('E2E User')).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
+
   // --- Create a second workspace via the switcher → its dashboard ---
   await page.getByRole('button', { name: 'Acme Lab' }).click();
   await page.getByRole('menuitem', { name: 'New workspace' }).click();

@@ -68,6 +68,19 @@ export class WorkspaceService {
     await this.provider.api.deleteOrganization({ body: { organizationId: workspaceId }, headers });
   }
 
+  /** Members of a workspace (each with the joined user); the caller must belong to it. */
+  async listMembers(headers: Headers, workspaceId: string) {
+    try {
+      const { members } = await this.provider.api.listMembers({ query: { organizationId: workspaceId }, headers });
+      return members;
+    } catch (error) {
+      if (isAPIError(error)) {
+        throw new WorkspaceNotFoundError(workspaceId, { cause: error });
+      }
+      throw error;
+    }
+  }
+
   /**
    * The session-active workspace with members, or null when none is active.
    * Vendor contract (probe-verified): returns null when no workspace is active —

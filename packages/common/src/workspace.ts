@@ -37,3 +37,13 @@ export const workspaceMemberSchema = z.object({
   createdAt: z.date(),
 });
 export type WorkspaceMemberDto = z.infer<typeof workspaceMemberSchema>;
+
+/**
+ * A workspace member with the joined user (name/email) — the shape the members
+ * list needs. The egress filter strips the vendor's `organizationId` and
+ * `user.image`, which the list doesn't use.
+ */
+export const workspaceMemberDetailSchema = workspaceMemberSchema.extend({
+  user: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+});
+export type WorkspaceMemberDetailDto = z.infer<typeof workspaceMemberDetailSchema>;
