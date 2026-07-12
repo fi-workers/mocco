@@ -18,7 +18,7 @@ export default function SignOutPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center">
-      <p className="text-sm text-neutral-500">Signing out…</p>
+      <p className="text-sm text-muted-foreground">Signing out…</p>
     </main>
   );
 }

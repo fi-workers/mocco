@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { workspaceCreateInputSchema } from '@mocco/common/workspace';
 import { useForm } from 'react-hook-form';
 
-import Button from './button';
+import { Button } from '@/components/ui/button';
 
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 
@@ -36,22 +36,22 @@ export default function WorkspaceForm({ onSubmit, defaultValues, submitLabel = '
   });
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3 rounded-xl border border-neutral-200 p-4">
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-xl border border-border p-4">
       <input
         {...register('name')}
         maxLength={80}
         placeholder="Workspace name"
         aria-label="Workspace name"
-        className="h-10 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
+        className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring"
       />
-      {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
-      {errors.root && <p className="text-sm text-red-600">{errors.root.message}</p>}
+      {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+      {errors.root && <p className="text-sm text-destructive">{errors.root.message}</p>}
       <div className="flex gap-2">
         <Button type="submit" pending={isSubmitting} className="h-10 flex-1 text-sm">
-          {isSubmitting ? 'Saving…' : submitLabel}
+          {submitLabel}
         </Button>
         {onCancel && (
-          <Button variant="secondary" disabled={isSubmitting} onClick={onCancel} className="h-10 px-4 text-sm">
+          <Button variant="outline" disabled={isSubmitting} onClick={onCancel} className="h-10 px-4 text-sm">
             Cancel
           </Button>
         )}

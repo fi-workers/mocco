@@ -1,17 +1,17 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 
+import { Button } from '@/components/ui/button';
 import { signIn, signUp } from '@/lib/auth-client';
 import { signInSchema, signUpSchema } from '@/lib/auth-schema';
 import { Routes } from '@/lib/routes';
 
-import Button from './button';
-
 import type { SignUpValues } from '@/lib/auth-schema';
 import type { Resolver } from 'react-hook-form';
 
-const INPUT = 'h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500';
+const INPUT = 'h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring';
 
 // Shared by /auth/sign-in and /auth/sign-up — one form, two modes. react-hook-form
 // + the mode's zod schema (sign-up also requires a name).
@@ -46,10 +46,8 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
-      <Link href={Routes.home} className="text-center">
-        <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-lg font-bold text-white">
-          M
-        </div>
+      <Link href={Routes.home} className="flex flex-col items-center gap-3 text-center">
+        <Image src="/favicon/favicon.svg" alt="Mocco" width={44} height={44} className="rounded-xl" />
         <h1 className="text-2xl font-bold tracking-tight">Mocco</h1>
       </Link>
 
@@ -57,7 +55,7 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         {isSignUp && (
           <div>
             <input {...register('name')} placeholder="Name" aria-label="Name" className={`w-full ${INPUT}`} />
-            {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>}
+            {errors.name && <p className="mt-1 text-sm text-destructive">{errors.name.message}</p>}
           </div>
         )}
         <div>
@@ -68,7 +66,7 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
             aria-label="Email"
             className={`w-full ${INPUT}`}
           />
-          {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
+          {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email.message}</p>}
         </div>
         <div>
           <input
@@ -78,15 +76,15 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
             aria-label="Password"
             className={`w-full ${INPUT}`}
           />
-          {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
+          {errors.password && <p className="mt-1 text-sm text-destructive">{errors.password.message}</p>}
         </div>
-        {errors.root && <p className="text-sm text-red-600">{errors.root.message}</p>}
-        <Button type="submit" variant="neutral" pending={isSubmitting} className="h-11 w-full text-sm">
-          {isSubmitting ? 'Working…' : submitLabel}
+        {errors.root && <p className="text-sm text-destructive">{errors.root.message}</p>}
+        <Button type="submit" pending={isSubmitting} className="h-11 w-full text-sm">
+          {submitLabel}
         </Button>
         <Link
           href={isSignUp ? Routes.signIn : Routes.signUp}
-          className="text-center text-sm text-neutral-500 transition hover:text-neutral-800">
+          className="text-center text-sm text-muted-foreground transition hover:text-foreground">
           {isSignUp ? 'Have an account? Sign in' : 'No account? Create one'}
         </Link>
       </form>

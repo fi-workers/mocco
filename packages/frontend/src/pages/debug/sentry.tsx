@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import Button from '@/components/button';
+import { Button } from '@/components/ui/button';
 import { Configure } from '@/lib/configure';
 import { trpc } from '@/lib/trpc';
 
@@ -40,11 +40,11 @@ export default function SentryCheckPage() {
       <p className="text-sm text-muted-foreground">
         DSN configured: <strong>{Configure.SentryDsn ? 'yes' : 'no'}</strong> · env {Configure.Environment}
       </p>
-      <Button variant="neutral" onClick={throwClient} className="h-10 px-4 text-sm">
+      <Button variant="default" onClick={throwClient} className="h-10 px-4 text-sm">
         Throw a client error
       </Button>
       <Button
-        variant="secondary"
+        variant="outline"
         onClick={async () => {
           await callApiRoute();
         }}
@@ -52,7 +52,7 @@ export default function SentryCheckPage() {
         Trigger an API-route error
       </Button>
       <Button
-        variant="secondary"
+        variant="outline"
         onClick={async () => {
           await callTrpc();
         }}
