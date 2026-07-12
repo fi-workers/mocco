@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { Routes } from '@/lib/routes';
@@ -42,7 +42,15 @@ export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
           />
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem nativeButton={false} render={<Link href={Routes.workspaces}>Manage workspaces</Link>} />
+        <DropdownMenuItem
+          nativeButton={false}
+          render={
+            <Link href={{ pathname: Routes.workspaces, query: { create: '1' } }}>
+              <PlusIcon className="size-4" />
+              New workspace
+            </Link>
+          }
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

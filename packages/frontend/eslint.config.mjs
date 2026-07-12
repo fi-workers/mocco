@@ -38,6 +38,17 @@ export default [
     },
   },
   {
+    // Components/pages: these two rules fight React's shape — hooks (and the
+    // values derived for them) must be declared before any early return, and a
+    // component legitimately returns a loading element in one branch and content
+    // in another.
+    files: ['src/pages/**/*.tsx', 'src/components/**/*.tsx'],
+    rules: {
+      'unicorn/no-declarations-before-early-exit': 'off',
+      'sonarjs/function-return-type': 'off',
+    },
+  },
+  {
     // Machine-enforced vendor isolation: only lib/monitoring.ts imports the Sentry
     // vendor. Everything else uses the neutral Monitoring surface, so the vendor
     // (or Next) can be swapped by rewriting that one file.
