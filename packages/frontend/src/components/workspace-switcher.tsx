@@ -60,7 +60,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href={Routes.workspaces}>Manage workspaces</Link>} />
+        <DropdownMenuItem nativeButton={false} render={<Link href={Routes.workspaces}>Manage workspaces</Link>} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

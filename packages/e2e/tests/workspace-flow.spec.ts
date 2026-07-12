@@ -39,8 +39,9 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   await acmeRow.getByRole('button', { name: 'Switch' }).click();
   await expect(acmeRow.getByText('Active', { exact: true })).toBeVisible();
 
-  // --- Sign out: session cleared, /workspaces is gated ---
-  await page.getByRole('link', { name: 'Sign out' }).click();
+  // --- Sign out (via the account menu): session cleared, /workspaces is gated ---
+  await page.getByRole('button', { name: 'Open account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/workspaces');
   await expect(page).toHaveURL(/\/auth\/sign-in$/); // getServerSideProps redirects — no session

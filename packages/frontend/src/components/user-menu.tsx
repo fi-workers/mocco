@@ -6,6 +6,7 @@ import { Routes } from '../lib/routes';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -20,16 +21,21 @@ interface Props {
 export default function UserMenu({ user }: Props) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground transition hover:opacity-90 aria-expanded:ring-2 aria-expanded:ring-ring">
+      <DropdownMenuTrigger
+        aria-label="Open account menu"
+        className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground transition hover:opacity-90 aria-expanded:ring-2 aria-expanded:ring-ring">
         {user.name.charAt(0).toUpperCase()}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="truncate text-sm font-medium text-foreground">{user.name}</span>
-          <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate text-sm font-medium text-foreground">{user.name}</span>
+            <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          nativeButton={false}
           render={
             <Link href={Routes.account}>
               <SettingsIcon />
@@ -38,6 +44,7 @@ export default function UserMenu({ user }: Props) {
           }
         />
         <DropdownMenuItem
+          nativeButton={false}
           variant="destructive"
           render={
             <Link href={Routes.signOut}>
