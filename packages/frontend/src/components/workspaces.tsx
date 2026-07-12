@@ -16,8 +16,8 @@ interface Props {
 }
 
 // The account-page workspace manager: list, switch active, and add another.
-// A user with no workspace never reaches here — the shell sends them to
-// /onboarding, so this always renders at least one workspace.
+// Only rendered when at least one workspace exists — the account page shows its
+// own focused create view for the empty (first-run) case.
 export default function Workspaces({ initialWorkspaces, initialActiveId }: Props) {
   // Initial data comes from the server (getServerSideProps) — no load effect.
   const [workspaces, setWorkspaces] = useState(initialWorkspaces);

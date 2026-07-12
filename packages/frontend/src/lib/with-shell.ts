@@ -3,6 +3,7 @@ import { appRouter } from '@mocco/backend/trpc/root';
 import { Routes } from './routes';
 import { withAuth } from './with-auth';
 
+import type { AuthContext } from './with-auth';
 import type { GetServerSideProps } from 'next';
 
 /** The data every AppShell page needs: the signed-in user + their workspaces. */
@@ -13,24 +14,26 @@ export type ShellProps = {
   activeId: string | null;
 };
 
-/**
- * Ready-made getServerSideProps for pages that render inside AppShell: auth-gated
- * (withAuth) plus the shell data (user + workspaces + active) the sidebar needs.
- * A page with no extra data just re-exports this as its getServerSideProps.
- */
-export const shellServerSideProps: GetServerSideProps<ShellProps> = withAuth<ShellProps>(async (_context, context) => {
-  const { auth, workspace, session, headers } = context;
+/** Fetch the shell data (user + their workspaces + active) for an authed request. */
+export async function fetchShellProps({ auth, workspace, session, headers }: AuthContext): Promise<ShellProps> {
   const caller = appRouter.createCaller({ auth, workspace, session, headers });
   const [list, active] = await Promise.all([caller.workspace.list(), caller.workspace.active()]);
-  // A user with no workspace can't use the shell — send them to onboarding first.
-  if (list.workspaces.length === 0) {
-    return { redirect: { destination: Routes.onboarding, permanent: false } };
-  }
   return {
-    props: {
-      user: { name: session.user.name, email: session.user.email },
-      workspaces: list.workspaces.map(ws => ({ id: ws.id, name: ws.name })),
-      activeId: active.workspace?.id ?? null,
-    },
+    user: { name: session.user.name, email: session.user.email },
+    workspaces: list.workspaces.map(ws => ({ id: ws.id, name: ws.name })),
+    activeId: active.workspace?.id ?? null,
   };
+}
+
+/**
+ * getServerSideProps for pages that require an active workspace (everything but
+ * the workspaces page itself): auth-gated + shell data, redirecting a
+ * workspace-less user to /account, where they create their first one.
+ */
+export const shellServerSideProps: GetServerSideProps<ShellProps> = withAuth<ShellProps>(async (_context, context) => {
+  const props = await fetchShellProps(context);
+  if (props.workspaces.length === 0) {
+    return { redirect: { destination: Routes.account, permanent: false } };
+  }
+  return { props };
 });
