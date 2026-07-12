@@ -1,6 +1,7 @@
 import { getServices } from '@mocco/backend/auth/instance';
 
 import { headersFromNode } from './node-headers';
+import { Routes } from './routes';
 
 import type { Services } from '@mocco/backend/auth/instance';
 import type { Session } from '@mocco/common/auth';
@@ -26,7 +27,7 @@ export function withAuth<P extends Record<string, unknown>>(
     const headers = headersFromNode(context.req.headers);
     const session = await auth.getSession(headers);
     if (!session) {
-      return { redirect: { destination: '/auth/sign-in', permanent: false } };
+      return { redirect: { destination: Routes.signIn, permanent: false } };
     }
     return await handler(context, { auth, workspace, session, headers });
   };

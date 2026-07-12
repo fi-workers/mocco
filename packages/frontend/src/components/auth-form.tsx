@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useState } from 'react';
 
 import { signIn, signUp } from '../lib/auth-client';
+import { Routes } from '../lib/routes';
 
 import Button from './button';
 
@@ -28,12 +29,12 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       setLoading(false);
       return;
     }
-    await router.push('/account');
+    await router.push(Routes.account);
   };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
-      <Link href="/" className="text-center">
+      <Link href={Routes.home} className="text-center">
         <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-lg font-bold text-white">
           M
         </div>
@@ -76,7 +77,7 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           {loading ? 'Working…' : submitLabel}
         </Button>
         <Link
-          href={isSignUp ? '/auth/sign-in' : '/auth/sign-up'}
+          href={isSignUp ? Routes.signIn : Routes.signUp}
           className="text-center text-sm text-neutral-500 transition hover:text-neutral-800">
           {isSignUp ? 'Have an account? Sign in' : 'No account? Create one'}
         </Link>
