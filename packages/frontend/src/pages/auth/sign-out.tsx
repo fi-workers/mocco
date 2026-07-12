@@ -1,8 +1,8 @@
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
-import { signOut } from '../../lib/auth-client';
-import { Routes } from '../../lib/routes';
+import { signOut } from '@/lib/auth-client';
+import { Routes } from '@/lib/routes';
 
 // Signs the user out on load, then returns them to the public landing page.
 export default function SignOutPage() {

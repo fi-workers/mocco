@@ -1,13 +1,14 @@
 import { useRouter } from 'next/router';
 
-import AppShell from '../components/app-shell';
-import WorkspaceForm from '../components/workspace-form';
-import Workspaces from '../components/workspaces';
-import { trpc } from '../lib/trpc';
-import { withAuth } from '../lib/with-auth';
-import { fetchShellProps } from '../lib/with-shell';
+import AppShell from '@/components/app-shell';
+import WorkspaceForm from '@/components/workspace-form';
+import Workspaces from '@/components/workspaces';
+import { Routes } from '@/lib/routes';
+import { trpc } from '@/lib/trpc';
+import { withAuth } from '@/lib/with-auth';
+import { fetchShellProps } from '@/lib/with-shell';
 
-import type { ShellProps } from '../lib/with-shell';
+import type { ShellProps } from '@/lib/with-shell';
 
 // The workspaces list page. Unlike other shell pages it does NOT redirect a
 // workspace-less user (it's where they land to create their first) — so it
@@ -25,14 +26,14 @@ export default function WorkspacesPage({ user, workspaces, activeId }: ShellProp
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 px-6">
         <div>
           <h1 className="text-xl font-bold tracking-tight">Create your first workspace</h1>
-          <p className="mt-2 text-sm text-neutral-500">
+          <p className="mt-2 text-sm text-muted-foreground">
             A workspace is your team boundary — repos, members and deploy governance live inside it.
           </p>
         </div>
         <WorkspaceForm
           onSubmit={async values => {
-            await trpc.workspace.create.mutate(values);
-            await router.replace(router.asPath);
+            const { workspace } = await trpc.workspace.create.mutate(values);
+            await router.push(Routes.workspace(workspace.id));
           }}
         />
       </main>

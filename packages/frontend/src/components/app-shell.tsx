@@ -1,11 +1,11 @@
 import Link from 'next/link';
 
-import { Routes } from '../lib/routes';
+import { Routes } from '@/lib/routes';
 
 import UserMenu from './user-menu';
 import WorkspaceSwitcher from './workspace-switcher';
 
-import type { ShellProps } from '../lib/with-shell';
+import type { ShellProps } from '@/lib/with-shell';
 import type { ReactNode } from 'react';
 
 type Props = ShellProps & { children: ReactNode };
