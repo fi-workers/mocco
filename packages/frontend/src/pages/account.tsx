@@ -1,32 +1,15 @@
-import { appRouter } from '@mocco/backend/trpc/root';
-
 import AppShell from '../components/app-shell';
 import Workspaces from '../components/workspaces';
-import { withAuth } from '../lib/with-auth';
 
-import type { InferGetServerSidePropsType } from 'next';
+import type { ShellProps } from '../lib/with-shell';
 
-// Auth-guarded (withAuth): authenticated requests arrive with their workspaces
-// already loaded; unauthenticated ones are redirected before this runs.
-export const getServerSideProps = withAuth(async (_context, { auth, workspace, session, headers }) => {
-  const caller = appRouter.createCaller({ auth, workspace, session, headers });
-  const [list, active] = await Promise.all([caller.workspace.list(), caller.workspace.active()]);
-  return {
-    props: {
-      user: { name: session.user.name, email: session.user.email },
-      workspaces: list.workspaces.map(ws => ({ id: ws.id, name: ws.name })),
-      activeId: active.workspace?.id ?? null,
-    },
-  };
-});
+// Auth-gated + shell data (user + workspaces) — the account page needs exactly
+// the shell props, so it re-exports the shared getServerSideProps directly.
+export { shellServerSideProps as getServerSideProps } from '../lib/with-shell';
 
-export default function AccountPage({
-  user,
-  workspaces,
-  activeId,
-}: InferGetServerSidePropsType<typeof getServerSideProps>) {
+export default function AccountPage({ user, workspaces, activeId }: ShellProps) {
   return (
-    <AppShell user={user}>
+    <AppShell user={user} workspaces={workspaces} activeId={activeId}>
       <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
     </AppShell>
   );

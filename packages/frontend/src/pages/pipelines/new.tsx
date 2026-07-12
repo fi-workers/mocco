@@ -4,20 +4,17 @@ import AppShell from '../../components/app-shell';
 import Button from '../../components/button';
 import PipelineSteps from '../../components/pipeline-steps';
 import { trpc } from '../../lib/trpc';
-import { withAuth } from '../../lib/with-auth';
 
-import type { InferGetServerSidePropsType } from 'next';
+import type { ShellProps } from '../../lib/with-shell';
 
 // Preview only (slice 1): parse a pasted `.mocco.yml` and show the pipeline or
 // the parse issues. Nothing is persisted — the config's home is the repo,
-// fetched at a run's commit later. Auth-guarded (withAuth).
-export const getServerSideProps = withAuth(async (_context, { session }) => ({
-  props: { user: { name: session.user.name, email: session.user.email } },
-}));
+// fetched at a run's commit later. Auth-gated + shell data.
+export { shellServerSideProps as getServerSideProps } from '../../lib/with-shell';
 
 type PreviewResult = Awaited<ReturnType<typeof trpc.pipeline.preview.mutate>>;
 
-export default function NewPipelinePage({ user }: InferGetServerSidePropsType<typeof getServerSideProps>) {
+export default function NewPipelinePage({ user, workspaces, activeId }: ShellProps) {
   const [source, setSource] = useState('');
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +33,7 @@ export default function NewPipelinePage({ user }: InferGetServerSidePropsType<ty
   };
 
   return (
-    <AppShell user={user}>
+    <AppShell user={user} workspaces={workspaces} activeId={activeId}>
       <div className="flex flex-col gap-6">
         <h1 className="text-xl font-bold tracking-tight">Preview a .mocco.yml</h1>
 
