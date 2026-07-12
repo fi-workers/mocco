@@ -6,8 +6,13 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   /** Session signing secret. Generate with: openssl rand -base64 32 */
   AUTH_SECRET: z.string().min(1).optional(),
-  /** Public base URL of the app (e.g. https://mocco.work). */
+  /** Canonical public URL of the app (prod `https://www.mocco.club`, local `https://www.mocco.work`). */
   AUTH_URL: z.string().min(1).optional(),
+  // Platform-injected (Vercel) — read here so getEnv stays the only process.env
+  // reader. Used to derive per-deploy auth origins (see domain/auth/origins.ts).
+  VERCEL_ENV: z.string().min(1).optional(),
+  VERCEL_URL: z.string().min(1).optional(),
+  VERCEL_BRANCH_URL: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;
