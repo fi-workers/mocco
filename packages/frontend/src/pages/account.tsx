@@ -13,12 +13,12 @@ import type { GetServerSideProps, InferGetServerSidePropsType } from 'next';
 // redirect). Unauthenticated requests never render the page; authenticated ones
 // arrive with their workspaces already loaded.
 export const getServerSideProps = (async ({ req }) => {
-  const { auth, workspace } = getServices();
+  const { auth, workspace, pipeline } = getServices();
   const headers = headersFromNode(req.headers);
   const session = await auth.getSession(headers);
   if (!session) return { redirect: { destination: '/', permanent: false } };
 
-  const caller = appRouter.createCaller({ auth, workspace, session, headers });
+  const caller = appRouter.createCaller({ auth, workspace, pipeline, session, headers });
   const [list, active] = await Promise.all([caller.workspace.list(), caller.workspace.active()]);
   return {
     props: {

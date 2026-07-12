@@ -4,6 +4,9 @@ import { AuthService } from '../auth/AuthService';
 import { createProvider } from '../auth/provider';
 import { WorkspaceService } from '../auth/WorkspaceService';
 import { createTestDb, type TestDb } from '../db/testing/pglite';
+import { MoccoConfigParser } from '../pipeline/MoccoConfigParser';
+import { PipelineService } from '../pipeline/PipelineService';
+import { decodeYaml } from '../pipeline/yaml/decode';
 
 import { createTrpcHandler } from './handler';
 import { appRouter } from './root';
@@ -28,9 +31,10 @@ describe('tRPC workspace router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
   let workspace: WorkspaceService;
+  let pipeline: PipelineService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ auth, workspace, session, headers });
+    appRouter.createCaller({ auth, workspace, pipeline, session, headers });
 
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
@@ -43,6 +47,7 @@ describe('tRPC workspace router on pglite', () => {
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
+    pipeline = new PipelineService(t.db, new MoccoConfigParser(decodeYaml));
   });
   afterEach(async () => {
     await t.close();
@@ -128,25 +133,113 @@ describe('tRPC workspace router on pglite', () => {
   });
 });
 
-// HTTP-level: the mounted handler with a real Request — exercises createContext,
-// the neutral getSession, and the superjson wire format (Dates revive).
-describe('trpcHandler over HTTP', () => {
+const validYaml = `version: 1
+pipeline: deploy
+steps:
+  - run: build
+    executor: generic`;
+
+const invalidYaml = 'version: 1\npipeline: p\nsteps: []';
+
+describe('tRPC pipeline router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
   let workspace: WorkspaceService;
+  let pipeline: PipelineService;
+
+  const caller = (headers: Headers, session: Context['session']) =>
+    appRouter.createCaller({ auth, workspace, pipeline, session, headers });
+
+  const signedInCaller = async (email: string) => {
+    const headers = await signUpViaHttp(auth, email);
+    const session = await auth.getSession(headers);
+    return { api: caller(headers, session), headers };
+  };
 
   beforeEach(async () => {
     t = await createTestDb();
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
+    pipeline = new PipelineService(t.db, new MoccoConfigParser(decodeYaml));
+  });
+  afterEach(async () => {
+    await t.close();
+  });
+
+  it('unauthenticated calls are UNAUTHORIZED', async () => {
+    const anonymous = caller(new Headers(), null);
+    await expect(anonymous.pipeline.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('authed but no active workspace is PRECONDITION_FAILED', async () => {
+    const { api } = await signedInCaller('no-workspace@example.com');
+    await expect(api.pipeline.submit({ source: validYaml })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('submit persists a pipeline scoped to the active workspace', async () => {
+    const { api } = await signedInCaller('owner@example.com');
+    await api.workspace.create({ name: 'Acme Lab' });
+
+    const { pipeline: created } = await api.pipeline.submit({ source: validYaml });
+
+    expect(created.name).toBe('deploy');
+  });
+
+  it('submit rejects an invalid source with BAD_REQUEST', async () => {
+    const { api } = await signedInCaller('owner@example.com');
+    await api.workspace.create({ name: 'Acme Lab' });
+
+    await expect(api.pipeline.submit({ source: invalidYaml })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
+  it('list returns the pipelines for the active workspace', async () => {
+    const { api } = await signedInCaller('owner@example.com');
+    await api.workspace.create({ name: 'Acme Lab' });
+    await api.pipeline.submit({ source: validYaml });
+
+    const { pipelines } = await api.pipeline.list();
+
+    expect(pipelines).toHaveLength(1);
+  });
+
+  it('get returns the pipeline with its latest version', async () => {
+    const { api } = await signedInCaller('owner@example.com');
+    await api.workspace.create({ name: 'Acme Lab' });
+    const { pipeline: created } = await api.pipeline.submit({ source: validYaml });
+
+    const { pipeline: fetched, version } = await api.pipeline.get({ id: created.id });
+
+    expect(fetched.id).toBe(created.id);
+    expect(version?.definition).toMatchObject({ steps: [{ run: 'build', executor: 'generic' }] });
+  });
+});
+
+// HTTP-level: the mounted handler with a real Request — exercises createContext,
+// the neutral getSession, and the superjson wire format (Dates revive).
+describe('trpcHandler over HTTP', () => {
+  let t: TestDb;
+  let auth: AuthService;
+  let workspace: WorkspaceService;
+  let pipeline: PipelineService;
+
+  beforeEach(async () => {
+    t = await createTestDb();
+    const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    auth = new AuthService(provider);
+    workspace = new WorkspaceService(provider);
+    pipeline = new PipelineService(t.db, new MoccoConfigParser(decodeYaml));
   });
   afterEach(async () => {
     await t.close();
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const trpcHandler = createTrpcHandler({ auth, workspace });
+    const trpcHandler = createTrpcHandler({ auth, workspace, pipeline });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);

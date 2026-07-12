@@ -11,8 +11,8 @@ import type { Context } from '@mocco/backend/trpc/trpc';
 export default createNextApiHandler({
   router: appRouter,
   createContext: async ({ req }): Promise<Context> => {
-    const { auth, workspace } = getServices();
+    const { auth, workspace, pipeline } = getServices();
     const headers = headersFromNode(req.headers);
-    return { auth, workspace, session: await auth.getSession(headers), headers };
+    return { auth, workspace, pipeline, session: await auth.getSession(headers), headers };
   },
 });

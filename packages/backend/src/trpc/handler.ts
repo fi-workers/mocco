@@ -23,6 +23,7 @@ export function createTrpcHandler(deps: Services) {
       createContext: async (): Promise<Context> => ({
         auth: deps.auth,
         workspace: deps.workspace,
+        pipeline: deps.pipeline,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
