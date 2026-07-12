@@ -1,10 +1,10 @@
-import AppShell from '../components/app-shell';
+import AppShell from '@/components/app-shell';
 
-import type { ShellProps } from '../lib/with-shell';
+import type { ShellProps } from '@/lib/with-shell';
 
 // User account settings (reached from the sidebar). A shell page — needs a
 // workspace like the rest of the app.
-export { shellServerSideProps as getServerSideProps } from '../lib/with-shell';
+export { shellServerSideProps as getServerSideProps } from '@/lib/with-shell';
 
 export default function AccountPage({ user, workspaces, activeId }: ShellProps) {
   return (

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
-import Button from '../../components/button';
-import { Configure } from '../../lib/configure';
-import { trpc } from '../../lib/trpc';
+import Button from '@/components/button';
+import { Configure } from '@/lib/configure';
+import { trpc } from '@/lib/trpc';
 
 import type { GetServerSideProps } from 'next';
 

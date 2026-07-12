@@ -1,13 +1,13 @@
 import { useRouter } from 'next/router';
 
-import AppShell from '../components/app-shell';
-import WorkspaceForm from '../components/workspace-form';
-import Workspaces from '../components/workspaces';
-import { trpc } from '../lib/trpc';
-import { withAuth } from '../lib/with-auth';
-import { fetchShellProps } from '../lib/with-shell';
+import AppShell from '@/components/app-shell';
+import WorkspaceForm from '@/components/workspace-form';
+import Workspaces from '@/components/workspaces';
+import { trpc } from '@/lib/trpc';
+import { withAuth } from '@/lib/with-auth';
+import { fetchShellProps } from '@/lib/with-shell';
 
-import type { ShellProps } from '../lib/with-shell';
+import type { ShellProps } from '@/lib/with-shell';
 
 // The workspaces list page. Unlike other shell pages it does NOT redirect a
 // workspace-less user (it's where they land to create their first) — so it

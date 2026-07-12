@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 
-import { signIn, signUp } from '../lib/auth-client';
-import { signInSchema, signUpSchema } from '../lib/auth-schema';
-import { Routes } from '../lib/routes';
+import { signIn, signUp } from '@/lib/auth-client';
+import { signInSchema, signUpSchema } from '@/lib/auth-schema';
+import { Routes } from '@/lib/routes';
 
 import Button from './button';
 
-import type { SignUpValues } from '../lib/auth-schema';
+import type { SignUpValues } from '@/lib/auth-schema';
 import type { Resolver } from 'react-hook-form';
 
 const INPUT = 'h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500';

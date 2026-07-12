@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Routes } from '../lib/routes';
+import { Routes } from '@/lib/routes';
 
 // Public landing page. Auth lives at /login (reached from the nav or the CTA).
 export default function Home() {

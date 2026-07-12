@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { trpc } from '../lib/trpc';
+import { trpc } from '@/lib/trpc';
 
 import Button from './button';
 import WorkspaceForm from './workspace-form';

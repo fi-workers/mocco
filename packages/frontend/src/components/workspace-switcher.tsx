@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-import { Routes } from '../lib/routes';
-import { trpc } from '../lib/trpc';
+import { Routes } from '@/lib/routes';
+import { trpc } from '@/lib/trpc';
 
 import {
   DropdownMenu,
