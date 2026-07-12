@@ -1,23 +1,27 @@
-// The app's three environments, modeled on the checkable app's Environment enum.
-// Keys and values match exactly (no external contract forces a casing). Resolved
-// from Vercel's VERCEL_ENV (bridged to the client as NEXT_PUBLIC_VERCEL_ENV in
-// next.config):
+// The app's three environments as an `as const` object (no TS enum) with a derived
+// union type — plural const name, singular type name. Keys match their values
+// (no external contract forces a casing). Resolved from Vercel's VERCEL_ENV
+// (bridged to the client as NEXT_PUBLIC_VERCEL_ENV in next.config):
 //   Local — off Vercel (localhost)   · Dev — Vercel preview   · Prod — Vercel production
-export enum Environment {
-  Local = 'Local',
-  Dev = 'Dev',
-  Prod = 'Prod',
-}
+export const Environments = {
+  Local: 'Local',
+  Dev: 'Dev',
+  Prod: 'Prod',
+} as const;
 
+export type Environment = (typeof Environments)[keyof typeof Environments];
+
+// 'production' / 'preview' are Vercel's raw external values — parsed here at the
+// boundary; everything downstream uses the Environments constant, never a literal.
 function resolve(vercelEnv: string | undefined): Environment {
   switch (vercelEnv) {
     case 'production':
-      return Environment.Prod;
+      return Environments.Prod;
     case 'preview':
-      return Environment.Dev;
+      return Environments.Dev;
     default:
-      return Environment.Local;
+      return Environments.Local;
   }
 }
 
-export const ENVIRONMENT = resolve(process.env.NEXT_PUBLIC_VERCEL_ENV);
+export const ENVIRONMENT: Environment = resolve(process.env.NEXT_PUBLIC_VERCEL_ENV);
