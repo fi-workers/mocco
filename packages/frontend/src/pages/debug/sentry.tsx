@@ -4,6 +4,12 @@ import Button from '../../components/button';
 import { Configure } from '../../lib/configure';
 import { trpc } from '../../lib/trpc';
 
+import type { GetServerSideProps } from 'next';
+
+// Gated on Configure.DebugEnabled — 404 unless NEXT_PUBLIC_DEBUG=true.
+export const getServerSideProps: GetServerSideProps = async () =>
+  Configure.DebugEnabled ? { props: {} } : { notFound: true };
+
 function throwClient(): never {
   throw new Error('Sentry client verification error');
 }

@@ -4,6 +4,7 @@ import { getServices } from '@mocco/backend/auth/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
+import { Configure } from '../../../lib/configure';
 import { Monitoring } from '../../../lib/monitoring';
 import { headersFromNode } from '../../../lib/node-headers';
 
@@ -14,7 +15,13 @@ export default createNextApiHandler({
   createContext: async ({ req }): Promise<Context> => {
     const { auth, workspace } = getServices();
     const headers = headersFromNode(req.headers);
-    return { auth, workspace, session: await auth.getSession(headers), headers };
+    return {
+      auth,
+      workspace,
+      session: await auth.getSession(headers),
+      headers,
+      debugEnabled: Configure.DebugEnabled,
+    };
   },
   // The client only ever sees the masked message (errorFormatter); keep the real
   // internal error visible server-side. Structured Sentry capture hooks in here.
