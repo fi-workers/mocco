@@ -1,16 +1,41 @@
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
+
 import AppShell from '@/components/app-shell';
 import WorkspaceDashboard from '@/components/workspace-dashboard';
+import { fireAndForget } from '@/lib/fire-and-forget';
+import { Routes } from '@/lib/routes';
+import { trpc } from '@/lib/trpc';
 
-import type { ShellProps } from '@/lib/with-shell';
+// A workspace's dashboard (its repos + deploy governance), client-rendered.
+export default function WorkspaceDashboardPage() {
+  const router = useRouter();
+  const id = typeof router.query.id === 'string' ? router.query.id : null;
 
-export { workspaceDashboardServerSideProps as getServerSideProps } from '@/lib/with-shell';
+  const utils = trpc.useUtils();
+  const listQuery = trpc.workspace.list.useQuery();
+  const { mutate: setActive } = trpc.workspace.setActive.useMutation({
+    onSuccess: () => {
+      fireAndForget(utils.workspace.active.invalidate());
+    },
+    onError: () => {
+      fireAndForget(router.replace(Routes.workspaces));
+    },
+  });
 
-// A workspace's dashboard (its repos + deploy governance). getServerSideProps
-// makes the URL's workspace active, so `activeId` is this page's workspace.
-export default function WorkspaceDashboardPage({ user, workspaces, activeId }: ShellProps) {
-  const workspace = workspaces.find(ws => ws.id === activeId);
+  // Visiting a dashboard makes its workspace active server-side (keeping the
+  // switcher and next login in sync); setActive also validates membership, so a
+  // workspace the user isn't in bounces to /workspaces.
+  useEffect(() => {
+    if (id) {
+      setActive({ workspaceId: id });
+    }
+  }, [id, setActive]);
+
+  const workspace = listQuery.data?.workspaces.find(ws => ws.id === id);
+
   return (
-    <AppShell user={user} workspaces={workspaces} activeId={activeId}>
+    <AppShell>
       <WorkspaceDashboard name={workspace?.name ?? 'Workspace'} />
     </AppShell>
   );

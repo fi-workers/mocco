@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { test, expect } from '@playwright/test';
 
-// Full session round-trip against the real server + Postgres: sign up →
-// zero-workspace onboarding → create (lands on its dashboard) → create a second
-// → switch between them via the top-bar switcher → sign out (session cleared,
-// /workspaces gated) → sign back in (both workspaces persist). This is the
-// cookie/session path the pglite unit tests cannot exercise.
+// Full session round-trip against the real server + Postgres, all client-rendered:
+// sign up → zero-workspace onboarding → create (lands on its dashboard) → create
+// a second via the switcher → switch between them → sign out (session cleared,
+// /workspaces gated) → sign back in (/workspaces jumps into a workspace, both
+// persist). This is the cookie/session path the pglite unit tests can't exercise.
 test('sign up, create + switch workspaces via dashboards, sign out and back in', async ({ page }) => {
   const email = `e2e-${randomUUID()}@example.com`;
   const password = 'e2e-password-123';
@@ -23,7 +23,7 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByRole('heading', { name: 'Create your first workspace' })).toBeVisible();
 
-  // --- Create the first workspace → land on its dashboard, it's active ---
+  // --- Create the first workspace → land on its dashboard ---
   await page.getByLabel('Workspace name').fill('Acme Lab');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(dashboardUrl);
@@ -33,9 +33,9 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
 
   // --- Create a second workspace via the switcher → its dashboard ---
   await page.getByRole('button', { name: 'Acme Lab' }).click();
-  await page.getByRole('menuitem', { name: 'Manage workspaces' }).click();
-  await expect(page).toHaveURL(/\/workspaces$/);
-  await page.getByRole('button', { name: '+ New workspace' }).click();
+  await page.getByRole('menuitem', { name: 'New workspace' }).click();
+  await expect(page).toHaveURL(/\/workspaces\?create=1$/);
+  await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible();
   await page.getByLabel('Workspace name').fill('Beta Co');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(dashboardUrl);
@@ -52,13 +52,14 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/workspaces');
-  await expect(page).toHaveURL(/\/auth\/sign-in$/); // getServerSideProps redirects — no session
+  await expect(page).toHaveURL(/\/auth\/sign-in$/); // client guard redirects — no session
 
-  // --- Sign back in: both workspaces persisted ---
+  // --- Sign back in: /workspaces jumps straight into a workspace; both persist ---
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/workspaces$/);
-  await expect(page.getByRole('link', { name: /Acme Lab/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Beta Co/ })).toBeVisible();
+  await expect(page).toHaveURL(dashboardUrl);
+  await page.getByRole('button', { name: /Acme Lab|Beta Co/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Acme Lab' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Beta Co' })).toBeVisible();
 });

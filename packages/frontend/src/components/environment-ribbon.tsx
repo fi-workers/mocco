@@ -11,7 +11,6 @@ const COLOR: Record<Environment, string> = {
   [Environments.Prod]: 'bg-neutral-500',
 };
 
-// eslint-disable-next-line sonarjs/function-return-type -- a React component may render an element or null
 export default function EnvironmentRibbon() {
   if (Configure.Environment === Environments.Prod) {
     return null;
