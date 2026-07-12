@@ -6,7 +6,7 @@ created: 2026-07-01
 updated: 2026-07-01
 confidence: high
 owner: andrea
-code_refs: [packages/backend/src/db/schema.ts]
+code_refs: [packages/backend/src/infra/db/schema.ts]
 tags: [reference, db, drizzle, conventions]
 related:
   - ../adr/0005-tech-stack-vercel-native-next-fullstack.md
@@ -30,7 +30,7 @@ Ported from the house pattern (showyourtime's `syt_`).
 
 ## Migrations
 
-- `yarn db:generate` → `packages/backend/src/db/migrations/*.sql` (+ meta), **git-tracked**.
+- `yarn db:generate` → `packages/backend/src/infra/db/migrations/*.sql` (+ meta), **git-tracked**.
 - `yarn db:migrate` → apply. Local uses docker Postgres (`make docker-up`).
 - Schema change = generate + migrate. Reset with `docker compose down -v`.
 

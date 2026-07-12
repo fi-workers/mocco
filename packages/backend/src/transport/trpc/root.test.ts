@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AuthService } from '../auth/AuthService';
-import { createProvider } from '../auth/provider';
-import { WorkspaceService } from '../auth/WorkspaceService';
-import { createTestDb, type TestDb } from '../db/testing/pglite';
+import { AuthService } from '../../domain/auth/AuthService';
+import { createProvider } from '../../domain/auth/provider';
+import { WorkspaceService } from '../../domain/auth/WorkspaceService';
+import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
 
 import { createTrpcHandler } from './handler';
 import { appRouter } from './root';

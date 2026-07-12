@@ -20,7 +20,7 @@ Ship exactly **one concern per PR**, in dependency order, always green. The revi
    - English only (code, comments, docs). Check: `grep -rlP '[\x{AC00}-\x{D7A3}]' <changed files>` → nothing.
    - Dependencies pinned exactly (no `^`/`~`); `yarn.lock` contains only workspaces that exist on the branch.
    - Each schema change ships its own drizzle migration (history tracks PR order).
-   - New third-party services go behind a vendor-neutral wrapper (see `packages/backend/src/auth/provider.ts`).
+   - New third-party services go behind a vendor-neutral wrapper (see `packages/backend/src/domain/auth/provider.ts`).
    - Behavior changes update the matching `docs/reference/` page in the same PR.
    - **Scripted edits must assert their target** (e.g. `assert old in s` before replace) and be verified with a grep after — a silent replace-miss once shipped a commit whose message claimed a change that never landed.
    - **Stage explicit paths only — never `git add -A`/`git add .`.** The shared working tree can contain unrelated files (other sessions' notes, scratch work); a blanket add once swept a foreign research note into a public PR and required a history rewrite.
