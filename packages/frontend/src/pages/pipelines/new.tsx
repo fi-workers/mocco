@@ -1,23 +1,14 @@
-import { getServices } from '@mocco/backend/auth/instance';
 import { useState } from 'react';
 
 import Button from '../../components/button';
 import PipelineSteps from '../../components/pipeline-steps';
-import { headersFromNode } from '../../lib/node-headers';
 import { trpc } from '../../lib/trpc';
-
-import type { GetServerSideProps } from 'next';
+import { withAuth } from '../../lib/with-auth';
 
 // Preview only (slice 1): parse a pasted `.mocco.yml` and show the pipeline or
 // the parse issues. Nothing is persisted — the config's home is the repo,
-// fetched at a run's commit later.
-export const getServerSideProps = (async ({ req }) => {
-  const session = await getServices().auth.getSession(headersFromNode(req.headers));
-  if (!session) {
-    return { redirect: { destination: '/auth/sign-in', permanent: false } };
-  }
-  return { props: {} };
-}) satisfies GetServerSideProps;
+// fetched at a run's commit later. Auth-guarded (withAuth) — a session is all it needs.
+export const getServerSideProps = withAuth(async () => ({ props: {} }));
 
 type PreviewResult = Awaited<ReturnType<typeof trpc.pipeline.preview.mutate>>;
 
