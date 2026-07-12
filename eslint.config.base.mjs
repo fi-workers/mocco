@@ -135,6 +135,14 @@ export function createBaseConfig({ tsconfigRootDir }) {
       },
     },
 
+    // Domain error files colocate every error class for one vendor/service boundary
+    // in a single errors.ts (see AGENTS.md "vendor failures become domain errors" /
+    // "colocated with the service"); airbnb's one-class-per-file default doesn't fit.
+    {
+      files: ['**/errors.ts'],
+      rules: { 'max-classes-per-file': 'off' },
+    },
+
     // Test files and test-support helpers may use devDependencies (test-only packages like pglite),
     // and fixture credentials are not real secrets.
     {
