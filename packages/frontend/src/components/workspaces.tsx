@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { trpc } from '../lib/trpc';
 
 import Button from './button';
-import WorkspaceCreateForm from './workspace-create-form';
+import WorkspaceForm from './workspace-form';
 
 interface WorkspaceItem {
   id: string;
@@ -93,8 +93,9 @@ export default function Workspaces({ initialWorkspaces, initialActiveId }: Props
       </ul>
 
       {creating && (
-        <WorkspaceCreateForm
-          onCreated={async () => {
+        <WorkspaceForm
+          onSubmit={async values => {
+            await trpc.workspace.create.mutate(values);
             setCreating(false);
             await refresh();
           }}

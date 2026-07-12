@@ -1,8 +1,9 @@
 import { useRouter } from 'next/router';
 
 import AppShell from '../components/app-shell';
-import WorkspaceCreateForm from '../components/workspace-create-form';
+import WorkspaceForm from '../components/workspace-form';
 import Workspaces from '../components/workspaces';
+import { trpc } from '../lib/trpc';
 import { withAuth } from '../lib/with-auth';
 import { fetchShellProps } from '../lib/with-shell';
 
@@ -28,8 +29,9 @@ export default function AccountPage({ user, workspaces, activeId }: ShellProps) 
             A workspace is your team boundary — repos, members and deploy governance live inside it.
           </p>
         </div>
-        <WorkspaceCreateForm
-          onCreated={async () => {
+        <WorkspaceForm
+          onSubmit={async values => {
+            await trpc.workspace.create.mutate(values);
             await router.replace(router.asPath);
           }}
         />

@@ -1,36 +1,46 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 
 import { signIn, signUp } from '../lib/auth-client';
+import { signInSchema, signUpSchema } from '../lib/auth-schema';
 import { Routes } from '../lib/routes';
 
 import Button from './button';
 
-// Shared by /auth/sign-in and /auth/sign-up — one form, two modes.
+import type { SignUpValues } from '../lib/auth-schema';
+import type { Resolver } from 'react-hook-form';
+
+const INPUT = 'h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500';
+
+// Shared by /auth/sign-in and /auth/sign-up — one form, two modes. react-hook-form
+// + the mode's zod schema (sign-up also requires a name).
 export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const router = useRouter();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const isSignUp = mode === 'sign-up';
   const submitLabel = isSignUp ? 'Create account' : 'Sign in';
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<SignUpValues>({
+    // sign-in validates only email+password (its `name` field isn't rendered), so
+    // its resolver shape is narrower than the form's — reconcile via unknown.
+    resolver: zodResolver(isSignUp ? signUpSchema : signInSchema) as unknown as Resolver<SignUpValues>,
+    defaultValues: { name: '', email: '', password: '' },
+  });
+
+  const submit = handleSubmit(async ({ email, password, name }) => {
     const result = isSignUp ? await signUp({ email, password, name }) : await signIn({ email, password });
     if (result.error) {
-      setError(result.error.message ?? 'Something went wrong');
-      setLoading(false);
+      setError('root', { message: result.error.message ?? 'Something went wrong' });
       return;
     }
     await router.push(Routes.account);
-  };
+  });
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
@@ -41,40 +51,36 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <h1 className="text-2xl font-bold tracking-tight">Mocco</h1>
       </Link>
 
-      <form onSubmit={handleSubmit} className="flex w-full max-w-xs flex-col gap-3">
+      <form onSubmit={submit} className="flex w-full max-w-xs flex-col gap-3">
         {isSignUp && (
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Name"
-            aria-label="Name"
-            className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-          />
+          <div>
+            <input {...register('name')} placeholder="Name" aria-label="Name" className={`w-full ${INPUT}`} />
+            {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>}
+          </div>
         )}
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="Email"
-          aria-label="Email"
-          className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-        />
-        <input
-          type="password"
-          required
-          minLength={8}
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Password (8+ characters)"
-          aria-label="Password"
-          className="h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500"
-        />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" variant="neutral" pending={loading} className="h-11 w-full text-sm">
-          {loading ? 'Working…' : submitLabel}
+        <div>
+          <input
+            {...register('email')}
+            type="email"
+            placeholder="Email"
+            aria-label="Email"
+            className={`w-full ${INPUT}`}
+          />
+          {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
+        </div>
+        <div>
+          <input
+            {...register('password')}
+            type="password"
+            placeholder="Password (8+ characters)"
+            aria-label="Password"
+            className={`w-full ${INPUT}`}
+          />
+          {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
+        </div>
+        {errors.root && <p className="text-sm text-red-600">{errors.root.message}</p>}
+        <Button type="submit" variant="neutral" pending={isSubmitting} className="h-11 w-full text-sm">
+          {isSubmitting ? 'Working…' : submitLabel}
         </Button>
         <Link
           href={isSignUp ? Routes.signIn : Routes.signUp}

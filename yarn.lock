@@ -1165,6 +1165,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hookform/resolvers@npm:5.4.0":
+  version: 5.4.0
+  resolution: "@hookform/resolvers@npm:5.4.0"
+  dependencies:
+    "@standard-schema/utils": "npm:^0.3.0"
+  peerDependencies:
+    react-hook-form: ^7.55.0
+  checksum: 10/c56e03d3707999bf0bebdcf1a8c5fc1cbbca527425d893e2402ead09e3644681581b8d2ad76eec62f72270534f5dc38159e2d6ee4001a0152363b8eddfedfcab
+  languageName: node
+  linkType: hard
+
 "@humanfs/core@npm:^0.19.2":
   version: 0.19.2
   resolution: "@humanfs/core@npm:0.19.2"
@@ -1539,7 +1550,9 @@ __metadata:
   resolution: "@mocco/frontend@workspace:packages/frontend"
   dependencies:
     "@eslint-react/eslint-plugin": "npm:5.10.4"
+    "@hookform/resolvers": "npm:5.4.0"
     "@mocco/backend": "workspace:*"
+    "@mocco/common": "workspace:*"
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@sentry/nextjs": "npm:10.65.0"
     "@tailwindcss/postcss": "npm:4.1.17"
@@ -1556,9 +1569,11 @@ __metadata:
     react: "npm:19.2.1"
     react-doctor: "npm:0.7.1"
     react-dom: "npm:19.2.1"
+    react-hook-form: "npm:7.81.0"
     superjson: "npm:2.2.6"
     tailwindcss: "npm:4.1.17"
     typescript: "npm:5.9.3"
+    zod: "npm:4.1.13"
   languageName: unknown
   linkType: soft
 
@@ -3049,6 +3064,13 @@ __metadata:
   version: 1.1.0
   resolution: "@standard-schema/spec@npm:1.1.0"
   checksum: 10/a209615c9e8b2ea535d7db0a5f6aa0f962fd4ab73ee86a46c100fb78116964af1f55a27c1794d4801e534a196794223daa25ff5135021e03c7828aa3d95e1763
+  languageName: node
+  linkType: hard
+
+"@standard-schema/utils@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@standard-schema/utils@npm:0.3.0"
+  checksum: 10/7084f875d322792f2e0a5904009434c8374b9345b09ba89828b68fd56fa3c2b366d35bf340d9e8c72736ef01793c2f70d350c372ed79845dc3566c58d34b4b51
   languageName: node
   linkType: hard
 
@@ -8310,6 +8332,15 @@ __metadata:
   peerDependencies:
     react: ^19.2.1
   checksum: 10/cceea7104bd3ad52e2f6377f47c4b346244c1263917fd95745e31647ff8ab23b16f719c2bfc8bcf2a6c802ecb9c9e81f08b09e3447e1f49bc27368283ed299ba
+  languageName: node
+  linkType: hard
+
+"react-hook-form@npm:7.81.0":
+  version: 7.81.0
+  resolution: "react-hook-form@npm:7.81.0"
+  peerDependencies:
+    react: ^16.8.0 || ^17 || ^18 || ^19
+  checksum: 10/e230964e4f77ca4342ac4d2b7b5abab0628481fc2892f056388eb38056a5996a89cfce81579334d988b07850eee7dfc081a21d6c81afaac0bc09cd5283865bf0
   languageName: node
   linkType: hard
 
