@@ -9,7 +9,10 @@ export const stepSchema = z
   .strict();
 export type Step = z.infer<typeof stepSchema>;
 
-/** A pipeline item. v1: only steps. Slice 4 widens to union(step, gate). */
+/** A pipeline item. v1: only steps. Gates land as `version: 2` with an explicit
+ * `kind` discriminator (ADR 0010) — NOT a bare union on `run`/`gate` (which zod
+ * can't discriminate and whose errors double). The `run`-based uniqueness check
+ * below moves to an effective id (`id ?? run ?? gate`) in that same change. */
 export const pipelineItemSchema = stepSchema;
 export type PipelineItem = z.infer<typeof pipelineItemSchema>;
 

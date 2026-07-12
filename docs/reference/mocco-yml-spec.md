@@ -60,7 +60,8 @@ preconditions:
   require_merged_to: main
   require_status_checks: [ci/test, ci/lint]
   require_code_owner_review: true
-audit: { hash_chain: true }
+# note: no `audit` key — the append-only hash chain is an always-on system
+# property (ADR 0010), not a per-file toggle. It is shown here for emphasis only.
 ```
 
 ## Fields
@@ -74,7 +75,8 @@ audit: { hash_chain: true }
 | `concurrency` | object |  | Concurrency — `group`, `mode` |
 | `safety` | object |  | `prevent_outdated` |
 | `preconditions` | object |  | Verify GitHub facts before the pipeline starts |
-| `audit` | object |  | `hash_chain` |
+
+Note: `audit` is **not** a top-level file field — the append-only hash chain is an always-on, org-enforced system property (ADR 0010), not something a repo opts into.
 
 ### step item (identified by the `run` key)
 | Key | Type | Required | Description |
