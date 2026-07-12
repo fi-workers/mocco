@@ -21,6 +21,8 @@ related:
 > Validation schema: [`mocco.schema.json`](./mocco.schema.json) (JSON Schema draft 2020-12).
 
 > **Schema coverage note:** `mocco.schema.json` is generated from `moccoConfigSchema` (`packages/common/src/mocco-config.ts`, the single type source) via `yarn schema:gen`, and CI enforces no drift between the two. Today that zod schema covers **v1 basics only** — `version` / `pipeline` / `steps` (with `run` / `executor` / `with`). The `gate`, `credential`, `concurrency`, `safety`, `preconditions`, and `audit` fields shown below are the **target format landing in later slices** and are not yet in the generated schema — so the full example below will not validate against `mocco.schema.json` yet. This is intentional; this doc describes the target shape, the schema tracks what's actually implemented.
+>
+> **Scope + enforcement (see [ADR 0010](../adr/0010-mocco-yml-lean-core-and-enforcement-invariants.md)):** the schema stays **lean** — `gate` and `credential` land, but `concurrency` / `safety` / `preconditions` and CI-style fields (`needs`/DAG, `when`, `inputs`/`outputs`, `extends`) are **not scheduled** and are added only on a concrete need, with their enforcement semantics designed first. Key invariants ADR 0010 fixes: the file's `credential` is a **request** (the authoritative grant is a broker-side allowlist); a credentialed step must be **dominated** by a resumed gate (not merely preceded), gates are unconditional, N-of-M counts **distinct principals**, approvals bind to the pinned commit/artifact, and `audit` is an always-on **system property**, not the per-file toggle shown below. When `gate` lands it is `version: 2` with an explicit `kind` discriminator.
 
 ## Full example
 
