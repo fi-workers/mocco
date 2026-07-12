@@ -17,11 +17,11 @@ test('sign up, onboard, create + switch workspaces, sign out and back in', async
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
 
-  // --- Onboarding: a fresh user has no workspace ---
+  // --- First run: the account page shows its empty state (no workspace yet) ---
   await expect(page).toHaveURL(/\/account$/);
   await expect(page.getByRole('heading', { name: 'Create your first workspace' })).toBeVisible();
 
-  // --- Create the first workspace → it becomes active ---
+  // --- Create the first workspace → the app appears, it's active ---
   await page.getByLabel('Workspace name').fill('Acme Lab');
   await page.getByRole('button', { name: 'Create workspace' }).click();
   const acmeRow = page.locator('li', { hasText: 'Acme Lab' });
