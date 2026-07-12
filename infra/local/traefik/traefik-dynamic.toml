@@ -1,19 +1,20 @@
 [http]
 
-[http.middlewares.www-redirect.redirectregex]
+# Mirror production (ADR 0006): www is canonical, apex redirects to www.
+[http.middlewares.apex-redirect.redirectregex]
 permanent = true
-regex = "^https://www.mocco.work/(.*)"
-replacement = "https://mocco.work/${1}"
+regex = "^https://mocco.work/(.*)"
+replacement = "https://www.mocco.work/${1}"
 
-[http.routers.mocco-www]
-rule = "Host(`www.mocco.work`)"
+[http.routers.mocco-apex]
+rule = "Host(`mocco.work`)"
 service = "noop@internal"
-middlewares = ["www-redirect"]
+middlewares = ["apex-redirect"]
 entryPoints = ["https"]
-[http.routers.mocco-www.tls]
+[http.routers.mocco-apex.tls]
 
 [http.routers.mocco]
-rule = "Host(`mocco.work`)"
+rule = "Host(`www.mocco.work`)"
 service = "mocco"
 entryPoints = ["https"]
 [http.routers.mocco.tls]

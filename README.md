@@ -15,7 +15,7 @@ make initialize      # certs + /etc/hosts + yarn install
 make docker-up       # local Postgres
 yarn db:migrate      # apply schema
 yarn db:seed         # sample data (optional)
-make dev             # https://mocco.work (traefik → Next :3100)
+make dev             # https://www.mocco.work (traefik → Next :3100)
 ```
 
 Details: [docs/guides/local-setup.md](./docs/guides/local-setup.md)

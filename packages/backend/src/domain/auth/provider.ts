@@ -13,6 +13,8 @@ export interface AuthOptions {
   secret?: string;
   /** Public base URL of the app. */
   baseUrl?: string;
+  /** Origins allowed to call the auth endpoints (origin/CSRF check). */
+  trustedOrigins?: string[];
 }
 
 /** Any drizzle database the adapter accepts (node-postgres in prod, pglite in tests). */
@@ -24,6 +26,7 @@ export function createProvider(db: AdapterDb, options: AuthOptions = {}) {
     // Explicit injection only — the vendor's own env auto-detection is not relied upon.
     ...(options.secret && { secret: options.secret }),
     ...(options.baseUrl && { baseURL: options.baseUrl }),
+    ...(options.trustedOrigins?.length && { trustedOrigins: options.trustedOrigins }),
     database: drizzleAdapter(db, {
       provider: 'pg',
       schema: {

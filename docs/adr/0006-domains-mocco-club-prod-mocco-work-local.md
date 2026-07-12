@@ -35,3 +35,9 @@ related:
 ## Reversal Conditions
 
 - If we decide to revive the old workspace product, redistribute the domains (governance moves to app.mocco.work, etc.).
+
+## Amendment (2026-07-12)
+
+- **Local browsing canonical = `www.mocco.work`**, mirroring prod (`www.mocco.club`): apex redirects to www in both environments (traefik locally, Vercel in prod), so the www-normalization path is exercised in dev. `AUTH_URL` (local) = `https://www.mocco.work`.
+- **Auth origins are resolved per environment in code** (`domain/auth/origins.ts`), not hardcoded per deploy: production/local use `AUTH_URL` + its apex/www twin as `trustedOrigins`; **preview** deploys trust only their own `VERCEL_URL` / `VERCEL_BRANCH_URL` (never a `*.vercel.app` wildcard). This makes better-auth's origin check correct on every Vercel preview without per-deploy env edits.
+- The `dev.mocco.work` cloudflared tunnel (webhooks/OIDC callbacks) is still the plan for slice 3; it is a *separate* hostname from the `www.mocco.work` browsing origin and lands with the GitHub App work.

@@ -14,7 +14,7 @@ packages/frontend/  @mocco/frontend  src/ — Next.js Pages Router UI (pages/api
 packages/common/    @mocco/common    src/ — shared types & zod schemas
 docs/               llm-wiki: ADRs (immutable) · concepts · guides · reference · meta
 docs/prototype/     non-functional click-through (design reference, plain HTML/JS)
-infra/local/        traefik + mkcert for https://mocco.work local dev
+infra/local/        traefik + mkcert for https://www.mocco.work local dev
 ```
 
 - **Backend layering** (`packages/backend/src/`): `domain/` (Mocco's business logic — `auth/`, `pipeline/`, and each governance domain as it lands), `infra/` (replaceable plumbing with no business meaning — `db/`, `config/`), `transport/` (edges — `trpc/`, later Hono `ext/`). Dependency direction is one-way: `transport → domain → infra`. A new domain gets a folder under `domain/` when its slice lands — don't pre-create empty ones. `governance/`-style sub-grouping is added only once `domain/` is genuinely crowded. Vendor isolation stays at leaf files (`domain/auth/provider.ts`, `domain/pipeline/yaml/decode.ts`). The `@mocco/backend` export subpaths (`./auth/instance`, `./trpc/root`) are the stable public contract — repoint their targets on a move, don't rename the subpaths.
@@ -32,7 +32,7 @@ yarn test                         # vitest (backend) — includes pglite integra
 yarn verify                       # every check, serially (same scripts CI runs) — REQUIRED green before any push (pre-push enforces)
 yarn backend lint / ts-check      # per-workspace lint & typecheck
 yarn format                       # prettier
-make dev                          # https://mocco.work (traefik → Next :3100)
+make dev                          # https://www.mocco.work (traefik → Next :3100)
 ```
 
 Tests must pass without docker: integration tests run on **pglite** (in-memory WASM Postgres) via `packages/backend/src/infra/db/testing/pglite.ts`, applying the real migrations. Prefer extending those over mocking the DB.
