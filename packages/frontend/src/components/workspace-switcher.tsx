@@ -1,3 +1,4 @@
+import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
@@ -5,21 +6,31 @@ import { useState } from 'react';
 import { Routes } from '../lib/routes';
 import { trpc } from '../lib/trpc';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+
 interface Props {
   workspaces: { id: string; name: string }[];
   activeId: string | null;
 }
 
-// Sidebar workspace switcher: shows the active workspace and switches on select.
-// Switching re-runs the page's getServerSideProps so every surface sees the new
-// active workspace (no client-side workspace store yet).
+// Top-bar workspace switcher (Base UI menu handles outside-click, Escape and
+// focus). Selecting a workspace makes it active server-side, then re-runs the
+// page's getServerSideProps so every surface sees the new active workspace.
 export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const active = workspaces.find(ws => ws.id === activeId);
 
   const switchTo = async (workspaceId: string) => {
+    if (workspaceId === activeId) {
+      return;
+    }
     setBusy(true);
     try {
       await trpc.workspace.setActive.mutate({ workspaceId });
@@ -27,45 +38,30 @@ export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
     } catch {
       setBusy(false);
     }
-    setIsOpen(false);
   };
 
   return (
-    <div className="relative">
-      <button
-        type="button"
+    <DropdownMenu>
+      <DropdownMenuTrigger
         disabled={busy}
-        onClick={() => setIsOpen(previous => !previous)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium transition hover:bg-neutral-50 disabled:opacity-50">
-        <span className="truncate">{active?.name ?? 'No workspace'}</span>
-        <span aria-hidden="true" className="text-neutral-400">
-          ⌄
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="absolute z-10 mt-1 w-full rounded-lg border border-neutral-200 bg-white p-1 shadow-lg">
-          {workspaces.map(ws => (
-            <button
-              key={ws.id}
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                await switchTo(ws.id);
-              }}
-              className={`block w-full truncate rounded px-2 py-1.5 text-left text-sm transition disabled:opacity-50 ${
-                ws.id === activeId ? 'font-medium text-violet-700' : 'text-neutral-700 hover:bg-neutral-50'
-              }`}>
-              {ws.name}
-            </button>
-          ))}
-          <Link
-            href={Routes.workspaces}
-            className="block rounded px-2 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-50">
-            Manage workspaces
-          </Link>
-        </div>
-      )}
-    </div>
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition hover:bg-muted disabled:opacity-50 aria-expanded:bg-muted">
+        <span className="max-w-40 truncate">{active?.name ?? 'No workspace'}</span>
+        <ChevronsUpDownIcon className="size-3.5 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-56">
+        {workspaces.map(ws => (
+          <DropdownMenuItem
+            key={ws.id}
+            onClick={async () => {
+              await switchTo(ws.id);
+            }}>
+            <span className="flex-1 truncate">{ws.name}</span>
+            {ws.id === activeId && <CheckIcon className="size-4" />}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href={Routes.workspaces}>Manage workspaces</Link>} />
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
