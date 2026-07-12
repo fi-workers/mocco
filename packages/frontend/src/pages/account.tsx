@@ -8,7 +8,7 @@ export default function AccountPage() {
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
         <h1 className="text-xl font-bold tracking-tight">Account</h1>
         <div className="flex items-center gap-4 rounded-xl border border-border p-5">
           <div className="flex size-12 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground">

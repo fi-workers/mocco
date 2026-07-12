@@ -8,6 +8,8 @@ export const Routes = {
   signOut: '/auth/sign-out',
   workspaces: '/workspaces',
   workspace: (id: string) => `/workspaces/${id}`,
+  workspaceMembers: (id: string) => `/workspaces/${id}/members`,
+  workspaceSettings: (id: string) => `/workspaces/${id}/settings`,
   account: '/account',
 } as const;
 

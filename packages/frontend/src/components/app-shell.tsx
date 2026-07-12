@@ -56,9 +56,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
         <UserMenu user={user} />
       </header>
-      <main className="flex-1 px-6 py-8">
-        <div className="mx-auto max-w-5xl">{children}</div>
-      </main>
+      <main className="flex flex-1 flex-col">{children}</main>
     </div>
   );
 }
