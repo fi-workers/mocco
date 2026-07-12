@@ -33,7 +33,7 @@ export async function fetchShellProps({ auth, workspace, session, headers }: Aut
 export const shellServerSideProps: GetServerSideProps<ShellProps> = withAuth<ShellProps>(async (_context, context) => {
   const props = await fetchShellProps(context);
   if (props.workspaces.length === 0) {
-    return { redirect: { destination: Routes.account, permanent: false } };
+    return { redirect: { destination: Routes.workspaces, permanent: false } };
   }
   return { props };
 });

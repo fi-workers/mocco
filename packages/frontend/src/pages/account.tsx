@@ -1,47 +1,27 @@
-import { useRouter } from 'next/router';
-
 import AppShell from '../components/app-shell';
-import WorkspaceForm from '../components/workspace-form';
-import Workspaces from '../components/workspaces';
-import { trpc } from '../lib/trpc';
-import { withAuth } from '../lib/with-auth';
-import { fetchShellProps } from '../lib/with-shell';
 
 import type { ShellProps } from '../lib/with-shell';
 
-// The workspaces page. Unlike other shell pages it does NOT redirect a
-// workspace-less user (it's where they land to create their first) — so it
-// fetches the shell data without the redirect guard.
-export const getServerSideProps = withAuth<ShellProps>(async (_context, context) => ({
-  props: await fetchShellProps(context),
-}));
+// User account settings (reached from the sidebar). A shell page — needs a
+// workspace like the rest of the app.
+export { shellServerSideProps as getServerSideProps } from '../lib/with-shell';
 
 export default function AccountPage({ user, workspaces, activeId }: ShellProps) {
-  const router = useRouter();
-
-  // First run: no workspace yet — a focused create view, no sidebar.
-  if (workspaces.length === 0) {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 px-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Create your first workspace</h1>
-          <p className="mt-2 text-sm text-neutral-500">
-            A workspace is your team boundary — repos, members and deploy governance live inside it.
-          </p>
-        </div>
-        <WorkspaceForm
-          onSubmit={async values => {
-            await trpc.workspace.create.mutate(values);
-            await router.replace(router.asPath);
-          }}
-        />
-      </main>
-    );
-  }
-
   return (
     <AppShell user={user} workspaces={workspaces} activeId={activeId}>
-      <Workspaces initialWorkspaces={workspaces} initialActiveId={activeId} />
+      <div className="flex flex-col gap-6">
+        <h1 className="text-xl font-bold tracking-tight">Account</h1>
+        <div className="flex items-center gap-4 rounded-xl border border-neutral-200 p-5">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600 font-semibold text-white">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate font-medium">{user.name}</div>
+            <div className="truncate text-sm text-neutral-500">{user.email}</div>
+          </div>
+        </div>
+        <p className="text-sm text-neutral-500">Profile and password editing land here later.</p>
+      </div>
     </AppShell>
   );
 }

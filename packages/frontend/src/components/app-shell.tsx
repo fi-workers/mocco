@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 type Props = ShellProps & { children: ReactNode };
 
 const NAV = [
-  { href: Routes.account, label: 'Workspaces' },
+  { href: Routes.workspaces, label: 'Workspaces' },
   { href: Routes.pipelinePreview, label: 'Preview' },
 ];
 
@@ -23,7 +23,7 @@ export default function AppShell({ user, workspaces, activeId, children }: Props
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-60 flex-col border-r border-neutral-200 px-4 py-5">
-        <Link href={Routes.account} className="mb-4 flex items-center gap-2 px-2">
+        <Link href={Routes.workspaces} className="mb-4 flex items-center gap-2 px-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold text-white">
             M
           </span>
@@ -51,13 +51,16 @@ export default function AppShell({ user, workspaces, activeId, children }: Props
         </nav>
 
         <div className="mt-auto border-t border-neutral-200 pt-4">
-          <div className="px-2">
+          <Link
+            href={Routes.account}
+            className="block rounded-lg px-2 py-1.5 transition hover:bg-neutral-50"
+            title="Account settings">
             <div className="truncate text-sm font-medium">{user.name}</div>
             <div className="truncate text-xs text-neutral-500">{user.email}</div>
-          </div>
+          </Link>
           <Link
             href={Routes.signOut}
-            className="mt-2 block rounded-lg px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-50">
+            className="mt-1 block rounded-lg px-3 py-2 text-sm text-neutral-600 transition hover:bg-neutral-50">
             Sign out
           </Link>
         </div>

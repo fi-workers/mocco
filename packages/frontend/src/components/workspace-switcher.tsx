@@ -60,7 +60,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
             </button>
           ))}
           <Link
-            href={Routes.account}
+            href={Routes.workspaces}
             className="block rounded px-2 py-1.5 text-sm text-neutral-500 transition hover:bg-neutral-50">
             Manage workspaces
           </Link>
