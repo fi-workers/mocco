@@ -1,4 +1,5 @@
-import { ENVIRONMENT, Environments } from '../lib/environment';
+import { Configure } from '../lib/configure';
+import { Environments } from '../lib/environment';
 
 import type { Environment } from '../lib/environment';
 
@@ -12,12 +13,14 @@ const COLOR: Record<Environment, string> = {
 
 // eslint-disable-next-line sonarjs/function-return-type -- a React component may render an element or null
 export default function EnvironmentRibbon() {
-  if (ENVIRONMENT === Environments.Prod) return null;
+  if (Configure.Environment === Environments.Prod) {
+    return null;
+  }
 
   return (
     <div
-      className={`fixed left-1/2 top-0 z-50 -translate-x-1/2 rounded-b-lg px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white ${COLOR[ENVIRONMENT]}`}>
-      {ENVIRONMENT}
+      className={`fixed left-1/2 top-0 z-50 -translate-x-1/2 rounded-b-lg px-3 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white ${COLOR[Configure.Environment]}`}>
+      {Configure.Environment}
     </div>
   );
 }
