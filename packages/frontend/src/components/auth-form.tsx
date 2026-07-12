@@ -1,15 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 
-import { signIn, signUp } from '../lib/auth-client';
-import { signInSchema, signUpSchema } from '../lib/auth-schema';
-import { Routes } from '../lib/routes';
+import { signIn, signUp } from '@/lib/auth-client';
+import { signInSchema, signUpSchema } from '@/lib/auth-schema';
+import { Routes } from '@/lib/routes';
 
 import Button from './button';
 
-import type { SignUpValues } from '../lib/auth-schema';
+import type { SignUpValues } from '@/lib/auth-schema';
 import type { Resolver } from 'react-hook-form';
 
 const INPUT = 'h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-violet-500';
@@ -17,7 +16,6 @@ const INPUT = 'h-11 rounded-lg border border-neutral-200 px-3 text-sm outline-no
 // Shared by /auth/sign-in and /auth/sign-up — one form, two modes. react-hook-form
 // + the mode's zod schema (sign-up also requires a name).
 export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
-  const router = useRouter();
   const isSignUp = mode === 'sign-up';
   const submitLabel = isSignUp ? 'Create account' : 'Sign in';
 
@@ -39,7 +37,11 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       setError('root', { message: result.error.message ?? 'Something went wrong' });
       return;
     }
-    await router.push(Routes.workspaces);
+    // Full navigation (not client push) so the destination reads the freshly-set
+    // session cookie — better-auth's useSession doesn't refetch after an in-page
+    // sign-in, which would leave the auth guard seeing no session.
+    // eslint-disable-next-line unicorn/no-unnecessary-global-this -- bare `location` trips no-restricted-globals and `window` trips prefer-global-this; globalThis is the one form that satisfies both
+    globalThis.location.assign(Routes.workspaces);
   });
 
   return (

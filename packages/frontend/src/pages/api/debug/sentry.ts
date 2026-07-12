@@ -1,5 +1,5 @@
-import { Configure } from '../../../lib/configure';
-import { Monitoring } from '../../../lib/monitoring';
+import { Configure } from '@/lib/configure';
+import { Monitoring } from '@/lib/monitoring';
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 

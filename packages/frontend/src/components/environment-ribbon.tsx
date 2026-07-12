@@ -1,7 +1,7 @@
-import { Configure } from '../lib/configure';
-import { Environments } from '../lib/environment';
+import { Configure } from '@/lib/configure';
+import { Environments } from '@/lib/environment';
 
-import type { Environment } from '../lib/environment';
+import type { Environment } from '@/lib/environment';
 
 // A small fixed ribbon marking non-production environments, so a preview or local
 // tab is never mistaken for prod. Pattern borrowed from the checkable app.
@@ -11,7 +11,6 @@ const COLOR: Record<Environment, string> = {
   [Environments.Prod]: 'bg-neutral-500',
 };
 
-// eslint-disable-next-line sonarjs/function-return-type -- a React component may render an element or null
 export default function EnvironmentRibbon() {
   if (Configure.Environment === Environments.Prod) {
     return null;

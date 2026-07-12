@@ -1,7 +1,7 @@
 import { LogOutIcon, SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import { Routes } from '../lib/routes';
+import { Routes } from '@/lib/routes';
 
 import {
   DropdownMenu,

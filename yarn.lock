@@ -1828,7 +1828,9 @@ __metadata:
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@sentry/nextjs": "npm:10.65.0"
     "@tailwindcss/postcss": "npm:4.1.17"
+    "@tanstack/react-query": "npm:5.101.2"
     "@trpc/client": "npm:11.18.0"
+    "@trpc/react-query": "npm:11.18.0"
     "@trpc/server": "npm:11.18.0"
     "@types/node": "npm:22.20.0"
     "@types/react": "npm:19.2.1"
@@ -3588,6 +3590,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/query-core@npm:5.101.2":
+  version: 5.101.2
+  resolution: "@tanstack/query-core@npm:5.101.2"
+  checksum: 10/567af5e3c21628745a08c1a5054d838597bc620dcbbeabe20cdd6ccffdcca85a8d38128f6e80829b6e04d10f79ca793a7dd8fddc8a3d6bef10c2d580ae214c7d
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query@npm:5.101.2":
+  version: 5.101.2
+  resolution: "@tanstack/react-query@npm:5.101.2"
+  dependencies:
+    "@tanstack/query-core": "npm:5.101.2"
+  peerDependencies:
+    react: ^18 || ^19
+  checksum: 10/0837c176b6afb01e3632010bbd8bdfeee7f46c4a25a50ed2ba9ddddce11c34431161d80dd8e53a2f55190c2313bbfb22a84a77308e6ccf29877b4818de68c4b3
+  languageName: node
+  linkType: hard
+
 "@trpc/client@npm:11.18.0":
   version: 11.18.0
   resolution: "@trpc/client@npm:11.18.0"
@@ -3597,6 +3617,19 @@ __metadata:
   bin:
     intent: bin/intent.js
   checksum: 10/a2763774023834305ed645a37542d9bb96f33389587feee86202b1323ae80313e429a4db782b54af6ccd3a42b979dd551a07fb5ad1e8246f0adc8c9d798e7384
+  languageName: node
+  linkType: hard
+
+"@trpc/react-query@npm:11.18.0":
+  version: 11.18.0
+  resolution: "@trpc/react-query@npm:11.18.0"
+  peerDependencies:
+    "@tanstack/react-query": ^5.80.3
+    "@trpc/client": 11.18.0
+    "@trpc/server": 11.18.0
+    react: ">=18.2.0"
+    typescript: ">=5.7.2"
+  checksum: 10/6dcd24b683d3d38b324d93833ba9bbddb1ac0ebf265a01dbb847214d6d62a2be001fca0b31a3126d9dffe28e0ce3ef3eb55602b0ed0c2fb5a2f85e3e07377a33
   languageName: node
   linkType: hard
 

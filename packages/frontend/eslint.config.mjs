@@ -38,6 +38,17 @@ export default [
     },
   },
   {
+    // Components/pages: these two rules fight React's shape — hooks (and the
+    // values derived for them) must be declared before any early return, and a
+    // component legitimately returns a loading element in one branch and content
+    // in another.
+    files: ['src/pages/**/*.tsx', 'src/components/**/*.tsx'],
+    rules: {
+      'unicorn/no-declarations-before-early-exit': 'off',
+      'sonarjs/function-return-type': 'off',
+    },
+  },
+  {
     // Machine-enforced vendor isolation: only lib/monitoring.ts imports the Sentry
     // vendor. Everything else uses the neutral Monitoring surface, so the vendor
     // (or Next) can be swapped by rewriting that one file.
@@ -52,8 +63,27 @@ export default [
               group: ['@sentry/*'],
               message: 'Import the neutral Monitoring surface (lib/monitoring.ts), not the Sentry vendor.',
             },
+            // Absolute imports: reach across directories via the `@/` alias, never
+            // by climbing `../`. Same-directory `./` siblings stay relative (they
+            // survive a file moving within its folder). `@/` maps to this package's
+            // src; cross-package still uses `@mocco/*`.
+            {
+              regex: '^\\.\\./',
+              message: 'Use the @/ absolute alias instead of a ../ parent import.',
+            },
           ],
         },
+      ],
+    },
+  },
+  {
+    // monitoring.ts is exempt from the Sentry-vendor ban above (it IS the vendor
+    // boundary) but still holds to the no-parent-import rule.
+    files: ['src/lib/monitoring.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ regex: '^\\.\\./', message: 'Use the @/ absolute alias instead of a ../ parent import.' }] },
       ],
     },
   },
