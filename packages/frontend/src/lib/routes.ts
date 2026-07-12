@@ -7,7 +7,10 @@ export const Routes = {
   signUp: '/auth/sign-up',
   signOut: '/auth/sign-out',
   workspaces: '/workspaces',
+  workspace: (id: string) => `/workspaces/${id}`,
   account: '/account',
 } as const;
 
-export type Route = (typeof Routes)[keyof typeof Routes];
+// Only the static string routes — the dynamic builders (e.g. `workspace`) are
+// called, not linked to directly.
+export type Route = Extract<(typeof Routes)[keyof typeof Routes], string>;

@@ -37,3 +37,25 @@ export const shellServerSideProps: GetServerSideProps<ShellProps> = withAuth<She
   }
   return { props };
 });
+
+/**
+ * getServerSideProps for the workspace dashboard (/workspaces/[id]): makes the
+ * URL's workspace active — which also validates membership, since setActive
+ * rejects a workspace the user isn't in — then loads the shell data (now
+ * reporting that workspace as active). An unknown or forbidden id is bounced to
+ * the workspaces list.
+ */
+export const workspaceDashboardServerSideProps: GetServerSideProps<ShellProps> = withAuth<ShellProps>(
+  async (context, authContext) => {
+    const workspaceId = context.params?.id;
+    if (typeof workspaceId !== 'string') {
+      return { notFound: true };
+    }
+    try {
+      await appRouter.createCaller(authContext).workspace.setActive({ workspaceId });
+    } catch {
+      return { redirect: { destination: Routes.workspaces, permanent: false } };
+    }
+    return { props: await fetchShellProps(authContext) };
+  },
+);
