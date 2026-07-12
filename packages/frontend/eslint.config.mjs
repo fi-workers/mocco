@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier/flat';
-import { createBaseConfig } from '../../eslint.config.base.mjs';
+import { createBaseConfig, houseStyle } from '../../eslint.config.base.mjs';
 
 // React lint stack (ESLint 10 era):
 // - @eslint-react: type-aware React rules — the modern replacement for eslint-plugin-react
@@ -44,4 +44,5 @@ export default [
     rules: { 'no-restricted-syntax': 'off' },
   },
   prettier,
+  houseStyle,
 ];

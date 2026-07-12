@@ -13,7 +13,9 @@ import type { GetServerSideProps } from 'next';
 // fetched at a run's commit later.
 export const getServerSideProps = (async ({ req }) => {
   const session = await getServices().auth.getSession(headersFromNode(req.headers));
-  if (!session) return { redirect: { destination: '/', permanent: false } };
+  if (!session) {
+    return { redirect: { destination: '/', permanent: false } };
+  }
   return { props: {} };
 }) satisfies GetServerSideProps;
 

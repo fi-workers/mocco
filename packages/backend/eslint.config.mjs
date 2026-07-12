@@ -1,6 +1,6 @@
 import { configs as airbnb, plugins as airbnbPlugins } from 'eslint-config-airbnb-extended';
 import prettier from 'eslint-config-prettier/flat';
-import { createBaseConfig } from '../../eslint.config.base.mjs';
+import { createBaseConfig, houseStyle, restrictedSyntax } from '../../eslint.config.base.mjs';
 
 export default [
   ...createBaseConfig({ tsconfigRootDir: import.meta.dirname }),
@@ -35,8 +35,11 @@ export default [
     files: ['**/*.ts'],
     ignores: ['src/infra/config/env.ts'],
     rules: {
+      // Overrides base's no-restricted-syntax (arrays don't merge) — keep the shared
+      // bans (enum, for-of, …) and add the backend-only process.env ban.
       'no-restricted-syntax': [
         'error',
+        ...restrictedSyntax,
         {
           selector: "MemberExpression[object.object.name='process'][object.property.name='env']",
           message: 'Read env through getEnv() (config/env.ts) — the single, zod-validated env surface.',
@@ -52,4 +55,5 @@ export default [
     rules: { 'no-restricted-imports': 'off' },
   },
   prettier,
+  houseStyle,
 ];

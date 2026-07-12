@@ -143,7 +143,9 @@ describe('tRPC workspace router on pglite', () => {
     const api = await signedInCaller('preview@example.com');
     const result = await api.pipeline.preview({ source: 'version: 1\npipeline: p\nsteps: []' });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.issues.some(issue => issue.path.startsWith('steps'))).toBe(true);
+    if (!result.ok) {
+      expect(result.issues.some(issue => issue.path.startsWith('steps'))).toBe(true);
+    }
   });
 
   it('pipeline.preview requires a session', async () => {
