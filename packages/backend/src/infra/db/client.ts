@@ -5,7 +5,11 @@ import { getEnv } from '../config/env';
 
 import * as schema from './schema';
 
-const createDb = () => drizzle(new Pool({ connectionString: getEnv().DATABASE_URL }), { schema });
+// max:1 — one connection per warm serverless instance. Supabase's pooler caps
+// concurrent clients (session mode: ~15), and an unbounded Pool (pg default max 10)
+// across many concurrent lambdas exhausts it (EMAXCONNSESSION). Point DATABASE_URL
+// at the transaction pooler (:6543) in serverless. Local/tests: 1 is plenty.
+const createDb = () => drizzle(new Pool({ connectionString: getEnv().DATABASE_URL, max: 1 }), { schema });
 
 /** Drizzle DB type (reused in the tRPC context etc.). Shared schema across node-postgres and pglite. */
 export type Db = ReturnType<typeof createDb>;
