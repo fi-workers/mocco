@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@mocco/backend": "workspace:*",
+    "@sentry/nextjs": "10.65.0",
     "@trpc/client": "11.18.0",
     "@trpc/server": "11.18.0",
     "better-auth": "1.6.23",

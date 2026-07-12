@@ -4,6 +4,7 @@ import { getServices } from '@mocco/backend/auth/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
+import { Monitoring } from '../../../lib/monitoring';
 import { headersFromNode } from '../../../lib/node-headers';
 
 import type { Context } from '@mocco/backend/trpc/trpc';
@@ -18,8 +19,10 @@ export default createNextApiHandler({
   // The client only ever sees the masked message (errorFormatter); keep the real
   // internal error visible server-side. Structured Sentry capture hooks in here.
   onError: ({ error, path }) => {
-    if (error.code === 'INTERNAL_SERVER_ERROR') {
-      console.error(`tRPC ${path ?? '<no-path>'}:`, error);
+    if (error.code !== 'INTERNAL_SERVER_ERROR') {
+      return;
     }
+    Monitoring.captureException(error.cause ?? error, { trpcPath: path ?? null });
+    console.error(`tRPC ${path ?? '<no-path>'}:`, error);
   },
 });
