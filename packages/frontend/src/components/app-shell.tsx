@@ -3,12 +3,12 @@ import { useRouter } from 'next/router';
 
 import { Routes } from '../lib/routes';
 
+import WorkspaceSwitcher from './workspace-switcher';
+
+import type { ShellProps } from '../lib/with-shell';
 import type { ReactNode } from 'react';
 
-interface Props {
-  user: { name: string; email: string };
-  children: ReactNode;
-}
+type Props = ShellProps & { children: ReactNode };
 
 const NAV = [
   { href: Routes.account, label: 'Workspaces' },
@@ -17,18 +17,22 @@ const NAV = [
 
 // The authenticated app layout: a persistent left sidebar (nav + the signed-in
 // user) around the page content. Gated pages render their body inside it.
-export default function AppShell({ user, children }: Props) {
+export default function AppShell({ user, workspaces, activeId, children }: Props) {
   const router = useRouter();
 
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-60 flex-col border-r border-neutral-200 px-4 py-5">
-        <Link href={Routes.account} className="mb-6 flex items-center gap-2 px-2">
+        <Link href={Routes.account} className="mb-4 flex items-center gap-2 px-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-sm font-bold text-white">
             M
           </span>
           <span className="font-semibold tracking-tight">Mocco</span>
         </Link>
+
+        <div className="mb-4">
+          <WorkspaceSwitcher workspaces={workspaces} activeId={activeId} />
+        </div>
 
         <nav className="flex flex-col gap-1">
           {NAV.map(item => {
