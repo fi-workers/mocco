@@ -23,4 +23,16 @@ export const workspaceRouter = router({
     await ctx.workspace.setActive(ctx.headers, input.workspaceId);
     return { ok: true } as const;
   }),
+
+  update: protectedProcedure
+    .input(workspaceCreateInputSchema.extend({ workspaceId: z.uuid() }))
+    .output(z.object({ workspace: workspaceSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }),
+    })),
+
+  delete: protectedProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
+    await ctx.workspace.delete(ctx.headers, input.workspaceId);
+    return { ok: true } as const;
+  }),
 });

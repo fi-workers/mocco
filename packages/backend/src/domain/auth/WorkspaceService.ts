@@ -36,6 +36,25 @@ export class WorkspaceService {
     await this.provider.api.setActiveOrganization({ body: { organizationId: workspaceId }, headers });
   }
 
+  /** Rename a workspace (must have permission in it). */
+  async update(headers: Headers, workspaceId: string, input: WorkspaceCreateInput) {
+    const workspace = await this.provider.api.updateOrganization({
+      body: { organizationId: workspaceId, data: input },
+      headers,
+    });
+    // The vendor returns null for a workspace that doesn't exist or the caller
+    // can't touch — surface it rather than parse null at the egress boundary.
+    if (!workspace) {
+      throw new Error(`Workspace ${workspaceId} could not be updated`);
+    }
+    return workspace;
+  }
+
+  /** Delete a workspace (owner only). */
+  async delete(headers: Headers, workspaceId: string): Promise<void> {
+    await this.provider.api.deleteOrganization({ body: { organizationId: workspaceId }, headers });
+  }
+
   /**
    * The session-active workspace with members, or null when none is active.
    * Vendor contract (probe-verified): returns null when no workspace is active —
