@@ -18,7 +18,7 @@ import { router, protectedProcedure } from '../trpc';
 // missing or isn't the caller's; surface that as NOT_FOUND. Declared here — and
 // reused across the router's procedures (update, members) — rather than in the
 // transport core, so error→code mapping lives with the domain that owns it.
-const workspaceProcedure = protectedProcedure.use(async ({ next }) => {
+const protectedWorkspaceProcedure = protectedProcedure.use(async ({ next }) => {
   const result = await next();
   if (!result.ok && result.error.cause instanceof NotFoundError) {
     throw new TRPCError({ code: 'NOT_FOUND', message: result.error.cause.message, cause: result.error.cause });
@@ -27,37 +27,37 @@ const workspaceProcedure = protectedProcedure.use(async ({ next }) => {
 });
 
 export const workspaceRouter = router({
-  list: workspaceProcedure
+  list: protectedWorkspaceProcedure
     .output(z.object({ workspaces: z.array(workspaceSchema) }))
     .query(async ({ ctx }) => ({ workspaces: await ctx.workspace.list(ctx.headers) })),
 
-  active: workspaceProcedure
+  active: protectedWorkspaceProcedure
     .output(z.object({ workspace: workspaceSchema.extend({ members: z.array(workspaceMemberSchema) }).nullable() }))
     .query(async ({ ctx }) => ({ workspace: await ctx.workspace.getActive(ctx.headers) })),
 
-  create: workspaceProcedure
+  create: protectedWorkspaceProcedure
     .input(workspaceCreateInputSchema)
     .output(z.object({ workspace: workspaceSchema }))
     .mutation(async ({ ctx, input }) => ({ workspace: await ctx.workspace.create(ctx.headers, input) })),
 
-  setActive: workspaceProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
+  setActive: protectedWorkspaceProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
     await ctx.workspace.setActive(ctx.headers, input.workspaceId);
     return { ok: true } as const;
   }),
 
-  update: workspaceProcedure
+  update: protectedWorkspaceProcedure
     .input(workspaceCreateInputSchema.extend({ workspaceId: z.uuid() }))
     .output(z.object({ workspace: workspaceSchema }))
     .mutation(async ({ ctx, input }) => ({
       workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }),
     })),
 
-  delete: workspaceProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
+  delete: protectedWorkspaceProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
     await ctx.workspace.delete(ctx.headers, input.workspaceId);
     return { ok: true } as const;
   }),
 
-  members: workspaceProcedure
+  members: protectedWorkspaceProcedure
     .input(z.object({ workspaceId: z.uuid() }))
     .output(z.object({ members: z.array(workspaceMemberDetailSchema) }))
     .query(async ({ ctx, input }) => ({ members: await ctx.workspace.listMembers(ctx.headers, input.workspaceId) })),
