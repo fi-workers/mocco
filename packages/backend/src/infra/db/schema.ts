@@ -1,5 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  index,
+  uniqueIndex,
+  unique,
+  check,
+  foreignKey,
+} from 'drizzle-orm/pg-core';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
@@ -160,3 +171,81 @@ export const verifications = pgTable('mocco_verifications', {
   createdAt,
   updatedAt,
 });
+
+// ─────────────────────────────────────────────────────────────
+// Integration (slice 3a) — a workspace connects a provider account (GitHub App
+// installation), registers repos under it, and watches a branch. Neutral columns
+// (external_*_id, provider discriminator stored-not-dispatched); provider-specific
+// handshake state lives in the mocco_github_ table. See ADR 0011 + the slice-3 spec.
+// ─────────────────────────────────────────────────────────────
+
+/** A workspace's connection to a provider account (github: external_account_id = installation_id). */
+export const providerConnections = pgTable(
+  'mocco_provider_connections',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    provider: text().notNull(),
+    externalAccountId: text('external_account_id').notNull(),
+    accountLogin: text('account_login').notNull(),
+    status: text().notNull().default('active'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_provider_connections_provider_account_uq').on(t.provider, t.externalAccountId),
+    // A UNIQUE CONSTRAINT (not just an index) so mocco_repos' composite FK can reference (id, workspace_id).
+    unique('mocco_provider_connections_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_provider_connections_provider_check', sql`${t.provider} IN ('github')`),
+    check('mocco_provider_connections_status_check', sql`${t.status} IN ('active','suspended','deleted')`),
+  ],
+);
+
+/** A repository registered under a connection. Identity = external_repo_id; owner/name display-only. */
+export const repos = pgTable(
+  'mocco_repos',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => providerConnections.id, { onDelete: 'cascade' }),
+    externalRepoId: text('external_repo_id').notNull(),
+    owner: text().notNull(),
+    name: text().notNull(),
+    defaultBranch: text('default_branch').notNull(),
+    watchedBranch: text('watched_branch'),
+    status: text().notNull().default('active'),
+    connectedAt: timestamp('connected_at').notNull().defaultNow(),
+    lastSyncedAt: timestamp('last_synced_at'),
+  },
+  t => [
+    uniqueIndex('mocco_repos_connection_repo_uq').on(t.connectionId, t.externalRepoId),
+    // Composite FK guards the denormalized workspace_id against drift (kept for hot workspace-scoped listing).
+    foreignKey({
+      columns: [t.connectionId, t.workspaceId],
+      foreignColumns: [providerConnections.id, providerConnections.workspaceId],
+      name: 'mocco_repos_connection_workspace_fk',
+    }),
+    check('mocco_repos_status_check', sql`${t.status} IN ('active','inactive')`),
+  ],
+);
+
+/** Provider-specific install handshake state — single-use, TTL'd, consumed on the setup callback. */
+export const githubConnectStates = pgTable(
+  'mocco_github_connect_states',
+  {
+    state: text().primaryKey(),
+    userId: uuid('user_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    githubUserLogin: text('github_user_login'),
+    githubUserId: text('github_user_id'),
+    createdAt,
+    expiresAt: timestamp('expires_at').notNull(),
+    consumedAt: timestamp('consumed_at'),
+  },
+  t => [index('mocco_github_connect_states_workspace_idx').on(t.workspaceId)],
+);
