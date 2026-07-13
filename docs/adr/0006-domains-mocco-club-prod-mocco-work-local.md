@@ -1,5 +1,6 @@
 ---
 title: Domains — prod mocco.club, local mocco.work
+description: Assigns production domain mocco.club and local-dev domain mocco.work (tunneled for GitHub webhooks and OIDC callbacks), migrating the domain off the old workspace product.
 type: adr
 status: accepted
 created: 2026-07-01

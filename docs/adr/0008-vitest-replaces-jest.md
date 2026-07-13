@@ -1,5 +1,6 @@
 ---
 title: "ADR 0008: vitest replaces jest (amends 0005/0007)"
+description: Replaces Jest with Vitest for backend tests to get native ESM without experimental flags, keeping constructor injection as the test seam.
 type: adr
 status: accepted
 created: 2026-07-06

@@ -1,5 +1,6 @@
 ---
 title: DB conventions (Drizzle)
+description: Drizzle and Postgres schema conventions — mocco_ table prefix, snake_case columns, uuid primary keys, timestamp helpers, and index naming.
 type: reference
 status: active
 created: 2026-07-01

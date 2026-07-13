@@ -1,5 +1,6 @@
 ---
 title: Mocco is an independent authorization layer — separate from GitHub, only identifiers sync
+description: Establishes Mocco as the independent source of truth for deploy and approval authorization, kept separate from GitHub permissions with only one-way, opt-in identity sync.
 type: adr
 status: accepted
 created: 2026-06-30

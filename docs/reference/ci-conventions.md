@@ -1,5 +1,6 @@
 ---
 title: CI conventions (supply-chain hardening)
+description: Supply-chain hardening rules the CI workflows must follow — SHA-pinned actions, no pull_request_target with checkout, minimal permissions, and no secrets in PR workflows.
 type: reference
 status: active
 created: 2026-07-04

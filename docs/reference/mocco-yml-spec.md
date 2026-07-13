@@ -1,5 +1,6 @@
 ---
 title: .mocco.yml file format spec (draft v1)
+description: Draft v1 spec for the repo-root .mocco.yml declaring pipelines and gates, its target shape, and how the generated JSON Schema tracks what is actually implemented.
 type: reference
 status: draft
 created: 2026-06-30

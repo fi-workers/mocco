@@ -1,5 +1,6 @@
 ---
 title: Local development setup (mocco.work)
+description: Step-by-step local development setup for mocco.work using traefik, mkcert, Docker Postgres, and a tunnel for webhooks and OIDC callbacks.
 type: guide
 status: active
 created: 2026-07-01

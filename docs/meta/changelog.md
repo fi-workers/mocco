@@ -1,5 +1,6 @@
 ---
 title: Wiki meta changelog
+description: Records the rationale behind changes to the wiki's own structure, schema, and governing conventions.
 type: meta
 status: active
 created: 2026-06-30

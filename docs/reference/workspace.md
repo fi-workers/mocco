@@ -1,5 +1,6 @@
 ---
 title: Workspace model
+description: The workspace team-boundary model — tables, DB-enforced invariants, role constraints, and the vendor-organization mapping kept behind the auth boundary.
 type: reference
 status: active
 created: 2026-07-04

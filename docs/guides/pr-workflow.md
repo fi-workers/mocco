@@ -1,5 +1,6 @@
 ---
 title: PR workflow
+description: How changes land in the repo — one concern per PR, sequential landing on fresh main, and the green-and-installable checks every PR must pass.
 type: guide
 status: active
 created: 2026-07-04

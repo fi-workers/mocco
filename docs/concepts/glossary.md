@@ -1,5 +1,6 @@
 ---
 title: Glossary
+description: Disambiguates easily-confused Mocco, GitHub Actions, and GitLab CI terms such as pipeline, workflow, run, deploy, and gate.
 type: concept
 status: active
 created: 2026-06-30

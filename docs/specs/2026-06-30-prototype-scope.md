@@ -1,5 +1,6 @@
 ---
 title: Prototype scope & information architecture (IA)
+description: Scope and information architecture for the non-functional prototype click-through, mapping the four original components and the seven MVP gaps to screens.
 type: spec
 status: active
 created: 2026-06-30

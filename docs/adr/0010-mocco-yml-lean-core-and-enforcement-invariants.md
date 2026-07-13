@@ -1,3 +1,19 @@
+---
+title: "`.mocco.yml` stays a lean governance file; enforcement invariants are broker-side"
+description: Keeps .mocco.yml a lean governance file, placing enforcement invariants broker-side and rejecting speculative CI-style extension fields.
+type: adr
+status: accepted
+created: 2026-07-12
+updated: 2026-07-12
+confidence: high
+owner: andrea
+tags: [adr, mocco-yml, governance, schema, security]
+related:
+  - ./0003-core-model-is-pause-resume-gates-no-env.md
+  - ./0004-executor-agnostic-core-with-adapter-contract.md
+  - ../reference/mocco-yml-spec.md
+---
+
 # 10. `.mocco.yml` stays a lean governance file; enforcement invariants are broker-side
 
 Date: 2026-07-12

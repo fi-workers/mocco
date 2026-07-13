@@ -1,5 +1,6 @@
 ---
 title: Name the product Mocco
+description: Records the decision to name the product Mocco (reusing the shelved community-chat brand) and to position deploy governance as the first wedge toward a unified ops control plane.
 type: adr
 status: accepted
 created: 2026-06-30
