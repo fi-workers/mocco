@@ -16,9 +16,13 @@
   },
   "dependencies": {
     "@mocco/common": "workspace:*",
+    "@octokit/app": "16.1.2",
+    "@octokit/plugin-retry": "8.1.0",
+    "@octokit/plugin-throttling": "11.0.3",
     "@trpc/server": "11.18.0",
     "better-auth": "1.6.23",
     "drizzle-orm": "0.45.2",
+    "hono": "4.12.30",
     "pg": "8.22.0",
     "superjson": "2.2.6",
     "yaml": "2.9.0",
