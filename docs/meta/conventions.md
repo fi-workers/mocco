@@ -1,5 +1,6 @@
 ---
 title: Wiki authoring conventions
+description: Authoring conventions for the wiki — filenames, relative-path links, frontmatter, and the one-topic-per-document rule.
 type: meta
 status: active
 created: 2026-06-30

@@ -1,5 +1,6 @@
 ---
 title: Authorization model and wedge — why Mocco is independent
+description: Explains why Mocco is an independent deploy-authorization system distinct from GitHub, and how the "GitHub write ≠ deploy" wedge follows from that independence.
 type: concept
 status: active
 created: 2026-06-30

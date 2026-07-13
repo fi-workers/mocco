@@ -1,5 +1,6 @@
 ---
 title: "ADR 0007: pglite for tests, local lint base (amends 0005)"
+description: Adopts pglite for docker-free Postgres tests and sets a local lint base, amending the ADR 0005 stack.
 type: adr
 status: accepted
 created: 2026-07-04

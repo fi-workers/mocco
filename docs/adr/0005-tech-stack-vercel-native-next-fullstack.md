@@ -1,5 +1,6 @@
 ---
 title: Tech stack — Vercel-native Next full stack (house alignment)
+description: Chooses a single Vercel-native Next 16 full stack (tRPC, Drizzle/Postgres, Better Auth, yarn 4 workspaces) aligned with the in-house house stack.
 type: adr
 status: accepted
 created: 2026-07-01

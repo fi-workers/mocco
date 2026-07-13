@@ -1,5 +1,6 @@
 ---
 title: Executor-agnostic core + adapter contract (trigger event + callback + credential gate)
+description: Splits Mocco into a vendor-neutral core and an executor adapter contract (trigger event + callback + credential broker), with GitHub Actions as the first adapter.
 type: adr
 status: accepted
 created: 2026-06-30

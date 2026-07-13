@@ -1,3 +1,18 @@
+---
+title: Frontend uses the Pages Router
+description: Migrates the frontend from the App Router to the Next.js Pages Router, bridging the backend's fetch handlers to Node API routes at the vendor boundary.
+type: adr
+status: accepted
+created: 2026-07-11
+updated: 2026-07-11
+confidence: high
+owner: andrea
+tags: [adr, frontend, nextjs, pages-router]
+related:
+  - ./0005-tech-stack-vercel-native-next-fullstack.md
+  - ../reference/frontend-conventions.md
+---
+
 # 9. Frontend uses the Pages Router
 
 Date: 2026-07-11

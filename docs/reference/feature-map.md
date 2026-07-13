@@ -1,5 +1,6 @@
 ---
 title: Feature map — MVP scope
+description: Sorts features into MVP versus Post-MVP against the "GitHub write ≠ deploy" wedge.
 type: reference
 status: active
 created: 2026-07-04

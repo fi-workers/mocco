@@ -1,5 +1,7 @@
 ---
 title: Mocco Wiki — Top-level MOC
+description: Top-level map of content for the Mocco wiki, linking the product core, ADRs, concepts, guides, references, and meta docs.
+okf_version: "0.1"
 type: overview
 status: active
 created: 2026-06-30

@@ -1,5 +1,6 @@
 ---
 title: Frontmatter schema
+description: Specifies the required and optional YAML frontmatter keys every wiki document must carry.
 type: meta
 status: active
 created: 2026-06-30

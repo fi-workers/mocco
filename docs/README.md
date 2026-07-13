@@ -1,5 +1,6 @@
 ---
 title: How to use this repo's docs (LLM wiki)
+description: Orientation for how LLM agents and humans should read, navigate, and update this docs/ knowledge base, including folder roles and authoring rules.
 type: overview
 status: active
 created: 2026-06-30
@@ -12,6 +13,8 @@ tags: [meta, wiki, howto]
 # How to use this repo's docs/ (LLM Wiki)
 
 This folder is a knowledge base for LLM agents to read, navigate, and update efficiently across sessions. Read this document and `index.md` first before starting work.
+
+These docs conform to the [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) — a vendor-neutral standard where each markdown file is one concept carrying YAML frontmatter (a required `type`, plus recommended `title` and `description`), and the bundle version is declared as `okf_version` in `index.md`. The frontmatter schema below is a superset of OKF's fields.
 
 ## Entry order (at session start)
 

@@ -1,5 +1,6 @@
 ---
 title: Core model is pause/resume gates — drop the env concept
+description: Defines the core model as pause/resume gates inserted into a pipeline with role-based resume requirements, dropping the per-environment approval concept.
 type: adr
 status: accepted
 created: 2026-06-30

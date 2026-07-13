@@ -1,5 +1,6 @@
 ---
 title: ADR Index
+description: Chronological index of all architecture decision records with their status and dates.
 type: overview
 status: active
 created: 2026-06-30

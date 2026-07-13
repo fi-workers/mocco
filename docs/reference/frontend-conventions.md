@@ -1,5 +1,6 @@
 ---
 title: Frontend conventions (Next.js Pages Router)
+description: How packages/frontend is written under the Pages Router — React Compiler, server data via getServerSideProps, parse-don't-validate, URL-as-state, and the fetch-to-Node API bridges.
 type: reference
 status: active
 created: 2026-07-04
