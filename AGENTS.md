@@ -74,4 +74,5 @@ Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md) — or
 - [ADR 0002](./docs/adr/0002-mocco-is-an-independent-authorization-layer.md) — Mocco is an independent authorization layer; GitHub only links identity.
 - [ADR 0003](./docs/adr/0003-core-model-is-pause-resume-gates-no-env.md) — the core model is pause/resume gates, not environments.
 - [ADR 0004](./docs/adr/0004-executor-agnostic-core-with-adapter-contract.md) — executor-agnostic core; GitHub Actions is one adapter.
+- [ADR 0011](./docs/adr/0011-external-api-surface-architecture.md) — external inbound (setup callbacks, webhooks) is a Hono app on the **App Router** (`app/api/ext/...`), distinct from internal tRPC on the Pages Router; raw-body-safe for HMAC.
 - Feature scope: [docs/reference/feature-map.md](./docs/reference/feature-map.md) (MVP vs post-MVP).
