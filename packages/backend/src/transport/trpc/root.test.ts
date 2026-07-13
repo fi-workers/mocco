@@ -59,6 +59,18 @@ describe('tRPC workspace router on pglite', () => {
     await expect(api.workspace.active()).resolves.toEqual({ workspace: null });
   });
 
+  it('a domain NotFoundError maps to NOT_FOUND at the transport (mapDomainErrors)', async () => {
+    const owner = await signedInCaller('owner@example.com');
+    const { workspace: ws } = await owner.workspace.create({ name: 'Private' });
+
+    // A non-member update makes the service throw WorkspaceNotFoundError; the
+    // central middleware turns it into NOT_FOUND (not a masked 500).
+    const stranger = await signedInCaller('stranger@example.com');
+    await expect(stranger.workspace.update({ workspaceId: ws.id, name: 'Renamed' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
   it('create → list → active round-trip', async () => {
     const api = await signedInCaller('owner@example.com');
 

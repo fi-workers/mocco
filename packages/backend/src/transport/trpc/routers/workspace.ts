@@ -1,15 +1,15 @@
 // Workspace domain router — thin by convention: parse at the boundary (zod
-// from @mocco/common), delegate to the injected service, map domain errors.
+// from @mocco/common), delegate to the injected service. Domain errors (e.g.
+// WorkspaceNotFoundError) are mapped to transport codes centrally by the
+// mapDomainErrors middleware in trpc.ts, so procedures stay plumbing-free.
 import {
   workspaceCreateInputSchema,
   workspaceMemberDetailSchema,
   workspaceMemberSchema,
   workspaceSchema,
 } from '@mocco/common/workspace';
-import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { WorkspaceNotFoundError } from '../../../domain/auth/errors';
 import { router, protectedProcedure } from '../trpc';
 
 export const workspaceRouter = router({
@@ -34,16 +34,9 @@ export const workspaceRouter = router({
   update: protectedProcedure
     .input(workspaceCreateInputSchema.extend({ workspaceId: z.uuid() }))
     .output(z.object({ workspace: workspaceSchema }))
-    .mutation(async ({ ctx, input }) => {
-      try {
-        return { workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }) };
-      } catch (error) {
-        if (error instanceof WorkspaceNotFoundError) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: error.message, cause: error });
-        }
-        throw error;
-      }
-    }),
+    .mutation(async ({ ctx, input }) => ({
+      workspace: await ctx.workspace.update(ctx.headers, input.workspaceId, { name: input.name }),
+    })),
 
   delete: protectedProcedure.input(z.object({ workspaceId: z.uuid() })).mutation(async ({ ctx, input }) => {
     await ctx.workspace.delete(ctx.headers, input.workspaceId);
@@ -53,14 +46,5 @@ export const workspaceRouter = router({
   members: protectedProcedure
     .input(z.object({ workspaceId: z.uuid() }))
     .output(z.object({ members: z.array(workspaceMemberDetailSchema) }))
-    .query(async ({ ctx, input }) => {
-      try {
-        return { members: await ctx.workspace.listMembers(ctx.headers, input.workspaceId) };
-      } catch (error) {
-        if (error instanceof WorkspaceNotFoundError) {
-          throw new TRPCError({ code: 'NOT_FOUND', message: error.message, cause: error });
-        }
-        throw error;
-      }
-    }),
+    .query(async ({ ctx, input }) => ({ members: await ctx.workspace.listMembers(ctx.headers, input.workspaceId) })),
 });

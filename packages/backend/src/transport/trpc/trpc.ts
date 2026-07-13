@@ -1,6 +1,8 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
+import { NotFoundError } from '../../domain/errors';
+
 import type { AuthService } from '../../domain/auth/AuthService';
 import type { WorkspaceService } from '../../domain/auth/WorkspaceService';
 import type { Session } from '@mocco/common/auth';
@@ -34,10 +36,24 @@ const t = initTRPC.context<Context>().create({
 });
 
 export const { router } = t;
-export const publicProcedure = t.procedure;
+
+/**
+ * Maps domain error families to transport codes in one place — services throw
+ * them (colocated in each domain's errors.ts), so procedures stay plumbing-free.
+ * A `NotFoundError` (wrapped by tRPC as the cause) becomes NOT_FOUND.
+ */
+const mapDomainErrors = t.middleware(async ({ next }) => {
+  const result = await next();
+  if (!result.ok && result.error.cause instanceof NotFoundError) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: result.error.cause.message, cause: result.error.cause });
+  }
+  return result;
+});
+
+export const publicProcedure = t.procedure.use(mapDomainErrors);
 
 /** Requires a signed-in user; narrows ctx.session to non-null. */
-export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
   if (!ctx.session) {
     throw new TRPCError({ code: 'UNAUTHORIZED' });
   }
