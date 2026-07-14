@@ -13,7 +13,7 @@ export default function WorkspaceOverviewPage() {
     <AppShell>
       {id ? (
         <WorkspaceLayout workspaceId={id} active="overview">
-          <WorkspaceOverview />
+          <WorkspaceOverview workspaceId={id} />
         </WorkspaceLayout>
       ) : null}
     </AppShell>
