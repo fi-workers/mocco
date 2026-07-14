@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#backend/*": "./src/*.ts"
+  },
   "exports": {
     "./auth/instance": "./src/domain/auth/instance.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
