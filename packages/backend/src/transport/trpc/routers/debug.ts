@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 
-import { publicProcedure, router } from '../trpc';
+import { publicProcedure, router } from '#backend/transport/trpc/trpc';
 
 // Verification-only router: `throwInternal` throws so the tRPC error path
 // (errorFormatter mask + onError → Sentry capture) can be confirmed end-to-end.

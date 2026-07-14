@@ -1,6 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
-import { getServices, type Services } from '../../domain/auth/instance';
+import { getServices, type Services } from '#backend/domain/auth/instance';
 
 import { appRouter } from './root';
 

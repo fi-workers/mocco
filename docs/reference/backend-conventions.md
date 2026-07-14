@@ -86,6 +86,7 @@ Vendor/DB failures become **domain errors at the service**; the **transport maps
 
 ## House rules (lint-enforced)
 
+- **Absolute imports via `#backend/*`**: cross-directory imports use the `#backend/*` subpath (`package.json` `imports`: `#backend/* → ./src/*.ts`); `../` parent climbs are banned. Same-dir `./` and cross-package `@mocco/common/*` are unaffected. Node `#` subpath imports are package-internal — they resolve under tsc/vitest/Next without exposing anything through the locked `exports` contract.
 - **Centralized env access**: `infra/config/env.ts` is the only `process.env` reader — a lazy, zod-validated `getEnv()`. Never read `process.env` inline; add new vars to the schema.
 - **No index/barrel files**: never create `index.ts` re-export hubs. Name modules concretely; cross-package consumers go through explicit `package.json` `exports` subpaths.
 - **Constants over enums & magic strings**: no TS `enum` — model a fixed set as an `as const` object + derived union type. Reference the exported constant, never a raw domain string. Define each domain constant once.

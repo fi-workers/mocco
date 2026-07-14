@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 
-import * as schema from '../schema';
+import * as schema from '#backend/infra/db/schema';
 
 export type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
