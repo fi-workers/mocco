@@ -50,8 +50,8 @@ within the domain.**
 
 | File | Class | Table | Methods (house naming) |
 |---|---|---|---|
-| `provider-connection.repo.ts` | `ProviderConnectionRepo` | `providerConnections` | `getById(ws, id)` (throws), `findByWorkspace(ws)`, `upsert(ws, provider, {externalAccountId, accountLogin})` |
-| `repo.repo.ts` | `RepoRepo` | `repos` | `findByWorkspace(ws)`, `upsert(row)`, `updateWatchedBranch(ws, id, branch)` (throws if 0 rows) |
+| `provider-connection.repo.ts` | `ProviderConnectionRepo` | `providerConnections` | `getById(ws, id)` (throws `EntityNotFoundError`), `findByWorkspace(ws)`, `upsert(ws, provider, {externalAccountId, accountLogin})` — conflict target `[provider, externalAccountId]` |
+| `repo.repo.ts` | `RepoRepo` | `repos` | `findByWorkspace(ws)`, `upsert(row)` — conflict target `[connectionId, externalRepoId]`, `updateWatchedBranch(ws, id, branch)` (throws `EntityNotFoundError` if 0 rows) |
 | `connect-state.repo.ts` | `ConnectStateRepo` | `githubConnectStates` | `insert(row)`, `consume(state, userId, now)` → row \| `undefined` |
 
 Naming note: `repo.repo.ts` / `RepoRepo` is literal-but-awkward (the table is named `repos`).
@@ -69,11 +69,16 @@ update, not a lookup, so it returns `undefined` on zero rows (the service interp
 
 ### Shared single-row helper (the `first()` concern — "managed separately")
 
-The current private `first()` in `ConnectionService` moves out. Add **one shared helper** in
-`infra/db/` — `firstOrThrow(rows, message)` — that returns `rows[0]` or throws
-`EntityNotFoundError(message)`. All repos use it instead of inlining `[x] = …; if (!x) throw`.
-This is the "separately managed" form the user asked for: a single shared utility, not a
-per-service helper, and not duplicated per repo.
+The current private `first()` in `ConnectionService` moves out to **shared helpers in
+`infra/db/`**, separately managed (not a per-service/per-repo inline). Two semantically
+distinct cases — keep them distinct:
+
+- **Lookup that may legitimately miss** (`getById`, `updateWatchedBranch`'s 0-row case) →
+  `getOrThrow(rows, message)` returns `rows[0]` or throws **`EntityNotFoundError`**.
+- **Single-row write guaranteed to return a row** (`upsert`, `insert…returning`) → `expectOne(rows)`
+  returns `rows[0]` or throws a plain invariant `Error` ("expected one row from a single-row
+  write") — a can't-happen assert, NOT a not-found. This preserves the current `first()`
+  semantics rather than conflating them with `EntityNotFoundError`.
 
 Add `infra/db/errors.ts` exporting `EntityNotFoundError extends Error` (a DB-layer error,
 the Mocco equivalent of the house `database.errors`/`database.exceptions` file). Repos throw
@@ -89,9 +94,14 @@ it; it never reaches the transport directly.
 - Holds the repos + provider via constructor injection (see below), imports **no**
   `drizzle-orm`/schema.
 - **Catches `EntityNotFoundError` from `get*`/`update*` and rethrows the specific domain
-  error** (`ProviderConnectionNotFoundError`, `RepoNotFoundError`) with the caught error as
-  `cause` — mirroring `CouponService`'s catch-and-map. `ConnectStateInvalidError` is thrown
-  by the service when `consume` returns `undefined`.
+  error** with the caught error as `cause` — mirroring `CouponService`'s catch-and-map:
+  `ProviderConnectionRepo.getById` → `ProviderConnectionNotFoundError`;
+  `RepoRepo.updateWatchedBranch` 0-row → `RepoNotFoundError`. `ConnectStateInvalidError` is
+  thrown by the service when `consume` returns `undefined`.
+- Note `RepoNotFoundError` has a **second, non-DB provenance**: in `addRepo`, when the
+  provider's available-repo list has no match (`available.find(...) === undefined`), the
+  service throws `RepoNotFoundError` **directly** — this stays a service-level throw and is
+  NOT routed through `RepoRepo` (the repo has no say in a provider-list miss).
 - Owns the `Providers.github` constant and passes it into `ProviderConnectionRepo.upsert(ws,
   provider, …)` (the repo writes it and uses `[provider, externalAccountId]` as the conflict
   target; the repo does not import `Providers`). Keeps all `provider.listRepos(...)` calls
@@ -143,14 +153,26 @@ block) so `*.test.ts` may import schema freely.
 - **AGENTS.md**: one line in the Backend layering / Code-style area, beside vendor-isolation
   and env-centralization.
 
-## Absolute imports (@/) — dependency, not part of this refactor
+## Absolute imports — dependency, not part of this refactor
 
-New repo files should import via `@/` (house style: showyourtime/checkable alias backend
-imports; Mocco frontend already does `@/* → ./src/*`, #52). **Mocco backend has no alias
-today** (`packages/backend/tsconfig.json` sets no `paths`). Adding it is a backend-wide sweep
-unrelated to GitHub-connect, so it ships as a **separate precursor PR off `main`** mirroring
-#52 (add `@/* → ./src/*` to backend tsconfig, eslint import resolver, `no-restricted-imports`
-regex `^\.\./` ban, convert existing `../`→`@/`).
+New repo files should import via a **named, package-identifying alias**, matching the
+fi-workers house convention where the alias *is the package name* (`@fw/backend/*`,
+`@fw/checkable/*`) and Mocco's own existing cross-package imports (`@mocco/common/*`). The
+generic `@/` (frontend, #52) was rejected as ambiguous across a monorepo.
+
+**Alias: `@mocco/backend/* → ./src/*`.** Internal imports become
+`@mocco/backend/infra/db/schema`, `@mocco/backend/domain/integration/repos/...`, etc. — every
+import self-identifies by package name regardless of file location.
+
+- No collision with the package's public `exports` contract (`./auth/instance`, `./trpc/root`):
+  the `exports` map gates *external* consumers, while the tsconfig `paths` alias is *internal*
+  TS resolution — separate resolution contexts (the same split the house relies on).
+
+**Mocco backend has no alias today** (`packages/backend/tsconfig.json` sets no `paths`).
+Adding it is a backend-wide sweep unrelated to GitHub-connect, so it ships as a **separate
+precursor PR off `main`**: add `@mocco/backend/* → ./src/*` to the backend tsconfig, wire the
+eslint import resolver, add a `no-restricted-imports` ban on relative-parent (`^\.\./`)
+imports, and convert existing `../`→`@mocco/backend/`.
 
 **Sequencing:** (1) the `@/` precursor PR merges to `main`; (2) slice3a (#68) rebases onto
 `main`; (3) the repository refactor is added to #68 with `@/` imports and folded in before
