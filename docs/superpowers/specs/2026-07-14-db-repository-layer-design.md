@@ -49,9 +49,13 @@ DB-owning domain follows it by construction.
   reachable by `externalRepoId` alone). Keeping the scoping at the data-access boundary is
   the whole point — the invariant is enforced where the query is written.
 - The service keeps: throwing domain errors on `undefined` (`ProviderConnectionNotFoundError`,
-  `ConnectStateInvalidError`, `RepoNotFoundError`), TTL/`expiresAt` computation, the
-  `Providers.github` constant, and all `provider.listRepos(...)` calls plus the
-  "find the matching available repo" logic in `addRepo`.
+  `ConnectStateInvalidError`, `RepoNotFoundError`), TTL/`expiresAt` computation, ownership of
+  the `Providers.github` constant, and all `provider.listRepos(...)` calls plus the
+  "find the matching available repo" logic in `addRepo`. `Providers.github` stays in the
+  service and is **passed into** `upsertConnection(workspaceId, provider, ...)` as an
+  argument (the repository writes it into `values` and uses `[provider, externalAccountId]`
+  as the conflict target) — the repository does not import the `Providers` constant, keeping
+  the "service owns the domain constant" split intact.
 - The `first()` helper (single-row-write assertion) moves into the repository — it is a
   data-access concern.
 
@@ -62,7 +66,7 @@ prefixes per house naming):
 |---|---|
 | `insertConnectState(row)` | `startInstall`'s insert |
 | `consumeState(state, userId, now)` → `{ workspaceId } \| undefined` | `consumeConnectState`'s atomic update |
-| `upsertConnection(workspaceId, { externalAccountId, accountLogin })` → row | `createConnection` |
+| `upsertConnection(workspaceId, provider, { externalAccountId, accountLogin })` → row | `createConnection` |
 | `findConnection(workspaceId, connectionId)` → row \| `undefined` | `requireConnection` (private) |
 | `listConnections(workspaceId)` → row[] | `listConnections` |
 | `listRepos(workspaceId)` → row[] | `listRepos` |
@@ -78,15 +82,25 @@ The service's public method signatures (`startInstall`, `consumeConnectState`,
 
 - Service deps change from `{ db, provider }` to `{ connections: ConnectionRepository, provider }`.
   The service no longer receives a raw `db`.
-- The composition root (`domain/integration/instance.ts`, and wherever `createTrpcHandler`
-  wires deps) constructs `new ConnectionRepository(db)` and passes it in.
+- The **only production composition root** that constructs `ConnectionService` is
+  `domain/integration/instance.ts:37` (`new ConnectionService({ db: getDb(), provider })`) —
+  it becomes `new ConnectionService({ connections: new ConnectionRepository(getDb()), provider })`.
+  The tRPC and ext transports consume the already-built service via `getIntegration().connection`;
+  they do not construct it, so no other production wiring changes.
 
 ### Tests
 
-- `connection.test.ts` assembles `new ConnectionService({ connections: new ConnectionRepository(t.db), provider })`.
+- **Three test files** construct `ConnectionService` themselves and must move to the new
+  deps shape (`{ connections: new ConnectionRepository(t.db), provider }` in place of
+  `{ db: t.db, provider }`) — the deps-type change is compile-breaking, so all three fail
+  `tsc` until updated:
+  - `domain/integration/connection.test.ts` (1 site)
+  - `transport/trpc/routers/integration.test.ts` (1 site)
+  - `transport/ext/app.test.ts` (5 sites)
 - Tests **still run against real pglite** — test speed is explicitly not a goal, so no
   in-memory fake repository is introduced. Queries now flow through the repository; coverage
-  and assertions are unchanged. This is minimal churn (setup line + import).
+  and assertions are unchanged. This is minimal churn (each site swaps the deps object; add
+  the `ConnectionRepository` import).
 
 ### Lint enforcement
 
