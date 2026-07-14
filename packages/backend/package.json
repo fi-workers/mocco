@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./auth/instance": "./src/domain/auth/instance.ts",
+    "./integration/instance": "./src/domain/integration/instance.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
     "./trpc/root": "./src/transport/trpc/root.ts",
     "./trpc/trpc": "./src/transport/trpc/trpc.ts"
