@@ -24,6 +24,31 @@ export default [
               message:
                 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).',
             },
+            {
+              // Absolute imports: reach across directories via the #backend/* subpath,
+              // never by climbing ../. Same-directory ./ siblings stay relative (they
+              // survive a file moving within its folder); cross-package stays @mocco/*.
+              regex: '^\\.\\./',
+              message: 'Use the #backend/* absolute import instead of a ../ parent climb (same-dir ./ is fine).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // auth/ is excluded from the vendor block above (it IS the vendor boundary and
+    // legitimately imports ./provider), but it still holds to the no-parent-climb rule.
+    files: ['src/domain/auth/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^\\.\\./',
+              message: 'Use the #backend/* absolute import instead of a ../ parent climb (same-dir ./ is fine).',
+            },
           ],
         },
       ],

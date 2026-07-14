@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
+import { createTestDb, type TestDb } from '#backend/infra/db/testing/pglite';
 
 import { WorkspaceNotFoundError } from './errors';
 import { createProvider, type Provider } from './provider';

@@ -11,8 +11,8 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { NotFoundError } from '../../../domain/errors';
-import { router, protectedProcedure } from '../trpc';
+import { NotFoundError } from '#backend/domain/errors';
+import { router, protectedProcedure } from '#backend/transport/trpc/trpc';
 
 // The service throws WorkspaceNotFoundError (a NotFoundError) when a workspace is
 // missing or isn't the caller's; surface that as NOT_FOUND. Declared here — and

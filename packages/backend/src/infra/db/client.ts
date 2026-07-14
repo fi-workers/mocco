@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
-import { getEnv } from '../config/env';
+import { getEnv } from '#backend/infra/config/env';
 
 import * as schema from './schema';
 
