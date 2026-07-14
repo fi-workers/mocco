@@ -181,7 +181,7 @@ Methods: `findByWorkspace(workspaceId)` → rows; `upsert(row)` → row (conflic
 
 - [ ] **Step 1: Failing test** — seed workspace + connection + repo; assert `updateWatchedBranch` updates and returns, throws `EntityNotFoundError` for a foreign workspace, `upsert` inserts then updates on conflict, `findByWorkspace` scopes.
 - [ ] **Step 2: Run — FAIL.**
-- [ ] **Step 3: Implement** (mirror the `addRepo`/`setWatchedBranch` queries currently in `ConnectionService`; `updateWatchedBranch` uses `getOrThrow` on the `.returning()` result with message `` `Repo ${repoId} was not found` ``; `upsert` uses `expectOne`). The insert `values` shape is `{ workspaceId, connectionId, externalRepoId, owner, name, defaultBranch, watchedBranch }`.
+- [ ] **Step 3: Implement** (mirror the `addRepo`/`setWatchedBranch` queries currently in `ConnectionService`; `updateWatchedBranch` uses `getOrThrow` on the `.returning()` result with message `` `Repo ${repoId} was not found` ``; `upsert` uses `expectOne`). The insert `values` shape is `{ workspaceId, connectionId, externalRepoId, owner, name, defaultBranch, watchedBranch }`; the `onConflictDoUpdate` `set` clause is `{ watchedBranch: input.watchedBranch, status: 'active' }` (exactly as in the current `addRepo`).
 - [ ] **Step 4: Run — PASS.**
 - [ ] **Step 5: Commit** (`feat(integration): RepoRepo`).
 
@@ -225,9 +225,7 @@ Change `ConnectionServiceDeps` from `{ db, provider }` to `{ connections: Provid
 
 Import `EntityNotFoundError` from `#backend/infra/db/errors`.
 
-- [ ] **Step 3: Typecheck** — `yarn workspace @mocco/backend ts-check`. Expected: FAILS only in the three test files (deps shape) — Task 6. The service + `root.ts`/handler wiring compile once `instance.ts` is updated, so also do Task 5b before typechecking clean.
-
-- [ ] **Step 5b: Update the composition root** (`instance.ts`)
+- [ ] **Step 3: Update the composition root** (`instance.ts`) — do this before typechecking so only the test files remain red
 
 Replace `new ConnectionService({ db: getDb(), provider })` with:
 ```ts
@@ -244,7 +242,9 @@ state.integration = {
 ```
 Import the three repos from `#backend/domain/integration/repos/...`.
 
-- [ ] **Step 6: Commit** (service + instance together; tests still red until Task 6 — note this in the message or fold Task 6 into the same commit).
+- [ ] **Step 4: Typecheck** — `yarn workspace @mocco/backend ts-check`. Expected: FAILS only in the three test files (deps shape) — fixed in Task 6. Service + `root.ts`/handler wiring compile now that `instance.ts` is updated.
+
+- [ ] **Step 5: Commit** (service + instance together; tests still red until Task 6 — note this in the message, or fold Task 6 into the same commit).
 
 ---
 
@@ -282,6 +282,7 @@ Add the repo imports (`#backend/domain/integration/repos/...`). A tiny local hel
 ```js
 {
   files: ['src/domain/**/*Service.ts'],
+  ignores: ['src/domain/auth/**'], // auth is the vendor boundary; keep it out, like the vendor block
   rules: {
     'no-restricted-imports': ['error', { patterns: [
       ...vendorImportPatterns,
@@ -291,7 +292,7 @@ Add the repo imports (`#backend/domain/integration/repos/...`). A tiny local hel
   },
 },
 ```
-(This block, matching `*Service.ts`, wins over the vendor-only block for those files — hence the spread. Test files keep the existing `no-restricted-imports: 'off'`.)
+Placement matters: flat config is last-match-wins for a given rule on a file, so this block must be inserted **after** the existing vendor `no-restricted-imports` block (and before the `*.test.ts` `off` block, which must stay last). Because it re-spreads `vendorImportPatterns`, it preserves the better-auth ban while adding the drizzle/schema ban. The `ignores` keeps it off auth services (which never import drizzle anyway) so intent is explicit. Test files keep the existing `no-restricted-imports: 'off'`.
 
 - [ ] **Step 3: Verify** — `yarn workspace @mocco/backend lint`. Expected: PASS (ConnectionService no longer imports drizzle/schema; AuthService/WorkspaceService never did). Then a scratch check: temporarily add `import { eq } from 'drizzle-orm';` to `ConnectionService.ts` → `lint` FAILS with the repo message → revert.
 
