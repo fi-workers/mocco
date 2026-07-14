@@ -20,7 +20,9 @@ tags: [reference, backend, trpc, architecture, errors, lint]
 
 - **`domain/`** — Mocco's business logic. One folder per domain (`auth/`, `pipeline/`, and each governance domain as its slice lands). A domain gets its folder when its slice lands — don't pre-create empty ones. `governance/`-style sub-grouping is added only once `domain/` is genuinely crowded.
 - **`infra/`** — replaceable plumbing with no business meaning (`db/`, `config/`).
-- **`transport/`** — the edges (`trpc/`, later a Hono `ext/` for external REST). A transport carries **no business logic** — it parses at the boundary (zod from `@mocco/common`) and delegates to a domain service, so logic is never duplicated across surfaces.
+- **`transport/`** — the edges: `trpc/` (internal, Pages Router) and `ext/` (external inbound REST, a Hono app on the App Router — [ADR 0011](../adr/0011-external-api-surface-architecture.md); the only `hono` importer). A transport carries **no business logic** — it parses at the boundary (zod from `@mocco/common`) and delegates to a domain service, so logic is never duplicated across surfaces. External inbound (webhooks, OAuth/setup callbacks) never uses tRPC.
+
+A domain that owns its **own** `mocco_` tables (e.g. `integration`) takes an injected `db` typed as the broad `PgDatabase<PgQueryResultHKT, typeof schema>` (both the prod node-postgres db and the pglite test db satisfy it — the concrete `Db` from `infra/db/client.ts` is node-postgres-only). Vendor SDKs still stay isolated at a leaf even when a port exists (`domain/integration/github/provider.ts` is the sole `@octokit/app` importer, mirroring `domain/auth/provider.ts`) — placing the leaf in `infra` would invert the one-way `domain → infra` rule.
 
 The `@mocco/backend` export subpaths (`./auth/instance`, `./trpc/root`) are the stable public contract — repoint their targets on a move, don't rename the subpaths.
 
