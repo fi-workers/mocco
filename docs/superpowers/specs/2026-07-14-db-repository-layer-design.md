@@ -155,24 +155,32 @@ block) so `*.test.ts` may import schema freely.
 
 ## Absolute imports — dependency, not part of this refactor
 
-New repo files should import via a **named, package-identifying alias**, matching the
-fi-workers house convention where the alias *is the package name* (`@fw/backend/*`,
-`@fw/checkable/*`) and Mocco's own existing cross-package imports (`@mocco/common/*`). The
-generic `@/` (frontend, #52) was rejected as ambiguous across a monorepo.
+New repo files should import via a **named backend-internal absolute path**. The mechanism is
+**Node subpath imports** (package.json `imports`, the `#` prefix), NOT a tsconfig `paths`
+alias.
 
-**Alias: `@mocco/backend/* → ./src/*`.** Internal imports become
-`@mocco/backend/infra/db/schema`, `@mocco/backend/domain/integration/repos/...`, etc. — every
-import self-identifies by package name regardless of file location.
+**Why not a tsconfig `@mocco/backend/*` alias (the house `@fw/backend` style):** Mocco's
+backend is a **source library bundled into Next**, and its `exports` is a deliberately locked
+6-subpath whitelist that *abstracts* internal paths (`./auth/instance` →
+`src/domain/auth/instance.ts`). A `@mocco/backend/* → ./src/*` alias (a) can't be resolved by
+Next for internal specifiers via the exports whitelist, and (b) if cross-mapped in the
+frontend tsconfig, its blanket pattern intercepts the public subpaths and mis-resolves them
+(`@mocco/backend/auth/instance` → `../backend/src/auth/instance`, which doesn't exist). It
+would also need teaching to three resolvers (tsc, vitest, Next). The house `@fw/backend`
+works because that backend is a standalone service, not Next-bundled.
 
-- No collision with the package's public `exports` contract (`./auth/instance`, `./trpc/root`):
-  the `exports` map gates *external* consumers, while the tsconfig `paths` alias is *internal*
-  TS resolution — separate resolution contexts (the same split the house relies on).
+**Chosen: `#backend/* → ./src/*`** via `packages/backend/package.json` `"imports"`. Node
+subpath imports are package-internal by design: resolved natively by tsc
+(`moduleResolution: Bundler`), Next/webpack, and vitest/Vite — no plugin, no cross-package
+mapping. They live in a separate namespace from `exports`, so the locked public contract is
+untouched. Internal imports read `#backend/infra/db/schema`,
+`#backend/domain/integration/repos/...` — self-identifying as backend-internal.
 
-**Mocco backend has no alias today** (`packages/backend/tsconfig.json` sets no `paths`).
 Adding it is a backend-wide sweep unrelated to GitHub-connect, so it ships as a **separate
-precursor PR off `main`**: add `@mocco/backend/* → ./src/*` to the backend tsconfig, wire the
-eslint import resolver, add a `no-restricted-imports` ban on relative-parent (`^\.\./`)
-imports, and convert existing `../`→`@mocco/backend/`.
+precursor PR off `main`**: add `"imports": { "#backend/*": "./src/*" }` to the backend
+package.json, add a `no-restricted-imports` eslint ban on relative-parent (`^\.\./`) imports
+(mirroring the frontend #52 block), and convert existing `../` imports to `#backend/`.
+Same-directory `./` siblings stay relative; cross-package stays `@mocco/common/*`.
 
 **Sequencing:** (1) the `@/` precursor PR merges to `main`; (2) slice3a (#68) rebases onto
 `main`; (3) the repository refactor is added to #68 with `@/` imports and folded in before
