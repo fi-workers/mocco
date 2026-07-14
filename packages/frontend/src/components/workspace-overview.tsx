@@ -19,7 +19,9 @@ function noticeFor(query: ReturnType<typeof useRouter>['query']): string | null 
 // gated in later slices.
 export default function WorkspaceOverview({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
-  const connectionsQuery = trpc.integration.connections.useQuery({ workspaceId });
+  // retry:false — a PRECONDITION_FAILED (GitHub App not configured) or NOT_FOUND is
+  // permanent; retrying only keeps the page spinning. Treat "no data" as no connections.
+  const connectionsQuery = trpc.integration.connections.useQuery({ workspaceId }, { retry: false });
   const connections = connectionsQuery.data?.connections ?? [];
   const notice = noticeFor(router.query);
 

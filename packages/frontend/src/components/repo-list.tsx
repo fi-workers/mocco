@@ -59,7 +59,10 @@ function AddRepoSection({
   connectedIds: ReadonlySet<string>;
 }) {
   const utils = trpc.useUtils();
-  const availableQuery = trpc.integration.availableRepos.useQuery({ workspaceId, connectionId: connection.id });
+  const availableQuery = trpc.integration.availableRepos.useQuery(
+    { workspaceId, connectionId: connection.id },
+    { retry: false },
+  );
   const { mutateAsync: addRepo, isPending } = trpc.integration.addRepo.useMutation();
 
   const available = (availableQuery.data?.repos ?? []).filter(repo => !connectedIds.has(repo.externalRepoId));
@@ -107,7 +110,7 @@ function AddRepoSection({
 
 /** The connected repos plus an add-from-connection picker for each connection. */
 export function RepoList({ workspaceId, connections }: { workspaceId: string; connections: ConnectionDto[] }) {
-  const reposQuery = trpc.integration.repos.useQuery({ workspaceId });
+  const reposQuery = trpc.integration.repos.useQuery({ workspaceId }, { retry: false });
   const repos = reposQuery.data?.repos ?? [];
   const connectedIds = new Set(repos.map(repo => repo.externalRepoId));
 
