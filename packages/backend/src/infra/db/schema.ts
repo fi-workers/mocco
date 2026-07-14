@@ -12,6 +12,8 @@ import {
   foreignKey,
 } from 'drizzle-orm/pg-core';
 
+import type { Provider } from '@mocco/common/integration';
+
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
 
@@ -187,7 +189,7 @@ export const providerConnections = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    provider: text().notNull(),
+    provider: text().$type<Provider>().notNull(),
     externalAccountId: text('external_account_id').notNull(),
     accountLogin: text('account_login').notNull(),
     status: text().notNull().default('active'),

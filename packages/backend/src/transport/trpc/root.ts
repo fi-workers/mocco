@@ -1,6 +1,7 @@
 // The single composition point: domain routers merge here (composition, not a
 // barrel — nothing is re-exported, a new router value is built).
 import { debugRouter } from './routers/debug';
+import { integrationRouter } from './routers/integration';
 import { pipelineRouter } from './routers/pipeline';
 import { workspaceRouter } from './routers/workspace';
 import { publicProcedure, router } from './trpc';
@@ -9,6 +10,7 @@ export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true })),
 
   workspace: workspaceRouter,
+  integration: integrationRouter,
   pipeline: pipelineRouter,
   debug: debugRouter,
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { providerConnections, repos, workspaces } from '../../infra/db/schema';
@@ -58,30 +58,26 @@ describe('integration schema constraints (pglite)', () => {
     const conn = await seedConnection(workspaceId);
     const otherWorkspace = await seedWorkspace('Other');
     await expect(
-      t.db
-        .insert(providerConnections)
-        .values({
-          workspaceId: otherWorkspace,
-          provider: 'github',
-          externalAccountId: conn.externalAccountId,
-          accountLogin: 'x',
-        }),
+      t.db.insert(providerConnections).values({
+        workspaceId: otherWorkspace,
+        provider: 'github',
+        externalAccountId: conn.externalAccountId,
+        accountLogin: 'x',
+      }),
     ).rejects.toThrow();
   });
 
   it('cascades repos when the connection is deleted', async () => {
     const workspaceId = await seedWorkspace();
     const conn = await seedConnection(workspaceId);
-    await t.db
-      .insert(repos)
-      .values({
-        workspaceId,
-        connectionId: conn.id,
-        externalRepoId: '1',
-        owner: 'o',
-        name: 'n',
-        defaultBranch: 'main',
-      });
+    await t.db.insert(repos).values({
+      workspaceId,
+      connectionId: conn.id,
+      externalRepoId: '1',
+      owner: 'o',
+      name: 'n',
+      defaultBranch: 'main',
+    });
     await t.db.delete(providerConnections).where(eq(providerConnections.id, conn.id));
     expect(await t.db.select().from(repos)).toHaveLength(0);
   });
@@ -91,7 +87,8 @@ describe('integration schema constraints (pglite)', () => {
     await expect(
       t.db
         .insert(providerConnections)
-        .values({ workspaceId, provider: 'gitlab', externalAccountId: randomUUID(), accountLogin: 'x' }),
+        // raw SQL bypasses the compile-time Provider type to exercise the DB CHECK
+        .values({ workspaceId, provider: sql`'gitlab'`, externalAccountId: randomUUID(), accountLogin: 'x' }),
     ).rejects.toThrow();
   });
 
@@ -100,16 +97,14 @@ describe('integration schema constraints (pglite)', () => {
     const conn = await seedConnection(workspaceId);
     const otherWorkspace = await seedWorkspace('Other');
     await expect(
-      t.db
-        .insert(repos)
-        .values({
-          workspaceId: otherWorkspace,
-          connectionId: conn.id,
-          externalRepoId: '9',
-          owner: 'o',
-          name: 'n',
-          defaultBranch: 'main',
-        }),
+      t.db.insert(repos).values({
+        workspaceId: otherWorkspace,
+        connectionId: conn.id,
+        externalRepoId: '9',
+        owner: 'o',
+        name: 'n',
+        defaultBranch: 'main',
+      }),
     ).rejects.toThrow();
   });
 });
