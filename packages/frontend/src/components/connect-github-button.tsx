@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/button';
-import { fireAndForget } from '@/lib/fire-and-forget';
-import { trpc } from '@/lib/trpc';
+import { Button } from '@frontend/components/ui/button';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { trpc } from '@frontend/lib/trpc';
 
 /** Starts a GitHub App install: mints a state on the server, then full-navigates to GitHub. */
 export function ConnectGithubButton({ workspaceId }: { workspaceId: string }) {

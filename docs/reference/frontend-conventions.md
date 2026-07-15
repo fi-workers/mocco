@@ -1,6 +1,6 @@
 ---
 title: Frontend conventions (Next.js Pages Router, client-rendered)
-description: How packages/frontend is written — a client-rendered app (no SSR) on the Pages Router with an SSG landing, @trpc/react-query data, a client-side auth guard, shadcn/ui + neutral tokens, @/ absolute imports, React Compiler, parse-don't-validate, URL-as-state, and the fetch-to-Node API bridges.
+description: How packages/frontend is written — a client-rendered app (no SSR) on the Pages Router with an SSG landing, @trpc/react-query data, a client-side auth guard, shadcn/ui + neutral tokens, @frontend/* absolute imports, React Compiler, parse-don't-validate, URL-as-state, and the fetch-to-Node API bridges.
 type: reference
 status: active
 created: 2026-07-04
@@ -58,7 +58,7 @@ Priority order when writing or reviewing:
 
 `--max-warnings 0` — warnings are failures. If a rule must be silenced, disable the single line with a reason, never the rule globally.
 
-- **`@/` absolute imports**: `no-restricted-imports` bans `../` parent climbs; reach across directories via `@/`.
+- **`@frontend/*` absolute imports**: `no-restricted-imports` bans every relative `./`/`../` (`^\.`); reach across directories via `@frontend/*` (tsconfig `paths → ./src/*`). Cross-package stays `@mocco/*`; the backend is reached only via public `@mocco/backend/*` (the `@backend/*` cross-map in tsconfig is resolution-only and lint-banned in frontend source).
 - **Vendored `components/ui/`**: shadcn primitives are formatted to the repo style; two React-hostile rules (`unicorn/no-declarations-before-early-exit`, `sonarjs/function-return-type`) are off for `src/{pages,components}/**` because hooks must precede early returns and a component legitimately returns a spinner in one branch and content in another.
 - `pages/**/index.{ts,tsx}` is exempt from the no-barrel rule (route files are named by the router, not re-export hubs).
 

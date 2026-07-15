@@ -3,11 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { Providers } from '@mocco/common/integration';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 
-import * as schema from '../../infra/db/schema';
+import {
+  ConnectStateInvalidError,
+  ProviderConnectionNotFoundError,
+  RepoNotFoundError,
+} from '@backend/domain/integration/errors';
+import * as schema from '@backend/infra/db/schema';
 
-import { ConnectStateInvalidError, ProviderConnectionNotFoundError, RepoNotFoundError } from './errors';
-
-import type { InstallationVerifier, RepoLister } from './ports';
+import type { InstallationVerifier, RepoLister } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto, RepoAddInput } from '@mocco/common/integration';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 

@@ -12,8 +12,8 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { NotFoundError } from '../../../domain/errors';
-import { protectedProcedure, router } from '../trpc';
+import { NotFoundError } from '@backend/domain/errors';
+import { protectedProcedure, router } from '@backend/transport/trpc/trpc';
 
 // Requires the GitHub App to be configured (ctx.connection present) and maps this
 // domain's NotFoundError family to NOT_FOUND, reused across the router's procedures.

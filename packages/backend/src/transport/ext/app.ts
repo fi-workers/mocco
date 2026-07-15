@@ -4,14 +4,14 @@
 // returned to the caller.
 import { Hono } from 'hono';
 
-import { getServices } from '../../domain/auth/instance';
-import { ConnectStateInvalidError } from '../../domain/integration/errors';
-import { GithubApiError } from '../../domain/integration/github/errors';
-import { getIntegration } from '../../domain/integration/instance';
+import { getServices } from '@backend/domain/auth/instance';
+import { ConnectStateInvalidError } from '@backend/domain/integration/errors';
+import { GithubApiError } from '@backend/domain/integration/github/errors';
+import { getIntegration } from '@backend/domain/integration/instance';
 
-import type { AuthService } from '../../domain/auth/AuthService';
-import type { ConnectionService } from '../../domain/integration/ConnectionService';
-import type { GitHubProvider } from '../../domain/integration/github/provider';
+import type { AuthService } from '@backend/domain/auth/AuthService';
+import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { GitHubProvider } from '@backend/domain/integration/github/provider';
 
 export interface ExtDeps {
   auth: AuthService;

@@ -1,4 +1,4 @@
-import { NotFoundError } from '../errors';
+import { NotFoundError } from '@backend/domain/errors';
 
 /** A connection the caller's workspace doesn't own or that doesn't exist — NOT_FOUND. */
 export class ProviderConnectionNotFoundError extends NotFoundError {

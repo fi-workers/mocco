@@ -1,9 +1,9 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
-import type { AuthService } from '../../domain/auth/AuthService';
-import type { WorkspaceService } from '../../domain/auth/WorkspaceService';
-import type { ConnectionService } from '../../domain/integration/ConnectionService';
+import type { AuthService } from '@backend/domain/auth/AuthService';
+import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */

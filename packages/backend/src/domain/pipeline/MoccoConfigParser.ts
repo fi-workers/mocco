@@ -1,8 +1,8 @@
 import { moccoConfigSchema, type MoccoConfig } from '@mocco/common/mocco-config';
 
-import { MoccoConfigYamlError } from './errors';
+import { MoccoConfigYamlError } from '@backend/domain/pipeline/errors';
 
-import type { YamlDecoder } from './yaml/decode';
+import type { YamlDecoder } from '@backend/domain/pipeline/yaml/decode';
 
 export interface MoccoConfigIssue {
   path: string;

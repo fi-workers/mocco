@@ -1,5 +1,5 @@
-import AppShell from '@/components/app-shell';
-import { useSession } from '@/lib/auth-client';
+import AppShell from '@frontend/components/app-shell';
+import { useSession } from '@frontend/lib/auth-client';
 
 // User account settings. AppShell guards the session; the profile card reads the
 // same (cached) session client-side.

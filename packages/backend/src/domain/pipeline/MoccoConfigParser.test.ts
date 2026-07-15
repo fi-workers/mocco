@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { MoccoConfigParser } from './MoccoConfigParser';
-import { decodeYaml } from './yaml/decode';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 
 const parser = new MoccoConfigParser(decodeYaml);
 const good = `version: 1

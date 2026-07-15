@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { providerConnections, repos, workspaces } from '../../infra/db/schema';
-import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
+import { providerConnections, repos, workspaces } from '@backend/infra/db/schema';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 function one<T>(rows: T[]): T {
   const [row] = rows;

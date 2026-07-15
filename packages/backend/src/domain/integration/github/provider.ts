@@ -1,8 +1,8 @@
 import { App } from '@octokit/app';
 
-import { GithubApiError, octokitStatus } from './errors';
+import { GithubApiError, octokitStatus } from '@backend/domain/integration/github/errors';
 
-import type { InstallationVerifier, OwnershipResult, RepoLister } from '../ports';
+import type { InstallationVerifier, OwnershipResult, RepoLister } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
 
 // The ONLY file importing the GitHub SDK (@octokit/app). Everything above the

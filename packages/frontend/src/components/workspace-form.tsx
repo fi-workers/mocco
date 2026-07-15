@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { workspaceCreateInputSchema } from '@mocco/common/workspace';
 import { useForm } from 'react-hook-form';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@frontend/components/ui/button';
 
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 

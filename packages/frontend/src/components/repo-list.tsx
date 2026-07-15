@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { fireAndForget } from '@/lib/fire-and-forget';
-import { trpc } from '@/lib/trpc';
+import { Button } from '@frontend/components/ui/button';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { trpc } from '@frontend/lib/trpc';
 
 import type { ConnectionDto, RepoDto } from '@mocco/common/integration';
 

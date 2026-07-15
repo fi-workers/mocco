@@ -1,12 +1,11 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
-import { getServices, type Services } from '../../domain/auth/instance';
-import { getIntegration } from '../../domain/integration/instance';
+import { getServices, type Services } from '@backend/domain/auth/instance';
+import { getIntegration } from '@backend/domain/integration/instance';
+import { appRouter } from '@backend/transport/trpc/root';
 
-import { appRouter } from './root';
-
-import type { Context } from './trpc';
-import type { ConnectionService } from '../../domain/integration/ConnectionService';
+import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { Context } from '@backend/transport/trpc/trpc';
 
 /** Injected per-handler deps. `connection` is present only when the GitHub App is configured. */
 export interface TrpcDeps extends Services {

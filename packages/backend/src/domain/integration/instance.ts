@@ -3,11 +3,10 @@
 // a deploy without GitHub set up still serves every non-integration route — only
 // the integration surfaces report "not configured" (enforced by the router
 // middleware / ext route).
-import { getEnv } from '../../infra/config/env';
-import { getDb } from '../../infra/db/client';
-
-import { ConnectionService } from './ConnectionService';
-import { createGitHubProvider, type GitHubProvider } from './github/provider';
+import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { createGitHubProvider, type GitHubProvider } from '@backend/domain/integration/github/provider';
+import { getEnv } from '@backend/infra/config/env';
+import { getDb } from '@backend/infra/db/client';
 
 export interface Integration {
   connection: ConnectionService;

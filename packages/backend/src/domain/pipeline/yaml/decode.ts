@@ -3,7 +3,7 @@
 // rewriting this file alone.
 import { parse as yamlParse, YAMLParseError } from 'yaml';
 
-import { MoccoConfigYamlError } from '../errors';
+import { MoccoConfigYamlError } from '@backend/domain/pipeline/errors';
 
 /** Decode a YAML string to a plain JS value. Vendor errors become domain errors. */
 export function decodeYaml(source: string): unknown {

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AuthService } from '../../../domain/auth/AuthService';
-import { createProvider } from '../../../domain/auth/provider';
-import { WorkspaceService } from '../../../domain/auth/WorkspaceService';
-import { ConnectionService } from '../../../domain/integration/ConnectionService';
-import { createTestDb, type TestDb } from '../../../infra/db/testing/pglite';
-import { appRouter } from '../root';
+import { AuthService } from '@backend/domain/auth/AuthService';
+import { createProvider } from '@backend/domain/auth/provider';
+import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+import { appRouter } from '@backend/transport/trpc/root';
 
-import type { InstallationVerifier, RepoLister } from '../../../domain/integration/ports';
+import type { InstallationVerifier, RepoLister } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
 
 const REPO_A: AvailableRepoDto = { externalRepoId: '111', owner: 'fi-workers', name: 'api', defaultBranch: 'main' };

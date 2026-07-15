@@ -1,8 +1,8 @@
 import { useRouter } from 'next/router';
 
-import { ConnectGithubButton } from '@/components/connect-github-button';
-import { RepoList } from '@/components/repo-list';
-import { trpc } from '@/lib/trpc';
+import { ConnectGithubButton } from '@frontend/components/connect-github-button';
+import { RepoList } from '@frontend/components/repo-list';
+import { trpc } from '@frontend/lib/trpc';
 
 function noticeFor(query: ReturnType<typeof useRouter>['query']): string | null {
   if (query.connect_error === '1') {

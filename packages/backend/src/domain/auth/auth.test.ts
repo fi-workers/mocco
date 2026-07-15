@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
-
-import { createProvider, type Provider } from './provider';
+import { createProvider, type Provider } from '@backend/domain/auth/provider';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 // Full-stack auth test on pglite: real migrations + real auth provider.
 // Catches schema/adapter drift that unit mocks would miss.

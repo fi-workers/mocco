@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { toRepo } from './provider';
+import { toRepo } from '@backend/domain/integration/github/provider';
 
 describe('toRepo', () => {
   it('maps a GitHub repo to a neutral AvailableRepoDto', () => {

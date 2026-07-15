@@ -1,8 +1,8 @@
 import { useRouter } from 'next/router';
 
-import AppShell from '@/components/app-shell';
-import WorkspaceLayout from '@/components/workspace-layout';
-import WorkspaceMembers from '@/components/workspace-members';
+import AppShell from '@frontend/components/app-shell';
+import WorkspaceLayout from '@frontend/components/workspace-layout';
+import WorkspaceMembers from '@frontend/components/workspace-members';
 
 // Workspace members (read-only list), client-rendered inside the workspace frame.
 export default function WorkspaceMembersPage() {

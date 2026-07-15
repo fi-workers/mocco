@@ -1,8 +1,8 @@
 import { useRouter } from 'next/router';
 
-import AppShell from '@/components/app-shell';
-import WorkspaceLayout from '@/components/workspace-layout';
-import WorkspaceSettings from '@/components/workspace-settings';
+import AppShell from '@frontend/components/app-shell';
+import WorkspaceLayout from '@frontend/components/workspace-layout';
+import WorkspaceSettings from '@frontend/components/workspace-settings';
 
 // Workspace settings (rename + delete), client-rendered inside the workspace frame.
 export default function WorkspaceSettingsPage() {

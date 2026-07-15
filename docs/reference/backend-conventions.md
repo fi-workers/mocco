@@ -88,6 +88,7 @@ Vendor/DB failures become **domain errors at the service**; the **transport maps
 
 ## House rules (lint-enforced)
 
+- **Absolute imports via `@backend/*`, no relative paths**: every internal import uses `@backend/*` (tsconfig `paths → ./src/*`); every relative `./`/`../` is banned (`^\.`). Cross-package stays `@mocco/common/*`. vitest resolves it natively via `resolve.tsconfigPaths` (no plugin). The frontend build resolves the backend's own `@backend/*` imports through a resolution-only cross-map in the frontend tsconfig; the public `exports` whitelist stays the only way frontend *source* reaches the backend.
 - **Centralized env access**: `infra/config/env.ts` is the only `process.env` reader — a lazy, zod-validated `getEnv()`. Never read `process.env` inline; add new vars to the schema.
 - **No index/barrel files**: never create `index.ts` re-export hubs. Name modules concretely; cross-package consumers go through explicit `package.json` `exports` subpaths.
 - **Constants over enums & magic strings**: no TS `enum` — model a fixed set as an `as const` object + derived union type. Reference the exported constant, never a raw domain string. Define each domain constant once.

@@ -6,7 +6,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { toNodeHandler } from 'better-auth/node';
 import { organization } from 'better-auth/plugins';
 
-import { accounts, invitations, members, sessions, users, verifications, workspaces } from '../../infra/db/schema';
+import { accounts, invitations, members, sessions, users, verifications, workspaces } from '@backend/infra/db/schema';
 
 // Re-exported so the domain services can interpret vendor failures (the org
 // plugin throws this on missing/forbidden operations) without importing the

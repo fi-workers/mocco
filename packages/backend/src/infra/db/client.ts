@@ -1,9 +1,8 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
-import { getEnv } from '../config/env';
-
-import * as schema from './schema';
+import { getEnv } from '@backend/infra/config/env';
+import * as schema from '@backend/infra/db/schema';
 
 // max:1 — one connection per warm serverless instance. Supabase's pooler caps
 // concurrent clients (session mode: ~15), and an unbounded Pool (pg default max 10)
@@ -22,4 +21,4 @@ export function getDb(): Db {
   return state.db;
 }
 
-export * as schema from './schema';
+export * as schema from '@backend/infra/db/schema';

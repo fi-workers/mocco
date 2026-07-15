@@ -2,13 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { workspaces } from '../../infra/db/schema';
-import { createTestDb, type TestDb } from '../../infra/db/testing/pglite';
+import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { ProviderConnectionNotFoundError, RepoNotFoundError } from '@backend/domain/integration/errors';
+import { workspaces } from '@backend/infra/db/schema';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
-import { ConnectionService } from './ConnectionService';
-import { ProviderConnectionNotFoundError, RepoNotFoundError } from './errors';
-
-import type { InstallationVerifier, RepoLister } from './ports';
+import type { InstallationVerifier, RepoLister } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
 
 function fakeProvider(repos: AvailableRepoDto[]): RepoLister & InstallationVerifier {

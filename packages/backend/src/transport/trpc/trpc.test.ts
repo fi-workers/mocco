@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { maskInternalError } from './trpc';
+import { maskInternalError } from '@backend/transport/trpc/trpc';
 
 describe('maskInternalError', () => {
   it('masks the message of an INTERNAL_SERVER_ERROR (never leak SQL/vendor detail)', () => {
