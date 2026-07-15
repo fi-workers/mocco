@@ -4,9 +4,9 @@ import { getServices } from '@mocco/backend/auth/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
-import { Configure } from '@/lib/configure';
-import { Monitoring } from '@/lib/monitoring';
-import { headersFromNode } from '@/lib/node-headers';
+import { Configure } from '@frontend/lib/configure';
+import { Monitoring } from '@frontend/lib/monitoring';
+import { headersFromNode } from '@frontend/lib/node-headers';
 
 import type { Context } from '@mocco/backend/trpc/trpc';
 

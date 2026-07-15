@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
-import { fireAndForget } from '@/lib/fire-and-forget';
-import { Routes } from '@/lib/routes';
-import { trpc } from '@/lib/trpc';
-import { cn } from '@/lib/utils';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { Routes } from '@frontend/lib/routes';
+import { trpc } from '@frontend/lib/trpc';
+import { cn } from '@frontend/lib/utils';
 
 import type { ReactNode } from 'react';
 

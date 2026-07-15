@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { Button } from '@frontend/components/ui/button';
 
 // A workspace's Overview section: its repositories and the deploys mocco gates
 // for them. Repos arrive with the GitHub App (a later slice), so for now this is

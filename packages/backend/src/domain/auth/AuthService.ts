@@ -3,7 +3,7 @@
 // flows in as a value, so tests bind pglite through the same constructor
 // production uses. Explicit return types pin the neutral shapes from
 // @mocco/common so vendor type inference cannot leak.
-import { toNodeAuthHandler, type NodeAuthHandler, type Provider } from './provider';
+import { toNodeAuthHandler, type NodeAuthHandler, type Provider } from '@backend/domain/auth/provider';
 
 import type { Session } from '@mocco/common/auth';
 

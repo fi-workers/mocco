@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AuthService } from '#backend/domain/auth/AuthService';
-import { createProvider } from '#backend/domain/auth/provider';
-import { WorkspaceService } from '#backend/domain/auth/WorkspaceService';
-import { createTestDb, type TestDb } from '#backend/infra/db/testing/pglite';
+import { AuthService } from '@backend/domain/auth/AuthService';
+import { createProvider } from '@backend/domain/auth/provider';
+import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+import { createTrpcHandler } from '@backend/transport/trpc/handler';
+import { appRouter } from '@backend/transport/trpc/root';
 
-import { createTrpcHandler } from './handler';
-import { appRouter } from './root';
-
-import type { Context } from './trpc';
+import type { Context } from '@backend/transport/trpc/trpc';
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
 const signUpViaHttp = async (auth: AuthService, email: string) => {

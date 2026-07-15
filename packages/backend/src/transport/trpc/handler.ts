@@ -1,10 +1,9 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
-import { getServices, type Services } from '#backend/domain/auth/instance';
+import { getServices, type Services } from '@backend/domain/auth/instance';
+import { appRouter } from '@backend/transport/trpc/root';
 
-import { appRouter } from './root';
-
-import type { Context } from './trpc';
+import type { Context } from '@backend/transport/trpc/trpc';
 
 /** DI factory — production binds it below; tests bind it to pglite. */
 export function createTrpcHandler(deps: Services) {

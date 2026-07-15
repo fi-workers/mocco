@@ -3,13 +3,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
-import { useSession } from '@/lib/auth-client';
-import { fireAndForget } from '@/lib/fire-and-forget';
-import { Routes } from '@/lib/routes';
-import { trpc } from '@/lib/trpc';
-
-import UserMenu from './user-menu';
-import WorkspaceSwitcher from './workspace-switcher';
+import UserMenu from '@frontend/components/user-menu';
+import WorkspaceSwitcher from '@frontend/components/workspace-switcher';
+import { useSession } from '@frontend/lib/auth-client';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { Routes } from '@frontend/lib/routes';
+import { trpc } from '@frontend/lib/trpc';
 
 import type { ReactNode } from 'react';
 

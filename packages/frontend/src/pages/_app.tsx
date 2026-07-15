@@ -4,10 +4,10 @@ import Head from 'next/head';
 import { useState } from 'react';
 import superjson from 'superjson';
 
-import EnvironmentRibbon from '@/components/environment-ribbon';
-import { trpc } from '@/lib/trpc';
+import EnvironmentRibbon from '@frontend/components/environment-ribbon';
+import { trpc } from '@frontend/lib/trpc';
 
-import '@/styles/globals.css';
+import '@frontend/styles/globals.css';
 
 import type { AppProps } from 'next/app';
 

@@ -1,15 +1,14 @@
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import { Routes } from '@/lib/routes';
-
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+} from '@frontend/components/ui/dropdown-menu';
+import { Routes } from '@frontend/lib/routes';
 
 interface Props {
   workspaces: { id: string; name: string }[];

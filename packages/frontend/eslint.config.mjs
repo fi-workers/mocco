@@ -53,7 +53,8 @@ export default [
     // vendor. Everything else uses the neutral Monitoring surface, so the vendor
     // (or Next) can be swapped by rewriting that one file.
     files: ['**/*.{ts,tsx}'],
-    ignores: ['src/lib/monitoring.ts'],
+    // next-env.d.ts is Next-generated (references ./.next/types/...) — not ours to rewrite.
+    ignores: ['src/lib/monitoring.ts', 'next-env.d.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -63,13 +64,18 @@ export default [
               group: ['@sentry/*'],
               message: 'Import the neutral Monitoring surface (lib/monitoring.ts), not the Sentry vendor.',
             },
-            // Absolute imports: reach across directories via the `@/` alias, never
-            // by climbing `../`. Same-directory `./` siblings stay relative (they
-            // survive a file moving within its folder). `@/` maps to this package's
-            // src; cross-package still uses `@mocco/*`.
+            // Absolute imports only: every internal import uses the `@frontend/*` alias,
+            // never a relative `./` or `../`. Cross-package stays `@mocco/*`.
             {
-              regex: '^\\.\\./',
-              message: 'Use the @/ absolute alias instead of a ../ parent import.',
+              regex: '^\\.',
+              message: 'Use the @frontend/* absolute alias, not a relative ./ or ../ path.',
+            },
+            // `@backend/*` is a resolution-only cross-map (it lets the bundler resolve the
+            // backend package's own internal imports); the frontend must reach the backend
+            // only through its public `@mocco/backend/*` exports, never its internals.
+            {
+              group: ['@backend/*'],
+              message: 'Import the backend via its public @mocco/backend/* exports, not @backend/* internals.',
             },
           ],
         },
@@ -78,12 +84,20 @@ export default [
   },
   {
     // monitoring.ts is exempt from the Sentry-vendor ban above (it IS the vendor
-    // boundary) but still holds to the no-parent-import rule.
+    // boundary) but still holds to the no-relative and no-@backend-internals rules.
     files: ['src/lib/monitoring.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [{ regex: '^\\.\\./', message: 'Use the @/ absolute alias instead of a ../ parent import.' }] },
+        {
+          patterns: [
+            { regex: '^\\.', message: 'Use the @frontend/* absolute alias, not a relative ./ or ../ path.' },
+            {
+              group: ['@backend/*'],
+              message: 'Import the backend via its public @mocco/backend/* exports, not @backend/* internals.',
+            },
+          ],
+        },
       ],
     },
   },

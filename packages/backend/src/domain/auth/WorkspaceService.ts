@@ -4,10 +4,10 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
-import { WorkspaceNotFoundError } from './errors';
-import { isAPIError } from './provider';
+import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { isAPIError } from '@backend/domain/auth/provider';
 
-import type { Provider } from './provider';
+import type { Provider } from '@backend/domain/auth/provider';
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 
 export class WorkspaceService {

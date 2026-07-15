@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveAuthOrigins } from './origins';
+import { resolveAuthOrigins } from '@backend/domain/auth/origins';
 
 describe('resolveAuthOrigins', () => {
   it('production/local: base = AUTH_URL, trusts both its www and apex form', () => {

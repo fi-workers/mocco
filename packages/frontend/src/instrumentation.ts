@@ -1,5 +1,5 @@
-import { Configure } from './lib/configure';
-import { Monitoring } from './lib/monitoring';
+import { Configure } from '@frontend/lib/configure';
+import { Monitoring } from '@frontend/lib/monitoring';
 
 // Server-side monitoring init (Next auto-loads this file). The DSN is not secret
 // (it ships in the client bundle), so server and client share the one value via

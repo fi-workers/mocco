@@ -1,10 +1,10 @@
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import WorkspaceForm from '@/components/workspace-form';
-import { Routes } from '@/lib/routes';
-import { trpc } from '@/lib/trpc';
+import { Button } from '@frontend/components/ui/button';
+import WorkspaceForm from '@frontend/components/workspace-form';
+import { Routes } from '@frontend/lib/routes';
+import { trpc } from '@frontend/lib/trpc';
 
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 

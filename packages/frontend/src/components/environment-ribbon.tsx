@@ -1,7 +1,7 @@
-import { Configure } from '@/lib/configure';
-import { Environments } from '@/lib/environment';
+import { Configure } from '@frontend/lib/configure';
+import { Environments } from '@frontend/lib/environment';
 
-import type { Environment } from '@/lib/environment';
+import type { Environment } from '@frontend/lib/environment';
 
 // A small fixed ribbon marking non-production environments, so a preview or local
 // tab is never mistaken for prod. Pattern borrowed from the checkable app.

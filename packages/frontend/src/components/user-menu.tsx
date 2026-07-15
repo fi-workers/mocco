@@ -1,8 +1,6 @@
 import { LogOutIcon, SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import { Routes } from '@/lib/routes';
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +9,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+} from '@frontend/components/ui/dropdown-menu';
+import { Routes } from '@frontend/lib/routes';
 
 interface Props {
   user: { name: string; email: string };

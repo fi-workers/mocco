@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { Configure } from '@/lib/configure';
-import { trpc } from '@/lib/trpc';
+import { Button } from '@frontend/components/ui/button';
+import { Configure } from '@frontend/lib/configure';
+import { trpc } from '@frontend/lib/trpc';
 
 function throwClient(): never {
   throw new Error('Sentry client verification error');
