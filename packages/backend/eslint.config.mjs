@@ -25,11 +25,10 @@ export default [
                 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).',
             },
             {
-              // Absolute imports: reach across directories via the #backend/* subpath,
-              // never by climbing ../. Same-directory ./ siblings stay relative (they
-              // survive a file moving within its folder); cross-package stays @mocco/*.
-              regex: '^\\.\\./',
-              message: 'Use the #backend/* absolute import instead of a ../ parent climb (same-dir ./ is fine).',
+              // Absolute imports only: every internal import uses the @backend/* alias,
+              // never a relative ./ or ../. Cross-package stays @mocco/*.
+              regex: '^\\.',
+              message: 'Use the @backend/* absolute import, not a relative ./ or ../ path.',
             },
           ],
         },
@@ -46,8 +45,8 @@ export default [
         {
           patterns: [
             {
-              regex: '^\\.\\./',
-              message: 'Use the #backend/* absolute import instead of a ../ parent climb (same-dir ./ is fine).',
+              regex: '^\\.',
+              message: 'Use the @backend/* absolute import, not a relative ./ or ../ path.',
             },
           ],
         },

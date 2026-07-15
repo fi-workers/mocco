@@ -3,11 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from '#backend/infra/db/testing/pglite';
-
-import { WorkspaceNotFoundError } from './errors';
-import { createProvider, type Provider } from './provider';
-import { WorkspaceService } from './WorkspaceService';
+import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { createProvider, type Provider } from '@backend/domain/auth/provider';
+import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 /** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
 const causeOf = async (p: Promise<unknown>): Promise<string> => {

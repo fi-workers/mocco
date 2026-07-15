@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createTestDb, type TestDb } from './testing/pglite';
+import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 // Docker-free PGlite (WASM Postgres) integration test. Each test gets a fresh isolated DB.
 describe('auth schema (users/sessions/accounts/verifications)', () => {
