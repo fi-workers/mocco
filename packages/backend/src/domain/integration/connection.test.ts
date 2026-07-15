@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { ProviderConnectionNotFoundError, RepoNotFoundError } from '@backend/domain/integration/errors';
+import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
+import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
+import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
@@ -41,7 +44,12 @@ describe('ConnectionService (pglite)', () => {
   }
 
   function service(repos: AvailableRepoDto[] = [REPO_A, REPO_B]): ConnectionService {
-    return new ConnectionService({ db: t.db, provider: fakeProvider(repos) });
+    return new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(repos),
+    });
   }
 
   it('startInstall persists a state row and returns the install URL', async () => {

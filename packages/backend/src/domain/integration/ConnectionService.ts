@@ -1,123 +1,78 @@
 import { randomUUID } from 'node:crypto';
 
 import { Providers } from '@mocco/common/integration';
-import { and, eq, gt, isNull } from 'drizzle-orm';
 
 import {
   ConnectStateInvalidError,
   ProviderConnectionNotFoundError,
   RepoNotFoundError,
 } from '@backend/domain/integration/errors';
-import * as schema from '@backend/infra/db/schema';
+import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { InstallationVerifier, RepoLister } from '@backend/domain/integration/ports';
+import type { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
+import type { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
+import type { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import type { AvailableRepoDto, RepoAddInput } from '@mocco/common/integration';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-
-// Broad enough for both the prod node-postgres db and the pglite test db (both
-// carry `typeof schema`); client.ts's concrete `Db` is node-postgres-only.
-type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
-
-/** A single-row insert/update always returns one row; assert it for a non-undefined return type. */
-function first<T>(rows: T[]): T {
-  const [row] = rows;
-  if (row === undefined) {
-    throw new Error('expected a row from a single-row write');
-  }
-  return row;
-}
 
 /** How long an install-handshake `state` stays valid. */
 const CONNECT_STATE_TTL_MS = 10 * 60 * 1000;
 
 export interface ConnectionServiceDeps {
-  db: Db;
+  connections: ProviderConnectionRepo;
+  repos: RepoRepo;
+  connectStates: ConnectStateRepo;
   provider: RepoLister & InstallationVerifier;
 }
 
 /**
- * Owns the integration's own mocco_ tables directly (unlike auth, which goes
- * through the vendor). Enforces the tenant-isolation invariant: a repo is only
- * ever reached via (connection_id, external_repo_id) with the connection scoped
- * to the caller's workspace — never by external_repo_id alone.
+ * Owns the integration's own mocco_ tables (unlike auth, which goes through the
+ * vendor) — but reaches them only through repositories, never drizzle directly.
+ * Policy layer: maps the repos' EntityNotFoundError to domain errors and enforces
+ * the tenant-isolation invariant (repos are only ever reached workspace-scoped).
  */
 export class ConnectionService {
   constructor(private readonly deps: ConnectionServiceDeps) {}
 
   private async requireConnection(workspaceId: string, connectionId: string) {
-    const [row] = await this.deps.db
-      .select()
-      .from(schema.providerConnections)
-      .where(
-        and(eq(schema.providerConnections.id, connectionId), eq(schema.providerConnections.workspaceId, workspaceId)),
-      );
-    if (row === undefined) {
-      throw new ProviderConnectionNotFoundError(connectionId);
+    try {
+      return await this.deps.connections.getById(workspaceId, connectionId);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new ProviderConnectionNotFoundError(connectionId, { cause: error });
+      }
+      throw error;
     }
-    return row;
   }
 
   /** Begin an install: persist a single-use, TTL'd state bound to the user+workspace; return the provider install URL. */
   async startInstall(userId: string, workspaceId: string): Promise<{ installUrl: string }> {
     const state = randomUUID();
     const expiresAt = new Date(Date.now() + CONNECT_STATE_TTL_MS);
-    await this.deps.db.insert(schema.githubConnectStates).values({ state, userId, workspaceId, expiresAt });
+    await this.deps.connectStates.insert({ state, userId, workspaceId, expiresAt });
     return { installUrl: this.deps.provider.installUrl(state) };
   }
 
-  /**
-   * Atomically consume an install `state` for `userId`; returns the target workspace.
-   * The WHERE clause (unconsumed AND unexpired AND owned by the user) does the work —
-   * an unknown / already-consumed / expired / foreign state updates zero rows.
-   */
+  /** Atomically consume an install `state` for `userId`; returns the target workspace. */
   async consumeConnectState(state: string, userId: string): Promise<{ workspaceId: string }> {
-    const now = new Date();
-    const [row] = await this.deps.db
-      .update(schema.githubConnectStates)
-      .set({ consumedAt: now })
-      .where(
-        and(
-          eq(schema.githubConnectStates.state, state),
-          eq(schema.githubConnectStates.userId, userId),
-          isNull(schema.githubConnectStates.consumedAt),
-          gt(schema.githubConnectStates.expiresAt, now),
-        ),
-      )
-      .returning();
-    if (row === undefined) {
+    const consumed = await this.deps.connectStates.consume(state, userId, new Date());
+    if (consumed === undefined) {
       throw new ConnectStateInvalidError();
     }
-    return { workspaceId: row.workspaceId };
+    return consumed;
   }
 
   /** Upsert a connection keyed on (provider, external_account_id). */
   async createConnection(workspaceId: string, input: { externalAccountId: string; accountLogin: string }) {
-    return first(
-      await this.deps.db
-        .insert(schema.providerConnections)
-        .values({
-          workspaceId,
-          provider: Providers.github,
-          externalAccountId: input.externalAccountId,
-          accountLogin: input.accountLogin,
-        })
-        .onConflictDoUpdate({
-          target: [schema.providerConnections.provider, schema.providerConnections.externalAccountId],
-          set: { workspaceId, accountLogin: input.accountLogin, status: 'active' },
-        })
-        .returning(),
-    );
+    return await this.deps.connections.upsert(workspaceId, Providers.github, input);
   }
 
   async listConnections(workspaceId: string) {
-    return await this.deps.db
-      .select()
-      .from(schema.providerConnections)
-      .where(eq(schema.providerConnections.workspaceId, workspaceId));
+    return await this.deps.connections.findByWorkspace(workspaceId);
   }
 
   async listRepos(workspaceId: string) {
-    return await this.deps.db.select().from(schema.repos).where(eq(schema.repos.workspaceId, workspaceId));
+    return await this.deps.repos.findByWorkspace(workspaceId);
   }
 
   /** Live list (from the provider) of repos the connection can access. Connection must belong to the workspace. */
@@ -134,35 +89,25 @@ export class ConnectionService {
     if (match === undefined) {
       throw new RepoNotFoundError(input.externalRepoId);
     }
-    return first(
-      await this.deps.db
-        .insert(schema.repos)
-        .values({
-          workspaceId,
-          connectionId: connection.id,
-          externalRepoId: match.externalRepoId,
-          owner: match.owner,
-          name: match.name,
-          defaultBranch: match.defaultBranch,
-          watchedBranch: input.watchedBranch,
-        })
-        .onConflictDoUpdate({
-          target: [schema.repos.connectionId, schema.repos.externalRepoId],
-          set: { watchedBranch: input.watchedBranch, status: 'active' },
-        })
-        .returning(),
-    );
+    return await this.deps.repos.upsert({
+      workspaceId,
+      connectionId: connection.id,
+      externalRepoId: match.externalRepoId,
+      owner: match.owner,
+      name: match.name,
+      defaultBranch: match.defaultBranch,
+      watchedBranch: input.watchedBranch,
+    });
   }
 
   async setWatchedBranch(workspaceId: string, repoId: string, watchedBranch: string | null) {
-    const [row] = await this.deps.db
-      .update(schema.repos)
-      .set({ watchedBranch })
-      .where(and(eq(schema.repos.id, repoId), eq(schema.repos.workspaceId, workspaceId)))
-      .returning();
-    if (row === undefined) {
-      throw new RepoNotFoundError(repoId);
+    try {
+      return await this.deps.repos.updateWatchedBranch(workspaceId, repoId, watchedBranch);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new RepoNotFoundError(repoId, { cause: error });
+      }
+      throw error;
     }
-    return row;
   }
 }

@@ -2,6 +2,38 @@ import { configs as airbnb, plugins as airbnbPlugins } from 'eslint-config-airbn
 import prettier from 'eslint-config-prettier/flat';
 import { createBaseConfig, houseStyle, restrictedSyntax } from '../../eslint.config.base.mjs';
 
+// Shared no-restricted-imports patterns. `no-restricted-imports` arrays do NOT merge
+// across flat-config objects (last matching object wins), so any block that sets the
+// rule must re-declare every pattern it wants — hence these shared consts.
+const relativeImportBan = {
+  // Absolute imports only: every internal import uses the @backend/* alias,
+  // never a relative ./ or ../. Cross-package stays @mocco/*.
+  regex: '^\\.',
+  message: 'Use the @backend/* absolute import, not a relative ./ or ../ path.',
+};
+const vendorImportPatterns = [
+  {
+    group: ['**/auth/provider', '*/auth/provider'],
+    message:
+      'Import the neutral auth surface (auth/AuthService.ts, auth/WorkspaceService.ts) instead of the vendor provider.',
+  },
+  {
+    group: ['better-auth', 'better-auth/*'],
+    message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/*Service.ts).',
+  },
+];
+// A service reaches the DB only through its repository (domain/<d>/repos/*.repo.ts).
+const dbImportBan = [
+  {
+    group: ['drizzle-orm', 'drizzle-orm/*'],
+    message: 'A service reaches the DB through its repo (domain/<d>/repos/*.repo.ts), never drizzle directly.',
+  },
+  {
+    group: ['**/infra/db/schema', '@backend/infra/db/schema'],
+    message: 'A service reaches the DB through its repo, not the schema directly.',
+  },
+];
+
 export default [
   ...createBaseConfig({ tsconfigRootDir: import.meta.dirname }),
   {
@@ -10,47 +42,25 @@ export default [
     files: ['**/*.ts'],
     ignores: ['src/domain/auth/**'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['**/auth/provider', '*/auth/provider'],
-              message:
-                'Import the neutral auth surface (auth/AuthService.ts, auth/WorkspaceService.ts) instead of the vendor provider.',
-            },
-            {
-              group: ['better-auth', 'better-auth/*'],
-              message:
-                'The auth vendor is only importable inside auth/. Use the neutral surface (auth/AuthService.ts, auth/WorkspaceService.ts).',
-            },
-            {
-              // Absolute imports only: every internal import uses the @backend/* alias,
-              // never a relative ./ or ../. Cross-package stays @mocco/*.
-              regex: '^\\.',
-              message: 'Use the @backend/* absolute import, not a relative ./ or ../ path.',
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, relativeImportBan] }],
     },
   },
   {
     // auth/ is excluded from the vendor block above (it IS the vendor boundary and
-    // legitimately imports ./provider), but it still holds to the no-parent-climb rule.
+    // legitimately imports ./provider), but it still holds to the no-relative rule.
     files: ['src/domain/auth/**/*.ts'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              regex: '^\\.',
-              message: 'Use the @backend/* absolute import, not a relative ./ or ../ path.',
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': ['error', { patterns: [relativeImportBan] }],
+    },
+  },
+  {
+    // A DB-owning domain's service reaches its tables only through a repository — never
+    // drizzle/schema directly. auth is excluded (vendor-mediated, owns no tables here).
+    // Re-includes the vendor + relative bans since arrays don't merge (last block wins).
+    files: ['src/domain/**/*Service.ts'],
+    ignores: ['src/domain/auth/**'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, relativeImportBan, ...dbImportBan] }],
     },
   },
   {

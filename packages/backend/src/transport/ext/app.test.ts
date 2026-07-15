@@ -4,6 +4,9 @@ import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
+import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
+import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createExtApp } from '@backend/transport/ext/app';
 
@@ -63,7 +66,12 @@ describe('ext GitHub setup callback (pglite)', () => {
   it('redirects to sign-in when unauthenticated', async () => {
     const app = createExtApp({
       auth,
-      connection: new ConnectionService({ db: t.db, provider: fakeProvider() }),
+      connection: new ConnectionService({
+        connections: new ProviderConnectionRepo(t.db),
+        repos: new RepoRepo(t.db),
+        connectStates: new ConnectStateRepo(t.db),
+        provider: fakeProvider(),
+      }),
       provider: fakeProvider(),
     });
     const res = await get(app, 'installation_id=555&code=abc&state=x');
@@ -72,7 +80,12 @@ describe('ext GitHub setup callback (pglite)', () => {
   });
 
   it('persists the connection and redirects to the workspace on a verified install', async () => {
-    const connection = new ConnectionService({ db: t.db, provider: fakeProvider() });
+    const connection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(),
+    });
     const app = createExtApp({ auth, connection, provider: fakeProvider() });
     const { headers, workspaceId, state } = await primeInstall('ok@example.com', connection);
 
@@ -83,7 +96,12 @@ describe('ext GitHub setup callback (pglite)', () => {
   });
 
   it('does not connect when ownership is not verified', async () => {
-    const connection = new ConnectionService({ db: t.db, provider: fakeProvider() });
+    const connection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(),
+    });
     const app = createExtApp({ auth, connection, provider: fakeProvider(false) });
     const { headers, workspaceId, state } = await primeInstall('noown@example.com', connection);
 
@@ -93,7 +111,12 @@ describe('ext GitHub setup callback (pglite)', () => {
   });
 
   it('rejects a reused/invalid state', async () => {
-    const connection = new ConnectionService({ db: t.db, provider: fakeProvider() });
+    const connection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(),
+    });
     const app = createExtApp({ auth, connection, provider: fakeProvider() });
     const { headers, state } = await primeInstall('reuse@example.com', connection);
 
@@ -103,7 +126,12 @@ describe('ext GitHub setup callback (pglite)', () => {
   });
 
   it('shows a pending state when setup_action=request (no installation_id)', async () => {
-    const connection = new ConnectionService({ db: t.db, provider: fakeProvider() });
+    const connection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(),
+    });
     const app = createExtApp({ auth, connection, provider: fakeProvider() });
     const { headers } = await primeInstall('pending@example.com', connection);
 

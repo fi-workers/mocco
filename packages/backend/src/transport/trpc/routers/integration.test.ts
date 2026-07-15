@@ -4,6 +4,9 @@ import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
+import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
+import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 
@@ -43,7 +46,12 @@ describe('integration router on pglite', () => {
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
-    connection = new ConnectionService({ db: t.db, provider: fakeProvider() });
+    connection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeProvider(),
+    });
   });
   afterEach(async () => {
     await t.close();

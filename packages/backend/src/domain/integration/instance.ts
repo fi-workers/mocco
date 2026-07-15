@@ -5,6 +5,9 @@
 // middleware / ext route).
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { createGitHubProvider, type GitHubProvider } from '@backend/domain/integration/github/provider';
+import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
+import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
+import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
@@ -33,7 +36,16 @@ export function getIntegration(): Integration | undefined {
         clientId: env.GITHUB_APP_CLIENT_ID,
         clientSecret: env.GITHUB_APP_CLIENT_SECRET,
       });
-      state.integration = { connection: new ConnectionService({ db: getDb(), provider }), provider };
+      const db = getDb();
+      state.integration = {
+        connection: new ConnectionService({
+          connections: new ProviderConnectionRepo(db),
+          repos: new RepoRepo(db),
+          connectStates: new ConnectStateRepo(db),
+          provider,
+        }),
+        provider,
+      };
     }
   }
   return state.integration;
