@@ -3,12 +3,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 
-import { Button } from '@/components/ui/button';
-import { signIn, signUp } from '@/lib/auth-client';
-import { signInSchema, signUpSchema } from '@/lib/auth-schema';
-import { Routes } from '@/lib/routes';
+import { Button } from '@frontend/components/ui/button';
+import { signIn, signUp } from '@frontend/lib/auth-client';
+import { signInSchema, signUpSchema } from '@frontend/lib/auth-schema';
+import { Routes } from '@frontend/lib/routes';
 
-import type { SignUpValues } from '@/lib/auth-schema';
+import type { SignUpValues } from '@frontend/lib/auth-schema';
 import type { Resolver } from 'react-hook-form';
 
 const INPUT = 'h-11 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring';

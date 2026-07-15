@@ -1,6 +1,6 @@
-import { Environments } from './environment';
+import { Environments } from '@frontend/lib/environment';
 
-import type { Environment } from './environment';
+import type { Environment } from '@frontend/lib/environment';
 
 // Central client-side config reader — the one place that reads NEXT_PUBLIC_* env
 // (the checkable app's Configure pattern). Grows to hold other public config

@@ -1,11 +1,11 @@
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
-import WorkspaceForm from '@/components/workspace-form';
-import { useSession } from '@/lib/auth-client';
-import { fireAndForget } from '@/lib/fire-and-forget';
-import { Routes } from '@/lib/routes';
-import { trpc } from '@/lib/trpc';
+import WorkspaceForm from '@frontend/components/workspace-form';
+import { useSession } from '@frontend/lib/auth-client';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { Routes } from '@frontend/lib/routes';
+import { trpc } from '@frontend/lib/trpc';
 
 // /workspaces is a router, not a list: with a workspace it jumps straight into
 // one's dashboard (the active one, else the first). With none — or ?create — it

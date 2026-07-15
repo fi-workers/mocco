@@ -12,7 +12,8 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@frontend/*": ["./src/*"],
+      "@backend/*": ["../backend/src/*"]
     },
     "jsx": "react-jsx",
     "incremental": true,

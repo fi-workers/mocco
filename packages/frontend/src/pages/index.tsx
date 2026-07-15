@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { Routes } from '@/lib/routes';
+import { Routes } from '@frontend/lib/routes';
 
 // Public landing page. Auth lives at /auth/* (reached from the nav or the CTA).
 export default function Home() {
