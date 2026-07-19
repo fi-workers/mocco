@@ -13,10 +13,10 @@ export class ConnectStateRepo {
   }
 
   /** Atomically consume a state for the user: set consumedAt where it is unconsumed,
-   * unexpired, and owned by the user. Returns the target workspace, or undefined when
-   * zero rows match (unknown / already-consumed / expired / foreign) — the service
-   * decides that means the state is invalid. */
-  async consume(state: string, userId: string, now: Date): Promise<{ workspaceId: string } | undefined> {
+   * unexpired, and owned by the user. Returns the consumed row, or undefined when zero
+   * rows match (unknown / already-consumed / expired / foreign) — the service decides
+   * that means the state is invalid, and narrows the row to what it needs. */
+  async consume(state: string, userId: string, now: Date) {
     const [row] = await this.db
       .update(schema.githubConnectStates)
       .set({ consumedAt: now })
@@ -29,6 +29,6 @@ export class ConnectStateRepo {
         ),
       )
       .returning();
-    return row === undefined ? undefined : { workspaceId: row.workspaceId };
+    return row;
   }
 }

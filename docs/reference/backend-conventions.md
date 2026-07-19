@@ -94,7 +94,11 @@ This can't be statically lint-enforced, so it is covered by **cross-tenant tests
 ## Types & schemas
 
 - **Derive types from values** (has-a, not is-a): prefer `z.infer` / `ReturnType<typeof factory>` over hand-maintained parallel interfaces. Write explicit annotations only where they pin a boundary (e.g. a neutral return type that stops vendor inference from leaking).
-- **Egress is the tRPC `.output()` schema.** Services return raw vendor rows; the router's `.output()` (zod from `@mocco/common`) is the wire boundary — it strips unknown vendor fields and normalizes. Types live once in `@mocco/common` as zod schemas.
+- **Repos return the whole row (the model), not a hand-narrowed shape.** A repository maps a table to its entity and returns it in full (`.returning()` / `.select()` with no column projection) — the same rule as "services return raw vendor rows," applied at the DB layer. Don't build `{ someField: row.someField }` inside a repo; that narrowing belongs at the egress boundary, not the data layer.
+- **Egress is where narrowing happens — and it must be a _runtime_ narrowing, not a type annotation.** The DTO the caller sees is produced at the boundary:
+  - **tRPC procedures**: the router's `.output()` (zod from `@mocco/common`) is the wire boundary — `z.object` **strips unknown keys at runtime**, so the full row genuinely becomes the DTO (e.g. `connectionSchema` drops `externalAccountId`). Types live once in `@mocco/common` as zod schemas.
+  - **Surfaces without `.output()`** (the ext/Hono routes): the **service** is the narrowing boundary and must **project explicitly** (`return { workspaceId: row.workspaceId }`), because nothing downstream strips the row.
+- **A narrow return-type over a wide runtime object is a lie — avoid it.** `async consume(): Promise<{ workspaceId }>` that `return row` (a full row) compiles via structural typing, but the object still carries every column at runtime (raw tokens, timestamps). The type hides them; a later spread/log/serialize surfaces them. Narrow for real (zod `.output()` strips, or an explicit projection at the service) — never let the annotation pretend the object is smaller than it is.
 
 ## House rules (lint-enforced)
 

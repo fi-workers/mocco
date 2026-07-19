@@ -54,13 +54,18 @@ export class ConnectionService {
     return { installUrl: this.deps.provider.installUrl(state) };
   }
 
-  /** Atomically consume an install `state` for `userId`; returns the target workspace. */
+  /**
+   * Atomically consume an install `state` for `userId`; returns the target workspace.
+   * The repo returns the raw connect-state row; this service is the narrowing boundary
+   * for the ext (Hono) path — which has no tRPC `.output()` — so it projects to the DTO
+   * explicitly here (the runtime object must match the declared shape, not just the type).
+   */
   async consumeConnectState(state: string, userId: string): Promise<{ workspaceId: string }> {
     const consumed = await this.deps.connectStates.consume(state, userId, new Date());
     if (consumed === undefined) {
       throw new ConnectStateInvalidError();
     }
-    return consumed;
+    return { workspaceId: consumed.workspaceId };
   }
 
   /**
