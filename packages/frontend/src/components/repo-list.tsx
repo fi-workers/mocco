@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { CommitQueue } from '@frontend/components/commit-queue';
 import { Button } from '@frontend/components/ui/button';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { trpc } from '@frontend/lib/trpc';
@@ -13,7 +14,9 @@ function ConnectedRepoRow({ workspaceId, repo }: { workspaceId: string; repo: Re
   const utils = trpc.useUtils();
   const initialBranch = repo.watchedBranch ?? repo.defaultBranch;
   const [branch, setBranch] = useState(initialBranch);
+  const [showCommits, setShowCommits] = useState(false);
   const { mutateAsync: setWatchedBranch, isPending } = trpc.integration.setWatchedBranch.useMutation();
+  const isWatched = repo.watchedBranch !== null;
 
   const save = async (): Promise<void> => {
     // eslint-disable-next-line sonarjs/null-dereference -- branch is a useState<string> seeded from a non-null value
@@ -23,27 +26,42 @@ function ConnectedRepoRow({ workspaceId, repo }: { workspaceId: string; repo: Re
   };
 
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border px-4 py-3">
-      <span className="flex-1 truncate text-sm font-medium">
-        {repo.owner}/{repo.name}
-      </span>
-      <input
-        aria-label={`Watched branch for ${repo.owner}/${repo.name}`}
-        className={inputClass}
-        value={branch}
-        placeholder={repo.defaultBranch}
-        onChange={event => {
-          setBranch(event.target.value);
-        }}
-      />
-      <Button
-        variant="secondary"
-        pending={isPending}
-        onClick={() => {
-          fireAndForget(save());
-        }}>
-        Save
-      </Button>
+    <li className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="flex-1 truncate text-sm font-medium">
+          {repo.owner}/{repo.name}
+        </span>
+        <input
+          aria-label={`Watched branch for ${repo.owner}/${repo.name}`}
+          className={inputClass}
+          value={branch}
+          placeholder={repo.defaultBranch}
+          onChange={event => {
+            setBranch(event.target.value);
+          }}
+        />
+        <Button
+          variant="secondary"
+          pending={isPending}
+          onClick={() => {
+            fireAndForget(save());
+          }}>
+          Save
+        </Button>
+        {isWatched && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={showCommits}
+            aria-label={`${showCommits ? 'Hide' : 'Show'} synced commits for ${repo.owner}/${repo.name}`}
+            onClick={() => {
+              setShowCommits(current => !current);
+            }}>
+            {showCommits ? 'Hide commits' : 'Commits'}
+          </Button>
+        )}
+      </div>
+      {isWatched && showCommits && <CommitQueue workspaceId={workspaceId} repoId={repo.id} />}
     </li>
   );
 }

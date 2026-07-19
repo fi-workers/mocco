@@ -4,6 +4,8 @@
 // middleware, which also asserts the GitHub App is configured.
 import {
   availableRepoSchema,
+  commitsPageSchema,
+  commitsQueryInputSchema,
   connectionSchema,
   repoAddInputSchema,
   repoSchema,
@@ -97,5 +99,22 @@ export const integrationRouter = router({
         waitUntil(ctx.commitSync.backfillRepo(repo));
       }
       return { repo };
+    }),
+
+  // The candidate-queue read path. `commitSync` carries the same "GitHub App configured"
+  // optionality as `connection` (both built together in instance.ts, see trpc.ts) — the
+  // shared middleware above only narrows `connection`, so this procedure re-asserts its
+  // own dependency rather than assuming co-presence.
+  commits: protectedIntegrationProcedure
+    .input(commitsQueryInputSchema)
+    .output(commitsPageSchema)
+    .query(async ({ ctx, input }) => {
+      if (!ctx.commitSync) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'GitHub integration is not configured' });
+      }
+      // `commitSync` is the CommitSyncService Context field, not a Node sync fs API —
+      // n/no-sync's `/Sync$/` identifier heuristic false-positives here (see also above).
+      // eslint-disable-next-line n/no-sync
+      return await ctx.commitSync.listCommits(input.workspaceId, input.repoId, input.cursor, input.limit);
     }),
 });

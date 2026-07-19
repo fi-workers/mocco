@@ -261,4 +261,65 @@ describe('integration router on pglite', () => {
       expect(commitSource.calls).toBe(0);
     });
   });
+
+  describe('commits (candidate queue)', () => {
+    it('returns newest-first, paginating via nextCursor', async () => {
+      const api = await signedInCaller('commits@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await api.integration.addRepo({
+        workspaceId: ws.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: 'main',
+      });
+
+      const commitRepo = new CommitRepo(t.db);
+      await commitRepo.upsertMany(
+        Array.from({ length: 3 }, (_unused, i) => ({
+          repoId: repo.id,
+          sha: `sha-${i}`,
+          branch: 'main',
+          message: `commit ${i}`,
+          authorName: 'Author',
+          authorEmail: 'author@example.com',
+          committedAt: new Date(2026, 0, i + 1),
+        })),
+      );
+
+      const page = await api.integration.commits({ workspaceId: ws.id, repoId: repo.id, cursor: null, limit: 2 });
+      expect(page.commits).toHaveLength(2);
+      expect(page.commits[0]?.sha).toBe('sha-2'); // newest (last inserted) first
+      expect(page.commits[1]?.sha).toBe('sha-1');
+      expect(typeof page.commits[0]?.seq).toBe('string'); // bigint serialized as string on the wire
+      expect(page.nextCursor).not.toBeNull();
+
+      const nextPage = await api.integration.commits({
+        workspaceId: ws.id,
+        repoId: repo.id,
+        cursor: page.nextCursor,
+        limit: 2,
+      });
+      expect(nextPage.commits).toHaveLength(1);
+      expect(nextPage.commits[0]?.sha).toBe('sha-0');
+      expect(nextPage.nextCursor).toBeNull();
+    });
+
+    it('a non-member cannot read another workspace commits', async () => {
+      const owner = await signedInCaller('owner-commits@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const conn = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await owner.integration.addRepo({
+        workspaceId: wsA.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: null,
+      });
+
+      const stranger = await signedInCaller('stranger-commits@example.com');
+      await expect(
+        stranger.integration.commits({ workspaceId: wsA.id, repoId: repo.id, cursor: null, limit: 20 }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
 });

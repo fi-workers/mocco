@@ -1,6 +1,7 @@
 import { Providers } from '@mocco/common/integration';
 
 import { BACKFILL_DEFAULT_LIMIT, ConnectionStatuses } from '@backend/domain/integration/constants';
+import { RepoNotFoundError } from '@backend/domain/integration/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-events';
@@ -10,6 +11,7 @@ import type { ConnectStateRepo } from '@backend/domain/integration/repos/connect
 import type { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import type { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import type { CommitsPageDto } from '@mocco/common/integration';
 
 type PushData = Extract<ParsedWebhook, { kind: 'push' }>['data'];
 type InstallationData = Extract<ParsedWebhook, { kind: 'installation' }>['data'];
@@ -57,6 +59,20 @@ export interface CommitSyncServiceDeps {
  */
 export class CommitSyncService {
   constructor(private readonly deps: CommitSyncServiceDeps) {}
+
+  /** A repo owned by the workspace, or throw RepoNotFoundError. Read-side counterpart
+   * to ConnectionService's requireConnection — the repo is never resolved without
+   * proving the caller's workspace owns it. */
+  private async requireRepo(workspaceId: string, repoId: string) {
+    try {
+      return await this.deps.repos.getByIdInWorkspace(workspaceId, repoId);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new RepoNotFoundError(repoId, { cause: error });
+      }
+      throw error;
+    }
+  }
 
   /**
    * Claim a pending connect-state for the installing user and create the connection.
@@ -172,6 +188,38 @@ export class CommitSyncService {
       // Backfill is opportunistic — a provider hiccup must not fail the caller (e.g. addRepo).
       console.error(`[commit-sync] backfill failed for repo ${repo.id}`, error);
     }
+  }
+
+  /**
+   * Newest-first page of synced commits for a repo — the candidate-queue read path.
+   * `cursor`/`seq` are opaque strings on the wire (a DB bigserial exceeds JS's safe-integer
+   * range over time); parsed back to bigint only for the repo query.
+   */
+  async listCommits(
+    workspaceId: string,
+    repoId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<CommitsPageDto> {
+    await this.requireRepo(workspaceId, repoId);
+    const rows = await this.deps.commits.listByRepo(repoId, cursor === null ? null : BigInt(cursor), limit);
+    // The repo fetches `limit + 1` rows; a sentinel row beyond `limit` means another page follows.
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      commits: page.map(row => ({
+        id: row.id,
+        repoId: row.repoId,
+        seq: row.seq.toString(),
+        sha: row.sha,
+        branch: row.branch,
+        message: row.message,
+        authorName: row.authorName,
+        authorEmail: row.authorEmail,
+        committedAt: row.committedAt,
+      })),
+      nextCursor: rows.length > limit && last !== undefined ? last.seq.toString() : null,
+    };
   }
 
   /** Apply an installation-lifecycle transition (global key = provider + installation id). */

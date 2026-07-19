@@ -26,6 +26,17 @@ export class RepoRepo {
     );
   }
 
+  /** A repo owned by the workspace, keyed by its own id — or throw EntityNotFoundError. */
+  async getByIdInWorkspace(workspaceId: string, repoId: string) {
+    return getOrThrow(
+      await this.db
+        .select()
+        .from(schema.repos)
+        .where(and(eq(schema.repos.id, repoId), eq(schema.repos.workspaceId, workspaceId))),
+      `Repo ${repoId} was not found`,
+    );
+  }
+
   /** Mark every repo under a connection inactive — e.g. the installation itself was suspended/deleted. */
   async inactivateByConnection(connectionId: string) {
     await this.db
