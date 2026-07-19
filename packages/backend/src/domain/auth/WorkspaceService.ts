@@ -82,6 +82,18 @@ export class WorkspaceService {
   }
 
   /**
+   * Assert the caller belongs to a workspace; throws WorkspaceNotFoundError (which
+   * the router maps to NOT_FOUND) otherwise. The org plugin's listMembers already
+   * authorizes membership — it throws for a non-member or a missing workspace — so
+   * reusing it keeps this check on the same vendor-owned authority as every other
+   * workspace operation, and the NOT_FOUND mapping avoids leaking the workspace's
+   * existence to a non-member.
+   */
+  async assertMember(headers: Headers, workspaceId: string): Promise<void> {
+    await this.listMembers(headers, workspaceId);
+  }
+
+  /**
    * The session-active workspace with members, or null when none is active.
    * Vendor contract (probe-verified): returns null when no workspace is active —
    * real errors (DB down etc.) propagate instead of masquerading as an empty state.

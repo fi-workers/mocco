@@ -119,4 +119,76 @@ describe('integration router on pglite', () => {
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
+
+  // Tenant isolation is a correctness property (spec INVARIANT a): scoping queries
+  // by a *caller-supplied* workspaceId is meaningless unless that workspaceId is
+  // itself authorized against the session. These exercise the real attack — a
+  // non-member passing the VICTIM's workspaceId — which every procedure must reject.
+  describe('cross-tenant: the caller must be a member of the passed workspaceId', () => {
+    it('a non-member cannot read another workspace (repos / connections)', async () => {
+      const owner = await signedInCaller('owner-r@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+
+      const stranger = await signedInCaller('stranger-r@example.com');
+      await expect(stranger.integration.repos({ workspaceId: wsA.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(stranger.integration.connections({ workspaceId: wsA.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it('a non-member cannot list another workspace connection live repos', async () => {
+      const owner = await signedInCaller('owner-a@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const conn = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+
+      const stranger = await signedInCaller('stranger-a@example.com');
+      await expect(
+        stranger.integration.availableRepos({ workspaceId: wsA.id, connectionId: conn.id }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('a non-member cannot write into another workspace (addRepo with the victim workspaceId)', async () => {
+      const owner = await signedInCaller('owner-w@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const conn = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+
+      const stranger = await signedInCaller('stranger-w@example.com');
+      await expect(
+        stranger.integration.addRepo({
+          workspaceId: wsA.id,
+          connectionId: conn.id,
+          externalRepoId: '111',
+          watchedBranch: null,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('a non-member cannot setWatchedBranch on another workspace repo', async () => {
+      const owner = await signedInCaller('owner-s@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const conn = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await owner.integration.addRepo({
+        workspaceId: wsA.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: null,
+      });
+
+      const stranger = await signedInCaller('stranger-s@example.com');
+      await expect(
+        stranger.integration.setWatchedBranch({ workspaceId: wsA.id, repoId: repo.id, watchedBranch: 'main' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('a non-member cannot startInstall for another workspace', async () => {
+      const owner = await signedInCaller('owner-i@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+
+      const stranger = await signedInCaller('stranger-i@example.com');
+      await expect(stranger.integration.startInstall({ workspaceId: wsA.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+  });
 });
