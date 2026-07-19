@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   boolean,
+  bigserial,
   index,
   uniqueIndex,
   unique,
@@ -250,4 +251,48 @@ export const githubConnectStates = pgTable(
     consumedAt: timestamp('consumed_at'),
   },
   t => [index('mocco_github_connect_states_workspace_idx').on(t.workspaceId)],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Commit sync (slice 3b) — commits observed for a watched repo, and the
+// provider webhook deliveries that drive that sync (dedupe by delivery id).
+// ─────────────────────────────────────────────────────────────
+
+/** A commit synced for a repo. seq is a per-table monotonic ordinal for cursoring; upserted on (repo_id, sha). */
+export const commits = pgTable(
+  'mocco_commits',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    seq: bigserial({ mode: 'bigint' }).notNull(),
+    sha: text().notNull(),
+    branch: text().notNull(),
+    message: text().notNull(),
+    authorName: text('author_name').notNull(),
+    authorEmail: text('author_email').notNull(),
+    committedAt: timestamp('committed_at').notNull(),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_commits_repo_sha_uq').on(t.repoId, t.sha),
+    index('mocco_commits_repo_seq_idx').on(t.repoId, t.seq.desc()),
+  ],
+);
+
+/** A received provider webhook delivery — recorded to dedupe redeliveries by delivery_id. */
+export const webhookDeliveries = pgTable(
+  'mocco_webhook_deliveries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    provider: text().notNull(),
+    deliveryId: text('delivery_id').notNull(),
+    eventType: text('event_type').notNull(),
+    receivedAt: timestamp('received_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_webhook_deliveries_delivery_uq').on(t.deliveryId),
+    check('mocco_webhook_deliveries_provider_check', sql`${t.provider} IN ('github')`),
+  ],
 );
