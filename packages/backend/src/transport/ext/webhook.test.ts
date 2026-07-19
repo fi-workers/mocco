@@ -218,4 +218,31 @@ describe('ext GitHub webhook route (pglite)', () => {
     expect(res.status).toBe(503);
     expect(await t.db.select().from(webhookDeliveries)).toHaveLength(0);
   });
+
+  it('valid signature + schema-invalid body → 202 (never 500), and the deferred parse failure is parked, not thrown', async () => {
+    await seedWatchedRepo();
+    const app = createExtApp(deps());
+
+    // Signature-valid, but `action` is outside the zod enum — parseWebhook throws
+    // WebhookParseError. That must happen only inside the deferred waitUntil work,
+    // never on the request path, so the route still acks 202 immediately.
+    const invalidBody = JSON.stringify({
+      action: 'renamed',
+      installation: { id: 12_345_678, account: { login: 'fi-workers', id: 999 } },
+      sender: { login: 'octocat', id: 1 },
+    });
+    const res = await post(app, invalidBody, {
+      'content-type': 'application/json',
+      'x-github-event': 'installation',
+      'x-github-delivery': randomUUID(),
+      'x-hub-signature-256': sign(invalidBody),
+    });
+    expect(res.status).toBe(202);
+
+    // The delivery id was still recorded (dedup boundary), but the deferred parse+handle
+    // must catch its own failure internally — awaiting the injected waitUntil promise
+    // must not reject, and no commit rows are ever written for this event.
+    await Promise.all(pending);
+    expect(await t.db.select().from(webhookDeliveries)).toHaveLength(1);
+  });
 });

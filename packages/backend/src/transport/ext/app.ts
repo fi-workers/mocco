@@ -116,11 +116,24 @@ export function createExtApp(deps: ExtDeps): Hono {
       return c.text('duplicate delivery', 202);
     }
 
-    // New delivery: ack immediately and defer the sync so GitHub's ~10s budget is
-    // never spent on our work. waitUntil keeps the promise alive past the response.
-    // n/no-sync false-positives on the `commitSync` identifier (its `/Sync$/` heuristic).
-    // eslint-disable-next-line n/no-sync
-    deps.waitUntil(deps.commitSync.handle(parseWebhook(eventType, raw)));
+    // New delivery: ack immediately and defer BOTH parse and sync so GitHub's ~10s
+    // budget is never spent on our work, and a schema-invalid-but-signature-valid
+    // payload never throws on the request path. If it did, the 500 would tell
+    // GitHub to retry the same delivery — but recordIfNew above already marked it
+    // seen, so the retry would dedup to 202 and the event would be silently dropped
+    // forever. Parking it here (logged, swallowed) is an intentional at-most-once
+    // drop for deterministically-unparseable events — clean, not silent data loss.
+    deps.waitUntil(
+      (async () => {
+        try {
+          // n/no-sync false-positives on the `commitSync` identifier (its `/Sync$/` heuristic).
+          // eslint-disable-next-line n/no-sync
+          await deps.commitSync.handle(parseWebhook(eventType, raw));
+        } catch (error) {
+          console.error('[webhook] deferred processing failed', error);
+        }
+      })(),
+    );
     return c.text('accepted', 202);
   });
 
