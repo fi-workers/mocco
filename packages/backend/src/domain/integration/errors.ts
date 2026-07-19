@@ -24,6 +24,16 @@ export class OwnershipNotVerifiedError extends Error {
   }
 }
 
+/** The GitHub installation is already connected to a different workspace. An
+ * installation is globally unique and belongs to one workspace; moving it requires
+ * disconnecting from the current one first (rejected, not silently reassigned). */
+export class ConnectionClaimedError extends Error {
+  constructor(externalAccountId: string, options?: ErrorOptions) {
+    super(`Installation ${externalAccountId} is already connected to another workspace`, options);
+    this.name = 'ConnectionClaimedError';
+  }
+}
+
 /** The connect `state` is unknown, already consumed, or expired. */
 export class ConnectStateInvalidError extends Error {
   constructor(message = 'connect state invalid or expired', options?: ErrorOptions) {

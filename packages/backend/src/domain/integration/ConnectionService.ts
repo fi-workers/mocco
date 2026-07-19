@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Providers } from '@mocco/common/integration';
 
 import {
+  ConnectionClaimedError,
   ConnectStateInvalidError,
   ProviderConnectionNotFoundError,
   RepoNotFoundError,
@@ -62,8 +63,17 @@ export class ConnectionService {
     return consumed;
   }
 
-  /** Upsert a connection keyed on (provider, external_account_id). */
+  /**
+   * Upsert a connection keyed on (provider, external_account_id). An installation
+   * is globally unique and stays with the workspace it was first connected to;
+   * re-connecting it to a different workspace is rejected (rather than silently
+   * moved, or crashing on the composite FK when the origin workspace has repos).
+   */
   async createConnection(workspaceId: string, input: { externalAccountId: string; accountLogin: string }) {
+    const existing = await this.deps.connections.findByExternalAccount(Providers.github, input.externalAccountId);
+    if (existing !== undefined && existing.workspaceId !== workspaceId) {
+      throw new ConnectionClaimedError(input.externalAccountId);
+    }
     return await this.deps.connections.upsert(workspaceId, Providers.github, input);
   }
 

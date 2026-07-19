@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
-import { ProviderConnectionNotFoundError, RepoNotFoundError } from '@backend/domain/integration/errors';
+import {
+  ConnectionClaimedError,
+  ProviderConnectionNotFoundError,
+  RepoNotFoundError,
+} from '@backend/domain/integration/errors';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
@@ -87,6 +91,20 @@ describe('ConnectionService (pglite)', () => {
     expect(second.id).toBe(first.id);
     expect(second.accountLogin).toBe('acme-renamed');
     expect(await svc.listConnections(workspaceId)).toHaveLength(1);
+  });
+
+  it('createConnection rejects re-connecting the same installation to a different workspace', async () => {
+    const workspaceA = await seedWorkspace('A');
+    const workspaceB = await seedWorkspace('B');
+    const svc = service();
+    await svc.createConnection(workspaceA, { externalAccountId: '900', accountLogin: 'acme' });
+    // The same GitHub installation is globally unique — it belongs to one workspace.
+    // Re-connecting it elsewhere must be a clear domain error, not a raw FK crash.
+    await expect(
+      svc.createConnection(workspaceB, { externalAccountId: '900', accountLogin: 'acme' }),
+    ).rejects.toBeInstanceOf(ConnectionClaimedError);
+    expect(await svc.listConnections(workspaceA)).toHaveLength(1);
+    expect(await svc.listConnections(workspaceB)).toHaveLength(0);
   });
 
   it('availableRepos returns the provider repos; a foreign connection is NotFound', async () => {

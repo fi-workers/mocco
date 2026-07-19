@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 
 import { getServices } from '@backend/domain/auth/instance';
-import { ConnectStateInvalidError } from '@backend/domain/integration/errors';
+import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
 import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { getIntegration } from '@backend/domain/integration/instance';
 
@@ -60,7 +60,11 @@ export function createExtApp(deps: ExtDeps): Hono {
       return c.redirect(`${WORKSPACES}/${workspaceId}`);
     } catch (error) {
       // Expected failures redirect gracefully; unexpected errors surface as a generic 500.
-      if (error instanceof ConnectStateInvalidError || error instanceof GithubApiError) {
+      if (
+        error instanceof ConnectStateInvalidError ||
+        error instanceof GithubApiError ||
+        error instanceof ConnectionClaimedError
+      ) {
         return c.redirect(`${WORKSPACES}?connect_error=1`);
       }
       throw error;

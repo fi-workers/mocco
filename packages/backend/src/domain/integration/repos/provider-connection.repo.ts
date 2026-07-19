@@ -24,6 +24,22 @@ export class ProviderConnectionRepo {
     );
   }
 
+  /** Global lookup by the unique (provider, external_account_id) key — the ONE
+   * intentionally un-workspace-scoped read, used to enforce that an installation
+   * stays with a single workspace before an upsert could reassign it. */
+  async findByExternalAccount(provider: Provider, externalAccountId: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.providerConnections)
+      .where(
+        and(
+          eq(schema.providerConnections.provider, provider),
+          eq(schema.providerConnections.externalAccountId, externalAccountId),
+        ),
+      );
+    return row;
+  }
+
   async findByWorkspace(workspaceId: string) {
     return await this.db
       .select()
