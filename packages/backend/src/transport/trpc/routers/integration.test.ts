@@ -5,6 +5,7 @@ import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { ProviderConnectionRevokedError } from '@backend/domain/integration/github/errors';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
@@ -22,6 +23,19 @@ const REPO_B: AvailableRepoDto = { externalRepoId: '222', owner: 'fi-workers', n
 function fakeProvider(): RepoLister & InstallationVerifier {
   return {
     listRepos: async () => [REPO_A, REPO_B],
+    verifyOwnership: async () => ({ ownerVerified: true, accountLogin: 'me', githubUserId: '1' }),
+    installUrl: state => `https://example.test/install?state=${state}`,
+  };
+}
+
+/** A provider whose installation access token has been revoked GitHub-side
+ * (app uninstalled/suspended) — `listRepos` mints a token first and fails with
+ * `ProviderConnectionRevokedError`, exactly like the real adapter. */
+function fakeRevokedProvider(): RepoLister & InstallationVerifier {
+  return {
+    listRepos: async () => {
+      throw new ProviderConnectionRevokedError(401);
+    },
     verifyOwnership: async () => ({ ownerVerified: true, accountLogin: 'me', githubUserId: '1' }),
     installUrl: state => `https://example.test/install?state=${state}`,
   };
@@ -131,6 +145,31 @@ describe('integration router on pglite', () => {
     const { repos } = await api.integration.repos({ workspaceId: ws.id });
     expect(repos).toHaveLength(1);
     expect(repos[0]?.name).toBe('api');
+  });
+
+  it('a revoked GitHub installation surfaces availableRepos as FORBIDDEN, not INTERNAL_SERVER_ERROR', async () => {
+    const revokedConnection = new ConnectionService({
+      connections: new ProviderConnectionRepo(t.db),
+      repos: new RepoRepo(t.db),
+      connectStates: new ConnectStateRepo(t.db),
+      provider: fakeRevokedProvider(),
+    });
+    const headers = await signUpViaHttp(auth, 'revoked@example.com');
+    const session = await auth.getSession(headers);
+    const api = appRouter.createCaller({
+      auth,
+      workspace,
+      connection: revokedConnection,
+      commitSync,
+      session,
+      headers,
+    });
+    const { workspace: ws } = await api.workspace.create({ name: 'W' });
+    const conn = await revokedConnection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+
+    await expect(api.integration.availableRepos({ workspaceId: ws.id, connectionId: conn.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 
   it("addRepo against another workspace's connection maps to NOT_FOUND", async () => {

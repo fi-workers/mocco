@@ -1,7 +1,7 @@
 // Integration domain router — thin: parse at the boundary (zod from
 // @mocco/common), delegate to the injected ConnectionService. Maps its own
-// domain's errors here (NotFoundError -> NOT_FOUND) via a router-scoped
-// middleware, which also asserts the GitHub App is configured.
+// domain's errors here (NotFoundError -> NOT_FOUND, ForbiddenError -> FORBIDDEN)
+// via a router-scoped middleware, which also asserts the GitHub App is configured.
 import {
   availableRepoSchema,
   commitsPageSchema,
@@ -15,23 +15,29 @@ import { TRPCError } from '@trpc/server';
 import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 
-import { NotFoundError } from '@backend/domain/errors';
+import { ForbiddenError, NotFoundError } from '@backend/domain/errors';
 import { protectedProcedure, router } from '@backend/transport/trpc/trpc';
 
 // Every integration procedure is workspace-scoped and takes `workspaceId` in its
 // input; this is the seam that authorizes it.
 const workspaceScopedInput = z.object({ workspaceId: z.uuid() });
 
-// Re-raise a NotFoundError-family cause as NOT_FOUND; a no-op for anything else.
-const rethrowNotFound = (cause: unknown): void => {
+// Re-raise a NotFoundError/ForbiddenError-family cause as NOT_FOUND/FORBIDDEN; a
+// no-op for anything else. Shared by the pre-next() assertMember catch (which only
+// ever throws a NotFoundError) and the post-next() result branch (which also sees
+// ForbiddenError, e.g. a revoked GitHub installation surfaced by the adapter).
+const rethrowMappedDomainError = (cause: unknown): void => {
   if (cause instanceof NotFoundError) {
     throw new TRPCError({ code: 'NOT_FOUND', message: cause.message, cause });
+  }
+  if (cause instanceof ForbiddenError) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: cause.message, cause });
   }
 };
 
 // Requires the GitHub App to be configured (ctx.connection present), authorizes the
-// caller against the workspaceId they passed, and maps this domain's NotFoundError
-// family to NOT_FOUND — reused across the router's procedures.
+// caller against the workspaceId they passed, and maps this domain's NotFoundError/
+// ForbiddenError families to NOT_FOUND/FORBIDDEN — reused across the router's procedures.
 const protectedIntegrationProcedure = protectedProcedure.use(async ({ ctx, getRawInput, next }) => {
   if (!ctx.connection) {
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'GitHub integration is not configured' });
@@ -44,12 +50,12 @@ const protectedIntegrationProcedure = protectedProcedure.use(async ({ ctx, getRa
   try {
     await ctx.workspace.assertMember(ctx.headers, workspaceId);
   } catch (error) {
-    rethrowNotFound(error);
+    rethrowMappedDomainError(error);
     throw error;
   }
   const result = await next({ ctx: { ...ctx, connection: ctx.connection } });
   if (!result.ok) {
-    rethrowNotFound(result.error.cause);
+    rethrowMappedDomainError(result.error.cause);
   }
   return result;
 });
