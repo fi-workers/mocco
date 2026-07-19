@@ -70,4 +70,19 @@ describe('commitsQueryInputSchema', () => {
     expect(commitsQueryInputSchema.parse({ ...base, limit: 1 }).limit).toBe(1);
     expect(commitsQueryInputSchema.parse({ ...base, limit: 50 }).limit).toBe(50);
   });
+
+  it('rejects a non-numeric cursor and accepts a digit-string cursor or null', () => {
+    const base = {
+      workspaceId: '33333333-3333-4333-8333-333333333333',
+      repoId: '22222222-2222-4222-8222-222222222222',
+    };
+
+    // A schema-valid-but-non-numeric cursor must be rejected here, at the
+    // boundary — not surface as `BigInt('abc')` throwing a SyntaxError deep
+    // inside CommitSyncService.listCommits.
+    expect(() => commitsQueryInputSchema.parse({ ...base, cursor: 'abc' })).toThrow();
+
+    expect(commitsQueryInputSchema.parse({ ...base, cursor: '42' }).cursor).toBe('42');
+    expect(commitsQueryInputSchema.parse({ ...base, cursor: null }).cursor).toBeNull();
+  });
 });

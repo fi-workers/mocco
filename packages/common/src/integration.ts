@@ -72,7 +72,7 @@ export type CommitDto = z.infer<typeof commitSchema>;
 export const commitsQueryInputSchema = z.object({
   workspaceId: z.uuid(),
   repoId: z.uuid(),
-  cursor: z.string().nullable().default(null),
+  cursor: z.string().regex(/^\d+$/).nullable().default(null),
   limit: z.number().int().min(1).max(50).default(20),
 });
 export type CommitsQueryInput = z.infer<typeof commitsQueryInputSchema>;

@@ -321,5 +321,25 @@ describe('integration router on pglite', () => {
         stranger.integration.commits({ workspaceId: wsA.id, repoId: repo.id, cursor: null, limit: 20 }),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
+
+    it('a non-numeric cursor is rejected as BAD_REQUEST, not a 500', async () => {
+      const api = await signedInCaller('commits-bad-cursor@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await api.integration.addRepo({
+        workspaceId: ws.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: 'main',
+      });
+
+      // Regression: `cursor: 'abc'` used to pass the (bare-string) input schema
+      // and then blow up as `BigInt('abc')` inside CommitSyncService.listCommits,
+      // which tRPC surfaced as a masked INTERNAL_SERVER_ERROR. The schema now
+      // constrains cursor to digit-strings, so this is caught at the boundary.
+      await expect(
+        api.integration.commits({ workspaceId: ws.id, repoId: repo.id, cursor: 'abc', limit: 20 }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
   });
 });
