@@ -4,7 +4,7 @@ description: Sorts features into MVP versus Post-MVP against the "GitHub write �
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-07-04
+updated: 2026-07-20
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -56,6 +56,7 @@ Goal: connect repo → define gate → prove that **without approval, a producti
 |---|---|---|
 | Login (email+password) | Live | Vendor-neutral auth surface; Google SSO and GitHub account-linking land as separate PRs |
 | Connect repo | Prototype | Install GitHub App → select repo → detect `.mocco.yml` → OIDC trust. Onboarding |
+| Commit sync | **Live** | Verify-first GitHub webhook (`push`/`installation`/`installation_repositories`) → tenant-isolated `mocco_commits` sync, deferred via `waitUntil`. Feeds the candidate-queue read path. Config parse/detail (`.mocco.yml`) is deferred to 3c |
 | **GitHub App + Cloud OIDC** ★ | **Not drawn** | Dispatch/webhooks (App) + STS trust (OIDC). This wiring is what makes gating real |
 | Workspace model (backend) | **Live** | `mocco_workspaces`/`mocco_members`, DB-enforced invariants — see [workspace model](./workspace.md) |
 | Workspace UI + invite flow | Not drawn | client plugin + screens land together (session-type parity) |

@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-07-20
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -80,6 +80,16 @@ Vendor/DB failures become **domain errors at the service**; the **transport maps
    ```
 
    Name the composed procedure for its auth level (`protectedWorkspaceProcedure`), so a later public procedure in the same router can't be confused with it. The `errorFormatter` only masks `INTERNAL_SERVER_ERROR`, so a remapped `NOT_FOUND` keeps its message.
+
+## Webhook / external inbound
+
+The GitHub App webhook (`POST /api/ext/github/webhook`, [ADR 0011](../adr/0011-external-api-surface-architecture.md)) follows a **verify-first, ack-fast, sync-deferred** shape:
+
+1. **Verify the HMAC on the raw body first.** The request body is read as raw text and checked against `x-hub-signature-256` before anything else touches it — no write happens on an invalid/absent signature (`401`, generic body, no detail).
+2. **Record an idempotent delivery.** `WebhookDeliveryRepo.recordIfNew(provider, x-github-delivery, eventType)` is a DB-unique write keyed on GitHub's own delivery id. A redelivery of the same id is a no-op (`202 duplicate delivery`) — this is the sole dedupe mechanism (no separate job/queue table).
+3. **Return `202` immediately**, then run **parse + `CommitSyncService.handle()` in a deferred `@vercel/functions waitUntil` pass**. Parsing is deferred (not done before the `202`) on purpose: GitHub's ~10s delivery budget must never be spent on our work, and — more importantly — a signature-valid but schema-invalid payload must never throw on the request path. If it did, the `500` would tell GitHub to retry, but `recordIfNew` already marked the delivery seen, so the retry would dedup to `202` and the event would be silently dropped forever. Deferring the parse means a bad payload instead yields `202` + a logged error — an intentional, visible, at-most-once drop, not a silent one.
+4. **Resolve tenancy via `installation_id → connection → repo by (connection_id, external_repo_id)` — never by `external_repo_id` alone.** A push carries only a global GitHub installation id and a provider repo id, neither workspace-scoped; two workspaces can legitimately watch the same external repo. The connection is looked up first (`findByExternalAccount(provider, installationId)`), then the repo is looked up scoped to that connection's id. Anything that doesn't resolve at any step (unconnected installation, unregistered repo, unclaimed install) is **parked** — logged and dropped, never thrown — since webhooks are fire-and-forget.
+5. **Error hygiene to GitHub**: the ext app's `onError` handler (symmetric with the tRPC `errorFormatter`) returns a fixed generic `500` body on any unexpected throw — never a vendor/SQL/token detail. Expected failures (invalid signature, missing delivery id, unconfigured secret) return their own specific status with a generic message; nothing internal leaks either path.
 
 ## Workspace-scoped authorization
 
