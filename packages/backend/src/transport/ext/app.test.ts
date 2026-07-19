@@ -20,6 +20,7 @@ function fakeProvider(isOwner = true): GitHubProvider {
     listRepos: async () => [REPO_A],
     verifyOwnership: async () => ({ ownerVerified: isOwner, accountLogin: 'acme', githubUserId: '77' }),
     installUrl: state => `https://example.test/install?state=${state}`,
+    listCommits: async () => [],
   };
 }
 
