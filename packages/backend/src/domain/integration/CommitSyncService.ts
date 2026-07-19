@@ -34,7 +34,8 @@ function toCommitRow(repoId: string, branch: string): (c: SourceCommit) => Commi
 
 export interface CommitSyncServiceDeps {
   commits: CommitRepo;
-  /** Reserved for route-level delivery dedupe (wired in Task 8). */
+  /** Route-level delivery dedupe: the ext webhook route records each delivery id
+   * here (via the shared instance) before scheduling handle(). */
   deliveries: WebhookDeliveryRepo;
   connections: ProviderConnectionRepo;
   repos: RepoRepo;

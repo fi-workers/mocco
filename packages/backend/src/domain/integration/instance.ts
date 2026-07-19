@@ -18,6 +18,8 @@ export interface Integration {
   connection: ConnectionService;
   commitSync: CommitSyncService;
   provider: GitHubProvider;
+  /** Delivery-dedupe repo — used by the ext webhook route for idempotency. */
+  deliveries: WebhookDeliveryRepo;
 }
 
 const state: { integration?: Integration } = {};
@@ -46,17 +48,19 @@ export function getIntegration(): Integration | undefined {
       const connections = new ProviderConnectionRepo(db);
       const repos = new RepoRepo(db);
       const connectStates = new ConnectStateRepo(db);
+      const deliveries = new WebhookDeliveryRepo(db);
       state.integration = {
         connection: new ConnectionService({ connections, repos, connectStates, provider }),
         commitSync: new CommitSyncService({
           commits: new CommitRepo(db),
-          deliveries: new WebhookDeliveryRepo(db),
+          deliveries,
           connections,
           repos,
           connectStates,
           source: provider,
         }),
         provider,
+        deliveries,
       };
     }
   }

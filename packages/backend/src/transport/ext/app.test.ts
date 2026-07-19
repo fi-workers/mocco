@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
+import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createExtApp } from '@backend/transport/ext/app';
 
@@ -54,6 +57,28 @@ describe('ext GitHub setup callback (pglite)', () => {
     await t.close();
   });
 
+  /** Webhook-path deps the setup-route tests never exercise — present only to satisfy ExtDeps. */
+  function webhookDeps() {
+    const connections = new ProviderConnectionRepo(t.db);
+    const repos = new RepoRepo(t.db);
+    const connectStates = new ConnectStateRepo(t.db);
+    return {
+      commitSync: new CommitSyncService({
+        commits: new CommitRepo(t.db),
+        deliveries: new WebhookDeliveryRepo(t.db),
+        connections,
+        repos,
+        connectStates,
+        source: fakeProvider(),
+      }),
+      deliveries: new WebhookDeliveryRepo(t.db),
+      webhookSecret: undefined,
+      waitUntil: () => {
+        /* setup route never defers */
+      },
+    };
+  }
+
   /** Sign up, make a workspace, start an install, and return the pieces the callback needs. */
   async function primeInstall(email: string, connection: ConnectionService) {
     const headers = await signUp(auth, email);
@@ -74,6 +99,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         provider: fakeProvider(),
       }),
       provider: fakeProvider(),
+      ...webhookDeps(),
     });
     const res = await get(app, 'installation_id=555&code=abc&state=x');
     expect(res.status).toBe(302);
@@ -87,7 +113,7 @@ describe('ext GitHub setup callback (pglite)', () => {
       connectStates: new ConnectStateRepo(t.db),
       provider: fakeProvider(),
     });
-    const app = createExtApp({ auth, connection, provider: fakeProvider() });
+    const app = createExtApp({ auth, connection, provider: fakeProvider(), ...webhookDeps() });
     const { headers, workspaceId, state } = await primeInstall('ok@example.com', connection);
 
     const res = await get(app, `installation_id=555&code=abc&state=${state}&setup_action=install`, headers);
@@ -103,7 +129,7 @@ describe('ext GitHub setup callback (pglite)', () => {
       connectStates: new ConnectStateRepo(t.db),
       provider: fakeProvider(),
     });
-    const app = createExtApp({ auth, connection, provider: fakeProvider(false) });
+    const app = createExtApp({ auth, connection, provider: fakeProvider(false), ...webhookDeps() });
     const { headers, workspaceId, state } = await primeInstall('noown@example.com', connection);
 
     const res = await get(app, `installation_id=555&code=abc&state=${state}`, headers);
@@ -118,7 +144,7 @@ describe('ext GitHub setup callback (pglite)', () => {
       connectStates: new ConnectStateRepo(t.db),
       provider: fakeProvider(),
     });
-    const app = createExtApp({ auth, connection, provider: fakeProvider() });
+    const app = createExtApp({ auth, connection, provider: fakeProvider(), ...webhookDeps() });
     const { headers, state } = await primeInstall('reuse@example.com', connection);
 
     await get(app, `installation_id=555&code=abc&state=${state}`, headers); // consumes it
@@ -133,7 +159,7 @@ describe('ext GitHub setup callback (pglite)', () => {
       connectStates: new ConnectStateRepo(t.db),
       provider: fakeProvider(),
     });
-    const app = createExtApp({ auth, connection, provider: fakeProvider() });
+    const app = createExtApp({ auth, connection, provider: fakeProvider(), ...webhookDeps() });
     const { headers } = await primeInstall('pending@example.com', connection);
 
     const res = await get(app, 'setup_action=request&state=x', headers);

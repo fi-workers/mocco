@@ -256,11 +256,8 @@ describe('integration router on pglite', () => {
 
       await api.integration.setWatchedBranch({ workspaceId: ws.id, repoId: repo.id, watchedBranch: null });
 
-      // No polling target to wait on for a negative assertion — give any
-      // stray fire-and-forget call a moment to have landed, then check.
-      await new Promise(resolve => {
-        setTimeout(resolve, 20);
-      });
+      // The null branch short-circuits in backfillRepo before waitUntil, so there
+      // is no fire-and-forget race to wait out — the assertion is immediate.
       expect(commitSource.calls).toBe(0);
     });
   });
