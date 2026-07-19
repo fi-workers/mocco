@@ -10,6 +10,7 @@ import {
   watchedBranchInputSchema,
 } from '@mocco/common/integration';
 import { TRPCError } from '@trpc/server';
+import { waitUntil } from '@vercel/functions';
 import { z } from 'zod';
 
 import { NotFoundError } from '@backend/domain/errors';
@@ -82,7 +83,19 @@ export const integrationRouter = router({
   setWatchedBranch: protectedIntegrationProcedure
     .input(watchedBranchInputSchema.extend({ workspaceId: z.uuid() }))
     .output(z.object({ repo: repoSchema }))
-    .mutation(async ({ ctx, input }) => ({
-      repo: await ctx.connection.setWatchedBranch(input.workspaceId, input.repoId, input.watchedBranch),
-    })),
+    .mutation(async ({ ctx, input }) => {
+      const repo = await ctx.connection.setWatchedBranch(input.workspaceId, input.repoId, input.watchedBranch);
+      // Best-effort: a freshly-watched branch gets its recent history backfilled
+      // in the background (waitUntil) so the mutation doesn't wait on a GitHub
+      // round-trip. `commitSync` carries the same "GitHub App configured"
+      // optionality as `connection` (both built together in instance.ts) — skip
+      // rather than throw if it's ever absent.
+      if (input.watchedBranch !== null && ctx.commitSync) {
+        // `commitSync` is the CommitSyncService Context field (see trpc.ts), not a
+        // Node sync fs API — n/no-sync's `/Sync$/` identifier heuristic false-positives here.
+        // eslint-disable-next-line n/no-sync
+        waitUntil(ctx.commitSync.backfillRepo(repo));
+      }
+      return { repo };
+    }),
 });

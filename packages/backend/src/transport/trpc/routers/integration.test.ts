@@ -1,16 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
+import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 
-import type { InstallationVerifier, RepoLister } from '@backend/domain/integration/ports';
+import type { CommitSource, InstallationVerifier, RepoLister, SourceCommit } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
 
 const REPO_A: AvailableRepoDto = { externalRepoId: '111', owner: 'fi-workers', name: 'api', defaultBranch: 'main' };
@@ -22,6 +25,19 @@ function fakeProvider(): RepoLister & InstallationVerifier {
     verifyOwnership: async () => ({ ownerVerified: true, accountLogin: 'me', githubUserId: '1' }),
     installUrl: state => `https://example.test/install?state=${state}`,
   };
+}
+
+/** Plain object implementing the CommitSource port — records how many times the
+ * backfill path reached out to the provider, without any real network call. */
+function fakeCommitSource(): CommitSource & { calls: number } {
+  const source = {
+    calls: 0,
+    listCommits: async (): Promise<SourceCommit[]> => {
+      source.calls += 1;
+      return [];
+    },
+  };
+  return source;
 }
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
@@ -40,23 +56,36 @@ describe('integration router on pglite', () => {
   let auth: AuthService;
   let workspace: WorkspaceService;
   let connection: ConnectionService;
+  let commitSync: CommitSyncService;
+  let commitSource: CommitSource & { calls: number };
 
   beforeEach(async () => {
     t = await createTestDb();
     const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
-    connection = new ConnectionService({
-      connections: new ProviderConnectionRepo(t.db),
-      repos: new RepoRepo(t.db),
-      connectStates: new ConnectStateRepo(t.db),
-      provider: fakeProvider(),
+    const connections = new ProviderConnectionRepo(t.db);
+    const repos = new RepoRepo(t.db);
+    const connectStates = new ConnectStateRepo(t.db);
+    connection = new ConnectionService({ connections, repos, connectStates, provider: fakeProvider() });
+    commitSource = fakeCommitSource();
+    commitSync = new CommitSyncService({
+      commits: new CommitRepo(t.db),
+      deliveries: new WebhookDeliveryRepo(t.db),
+      connections,
+      repos,
+      connectStates,
+      source: commitSource,
     });
   });
   afterEach(async () => {
     await t.close();
   });
 
+  // `hasConnection` gates both `connection` and `commitSync` together — in
+  // production they are built side by side in `instance.ts` from the same
+  // "is the GitHub App configured" check, so a caller never observes one
+  // present without the other.
   const signedInCaller = async (email: string, hasConnection = true) => {
     const headers = await signUpViaHttp(auth, email);
     const session = await auth.getSession(headers);
@@ -64,6 +93,7 @@ describe('integration router on pglite', () => {
       auth,
       workspace,
       connection: hasConnection ? connection : undefined,
+      commitSync: hasConnection ? commitSync : undefined,
       session,
       headers,
     });
@@ -189,6 +219,49 @@ describe('integration router on pglite', () => {
       await expect(stranger.integration.startInstall({ workspaceId: wsA.id })).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
+    });
+  });
+
+  describe('backfill on watch', () => {
+    it('setting a non-null watched branch fires a best-effort backfill through commitSync', async () => {
+      const api = await signedInCaller('backfill@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await api.integration.addRepo({
+        workspaceId: ws.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: null,
+      });
+
+      await api.integration.setWatchedBranch({ workspaceId: ws.id, repoId: repo.id, watchedBranch: 'main' });
+
+      // The backfill runs fire-and-forget (waitUntil) — poll rather than await
+      // the mutation's own promise, which resolves before the backfill lands.
+      await vi.waitFor(() => {
+        expect(commitSource.calls).toBe(1);
+      });
+    });
+
+    it('clearing the watched branch (null) does not trigger a backfill', async () => {
+      const api = await signedInCaller('no-backfill@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const { repo } = await api.integration.addRepo({
+        workspaceId: ws.id,
+        connectionId: conn.id,
+        externalRepoId: '111',
+        watchedBranch: 'main',
+      });
+
+      await api.integration.setWatchedBranch({ workspaceId: ws.id, repoId: repo.id, watchedBranch: null });
+
+      // No polling target to wait on for a negative assertion — give any
+      // stray fire-and-forget call a moment to have landed, then check.
+      await new Promise(resolve => {
+        setTimeout(resolve, 20);
+      });
+      expect(commitSource.calls).toBe(0);
     });
   });
 });

@@ -3,16 +3,20 @@
 // a deploy without GitHub set up still serves every non-integration route — only
 // the integration surfaces report "not configured" (enforced by the router
 // middleware / ext route).
+import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { createGitHubProvider, type GitHubProvider } from '@backend/domain/integration/github/provider';
+import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
+import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
 export interface Integration {
   connection: ConnectionService;
+  commitSync: CommitSyncService;
   provider: GitHubProvider;
 }
 
@@ -37,12 +41,20 @@ export function getIntegration(): Integration | undefined {
         clientSecret: env.GITHUB_APP_CLIENT_SECRET,
       });
       const db = getDb();
+      // Shared repo instances — both services reach the same mocco_ tables, no
+      // reason to duplicate the wrapper per service.
+      const connections = new ProviderConnectionRepo(db);
+      const repos = new RepoRepo(db);
+      const connectStates = new ConnectStateRepo(db);
       state.integration = {
-        connection: new ConnectionService({
-          connections: new ProviderConnectionRepo(db),
-          repos: new RepoRepo(db),
-          connectStates: new ConnectStateRepo(db),
-          provider,
+        connection: new ConnectionService({ connections, repos, connectStates, provider }),
+        commitSync: new CommitSyncService({
+          commits: new CommitRepo(db),
+          deliveries: new WebhookDeliveryRepo(db),
+          connections,
+          repos,
+          connectStates,
+          source: provider,
         }),
         provider,
       };
