@@ -39,7 +39,7 @@ describe('RepoRepo (pglite)', () => {
     return { connectionId, workspaceId };
   }
 
-  it('findByConnectionAndExternalRepoId returns the raw row for a matching pair', async () => {
+  it('getByConnectionAndExternalRepoId returns the raw row for a matching pair', async () => {
     const { connectionId, workspaceId } = await seedConnection();
     const created = await repoRepo.upsert({
       workspaceId,
@@ -50,12 +50,12 @@ describe('RepoRepo (pglite)', () => {
       defaultBranch: 'main',
     });
 
-    const found = await repoRepo.findByConnectionAndExternalRepoId(connectionId, '111');
+    const found = await repoRepo.getByConnectionAndExternalRepoId(connectionId, '111');
     expect(found.id).toBe(created.id);
     expect(found.owner).toBe('fi-workers');
   });
 
-  it('findByConnectionAndExternalRepoId throws EntityNotFoundError for a foreign pair', async () => {
+  it('getByConnectionAndExternalRepoId throws EntityNotFoundError for a foreign pair', async () => {
     const connectionA = await seedConnection();
     const connectionB = await seedConnection();
     await repoRepo.upsert({
@@ -68,7 +68,7 @@ describe('RepoRepo (pglite)', () => {
     });
 
     // The repo exists, but under connectionA — asking via connectionB must miss.
-    await expect(repoRepo.findByConnectionAndExternalRepoId(connectionB.connectionId, '111')).rejects.toBeInstanceOf(
+    await expect(repoRepo.getByConnectionAndExternalRepoId(connectionB.connectionId, '111')).rejects.toBeInstanceOf(
       EntityNotFoundError,
     );
   });
@@ -104,7 +104,7 @@ describe('RepoRepo (pglite)', () => {
     await repoRepo.inactivateByConnection(connectionA.connectionId);
 
     const found = async (connectionId: string, externalRepoId: string) => {
-      const row = await repoRepo.findByConnectionAndExternalRepoId(connectionId, externalRepoId);
+      const row = await repoRepo.getByConnectionAndExternalRepoId(connectionId, externalRepoId);
       return row.status;
     };
     expect(await found(connectionA.connectionId, repoA1.externalRepoId)).toBe('inactive');
@@ -126,7 +126,7 @@ describe('RepoRepo (pglite)', () => {
 
     await repoRepo.touchLastSynced(created.id);
 
-    const found = await repoRepo.findByConnectionAndExternalRepoId(connectionId, '111');
+    const found = await repoRepo.getByConnectionAndExternalRepoId(connectionId, '111');
     expect(found.lastSyncedAt).not.toBeNull();
   });
 });

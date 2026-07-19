@@ -16,7 +16,7 @@ export class RepoRepo {
 
   /** A repo under a connection, keyed by the provider's own identity
    * (external_repo_id) — or throw EntityNotFoundError for a foreign pair. */
-  async findByConnectionAndExternalRepoId(connectionId: string, externalRepoId: string) {
+  async getByConnectionAndExternalRepoId(connectionId: string, externalRepoId: string) {
     return getOrThrow(
       await this.db
         .select()
