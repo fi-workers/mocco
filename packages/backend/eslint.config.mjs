@@ -22,6 +22,18 @@ const vendorImportPatterns = [
     message: 'The auth vendor is only importable inside auth/. Use the neutral surface (auth/*Service.ts).',
   },
 ];
+// Vendor isolation for the integration slice: the GitHub SDK lives only in the
+// github adapter leaf; hono only in the ext transport leaf. Everything else
+// consumes the neutral ports / tRPC. (Exception blocks below re-allow each in its
+// own leaf dir, since these arrays don't merge — last matching block wins.)
+const octokitBan = {
+  group: ['@octokit/*'],
+  message: 'The GitHub SDK is only importable inside domain/integration/github/. Consume the neutral ports instead.',
+};
+const honoBan = {
+  group: ['hono', 'hono/*'],
+  message: 'hono is only importable inside transport/ext/. Internal transport uses tRPC.',
+};
 // A service reaches the DB only through its repository (domain/<d>/repos/*.repo.ts).
 const dbImportBan = [
   {
@@ -42,7 +54,10 @@ export default [
     files: ['**/*.ts'],
     ignores: ['src/domain/auth/**'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, relativeImportBan] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...vendorImportPatterns, octokitBan, honoBan, relativeImportBan] },
+      ],
     },
   },
   {
@@ -50,7 +65,7 @@ export default [
     // legitimately imports ./provider), but it still holds to the no-relative rule.
     files: ['src/domain/auth/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [relativeImportBan] }],
+      'no-restricted-imports': ['error', { patterns: [octokitBan, honoBan, relativeImportBan] }],
     },
   },
   {
@@ -60,7 +75,27 @@ export default [
     files: ['src/domain/**/*Service.ts'],
     ignores: ['src/domain/auth/**'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, relativeImportBan, ...dbImportBan] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...vendorImportPatterns, octokitBan, honoBan, relativeImportBan, ...dbImportBan] },
+      ],
+    },
+  },
+  {
+    // The github adapter IS the GitHub SDK boundary — re-allow @octokit/* here (hono,
+    // auth vendor, and relative paths stay banned). Placed after the broad blocks so
+    // it wins for this leaf.
+    files: ['src/domain/integration/github/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, honoBan, relativeImportBan] }],
+    },
+  },
+  {
+    // The ext transport IS the hono boundary — re-allow hono here (@octokit/*, auth
+    // vendor, and relative paths stay banned).
+    files: ['src/transport/ext/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [...vendorImportPatterns, octokitBan, relativeImportBan] }],
     },
   },
   {
