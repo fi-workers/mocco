@@ -3,6 +3,7 @@ import superjson from 'superjson';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */
@@ -10,6 +11,8 @@ export interface Context {
   /** Injected services (production instances or per-test pglite ones). */
   auth: AuthService;
   workspace: WorkspaceService;
+  /** Present only when the GitHub App is configured; the integration router asserts it. */
+  connection?: ConnectionService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

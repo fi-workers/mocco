@@ -20,7 +20,9 @@ tags: [reference, backend, trpc, architecture, errors, lint]
 
 - **`domain/`** — Mocco's business logic. One folder per domain (`auth/`, `pipeline/`, and each governance domain as its slice lands). A domain gets its folder when its slice lands — don't pre-create empty ones. `governance/`-style sub-grouping is added only once `domain/` is genuinely crowded.
 - **`infra/`** — replaceable plumbing with no business meaning (`db/`, `config/`).
-- **`transport/`** — the edges (`trpc/`, later a Hono `ext/` for external REST). A transport carries **no business logic** — it parses at the boundary (zod from `@mocco/common`) and delegates to a domain service, so logic is never duplicated across surfaces.
+- **`transport/`** — the edges: `trpc/` (internal, Pages Router) and `ext/` (external inbound REST, a Hono app on the App Router — [ADR 0011](../adr/0011-external-api-surface-architecture.md); the only `hono` importer). A transport carries **no business logic** — it parses at the boundary (zod from `@mocco/common`) and delegates to a domain service, so logic is never duplicated across surfaces. External inbound (webhooks, OAuth/setup callbacks) never uses tRPC.
+
+A domain that owns its **own** `mocco_` tables (e.g. `integration`) takes an injected `db` typed as the broad `PgDatabase<PgQueryResultHKT, typeof schema>` (both the prod node-postgres db and the pglite test db satisfy it — the concrete `Db` from `infra/db/client.ts` is node-postgres-only). Vendor SDKs still stay isolated at a leaf even when a port exists (`domain/integration/github/provider.ts` is the sole `@octokit/app` importer, mirroring `domain/auth/provider.ts`) — placing the leaf in `infra` would invert the one-way `domain → infra` rule.
 
 The `@mocco/backend` export subpaths (`./auth/instance`, `./trpc/root`) are the stable public contract — repoint their targets on a move, don't rename the subpaths.
 
@@ -79,10 +81,24 @@ Vendor/DB failures become **domain errors at the service**; the **transport maps
 
    Name the composed procedure for its auth level (`protectedWorkspaceProcedure`), so a later public procedure in the same router can't be confused with it. The `errorFormatter` only masks `INTERNAL_SERVER_ERROR`, so a remapped `NOT_FOUND` keeps its message.
 
+## Workspace-scoped authorization
+
+A procedure that takes a `workspaceId` (or any tenant id) in its **input** must **authorize the caller against it**, not merely filter queries by it. Scoping a DB query by a client-supplied `workspaceId` is _not_ isolation — a non-member who knows the id would otherwise read and write another tenant's data. Filtering and authorizing are two different halves:
+
+- The **repo filters** by `workspaceId` (defence in depth); the **router proves** the caller belongs to it (the actual gate).
+- Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
+- Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
+
+This can't be statically lint-enforced, so it is covered by **cross-tenant tests**: a non-member passing the victim's `workspaceId` must be rejected on every procedure (read, write, and install).
+
 ## Types & schemas
 
 - **Derive types from values** (has-a, not is-a): prefer `z.infer` / `ReturnType<typeof factory>` over hand-maintained parallel interfaces. Write explicit annotations only where they pin a boundary (e.g. a neutral return type that stops vendor inference from leaking).
-- **Egress is the tRPC `.output()` schema.** Services return raw vendor rows; the router's `.output()` (zod from `@mocco/common`) is the wire boundary — it strips unknown vendor fields and normalizes. Types live once in `@mocco/common` as zod schemas.
+- **Repos return the whole row (the model), not a hand-narrowed shape.** A repository maps a table to its entity and returns it in full (`.returning()` / `.select()` with no column projection) — the same rule as "services return raw vendor rows," applied at the DB layer. Don't build `{ someField: row.someField }` inside a repo; that narrowing belongs at the egress boundary, not the data layer.
+- **Egress is where narrowing happens — and it must be a _runtime_ narrowing, not a type annotation.** The DTO the caller sees is produced at the boundary:
+  - **tRPC procedures**: the router's `.output()` (zod from `@mocco/common`) is the wire boundary — `z.object` **strips unknown keys at runtime**, so the full row genuinely becomes the DTO (e.g. `connectionSchema` drops `externalAccountId`). Types live once in `@mocco/common` as zod schemas.
+  - **Surfaces without `.output()`** (the ext/Hono routes): the **service** is the narrowing boundary and must **project explicitly** (`return { workspaceId: row.workspaceId }`), because nothing downstream strips the row.
+- **A narrow return-type over a wide runtime object is a lie — avoid it.** `async consume(): Promise<{ workspaceId }>` that `return row` (a full row) compiles via structural typing, but the object still carries every column at runtime (raw tokens, timestamps). The type hides them; a later spread/log/serialize surfaces them. Narrow for real (zod `.output()` strips, or an explicit projection at the service) — never let the annotation pretend the object is smaller than it is.
 
 ## House rules (lint-enforced)
 
