@@ -35,7 +35,7 @@
 - `packages/backend/src/domain/integration/repos/commit.repo.ts` — CREATE: `CommitRepo` (upsertMany, listByRepo cursor).
 - `packages/backend/src/domain/integration/repos/webhook-delivery.repo.ts` — CREATE: `WebhookDeliveryRepo` (recordIfNew).
 - `packages/backend/src/domain/integration/repos/provider-connection.repo.ts` — MODIFY: add `updateStatusByExternalAccount`.
-- `packages/backend/src/domain/integration/repos/repo.repo.ts` — MODIFY: add `findByConnectionAndExternalRepoId`, `inactivateByConnection`, `touchLastSynced`.
+- `packages/backend/src/domain/integration/repos/repo.repo.ts` — MODIFY: add `getByConnectionAndExternalRepoId`, `inactivateByConnection`, `touchLastSynced`.
 - `packages/backend/src/domain/integration/CommitSyncService.ts` — CREATE: the 3b service (sync push, backfill, lifecycle).
 - `packages/backend/src/domain/integration/instance.ts` — MODIFY: build + export `commitSync`.
 - `packages/backend/src/transport/ext/app.ts` — MODIFY: add `POST /github/webhook`; extend `ExtDeps`.
@@ -283,11 +283,11 @@ Add `listCommits` to the returned provider object (bounded — single page, `per
 - `CommitRepo.listByRepo(repoId: string, cursor: bigint | null, limit: number)` → rows `seq DESC`, `seq < cursor` when cursor set; fetch `limit + 1` to compute `nextCursor`.
 - `WebhookDeliveryRepo.recordIfNew(provider, deliveryId, eventType): Promise<boolean>` (insert `onConflictDoNothing().returning()`; `true` if a row was inserted, `false` if duplicate).
 - `ProviderConnectionRepo.updateStatusByExternalAccount(provider, externalAccountId, status): Promise<void>`.
-- `RepoRepo.findByConnectionAndExternalRepoId(connectionId, externalRepoId)` → raw row via `getOrThrow` (throws `EntityNotFoundError`).
+- `RepoRepo.getByConnectionAndExternalRepoId(connectionId, externalRepoId)` → raw row via `getOrThrow` (throws `EntityNotFoundError`).
 - `RepoRepo.inactivateByConnection(connectionId): Promise<void>` (set `status='inactive'`).
 - `RepoRepo.touchLastSynced(repoId): Promise<void>`.
 
-- [ ] **Step 1: Failing tests** covering: `recordIfNew` returns `true` then `false` for the same `delivery_id`; `upsertMany` is idempotent on `(repo_id, sha)`; `listByRepo` returns newest-first and pages by cursor; `findByConnectionAndExternalRepoId` throws for a foreign pair.
+- [ ] **Step 1: Failing tests** covering: `recordIfNew` returns `true` then `false` for the same `delivery_id`; `upsertMany` is idempotent on `(repo_id, sha)`; `listByRepo` returns newest-first and pages by cursor; `getByConnectionAndExternalRepoId` throws for a foreign pair.
 - [ ] **Step 2: Run — FAIL.**
 - [ ] **Step 3: Implement** each repo, mirroring the existing `provider-connection.repo.ts`/`repo.repo.ts` (drizzle only, `getOrThrow`/`expectOne` from `@backend/infra/db/rows`, no business logic). Use `lt(schema.commits.seq, cursor)` + `desc(schema.commits.seq)` + `.limit(limit + 1)` for the cursor page.
 - [ ] **Step 4: Run — PASS.**
@@ -303,7 +303,7 @@ Constructor-injected `{ commits, deliveries, connections, repos, source }` (repo
 
 **Interfaces:**
 - `handle(parsed: ParsedWebhook): Promise<void>` — routes by kind; the webhook route calls this in `waitUntil`.
-- `syncPush(data: PushEvent): Promise<void>` — resolve `connection = connections.findByExternalAccount('github', String(installation.id))`; if `undefined` → **park (return)**; derive `branch` from `ref` (`refs/heads/…`); resolve `repo = repos.findByConnectionAndExternalRepoId(connection.id, String(repository.id))` (throws → park/log); if `repo.watchedBranch !== branch` → skip; `commits.upsertMany(data.commits.map(toCommitRow(repo.id, branch)))`; `repos.touchLastSynced(repo.id)`.
+- `syncPush(data: PushEvent): Promise<void>` — resolve `connection = connections.findByExternalAccount('github', String(installation.id))`; if `undefined` → **park (return)**; derive `branch` from `ref` (`refs/heads/…`); resolve `repo = repos.getByConnectionAndExternalRepoId(connection.id, String(repository.id))` (throws → park/log); if `repo.watchedBranch !== branch` → skip; `commits.upsertMany(data.commits.map(toCommitRow(repo.id, branch)))`; `repos.touchLastSynced(repo.id)`.
 - `backfillRepo(repo): Promise<void>` — `source.listCommits({ externalAccountId: connection.externalAccountId, owner, name }, watchedBranch, BACKFILL_DEFAULT_LIMIT)` → `upsertMany` → `touchLastSynced`. Best-effort.
 - lifecycle: `handleInstallation(data)` — `deleted` → `connections.updateStatusByExternalAccount(...,'deleted')` + `repos.inactivateByConnection(conn.id)`; `suspend`/`unsuspend` → status flip; `created` → reconcile a pending connect-state (match `sender.id` to an unconsumed `mocco_github_connect_states.github_user_id` within TTL → create connection; else park unclaimed); `installation_repositories` → **log only**.
 
