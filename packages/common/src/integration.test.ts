@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commitSchema, commitsPageSchema } from './integration';
+import { commitSchema, commitsPageSchema, commitsQueryInputSchema } from './integration';
 
 describe('commitSchema', () => {
   it('round-trips a neutral commit', () => {
@@ -45,5 +45,29 @@ describe('commitsPageSchema', () => {
       commits: [],
       nextCursor: null,
     });
+  });
+});
+
+describe('commitsQueryInputSchema', () => {
+  it('defaults cursor to null and limit to 20 when omitted', () => {
+    const parsed = commitsQueryInputSchema.parse({
+      workspaceId: '33333333-3333-4333-8333-333333333333',
+      repoId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    expect(parsed.cursor).toBeNull();
+    expect(parsed.limit).toBe(20);
+  });
+
+  it('rejects a limit of 0 or 51, and accepts 1 and 50', () => {
+    const base = {
+      workspaceId: '33333333-3333-4333-8333-333333333333',
+      repoId: '22222222-2222-4222-8222-222222222222',
+    };
+
+    expect(() => commitsQueryInputSchema.parse({ ...base, limit: 0 })).toThrow();
+    expect(() => commitsQueryInputSchema.parse({ ...base, limit: 51 })).toThrow();
+    expect(commitsQueryInputSchema.parse({ ...base, limit: 1 }).limit).toBe(1);
+    expect(commitsQueryInputSchema.parse({ ...base, limit: 50 }).limit).toBe(50);
   });
 });
