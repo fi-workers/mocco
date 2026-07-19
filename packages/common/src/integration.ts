@@ -50,3 +50,35 @@ export const watchedBranchInputSchema = z.object({
   watchedBranch: z.string().min(1).nullable(),
 });
 export type WatchedBranchInput = z.infer<typeof watchedBranchInputSchema>;
+
+/**
+ * A synced commit from the watched branch's candidate queue. `seq` is the
+ * opaque cursor and monotonic sort key — it's a DB `bigserial`, which exceeds
+ * JS's safe-integer range over time, so it stays a string end-to-end.
+ */
+export const commitSchema = z.object({
+  id: z.uuid(),
+  repoId: z.uuid(),
+  seq: z.string(),
+  sha: z.string(),
+  branch: z.string(),
+  message: z.string(),
+  authorName: z.string(),
+  authorEmail: z.string(),
+  committedAt: z.date(),
+});
+export type CommitDto = z.infer<typeof commitSchema>;
+
+export const commitsQueryInputSchema = z.object({
+  workspaceId: z.uuid(),
+  repoId: z.uuid(),
+  cursor: z.string().nullable().default(null),
+  limit: z.number().int().min(1).max(50).default(20),
+});
+export type CommitsQueryInput = z.infer<typeof commitsQueryInputSchema>;
+
+export const commitsPageSchema = z.object({
+  commits: z.array(commitSchema),
+  nextCursor: z.string().nullable(),
+});
+export type CommitsPageDto = z.infer<typeof commitsPageSchema>;

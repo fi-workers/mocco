@@ -1806,6 +1806,7 @@ __metadata:
   dependencies:
     eslint: "npm:10.6.0"
     typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
     zod: "npm:4.1.13"
   languageName: unknown
   linkType: soft
