@@ -2,6 +2,7 @@ import { Providers } from '@mocco/common/integration';
 
 import { BACKFILL_DEFAULT_LIMIT, ConnectionStatuses } from '@backend/domain/integration/constants';
 import { RepoNotFoundError } from '@backend/domain/integration/errors';
+import { toSourceCommit } from '@backend/domain/integration/github/provider';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-events';
@@ -157,15 +158,7 @@ export class CommitSyncService {
       return; // push is on a branch this repo doesn't watch
     }
 
-    const rows = data.commits
-      .map((c): SourceCommit => ({
-        sha: c.id,
-        message: c.message,
-        authorName: c.author.name,
-        authorEmail: c.author.email,
-        committedAt: new Date(c.timestamp),
-      }))
-      .map(toCommitRow(repo.id, branch));
+    const rows = data.commits.map(c => toSourceCommit(c)).map(toCommitRow(repo.id, branch));
     await this.deps.commits.upsertMany(rows);
     await this.deps.repos.touchLastSynced(repo.id);
   }
