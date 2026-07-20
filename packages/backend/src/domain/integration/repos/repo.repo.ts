@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 
+import { RepoStatuses } from '@backend/domain/integration/constants';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
@@ -11,6 +12,42 @@ export class RepoRepo {
 
   async findByWorkspace(workspaceId: string) {
     return await this.db.select().from(schema.repos).where(eq(schema.repos.workspaceId, workspaceId));
+  }
+
+  /** A repo under a connection, keyed by the provider's own identity
+   * (external_repo_id) — or throw EntityNotFoundError for a foreign pair. */
+  async getByConnectionAndExternalRepoId(connectionId: string, externalRepoId: string) {
+    return getOrThrow(
+      await this.db
+        .select()
+        .from(schema.repos)
+        .where(and(eq(schema.repos.connectionId, connectionId), eq(schema.repos.externalRepoId, externalRepoId))),
+      `Repo ${externalRepoId} was not found for connection ${connectionId}`,
+    );
+  }
+
+  /** A repo owned by the workspace, keyed by its own id — or throw EntityNotFoundError. */
+  async getByIdInWorkspace(workspaceId: string, repoId: string) {
+    return getOrThrow(
+      await this.db
+        .select()
+        .from(schema.repos)
+        .where(and(eq(schema.repos.id, repoId), eq(schema.repos.workspaceId, workspaceId))),
+      `Repo ${repoId} was not found`,
+    );
+  }
+
+  /** Mark every repo under a connection inactive — e.g. the installation itself was suspended/deleted. */
+  async inactivateByConnection(connectionId: string) {
+    await this.db
+      .update(schema.repos)
+      .set({ status: RepoStatuses.inactive })
+      .where(eq(schema.repos.connectionId, connectionId));
+  }
+
+  /** Stamp last_synced_at with now — called after a sync pass completes for the repo. */
+  async touchLastSynced(repoId: string) {
+    await this.db.update(schema.repos).set({ lastSyncedAt: new Date() }).where(eq(schema.repos.id, repoId));
   }
 
   /** Upsert keyed on (connection_id, external_repo_id). */

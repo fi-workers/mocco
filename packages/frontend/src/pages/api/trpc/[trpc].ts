@@ -16,10 +16,12 @@ export default createNextApiHandler({
   createContext: async ({ req }): Promise<Context> => {
     const { auth, workspace } = getServices();
     const headers = headersFromNode(req.headers);
+    const integration = getIntegration();
     return {
       auth,
       workspace,
-      connection: getIntegration()?.connection,
+      connection: integration?.connection,
+      commitSync: integration?.commitSync,
       session: await auth.getSession(headers),
       headers,
       debugEnabled: Configure.DebugEnabled,

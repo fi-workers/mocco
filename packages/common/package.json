@@ -11,14 +11,16 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "ts-check": "tsc --noEmit"
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "4.1.13"
   },
   "devDependencies": {
     "eslint": "10.6.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   },
   "engines": {
     "node": ">=22"

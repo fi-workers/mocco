@@ -1,0 +1,8 @@
+{
+  "action": "deleted",
+  "installation": {
+    "id": 12345678,
+    "account": { "login": "fi-workers", "id": 999 }
+  },
+  "sender": { "login": "octocat", "id": 1 }
+}

@@ -5,3 +5,7 @@
 
 /** A referenced resource doesn't exist or isn't the caller's — maps to NOT_FOUND. */
 export abstract class NotFoundError extends Error {}
+
+/** The caller's credentials/authorization for an external resource were revoked
+ * or are no longer sufficient — maps to FORBIDDEN. */
+export abstract class ForbiddenError extends Error {}

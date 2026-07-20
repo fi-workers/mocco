@@ -48,6 +48,8 @@ const schema = z.object({
     }),
   GITHUB_APP_CLIENT_ID: z.string().min(1).optional(),
   GITHUB_APP_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Verifies GitHub webhook payload signatures. Optional, same as the other GITHUB_APP_* vars. */
+  GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

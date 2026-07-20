@@ -24,3 +24,21 @@ export interface InstallationVerifier {
   /** Build the provider install URL carrying our opaque `state`. */
   installUrl(state: string): string;
 }
+
+export interface SourceCommit {
+  sha: string;
+  message: string;
+  authorName: string;
+  authorEmail: string;
+  committedAt: Date;
+}
+
+/** Backfill/read-back of commit history. Consumed by the commit-sync service. */
+export interface CommitSource {
+  /** Recent commits on a branch (bounded backfill). `limit` capped by the caller at BACKFILL_MAX_LIMIT. */
+  listCommits(
+    ref: { externalAccountId: string; owner: string; name: string },
+    branch: string,
+    limit: number,
+  ): Promise<SourceCommit[]>;
+}

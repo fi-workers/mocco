@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
+import type { ConnectionStatus } from '@backend/domain/integration/constants';
 import type { Db } from '@backend/infra/db/types';
 import type { Provider } from '@mocco/common/integration';
 
@@ -45,6 +46,20 @@ export class ProviderConnectionRepo {
       .select()
       .from(schema.providerConnections)
       .where(eq(schema.providerConnections.workspaceId, workspaceId));
+  }
+
+  /** Update status for the (provider, external_account_id) pair — the global key
+   * a webhook payload carries, ahead of any workspace scoping. */
+  async updateStatusByExternalAccount(provider: Provider, externalAccountId: string, status: ConnectionStatus) {
+    await this.db
+      .update(schema.providerConnections)
+      .set({ status })
+      .where(
+        and(
+          eq(schema.providerConnections.provider, provider),
+          eq(schema.providerConnections.externalAccountId, externalAccountId),
+        ),
+      );
   }
 
   /** Upsert keyed on (provider, external_account_id). */

@@ -57,4 +57,11 @@ describe('getEnv', () => {
     const { getEnv } = await import('./env');
     expect(() => getEnv()).not.toThrow();
   });
+
+  it('exposes GITHUB_WEBHOOK_SECRET when set', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://x');
+    vi.stubEnv('GITHUB_WEBHOOK_SECRET', 'whsec');
+    const { getEnv } = await import('./env');
+    expect(getEnv().GITHUB_WEBHOOK_SECRET).toBe('whsec');
+  });
 });

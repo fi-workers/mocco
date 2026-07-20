@@ -8,3 +8,5 @@ packages/frontend/public/
 .yarn/
 **/.next/
 **/dist/
+# Multi-agent SDD scratch (task briefs/reports) — gitignored, not committed, not a prettier target
+.superpowers/
