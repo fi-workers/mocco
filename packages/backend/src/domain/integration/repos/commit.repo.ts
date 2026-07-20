@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import { getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -34,6 +34,20 @@ export class CommitRepo {
       )
       .orderBy(desc(schema.commits.seq))
       .limit(limit + 1);
+  }
+
+  /** Rows for a repo's just-synced shas — used by the deferred config-snapshot
+   * pass to resolve `{id, sha}` for a batch without depending on `upsertMany`'s
+   * on-conflict-do-nothing return (a redelivered sha wouldn't come back from
+   * that). Bounded to the given shas; never fetches unrelated commits. */
+  async findByRepoAndShas(repoId: string, shas: string[]) {
+    if (shas.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(schema.commits)
+      .where(and(eq(schema.commits.repoId, repoId), inArray(schema.commits.sha, shas)));
   }
 
   /** A commit owned by the workspace (via its repo — mocco_commits has no

@@ -3,14 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { ProviderConnectionRevokedError } from '@backend/domain/integration/github/errors';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 
@@ -91,6 +95,12 @@ describe('integration router on pglite', () => {
       repos,
       connectStates,
       source: commitSource,
+      configs: new CommitConfigService({
+        configs: new CommitConfigRepo(t.db),
+        commits: new CommitRepo(t.db),
+        source: commitSource,
+        parser: new MoccoConfigParser(decodeYaml),
+      }),
     });
   });
   afterEach(async () => {

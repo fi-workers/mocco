@@ -114,6 +114,30 @@ describe('CommitRepo (pglite)', () => {
     expect(await commitRepo.listByRepo(repoB, null, 10)).toHaveLength(1);
   });
 
+  it('findByRepoAndShas returns rows for the requested shas, scoped to the repo', async () => {
+    const { repoId } = await seedRepo();
+    const { repoId: otherRepoId } = await seedRepo();
+    await commitRepo.upsertMany([
+      commitValues(repoId, { sha: 'sha-a' }),
+      commitValues(repoId, { sha: 'sha-b' }),
+      commitValues(repoId, { sha: 'sha-c' }),
+    ]);
+    // Same sha under a different repo — must not leak into the result.
+    await commitRepo.upsertMany([commitValues(otherRepoId, { sha: 'sha-a' })]);
+
+    const rows = await commitRepo.findByRepoAndShas(repoId, ['sha-a', 'sha-b', 'sha-missing']);
+
+    expect(new Set(rows.map(r => r.sha))).toEqual(new Set(['sha-a', 'sha-b']));
+    expect(rows.every(r => r.repoId === repoId)).toBe(true);
+  });
+
+  it('findByRepoAndShas returns an empty array for an empty shas list without erroring', async () => {
+    const { repoId } = await seedRepo();
+    await commitRepo.upsertMany([commitValues(repoId, { sha: 'sha-only' })]);
+
+    expect(await commitRepo.findByRepoAndShas(repoId, [])).toEqual([]);
+  });
+
   it('getByIdInWorkspace returns the raw row for a commit owned by the workspace', async () => {
     const { workspaceId, repoId } = await seedRepo();
     await commitRepo.upsertMany([commitValues(repoId, { sha: 'sha-owned', message: 'owned' })]);

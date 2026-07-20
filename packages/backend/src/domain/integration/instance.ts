@@ -3,14 +3,18 @@
 // a deploy without GitHub set up still serves every non-integration route — only
 // the integration surfaces report "not configured" (enforced by the router
 // middleware / ext route).
+import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { createGitHubProvider, type GitHubProvider } from '@backend/domain/integration/github/provider';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
@@ -49,15 +53,22 @@ export function getIntegration(): Integration | undefined {
       const repos = new RepoRepo(db);
       const connectStates = new ConnectStateRepo(db);
       const deliveries = new WebhookDeliveryRepo(db);
+      const commits = new CommitRepo(db);
       state.integration = {
         connection: new ConnectionService({ connections, repos, connectStates, provider }),
         commitSync: new CommitSyncService({
-          commits: new CommitRepo(db),
+          commits,
           deliveries,
           connections,
           repos,
           connectStates,
           source: provider,
+          configs: new CommitConfigService({
+            configs: new CommitConfigRepo(db),
+            commits,
+            source: provider,
+            parser: new MoccoConfigParser(decodeYaml),
+          }),
         }),
         provider,
         deliveries,
