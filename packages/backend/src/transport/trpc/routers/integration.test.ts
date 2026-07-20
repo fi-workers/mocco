@@ -50,6 +50,7 @@ function fakeCommitSource(): CommitSource & { calls: number } {
       source.calls += 1;
       return [];
     },
+    getConfigAtCommit: async () => null,
   };
   return source;
 }

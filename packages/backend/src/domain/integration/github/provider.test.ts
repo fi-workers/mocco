@@ -2,7 +2,14 @@ import { createHmac } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { toListedCommit, toRepo, toSourceCommit, verify } from '@backend/domain/integration/github/provider';
+import { GithubApiError } from '@backend/domain/integration/github/errors';
+import {
+  decodeGetContent,
+  toListedCommit,
+  toRepo,
+  toSourceCommit,
+  verify,
+} from '@backend/domain/integration/github/provider';
 
 describe('verify', () => {
   // Not a real credential — a fixture value hashed in-test with node:crypto to
@@ -85,6 +92,41 @@ describe('toListedCommit', () => {
       authorEmail: '',
       committedAt: new Date(0),
     });
+  });
+});
+
+describe('decodeGetContent', () => {
+  it('decodes a base64 file payload to the expected UTF-8 text', () => {
+    const text = 'gate: production\ntimeout: 30\n';
+    const raw = {
+      type: 'file',
+      encoding: 'base64',
+      // Buffer is the available base64 encoder on this runtime (see provider.ts#decodeGetContent).
+      // eslint-disable-next-line unicorn/prefer-uint8array-base64
+      content: Buffer.from(text, 'utf8').toString('base64'),
+      size: text.length,
+      name: '.mocco.yml',
+      path: '.mocco.yml',
+      sha: 'abc123',
+    };
+    expect(decodeGetContent(raw)).toBe(text);
+  });
+
+  it('decodes correctly even when GitHub line-wraps the base64 content with newlines', () => {
+    const text = 'a'.repeat(200);
+    // eslint-disable-next-line unicorn/prefer-uint8array-base64 -- see above.
+    const wrapped = Buffer.from(text, 'utf8').toString('base64').replaceAll(/.{60}/g, '$&\n');
+    expect(decodeGetContent({ type: 'file', encoding: 'base64', content: wrapped })).toBe(text);
+  });
+
+  it('rejects a directory listing (array response) with a mapped GithubApiError, not a crash', () => {
+    const raw = [{ type: 'file', name: 'a.txt', path: 'a.txt', sha: 'x' }];
+    expect(() => decodeGetContent(raw)).toThrow(GithubApiError);
+  });
+
+  it('rejects a response with no content field (e.g. a symlink) with a mapped GithubApiError', () => {
+    const raw = { type: 'symlink', target: 'other/path', size: 4, name: '.mocco.yml', path: '.mocco.yml', sha: 'x' };
+    expect(() => decodeGetContent(raw)).toThrow(GithubApiError);
   });
 });
 

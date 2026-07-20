@@ -49,11 +49,12 @@ function fakeProvider(): GitHubProvider {
     verifyOwnership: async () => ({ ownerVerified: true, accountLogin: 'acme', githubUserId: '77' }),
     installUrl: state => `https://example.test/install?state=${state}`,
     listCommits: async () => [],
+    getConfigAtCommit: async () => null,
   };
 }
 
 /** CommitSource port — push handling never reaches it (only backfill does). */
-const fakeSource: CommitSource = { listCommits: async () => [] };
+const fakeSource: CommitSource = { listCommits: async () => [], getConfigAtCommit: async () => null };
 
 function sign(body: string, secret = SECRET): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;

@@ -33,6 +33,7 @@ function fakeSource(commits: SourceCommit[]): CommitSource & { calls: number } {
       source.calls += 1;
       return commits;
     },
+    getConfigAtCommit: async () => null,
   };
   return source;
 }
