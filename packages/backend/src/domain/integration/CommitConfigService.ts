@@ -5,7 +5,7 @@ import type { CommitSource } from '@backend/domain/integration/ports';
 import type { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import type { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import type { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
-import type { CommitConfigDto, CommitDetailDto } from '@mocco/common/integration';
+import type { CommitConfigDto } from '@mocco/common/integration';
 
 // Row/ref shapes are taken from the ports/repos (a service never imports the drizzle
 // schema) — mirrors the convention in CommitSyncService.
@@ -100,7 +100,7 @@ export class CommitConfigService {
    * the commit hasn't been snapshotted yet; a snapshotted commit always
    * returns a `CommitConfigDto` with `present` reflecting whether its tree
    * had a `.mocco.yml` at snapshot time. */
-  async getDetail(workspaceId: string, commitId: string): Promise<CommitDetailDto> {
+  async getDetail(workspaceId: string, commitId: string) {
     const commit = await this.requireCommit(workspaceId, commitId);
     const snapshot = await this.deps.configs.findByCommitId(commitId);
 
@@ -115,17 +115,10 @@ export class CommitConfigService {
           };
 
     return {
-      commit: {
-        id: commit.id,
-        repoId: commit.repoId,
-        seq: commit.seq.toString(),
-        sha: commit.sha,
-        branch: commit.branch,
-        message: commit.message,
-        authorName: commit.authorName,
-        authorEmail: commit.authorEmail,
-        committedAt: commit.committedAt,
-      },
+      // Raw row narrowed by `.output(commitDetailSchema)` at the router boundary; `seq` is the
+      // only field that needs an explicit transform (bigint -> string for the wire) — mirrors
+      // the convention in CommitSyncService.listCommits.
+      commit: { ...commit, seq: commit.seq.toString() },
       config,
     };
   }

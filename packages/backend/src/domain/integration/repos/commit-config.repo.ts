@@ -5,7 +5,7 @@ import * as schema from '@backend/infra/db/schema';
 import type { Db } from '@backend/infra/db/types';
 
 /** Data access for mocco_commit_configs — a re-snapshot of a commit's parsed
- * `.mocco/config.yml` overwrites the prior row rather than versioning it. */
+ * `.mocco.yml` overwrites the prior row rather than versioning it. */
 export class CommitConfigRepo {
   constructor(private readonly db: Db) {}
 
