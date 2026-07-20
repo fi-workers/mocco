@@ -21,6 +21,7 @@ export class CommitConfigRepo {
           parsedJson: row.parsedJson,
           valid: row.valid,
           validationErrors: row.validationErrors,
+          // re-snapshot bumps the timestamp to the DB clock (a caller-passed syncedAt is intentionally ignored on overwrite)
           syncedAt: sql`now()`,
         },
       });

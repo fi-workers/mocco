@@ -92,6 +92,36 @@ describe('CommitConfigRepo (pglite)', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('upsert refreshes syncedAt to the DB clock on a re-snapshot', async () => {
+    const commitId = await seedCommit();
+
+    await commitConfigRepo.upsert({
+      commitId,
+      rawYaml: 'version: 1',
+      parsedJson: { version: 1 },
+      valid: true,
+      validationErrors: [],
+    });
+    const first = await commitConfigRepo.findByCommitId(commitId);
+    if (first === undefined) {
+      throw new Error('expected row after first upsert');
+    }
+
+    await commitConfigRepo.upsert({
+      commitId,
+      rawYaml: 'version: 2',
+      parsedJson: { version: 2 },
+      valid: true,
+      validationErrors: [],
+    });
+    const second = await commitConfigRepo.findByCommitId(commitId);
+    if (second === undefined) {
+      throw new Error('expected row after second upsert');
+    }
+
+    expect(second.syncedAt.getTime()).toBeGreaterThanOrEqual(first.syncedAt.getTime());
+  });
+
   it('findByCommitId returns undefined when there is no config for the commit', async () => {
     const commitId = await seedCommit();
     expect(await commitConfigRepo.findByCommitId(commitId)).toBeUndefined();
