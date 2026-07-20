@@ -3,7 +3,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { App } from '@octokit/app';
 
 import { BACKFILL_MAX_LIMIT } from '@backend/domain/integration/constants';
-import { GithubWebhookEvents, SIGNATURE_ALGORITHM, WebhookKinds } from '@backend/domain/integration/github/constants';
+import {
+  CONFIG_FILE_PATH,
+  GithubWebhookEvents,
+  SIGNATURE_ALGORITHM,
+  WebhookKinds,
+} from '@backend/domain/integration/github/constants';
 import {
   GithubApiError,
   octokitStatus,
@@ -92,6 +97,36 @@ export function toListedCommit(raw: RawListedCommit): SourceCommit {
     authorEmail: author?.email ?? '',
     committedAt: author?.date === undefined ? new Date(0) : new Date(author.date),
   };
+}
+
+/** Raw shape of a GitHub "get content" response we care about — narrower than
+ * octokit's full union of file/directory/symlink/submodule variants. Only the
+ * file variant carries a base64 `content`; a directory listing is an array,
+ * and symlink/submodule objects have no `content` field at all. */
+interface RawContentFile {
+  content?: string;
+  encoding?: string;
+}
+
+/** Pure mapper: GitHub "get content" response -> decoded UTF-8 text. Unit-tested.
+ * Rejects anything that isn't a single base64-encoded file — a directory (array),
+ * or an object missing `content`/`encoding: 'base64'` (symlink, submodule, or an
+ * oversized file GitHub declined to inline) — with a mapped `GithubApiError`
+ * instead of crashing on an unexpected shape. `getConfigAtCommit` stays a thin
+ * wrapper: this is where the only branching logic lives, and it's fully covered
+ * here without any network call. */
+export function decodeGetContent(data: unknown): string {
+  if (Array.isArray(data) || typeof data !== 'object' || data === null) {
+    throw new GithubApiError('expected a single file at the config path, got a directory listing', undefined);
+  }
+  const file = data as RawContentFile;
+  if (file.content === undefined || file.encoding !== 'base64') {
+    throw new GithubApiError('expected a base64-encoded file at the config path', undefined);
+  }
+  // Uint8Array.fromBase64 is still V8-experimental (see env.ts's GITHUB_APP_PRIVATE_KEY_B64
+  // transform) — Buffer is the only base64 decoder actually available on this runtime.
+  // eslint-disable-next-line unicorn/prefer-uint8array-base64
+  return Buffer.from(file.content, 'base64').toString('utf8');
 }
 
 /** Constant-time comparison of a `sha256=<hex>` webhook signature against one
@@ -210,6 +245,28 @@ export function createGitHubProvider(config: GitHubConfig): RepoLister & Install
       } catch (error) {
         throw new GithubApiError('failed to list repository commits', octokitStatus(error), { cause: error });
       }
+    },
+
+    // Thin wrapper: the network call + 404→null branch live here; the shape
+    // validation/decoding is the pure, unit-tested `decodeGetContent` above.
+    async getConfigAtCommit(ref, sha) {
+      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+      let data: unknown;
+      try {
+        ({ data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+          owner: ref.owner,
+          repo: ref.name,
+          path: CONFIG_FILE_PATH,
+          ref: sha,
+        }));
+      } catch (error) {
+        // A repo with no `.mocco.yml` at this SHA is normal, not an error.
+        if (octokitStatus(error) === 404) {
+          return null;
+        }
+        throw new GithubApiError('failed to fetch config file', octokitStatus(error), { cause: error });
+      }
+      return decodeGetContent(data);
     },
   };
 }

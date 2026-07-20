@@ -4,14 +4,16 @@ import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
+import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { Context } from '@backend/transport/trpc/trpc';
 
-/** Injected per-handler deps. `connection`/`commitSync` are present only when the GitHub App is configured. */
+/** Injected per-handler deps. `connection`/`commitSync`/`commitConfig` are present only when the GitHub App is configured. */
 export interface TrpcDeps extends Services {
   connection?: ConnectionService;
   commitSync?: CommitSyncService;
+  commitConfig?: CommitConfigService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -33,6 +35,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         workspace: deps.workspace,
         connection: deps.connection,
         commitSync: deps.commitSync,
+        commitConfig: deps.commitConfig,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -46,5 +49,6 @@ export async function trpcHandler(request: Request): Promise<Response> {
     ...getServices(),
     connection: integration?.connection,
     commitSync: integration?.commitSync,
+    commitConfig: integration?.commitConfig,
   })(request);
 }

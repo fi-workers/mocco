@@ -41,4 +41,9 @@ export interface CommitSource {
     branch: string,
     limit: number,
   ): Promise<SourceCommit[]>;
+  /** Raw `.mocco.yml` at a commit SHA, or null when the repo has none at that SHA (404). */
+  getConfigAtCommit(
+    ref: { externalAccountId: string; owner: string; name: string },
+    sha: string,
+  ): Promise<string | null>;
 }

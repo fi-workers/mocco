@@ -6,6 +6,7 @@ import { GithubInstallationActions, WebhookKinds } from '@backend/domain/integra
 import { toSourceCommit } from '@backend/domain/integration/github/provider';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
+import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-events';
 import type { CommitSource, SourceCommit } from '@backend/domain/integration/ports';
 import type { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -44,6 +45,9 @@ export interface CommitSyncServiceDeps {
   repos: RepoRepo;
   source: CommitSource;
   connectStates: ConnectStateRepo;
+  /** Snapshots `.mocco.yml` for newly-synced commits, in the same deferred pass
+   * as the commit rows themselves (see `snapshotSyncedCommits`). */
+  configs: CommitConfigService;
 }
 
 /**
@@ -60,6 +64,29 @@ export interface CommitSyncServiceDeps {
  */
 export class CommitSyncService {
   constructor(private readonly deps: CommitSyncServiceDeps) {}
+
+  /**
+   * Snapshot `.mocco.yml` for a just-synced batch of shas, bounded to the caller's
+   * repo. `upsertMany` uses on-conflict-do-nothing (commits are immutable), so a
+   * redelivered sha wouldn't come back from its return value — re-reading by
+   * (repo, shas) resolves `{id, sha}` for the whole batch regardless of whether
+   * each row was freshly inserted or already there. Best-effort at every level:
+   * `CommitConfigService.snapshotForCommits` already isolates per-commit failures
+   * internally, and this wraps the whole phase again defensively so a surprise
+   * throw here can never unwind past the commit rows already committed to DB.
+   */
+  private async snapshotSyncedCommits(
+    ref: { externalAccountId: string; owner: string; name: string },
+    repoId: string,
+    shas: string[],
+  ): Promise<void> {
+    try {
+      const synced = await this.deps.commits.findByRepoAndShas(repoId, shas);
+      await this.deps.configs.snapshotForCommits(ref, synced);
+    } catch (error) {
+      console.error(`[commit-sync] config snapshot phase failed for repo ${repoId}`, error);
+    }
+  }
 
   /** A repo owned by the workspace, or throw RepoNotFoundError. Read-side counterpart
    * to ConnectionService's requireConnection — the repo is never resolved without
@@ -161,6 +188,11 @@ export class CommitSyncService {
     const rows = data.commits.map(c => toSourceCommit(c)).map(toCommitRow(repo.id, branch));
     await this.deps.commits.upsertMany(rows);
     await this.deps.repos.touchLastSynced(repo.id);
+    await this.snapshotSyncedCommits(
+      { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
+      repo.id,
+      rows.map(r => r.sha),
+    );
   }
 
   /** Best-effort backfill of recent history for a freshly-watched repo. Never throws. */
@@ -170,13 +202,16 @@ export class CommitSyncService {
         return; // nothing to backfill until a branch is watched
       }
       const connection = await this.deps.connections.getById(repo.workspaceId, repo.connectionId);
-      const commits = await this.deps.source.listCommits(
-        { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
-        repo.watchedBranch,
-        BACKFILL_DEFAULT_LIMIT,
-      );
-      await this.deps.commits.upsertMany(commits.map(toCommitRow(repo.id, repo.watchedBranch)));
+      const ref = { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name };
+      const commits = await this.deps.source.listCommits(ref, repo.watchedBranch, BACKFILL_DEFAULT_LIMIT);
+      const rows = commits.map(toCommitRow(repo.id, repo.watchedBranch));
+      await this.deps.commits.upsertMany(rows);
       await this.deps.repos.touchLastSynced(repo.id);
+      await this.snapshotSyncedCommits(
+        ref,
+        repo.id,
+        rows.map(r => r.sha),
+      );
     } catch (error) {
       // Backfill is opportunistic — a provider hiccup must not fail the caller (e.g. addRepo).
       console.error(`[commit-sync] backfill failed for repo ${repo.id}`, error);

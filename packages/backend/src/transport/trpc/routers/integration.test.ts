@@ -3,14 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { ProviderConnectionRevokedError } from '@backend/domain/integration/github/errors';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 
@@ -50,6 +54,7 @@ function fakeCommitSource(): CommitSource & { calls: number } {
       source.calls += 1;
       return [];
     },
+    getConfigAtCommit: async () => null,
   };
   return source;
 }
@@ -71,6 +76,7 @@ describe('integration router on pglite', () => {
   let workspace: WorkspaceService;
   let connection: ConnectionService;
   let commitSync: CommitSyncService;
+  let commitConfig: CommitConfigService;
   let commitSource: CommitSource & { calls: number };
 
   beforeEach(async () => {
@@ -83,6 +89,12 @@ describe('integration router on pglite', () => {
     const connectStates = new ConnectStateRepo(t.db);
     connection = new ConnectionService({ connections, repos, connectStates, provider: fakeProvider() });
     commitSource = fakeCommitSource();
+    commitConfig = new CommitConfigService({
+      configs: new CommitConfigRepo(t.db),
+      commits: new CommitRepo(t.db),
+      source: commitSource,
+      parser: new MoccoConfigParser(decodeYaml),
+    });
     commitSync = new CommitSyncService({
       commits: new CommitRepo(t.db),
       deliveries: new WebhookDeliveryRepo(t.db),
@@ -90,6 +102,7 @@ describe('integration router on pglite', () => {
       repos,
       connectStates,
       source: commitSource,
+      configs: commitConfig,
     });
   });
   afterEach(async () => {
@@ -108,9 +121,34 @@ describe('integration router on pglite', () => {
       workspace,
       connection: hasConnection ? connection : undefined,
       commitSync: hasConnection ? commitSync : undefined,
+      commitConfig: hasConnection ? commitConfig : undefined,
       session,
       headers,
     });
+  };
+
+  /** Registers a repo under `ws` and one synced commit, returning its id. Config
+   * snapshots (if any) are seeded separately via `CommitConfigRepo`, mirroring
+   * commit-config.repo.test.ts rather than routing through a fake CommitSource. */
+  const seedCommitId = async (ws: { id: string }, conn: { id: string }, sha: string): Promise<string> => {
+    const repo = await connection.addRepo(ws.id, { connectionId: conn.id, externalRepoId: '111', watchedBranch: null });
+    const commitRepo = new CommitRepo(t.db);
+    await commitRepo.upsertMany([
+      {
+        repoId: repo.id,
+        sha,
+        branch: 'main',
+        message: `commit ${sha}`,
+        authorName: 'Author',
+        authorEmail: 'author@example.com',
+        committedAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    ]);
+    const [row] = await commitRepo.listByRepo(repo.id, null, 1);
+    if (row === undefined) {
+      throw new Error('expected seeded commit row');
+    }
+    return row.id;
   };
 
   it('is PRECONDITION_FAILED when the GitHub App is not configured', async () => {
@@ -161,6 +199,7 @@ describe('integration router on pglite', () => {
       workspace,
       connection: revokedConnection,
       commitSync,
+      commitConfig,
       session,
       headers,
     });
@@ -379,6 +418,119 @@ describe('integration router on pglite', () => {
       await expect(
         api.integration.commits({ workspaceId: ws.id, repoId: repo.id, cursor: 'abc', limit: 20 }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+  });
+
+  describe('commitDetail', () => {
+    it('returns the commit with a valid config snapshot', async () => {
+      const api = await signedInCaller('detail-valid@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(ws, conn, 'sha-valid');
+      await new CommitConfigRepo(t.db).upsert({
+        commitId,
+        present: true,
+        rawYaml: 'version: 1',
+        parsedJson: { version: 1, pipeline: 'deploy', steps: [{ run: 'build', executor: 'generic' }] },
+        valid: true,
+        validationErrors: [],
+      });
+
+      const detail = await api.integration.commitDetail({ workspaceId: ws.id, commitId });
+      expect(detail.commit.id).toBe(commitId);
+      expect(detail.commit.sha).toBe('sha-valid');
+      expect(typeof detail.commit.seq).toBe('string'); // bigint serialized as string on the wire
+      expect(detail.config).toEqual({
+        present: true,
+        valid: true,
+        config: { version: 1, pipeline: 'deploy', steps: [{ run: 'build', executor: 'generic' }] },
+        issues: [],
+      });
+    });
+
+    it('returns the commit with an invalid config snapshot (valid:false, issues)', async () => {
+      const api = await signedInCaller('detail-invalid@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(ws, conn, 'sha-invalid');
+      await new CommitConfigRepo(t.db).upsert({
+        commitId,
+        present: true,
+        rawYaml: 'version: 1\npipeline: deploy\nsteps: []',
+        parsedJson: null,
+        valid: false,
+        validationErrors: [{ path: 'steps', message: 'too small', code: 'too_small' }],
+      });
+
+      const detail = await api.integration.commitDetail({ workspaceId: ws.id, commitId });
+      expect(detail.config).toEqual({
+        present: true,
+        valid: false,
+        config: null,
+        issues: [{ path: 'steps', message: 'too small', code: 'too_small' }],
+      });
+    });
+
+    it('returns the commit with an absent config snapshot (present:false)', async () => {
+      const api = await signedInCaller('detail-absent@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(ws, conn, 'sha-absent');
+      await new CommitConfigRepo(t.db).upsert({
+        commitId,
+        present: false,
+        rawYaml: '',
+        parsedJson: null,
+        valid: false,
+        validationErrors: [],
+      });
+
+      const detail = await api.integration.commitDetail({ workspaceId: ws.id, commitId });
+      expect(detail.config).toEqual({ present: false, valid: false, config: null, issues: [] });
+    });
+
+    it('returns config:null when the commit has not been snapshotted yet', async () => {
+      const api = await signedInCaller('detail-unsnapshotted@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const conn = await connection.createConnection(ws.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(ws, conn, 'sha-unsnapshotted');
+
+      const detail = await api.integration.commitDetail({ workspaceId: ws.id, commitId });
+      expect(detail.config).toBeNull();
+    });
+
+    it('is PRECONDITION_FAILED when the GitHub App is not configured', async () => {
+      const api = await signedInCaller('detail-no-app@example.com', false);
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      await expect(
+        api.integration.commitDetail({ workspaceId: ws.id, commitId: '00000000-0000-0000-0000-000000000000' }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    });
+
+    it('a non-member cannot read another workspace commit detail', async () => {
+      const owner = await signedInCaller('owner-detail@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const conn = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(wsA, conn, 'sha-cross-member');
+
+      const stranger = await signedInCaller('stranger-detail@example.com');
+      await expect(stranger.integration.commitDetail({ workspaceId: wsA.id, commitId })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+
+    it("a commit belonging to another workspace maps to NOT_FOUND (querying B's own workspaceId with A's commitId)", async () => {
+      const ownerA = await signedInCaller('owner-detail-a@example.com');
+      const { workspace: wsA } = await ownerA.workspace.create({ name: 'A' });
+      const connA = await connection.createConnection(wsA.id, { externalAccountId: '900', accountLogin: 'acme' });
+      const commitId = await seedCommitId(wsA, connA, 'sha-foreign');
+
+      const memberB = await signedInCaller('member-detail-b@example.com');
+      const { workspace: wsB } = await memberB.workspace.create({ name: 'B' });
+
+      await expect(memberB.integration.commitDetail({ workspaceId: wsB.id, commitId })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
     });
   });
 });
