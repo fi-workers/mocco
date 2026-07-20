@@ -16,6 +16,14 @@ export class RepoNotFoundError extends NotFoundError {
   }
 }
 
+/** A commit the caller's workspace doesn't own (via its repo) or that doesn't exist — NOT_FOUND. */
+export class CommitNotFoundError extends NotFoundError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`Commit ${id} was not found`, options);
+    this.name = 'CommitNotFoundError';
+  }
+}
+
 /** The installing user could not be proven to administer the installation. */
 export class OwnershipNotVerifiedError extends Error {
   constructor(options?: ErrorOptions) {
