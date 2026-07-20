@@ -13,7 +13,6 @@ import type { ConnectStateRepo } from '@backend/domain/integration/repos/connect
 import type { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import type { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
-import type { CommitsPageDto } from '@mocco/common/integration';
 
 type PushData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.push }>['data'];
 type InstallationData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.installation }>['data'];
@@ -189,29 +188,16 @@ export class CommitSyncService {
    * `cursor`/`seq` are opaque strings on the wire (a DB bigserial exceeds JS's safe-integer
    * range over time); parsed back to bigint only for the repo query.
    */
-  async listCommits(
-    workspaceId: string,
-    repoId: string,
-    cursor: string | null,
-    limit: number,
-  ): Promise<CommitsPageDto> {
+  async listCommits(workspaceId: string, repoId: string, cursor: string | null, limit: number) {
     await this.requireRepo(workspaceId, repoId);
     const rows = await this.deps.commits.listByRepo(repoId, cursor === null ? null : BigInt(cursor), limit);
     // The repo fetches `limit + 1` rows; a sentinel row beyond `limit` means another page follows.
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
-      commits: page.map(row => ({
-        id: row.id,
-        repoId: row.repoId,
-        seq: row.seq.toString(),
-        sha: row.sha,
-        branch: row.branch,
-        message: row.message,
-        authorName: row.authorName,
-        authorEmail: row.authorEmail,
-        committedAt: row.committedAt,
-      })),
+      // Raw rows narrowed by `.output(commitsPageSchema)` at the router boundary; `seq` is the
+      // only field that needs an explicit transform (bigint -> string for the wire).
+      commits: page.map(row => ({ ...row, seq: row.seq.toString() })),
       nextCursor: rows.length > limit && last !== undefined ? last.seq.toString() : null,
     };
   }
