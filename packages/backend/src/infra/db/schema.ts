@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   bigserial,
+  jsonb,
   index,
   uniqueIndex,
   unique,
@@ -295,4 +296,23 @@ export const webhookDeliveries = pgTable(
     uniqueIndex('mocco_webhook_deliveries_delivery_uq').on(t.deliveryId),
     check('mocco_webhook_deliveries_provider_check', sql`${t.provider} IN ('github')`),
   ],
+);
+
+/** A commit's `.mocco.yml` config, synced 1:1 per commit. Path is always `.mocco.yml` (no per-commit path/hash). */
+export const commitConfigs = pgTable(
+  'mocco_commit_configs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    commitId: uuid('commit_id')
+      .notNull()
+      .references(() => commits.id, { onDelete: 'cascade' }),
+    rawYaml: text('raw_yaml').notNull(),
+    parsedJson: jsonb('parsed_json'), // parsed MoccoConfig when valid, else null
+    valid: boolean().notNull(),
+    validationErrors: jsonb('validation_errors')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+  },
+  t => [uniqueIndex('mocco_commit_configs_commit_uq').on(t.commitId)],
 );
