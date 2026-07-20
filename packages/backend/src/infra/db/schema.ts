@@ -298,6 +298,11 @@ export const webhookDeliveries = pgTable(
   ],
 );
 
+// ─────────────────────────────────────────────────────────────
+// Config snapshot (slice 3c) — each commit's `.mocco.yml`, fetched and parsed
+// at that commit's SHA in the same deferred pass as the commit sync above.
+// ─────────────────────────────────────────────────────────────
+
 /** A commit's `.mocco.yml` config, synced 1:1 per commit. Path is always `.mocco.yml` (no per-commit path/hash). */
 export const commitConfigs = pgTable(
   'mocco_commit_configs',
