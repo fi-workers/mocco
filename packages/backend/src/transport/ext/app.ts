@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 
 import { getServices } from '@backend/domain/auth/instance';
 import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
+import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/github/constants';
 import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { parseWebhook, verify } from '@backend/domain/integration/github/provider';
 import { getIntegration } from '@backend/domain/integration/instance';
@@ -52,7 +53,7 @@ export function createExtApp(deps: ExtDeps): Hono {
     const state = c.req.query('state') ?? '';
 
     // Org requires admin approval — no installation yet; reconciled via webhook in 3b.
-    if (setupAction === 'request' || installationId === undefined) {
+    if (setupAction === GithubSetupActions.request || installationId === undefined) {
       return c.redirect(`${WORKSPACES}?pending=1`);
     }
     if (code === undefined) {
@@ -99,16 +100,16 @@ export function createExtApp(deps: ExtDeps): Hono {
     }
     // Read the RAW body BEFORE any parse — the HMAC is computed over the exact bytes.
     const raw = await c.req.text();
-    if (!verify(raw, c.req.header('x-hub-signature-256') ?? null, deps.webhookSecret)) {
+    if (!verify(raw, c.req.header(GithubHeaders.signature) ?? null, deps.webhookSecret)) {
       // Invalid/absent signature — reject with NO writes and no detail.
       return c.text('invalid signature', 401);
     }
 
-    const deliveryId = c.req.header('x-github-delivery');
+    const deliveryId = c.req.header(GithubHeaders.delivery);
     if (deliveryId === undefined) {
       return c.text('missing delivery id', 400);
     }
-    const eventType = c.req.header('x-github-event') ?? null;
+    const eventType = c.req.header(GithubHeaders.event) ?? null;
 
     // Idempotent by delivery id: a redelivery must never reprocess.
     const isNew = await deps.deliveries.recordIfNew(Providers.github, deliveryId, eventType ?? 'unknown');

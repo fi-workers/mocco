@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
+import { GithubInstallationActions } from '@backend/domain/integration/github/constants';
+
+import type { GithubInstallationAction, WebhookKinds } from '@backend/domain/integration/github/constants';
+
 // GitHub-namespaced webhook payload schemas. These are NOT neutral — they mirror
 // GitHub App webhook taxonomy verbatim and live next to the GitHub adapter (never
 // in @mocco/common). Only the fields we consume are declared; unknown fields pass
 // through untouched (zod objects ignore extras by default). Parse with
-// `safeParse` at the boundary.
+// `safeParse` at the boundary. The `action`/`kind` enums are built FROM the
+// constants in `./constants` (single source of truth) — never a duplicated
+// literal list.
 
 const repoRef = z.object({ id: z.number(), name: z.string(), owner: z.object({ login: z.string() }) });
 
@@ -22,8 +28,13 @@ export const pushEventSchema = z.object({
   ),
 });
 
+const installationActionValues = Object.values(GithubInstallationActions) as [
+  GithubInstallationAction,
+  ...GithubInstallationAction[],
+];
+
 export const installationEventSchema = z.object({
-  action: z.enum(['created', 'deleted', 'suspend', 'unsuspend', 'new_permissions_accepted']),
+  action: z.enum(installationActionValues),
   installation: z.object({ id: z.number(), account: z.object({ login: z.string(), id: z.number() }) }),
   sender: z.object({ login: z.string(), id: z.number() }),
 });
@@ -34,7 +45,7 @@ export const installationRepositoriesEventSchema = z.object({
 });
 
 export type ParsedWebhook =
-  | { kind: 'push'; data: z.infer<typeof pushEventSchema> }
-  | { kind: 'installation'; data: z.infer<typeof installationEventSchema> }
-  | { kind: 'installation_repositories'; data: z.infer<typeof installationRepositoriesEventSchema> }
-  | { kind: 'ignored'; eventType: string };
+  | { kind: typeof WebhookKinds.push; data: z.infer<typeof pushEventSchema> }
+  | { kind: typeof WebhookKinds.installation; data: z.infer<typeof installationEventSchema> }
+  | { kind: typeof WebhookKinds.installation_repositories; data: z.infer<typeof installationRepositoriesEventSchema> }
+  | { kind: typeof WebhookKinds.ignored; eventType: string };

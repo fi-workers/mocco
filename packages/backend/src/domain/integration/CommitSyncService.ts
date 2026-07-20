@@ -2,6 +2,7 @@ import { Providers } from '@mocco/common/integration';
 
 import { BACKFILL_DEFAULT_LIMIT, ConnectionStatuses } from '@backend/domain/integration/constants';
 import { RepoNotFoundError } from '@backend/domain/integration/errors';
+import { GithubInstallationActions, WebhookKinds } from '@backend/domain/integration/github/constants';
 import { toSourceCommit } from '@backend/domain/integration/github/provider';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
@@ -107,15 +108,15 @@ export class CommitSyncService {
 
   /** Route a parsed webhook to its handler. The webhook route calls this in `waitUntil`. */
   async handle(parsed: ParsedWebhook): Promise<void> {
-    if (parsed.kind === 'push') {
+    if (parsed.kind === WebhookKinds.push) {
       await this.syncPush(parsed.data);
       return;
     }
-    if (parsed.kind === 'installation') {
+    if (parsed.kind === WebhookKinds.installation) {
       await this.handleInstallation(parsed.data);
       return;
     }
-    if (parsed.kind === 'installation_repositories') {
+    if (parsed.kind === WebhookKinds.installation_repositories) {
       // Repo-set changes are observed but not reconciled here (slice 3b): repos are
       // added/removed explicitly via ConnectionService. Log-only, by design.
       console.warn(
@@ -218,7 +219,7 @@ export class CommitSyncService {
   /** Apply an installation-lifecycle transition (global key = provider + installation id). */
   async handleInstallation(data: InstallationData): Promise<void> {
     const externalAccountId = String(data.installation.id);
-    if (data.action === 'deleted') {
+    if (data.action === GithubInstallationActions.deleted) {
       const connection = await this.deps.connections.findByExternalAccount(Providers.github, externalAccountId);
       if (connection === undefined) {
         console.warn(`[commit-sync] installation.deleted for unconnected installation ${externalAccountId} — parked`);
@@ -232,7 +233,7 @@ export class CommitSyncService {
       await this.deps.repos.inactivateByConnection(connection.id);
       return;
     }
-    if (data.action === 'suspend') {
+    if (data.action === GithubInstallationActions.suspend) {
       await this.deps.connections.updateStatusByExternalAccount(
         Providers.github,
         externalAccountId,
@@ -240,7 +241,7 @@ export class CommitSyncService {
       );
       return;
     }
-    if (data.action === 'unsuspend') {
+    if (data.action === GithubInstallationActions.unsuspend) {
       await this.deps.connections.updateStatusByExternalAccount(
         Providers.github,
         externalAccountId,
@@ -248,9 +249,9 @@ export class CommitSyncService {
       );
       return;
     }
-    if (data.action === 'created') {
+    if (data.action === GithubInstallationActions.created) {
       await this.reconcileInstallationCreated(data, externalAccountId);
     }
-    // action === 'new_permissions_accepted' → no state change we track
+    // action === GithubInstallationActions.new_permissions_accepted → no state change we track
   }
 }

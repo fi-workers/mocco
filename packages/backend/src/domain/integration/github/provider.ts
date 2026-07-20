@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { App } from '@octokit/app';
 
 import { BACKFILL_MAX_LIMIT } from '@backend/domain/integration/constants';
+import { GithubWebhookEvents, SIGNATURE_ALGORITHM, WebhookKinds } from '@backend/domain/integration/github/constants';
 import {
   GithubApiError,
   octokitStatus,
@@ -105,7 +106,7 @@ export function verify(rawBody: string, signature: string | null, secret: string
   if (signature === null) {
     return false;
   }
-  const expected = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+  const expected = `${SIGNATURE_ALGORITHM}=${createHmac(SIGNATURE_ALGORITHM, secret).update(rawBody).digest('hex')}`;
   const provided = Buffer.from(signature);
   const wanted = Buffer.from(expected);
   return provided.length === wanted.length && timingSafeEqual(provided, wanted);
@@ -121,18 +122,22 @@ export function verify(rawBody: string, signature: string | null, secret: string
  * returns a different member of that single union. */
 // eslint-disable-next-line sonarjs/function-return-type
 export function parseWebhook(eventType: string | null, rawBody: string): ParsedWebhook {
-  if (eventType !== 'push' && eventType !== 'installation' && eventType !== 'installation_repositories') {
-    return { kind: 'ignored', eventType: eventType ?? 'unknown' };
+  if (
+    eventType !== GithubWebhookEvents.push &&
+    eventType !== GithubWebhookEvents.installation &&
+    eventType !== GithubWebhookEvents.installation_repositories
+  ) {
+    return { kind: WebhookKinds.ignored, eventType: eventType ?? 'unknown' };
   }
   try {
     const json: unknown = JSON.parse(rawBody);
-    if (eventType === 'push') {
-      return { kind: 'push', data: pushEventSchema.parse(json) };
+    if (eventType === GithubWebhookEvents.push) {
+      return { kind: WebhookKinds.push, data: pushEventSchema.parse(json) };
     }
-    if (eventType === 'installation') {
-      return { kind: 'installation', data: installationEventSchema.parse(json) };
+    if (eventType === GithubWebhookEvents.installation) {
+      return { kind: WebhookKinds.installation, data: installationEventSchema.parse(json) };
     }
-    return { kind: 'installation_repositories', data: installationRepositoriesEventSchema.parse(json) };
+    return { kind: WebhookKinds.installation_repositories, data: installationRepositoriesEventSchema.parse(json) };
   } catch (error) {
     throw new WebhookParseError(eventType, { cause: error });
   }
