@@ -76,6 +76,7 @@ describe('integration router on pglite', () => {
   let workspace: WorkspaceService;
   let connection: ConnectionService;
   let commitSync: CommitSyncService;
+  let commitConfig: CommitConfigService;
   let commitSource: CommitSource & { calls: number };
 
   beforeEach(async () => {
@@ -88,6 +89,12 @@ describe('integration router on pglite', () => {
     const connectStates = new ConnectStateRepo(t.db);
     connection = new ConnectionService({ connections, repos, connectStates, provider: fakeProvider() });
     commitSource = fakeCommitSource();
+    commitConfig = new CommitConfigService({
+      configs: new CommitConfigRepo(t.db),
+      commits: new CommitRepo(t.db),
+      source: commitSource,
+      parser: new MoccoConfigParser(decodeYaml),
+    });
     commitSync = new CommitSyncService({
       commits: new CommitRepo(t.db),
       deliveries: new WebhookDeliveryRepo(t.db),
@@ -95,12 +102,7 @@ describe('integration router on pglite', () => {
       repos,
       connectStates,
       source: commitSource,
-      configs: new CommitConfigService({
-        configs: new CommitConfigRepo(t.db),
-        commits: new CommitRepo(t.db),
-        source: commitSource,
-        parser: new MoccoConfigParser(decodeYaml),
-      }),
+      configs: commitConfig,
     });
   });
   afterEach(async () => {
@@ -119,6 +121,7 @@ describe('integration router on pglite', () => {
       workspace,
       connection: hasConnection ? connection : undefined,
       commitSync: hasConnection ? commitSync : undefined,
+      commitConfig: hasConnection ? commitConfig : undefined,
       session,
       headers,
     });
@@ -172,6 +175,7 @@ describe('integration router on pglite', () => {
       workspace,
       connection: revokedConnection,
       commitSync,
+      commitConfig,
       session,
       headers,
     });

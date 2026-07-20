@@ -22,6 +22,7 @@ export default createNextApiHandler({
       workspace,
       connection: integration?.connection,
       commitSync: integration?.commitSync,
+      commitConfig: integration?.commitConfig,
       session: await auth.getSession(headers),
       headers,
       debugEnabled: Configure.DebugEnabled,
