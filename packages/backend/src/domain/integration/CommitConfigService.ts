@@ -4,7 +4,6 @@ import { EntityNotFoundError } from '@backend/infra/db/errors';
 import type { CommitSource } from '@backend/domain/integration/ports';
 import type { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import type { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import type { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import type { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
 import type { CommitConfigDto, CommitDetailDto } from '@mocco/common/integration';
 
@@ -16,7 +15,6 @@ type Ref = Parameters<CommitSource['getConfigAtCommit']>[0];
 export interface CommitConfigServiceDeps {
   configs: CommitConfigRepo;
   commits: CommitRepo;
-  repos: RepoRepo;
   source: CommitSource;
   /** Stateless domain object — construct once at the composition root with a
    * `YamlDecoder` and inject it here. Never `new`'d inside this service. */
@@ -30,30 +28,13 @@ export interface CommitConfigServiceDeps {
  * Like ConnectionService/CommitSyncService, it reaches the DB only through
  * repositories and maps their `EntityNotFoundError` to a domain error.
  *
- * ## Known gap: "absent" (`present: false`) is not representable today
- *
- * `commitConfigSchema` (the wire DTO) carries a `present: boolean` field —
- * `present: false` means "we looked, and this commit's tree has no
- * `.mocco.yml`". But the `mocco_commit_configs` TABLE has no `present` column
- * (see `packages/backend/src/infra/db/schema.ts`): only `rawYaml` (not null),
- * `parsedJson`, `valid` (not null), and `validationErrors` (not null).
- *
- * Every heuristic that tries to encode "absent" using those columns alone is
- * fragile — e.g. treating `rawYaml === '' && !valid && validationErrors.length
- * === 0` as "absent" would also misclassify a genuinely empty-but-present
- * `.mocco.yml` that happens to fail parsing with a message-less issue. Making
- * `rawYaml` nullable, or adding a real `present` column, both require a schema
- * migration — out of this service's scope.
- *
- * So `snapshotCommit` deliberately does **not** store a row when the source
- * reports no config at a commit (`getConfigAtCommit` returns `null`). This
- * keeps every stored row unambiguous (a row only ever exists for a commit
- * whose tree DID have a `.mocco.yml` at snapshot time), at the cost of
- * collapsing two DTO-level states into one on read: `getDetail` returns
- * `config: null` both for "never snapshotted" and for "snapshotted, file
- * absent". `present: false` is consequently unreachable via this path today.
- * Closing this gap needs a schema column — flagged for the router task (8)
- * rather than guessed at here.
+ * `mocco_commit_configs.present` mirrors the wire DTO's `present: boolean`
+ * 1:1: a stored row always exists once a commit has been snapshotted, and
+ * `present` distinguishes "the tree had a `.mocco.yml`" (`true`, with the
+ * parsed content) from "we looked and there was none" (`false`, with an
+ * empty `rawYaml` marker and no parsed config). `config: null` in
+ * `CommitDetailDto` means only one thing: this commit has never been
+ * snapshotted at all.
  */
 export class CommitConfigService {
   constructor(private readonly deps: CommitConfigServiceDeps) {}
@@ -72,31 +53,39 @@ export class CommitConfigService {
   }
 
   /**
-   * Fetch, parse, and snapshot one commit's `.mocco.yml`. Best-effort: a
-   * `getConfigAtCommit` failure for this commit is logged and swallowed —
-   * never thrown — so one bad commit can't sink a `snapshotForCommits` batch.
+   * Fetch, parse, and snapshot one commit's `.mocco.yml`. Best-effort: any
+   * failure for this commit — fetch, parse, or the DB upsert — is logged and
+   * swallowed, never thrown, so one bad commit can't sink a
+   * `snapshotForCommits` batch.
    */
   async snapshotCommit(ref: Ref, commitRow: CommitRow): Promise<void> {
-    let raw: string | null;
     try {
-      raw = await this.deps.source.getConfigAtCommit(ref, commitRow.sha);
-    } catch (error) {
-      console.error(`[commit-config] getConfigAtCommit failed for commit ${commitRow.id} (${commitRow.sha})`, error);
-      return;
-    }
-    if (raw === null) {
-      // No `.mocco.yml` in this commit's tree — see the class doc for why no row is stored.
-      return;
-    }
+      const raw = await this.deps.source.getConfigAtCommit(ref, commitRow.sha);
+      if (raw === null) {
+        // No `.mocco.yml` in this commit's tree — store an explicit absent marker.
+        await this.deps.configs.upsert({
+          commitId: commitRow.id,
+          present: false,
+          rawYaml: '',
+          parsedJson: null,
+          valid: false,
+          validationErrors: [],
+        });
+        return;
+      }
 
-    const result = this.deps.parser.parse(raw);
-    await this.deps.configs.upsert({
-      commitId: commitRow.id,
-      rawYaml: raw,
-      parsedJson: result.ok ? result.config : null,
-      valid: result.ok,
-      validationErrors: result.ok ? [] : result.issues,
-    });
+      const result = this.deps.parser.parse(raw);
+      await this.deps.configs.upsert({
+        commitId: commitRow.id,
+        present: true,
+        rawYaml: raw,
+        parsedJson: result.ok ? result.config : null,
+        valid: result.ok,
+        validationErrors: result.ok ? [] : result.issues,
+      });
+    } catch (error) {
+      console.error(`[commit-config] snapshotCommit failed for commit ${commitRow.id} (${commitRow.sha})`, error);
+    }
   }
 
   /** Snapshot a batch of commits under one repo/ref. Bounded by the caller;
@@ -108,8 +97,9 @@ export class CommitConfigService {
   }
 
   /** A commit plus its config snapshot, workspace-scoped. `config: null` means
-   * either the commit hasn't been snapshotted yet, or (see the class doc) the
-   * snapshot found no `.mocco.yml` — the two are not distinguished today. */
+   * the commit hasn't been snapshotted yet; a snapshotted commit always
+   * returns a `CommitConfigDto` with `present` reflecting whether its tree
+   * had a `.mocco.yml` at snapshot time. */
   async getDetail(workspaceId: string, commitId: string): Promise<CommitDetailDto> {
     const commit = await this.requireCommit(workspaceId, commitId);
     const snapshot = await this.deps.configs.findByCommitId(commitId);
@@ -118,7 +108,7 @@ export class CommitConfigService {
       snapshot === undefined
         ? null
         : {
-            present: true,
+            present: snapshot.present,
             valid: snapshot.valid,
             config: snapshot.parsedJson as CommitConfigDto['config'],
             issues: snapshot.validationErrors as CommitConfigDto['issues'],

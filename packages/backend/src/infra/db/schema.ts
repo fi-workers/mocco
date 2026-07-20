@@ -306,6 +306,7 @@ export const commitConfigs = pgTable(
     commitId: uuid('commit_id')
       .notNull()
       .references(() => commits.id, { onDelete: 'cascade' }),
+    present: boolean().notNull().default(true), // false = snapshot confirmed no `.mocco.yml` at this commit
     rawYaml: text('raw_yaml').notNull(),
     parsedJson: jsonb('parsed_json'), // parsed MoccoConfig when valid, else null
     valid: boolean().notNull(),

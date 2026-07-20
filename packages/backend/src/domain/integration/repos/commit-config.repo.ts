@@ -17,6 +17,7 @@ export class CommitConfigRepo {
       .onConflictDoUpdate({
         target: schema.commitConfigs.commitId,
         set: {
+          present: row.present,
           rawYaml: row.rawYaml,
           parsedJson: row.parsedJson,
           valid: row.valid,

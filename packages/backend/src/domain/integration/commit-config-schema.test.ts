@@ -74,4 +74,18 @@ describe('commit-config schema constraints (pglite)', () => {
     await t.db.delete(commits).where(eq(commits.id, commitId));
     expect(await t.db.select().from(commitConfigs).where(eq(commitConfigs.commitId, commitId))).toHaveLength(0);
   });
+
+  it('defaults present to true when a row is inserted without it', async () => {
+    const commitId = await seedCommit();
+    await t.db.insert(commitConfigs).values({ commitId, rawYaml: 'a: 1', valid: true });
+    const [row] = await t.db.select().from(commitConfigs).where(eq(commitConfigs.commitId, commitId));
+    expect(row?.present).toBe(true);
+  });
+
+  it('stores an explicit present:false row (the absent marker)', async () => {
+    const commitId = await seedCommit();
+    await t.db.insert(commitConfigs).values({ commitId, present: false, rawYaml: '', valid: false });
+    const [row] = await t.db.select().from(commitConfigs).where(eq(commitConfigs.commitId, commitId));
+    expect(row?.present).toBe(false);
+  });
 });

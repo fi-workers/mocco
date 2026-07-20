@@ -6,7 +6,6 @@ import { CommitConfigService } from '@backend/domain/integration/CommitConfigSer
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
 import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { commitConfigs, providerConnections, repos, workspaces } from '@backend/infra/db/schema';
@@ -86,7 +85,6 @@ describe('CommitConfigService (pglite)', () => {
     return new CommitConfigService({
       configs,
       commits,
-      repos: new RepoRepo(t.db),
       source,
       parser,
     });
@@ -167,11 +165,7 @@ describe('CommitConfigService (pglite)', () => {
     expect((row?.validationErrors as unknown[]).length).toBeGreaterThan(0);
   });
 
-  // Documents the current, deliberately limited handling of an absent `.mocco.yml`.
-  // The `mocco_commit_configs` table has no `present` column (see CommitConfigService
-  // doc comment) — this test locks in today's behavior (no row stored) rather than a
-  // fragile heuristic. A follow-up schema change is needed for full DTO conformance.
-  it('snapshotCommit does not store a row when the source has no config at that commit (absent)', async () => {
+  it('snapshotCommit stores an explicit present:false marker row when the source has no config at that commit (absent)', async () => {
     const workspaceId = await seedWorkspace();
     const repo = await seedRepo(workspaceId);
     const commit = await seedCommit(repo.id, 'sha-absent');
@@ -179,7 +173,12 @@ describe('CommitConfigService (pglite)', () => {
 
     await svc.snapshotCommit(REF, commit);
 
-    expect(await configs.findByCommitId(commit.id)).toBeUndefined();
+    const row = await configs.findByCommitId(commit.id);
+    expect(row?.present).toBe(false);
+    expect(row?.valid).toBe(false);
+    expect(row?.rawYaml).toBe('');
+    expect(row?.parsedJson).toBeNull();
+    expect(row?.validationErrors).toEqual([]);
   });
 
   it('re-snapshot overwrites: a later snapshotCommit call replaces the prior row', async () => {
@@ -218,7 +217,9 @@ describe('CommitConfigService (pglite)', () => {
 
     const row1 = await configs.findByCommitId(c1.id);
     expect(row1?.valid).toBe(true);
-    expect(await configs.findByCommitId(c2.id)).toBeUndefined();
+    expect(row1?.present).toBe(true);
+    const row2 = await configs.findByCommitId(c2.id);
+    expect(row2?.present).toBe(false);
   });
 
   it('snapshotForCommits: a fetch failure for one commit does not sink the rest of the batch', async () => {
@@ -233,6 +234,44 @@ describe('CommitConfigService (pglite)', () => {
     expect(await configs.findByCommitId(broken.id)).toBeUndefined();
     const okRow = await configs.findByCommitId(ok.id);
     expect(okRow?.valid).toBe(true);
+  });
+
+  it('snapshotForCommits: an upsert failure for one commit does not sink the rest of the batch', async () => {
+    const workspaceId = await seedWorkspace();
+    const repo = await seedRepo(workspaceId);
+    const broken = await seedCommit(repo.id, 'sha-upsert-broken');
+    const ok = await seedCommit(repo.id, 'sha-upsert-ok');
+
+    class FailingUpsertRepo extends CommitConfigRepo {
+      constructor(
+        db: TestDb['db'],
+        private readonly failingCommitId: string,
+      ) {
+        super(db);
+      }
+
+      override async upsert(row: Parameters<CommitConfigRepo['upsert']>[0]): Promise<void> {
+        if (row.commitId === this.failingCommitId) {
+          throw new Error(`boom: upsert for ${row.commitId}`);
+        }
+        await super.upsert(row);
+      }
+    }
+
+    const failingConfigs = new FailingUpsertRepo(t.db, broken.id);
+    const svc = new CommitConfigService({
+      configs: failingConfigs,
+      commits,
+      source: fakeSource({ 'sha-upsert-broken': VALID_YAML, 'sha-upsert-ok': VALID_YAML }),
+      parser,
+    });
+
+    await expect(svc.snapshotForCommits(REF, [broken, ok])).resolves.toBeUndefined();
+
+    expect(await configs.findByCommitId(broken.id)).toBeUndefined();
+    const okRow = await configs.findByCommitId(ok.id);
+    expect(okRow?.valid).toBe(true);
+    expect(okRow?.present).toBe(true);
   });
 
   it('getDetail returns the commit and its snapshotted config', async () => {
@@ -250,6 +289,19 @@ describe('CommitConfigService (pglite)', () => {
     expect(detail.config?.valid).toBe(true);
     expect(detail.config?.present).toBe(true);
     expect(detail.config?.config).toMatchObject({ pipeline: 'deploy' });
+  });
+
+  it('getDetail returns config:{present:false,...} (not config:null) when the commit was snapshotted absent', async () => {
+    const workspaceId = await seedWorkspace();
+    const repo = await seedRepo(workspaceId);
+    const commit = await seedCommit(repo.id, 'sha-detail-absent');
+    const svc = service(fakeSource({ 'sha-detail-absent': null }));
+    await svc.snapshotCommit(REF, commit);
+
+    const detail = await svc.getDetail(workspaceId, commit.id);
+
+    expect(detail.config).not.toBeNull();
+    expect(detail.config).toEqual({ present: false, valid: false, config: null, issues: [] });
   });
 
   it('getDetail returns config:null when the commit has not been snapshotted yet', async () => {

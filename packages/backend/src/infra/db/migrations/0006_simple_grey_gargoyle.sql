@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_commit_configs" ADD COLUMN "present" boolean DEFAULT true NOT NULL;

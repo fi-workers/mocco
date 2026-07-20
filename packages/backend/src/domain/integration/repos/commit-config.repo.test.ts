@@ -122,6 +122,43 @@ describe('CommitConfigRepo (pglite)', () => {
     expect(second.syncedAt.getTime()).toBeGreaterThanOrEqual(first.syncedAt.getTime());
   });
 
+  it('upsert flips present on a re-snapshot (present:true -> false and back)', async () => {
+    const commitId = await seedCommit();
+
+    await commitConfigRepo.upsert({
+      commitId,
+      present: true,
+      rawYaml: 'version: 1',
+      parsedJson: { version: 1 },
+      valid: true,
+      validationErrors: [],
+    });
+    const afterFirst = await commitConfigRepo.findByCommitId(commitId);
+    expect(afterFirst?.present).toBe(true);
+
+    await commitConfigRepo.upsert({
+      commitId,
+      present: false,
+      rawYaml: '',
+      parsedJson: null,
+      valid: false,
+      validationErrors: [],
+    });
+    const afterSecond = await commitConfigRepo.findByCommitId(commitId);
+    expect(afterSecond?.present).toBe(false);
+
+    await commitConfigRepo.upsert({
+      commitId,
+      present: true,
+      rawYaml: 'version: 2',
+      parsedJson: { version: 2 },
+      valid: true,
+      validationErrors: [],
+    });
+    const afterThird = await commitConfigRepo.findByCommitId(commitId);
+    expect(afterThird?.present).toBe(true);
+  });
+
   it('findByCommitId returns undefined when there is no config for the commit', async () => {
     const commitId = await seedCommit();
     expect(await commitConfigRepo.findByCommitId(commitId)).toBeUndefined();
