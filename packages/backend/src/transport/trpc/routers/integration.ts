@@ -4,6 +4,8 @@
 // via a router-scoped middleware, which also asserts the GitHub App is configured.
 import {
   availableRepoSchema,
+  commitDetailQueryInputSchema,
+  commitDetailSchema,
   commitsPageSchema,
   commitsQueryInputSchema,
   connectionSchema,
@@ -122,5 +124,22 @@ export const integrationRouter = router({
       // n/no-sync's `/Sync$/` identifier heuristic false-positives here (see also above).
       // eslint-disable-next-line n/no-sync
       return await ctx.commitSync.listCommits(input.workspaceId, input.repoId, input.cursor, input.limit);
+    }),
+
+  // A single commit plus its `.mocco.yml` snapshot (or `config: null` if it hasn't
+  // been snapshotted yet). `commitConfig` carries the same "GitHub App configured"
+  // optionality as `connection`/`commitSync` (all three built together in
+  // instance.ts, see trpc.ts) — re-asserted here like `commits` does for
+  // `commitSync`, since the shared middleware above only narrows `connection`.
+  // No hand-projection: `getDetail`'s return narrows to the wire shape via
+  // `.output(commitDetailSchema)` alone.
+  commitDetail: protectedIntegrationProcedure
+    .input(commitDetailQueryInputSchema)
+    .output(commitDetailSchema)
+    .query(async ({ ctx, input }) => {
+      if (!ctx.commitConfig) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'GitHub integration is not configured' });
+      }
+      return await ctx.commitConfig.getDetail(input.workspaceId, input.commitId);
     }),
 });
