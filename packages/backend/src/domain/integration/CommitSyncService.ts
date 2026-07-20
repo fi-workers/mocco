@@ -15,8 +15,8 @@ import type { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import type { CommitsPageDto } from '@mocco/common/integration';
 
-type PushData = Extract<ParsedWebhook, { kind: 'push' }>['data'];
-type InstallationData = Extract<ParsedWebhook, { kind: 'installation' }>['data'];
+type PushData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.push }>['data'];
+type InstallationData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.installation }>['data'];
 // Row shapes are taken from the repos (a service never imports the drizzle schema).
 type RepoRow = Awaited<ReturnType<RepoRepo['getByConnectionAndExternalRepoId']>>;
 type CommitInsert = Parameters<CommitRepo['upsertMany']>[0][number];
@@ -123,7 +123,7 @@ export class CommitSyncService {
         `[commit-sync] installation_repositories '${parsed.data.action}' for installation ${parsed.data.installation.id} — logged, not reconciled`,
       );
     }
-    // kind === 'ignored' → no-op
+    // kind === WebhookKinds.ignored → no-op
   }
 
   /** Sync the commits carried by a push, tenant-scoped through the connection. */

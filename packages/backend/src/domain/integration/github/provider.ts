@@ -115,7 +115,7 @@ export function verify(rawBody: string, signature: string | null, secret: string
 /** Parse a raw webhook body against the GitHub-namespaced zod schema selected by
  * `eventType`. Pure. A schema/JSON failure is wrapped as `WebhookParseError` —
  * the zod issue list (and any payload fragment it can echo back) never leaves
- * this function. An event type we don't act on maps to `{ kind: 'ignored' }`
+ * this function. An event type we don't act on maps to `{ kind: WebhookKinds.ignored }`
  * without needing the body to parse at all.
  * sonarjs/function-return-type is a false positive here: the return type is
  * the ParsedWebhook discriminated union declared above; each branch legitimately
