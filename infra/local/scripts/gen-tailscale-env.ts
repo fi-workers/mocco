@@ -12,8 +12,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // ── Pure parts (test seam) ──
@@ -91,6 +91,9 @@ function main(): void {
   }
 
   const next = upsertEnvLine(existing, 'SERVICE_DOMAIN', host);
+  // Ensure packages/frontend/env/ exists so the generator works standalone,
+  // regardless of whether the committed env files have been created yet.
+  mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(envPath, next);
 
   console.log(`SERVICE_DOMAIN=${host} -> packages/frontend/env/.env`);
