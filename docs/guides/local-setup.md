@@ -44,18 +44,24 @@ make dev      # = yarn dev = concurrently(run-frontend + run-traefik)
 
 ## Environment variables
 
-Copy `packages/frontend/src/.env.example` → `.env`:
-- `AUTH_URL` = `https://www.mocco.work`
-- `DATABASE_URL` = local pg
+Env loads through `with-env` (`infra/local/scripts/with-env.ts`), later wins:
+committed defaults in `packages/frontend/env/.env.local` → your gitignored
+`packages/frontend/env/.env`. See [env reference](../reference/env.md).
+
+- Committed defaults (already in `env/.env.local`, a fresh clone boots on these):
+  `SERVICE_DOMAIN=www.mocco.work` (the app host — scheme derived: https here, http
+  for `localhost`) and a local `DATABASE_URL`.
+- Personal/secret overrides: copy `packages/frontend/env/.env.example` →
+  `packages/frontend/env/.env` and fill in `AUTH_SECRET` (+ any GitHub App secrets).
 
 ## Login (email + password)
 
 No external OAuth app is needed — sign-up works out of the box.
 
-1. Copy `packages/frontend/src/.env.example` → `.env` and fill in:
+1. Copy `packages/frontend/env/.env.example` → `packages/frontend/env/.env` and fill in:
    - `AUTH_SECRET` = `openssl rand -base64 32`
-   - `AUTH_URL` = `https://www.mocco.work`
-   - `DATABASE_URL` = local pg
+   - (`SERVICE_DOMAIN` and `DATABASE_URL` already default from `env/.env.local`; override
+     `SERVICE_DOMAIN` here — or run `yarn env:tailscale` — only for tailnet access)
 2. `make dev` → `https://www.mocco.work` → **Create account** → you land on `/account`.
 
 - Route: `app/api/auth/[...all]` re-exports the backend's neutral `authHandler` (the vendor is isolated inside `packages/backend/src/domain/auth/`)
