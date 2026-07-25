@@ -9,6 +9,10 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# packages/frontend/env/ — committed defaults + template; env/.env stays ignored.
+!packages/frontend/env/.env.local
+!packages/frontend/env/.env.example
 .yarn/*
 !.yarn/patches
 !.yarn/releases
