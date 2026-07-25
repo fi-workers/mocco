@@ -1,99 +1,142 @@
-# Env Management (with-env wrapper) Implementation Plan
+# Env Management (SERVICE_DOMAIN + with-env loader + tailnet generator) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Next's built-in `.env` loading with a `with-env` wrapper giving explicit precedence — committed `env/.env.local` defaults → Tailscale team secrets (memory-only, skippable) → gitignored `env/.env` personal override (wins).
+**Goal:** Introduce a single canonical `SERVICE_DOMAIN` (bare authority) that the app URL + auth origins derive from; load env via an explicit two-layer `with-env` wrapper (committed `env/.env.local` → gitignored `env/.env`, which wins); and confine all Tailscale knowledge to one dev-only generator that upserts `SERVICE_DOMAIN=<tailnet host>` into `env/.env`.
 
-**Architecture:** A dependency-free `infra/local/scripts/with-env.ts` (ported from algocare-home) loads the files in our order + merges a runtime Tailscale fetch, then `spawn`s the child (`next dev`, `drizzle-kit`) with the merged env. Env files live in `packages/frontend/env/` so Next's root-only auto-loader never double-loads them.
+**Architecture:** `SERVICE_DOMAIN` replaces `AUTH_URL` (`resolveAuthOrigins` composes the scheme: loopback→http, else https). `infra/local/scripts/with-env.ts` is a dependency-free two-file loader that `spawn`s the child with the merged env; env files live under `packages/frontend/env/` so Next's root auto-loader never sees them. `infra/local/scripts/gen-tailscale-env.ts` reads `tailscale status --json → Self.DNSName` and upserts `SERVICE_DOMAIN` into `env/.env` — the only Tailscale-aware code.
 
-**Tech Stack:** `tsx` (already used for scripts), Node built-ins (`child_process`, `fs`, `fetch`, `AbortController`), vitest for the pure parts.
+**Tech Stack:** `tsx@4.22.4` (already a root devDep), Node built-ins (`child_process`, `node:fs`), vitest for the pure parts.
 
-**Spec:** `docs/superpowers/specs/2026-07-25-env-management-design.md`. Reference impl: `~/Projects/algocare/algocare-home/infra/local/scripts/with-env.ts`. **One chore PR** (`chore/env-management`, off `main`). `yarn verify` green before push.
+**Spec:** `docs/superpowers/specs/2026-07-25-env-management-design.md`. Reference (loader shape only): `~/Projects/algocare/algocare-home/infra/local/scripts/with-env.ts`. **One chore PR** (`chore/env-management`, off `main`). `yarn verify` green before push.
 
 ## Global Constraints
 
-- Dev-infra only — NO product code changes; `AUTH_URL`/`resolveAuthOrigins` logic untouched (this only changes how env is *loaded*).
-- Precedence (later wins): **`env/.env.local` (committed defaults) → Tailscale (memory-only, configurable URL, graceful skip) → `env/.env` (gitignored personal)**.
+- Precedence (later wins): **`env/.env.local` (committed defaults) → `env/.env` (gitignored personal)**. Two files only — no remote fetch (dropped from algocare's version).
 - Env files under `packages/frontend/env/` (NOT the package root) — dodges Next's auto-loader so our precedence stands.
-- Deps pinned exactly (no `^`/`~`); absolute imports where applicable; no barrels; the wrapper is dependency-free (no dotenv/dotenv-cli).
-- Tailscale fetch: memory only (never written to disk), `AbortController` ~3s timeout, and **skip with a warning** when the URL is unset/non-200/unreachable — never fail the wrapped command.
-- No `vi.mock`; the fetch is behind a seam so the merge tests need no network.
+- **`SERVICE_DOMAIN` is a bare authority** (`host` or `host:port`), never a URL. Scheme derived in code: loopback (`localhost`/`127.*`/`[::1]`) → `http`, else `https`.
+- **Tailscale is confined to `gen-tailscale-env.ts`** — `env.ts`, `origins.ts`, `with-env.ts` never reference it. They see only `SERVICE_DOMAIN`.
+- Deps already present (`tsx`); no new deps; absolute imports (`@backend/*`) in product code; no barrels.
+- No `vi.mock`; pure functions are exported + unit-tested, the `tailscale`/`fs`/`spawn` I/O is the untested shell.
+- Env-only vars (`AUTH_SECRET`, `GITHUB_APP_*`) keep their names — only `AUTH_URL → SERVICE_DOMAIN` changes.
 
 ## File Structure
 
 **New**
-- `infra/local/scripts/with-env.ts` — the wrapper (exports pure `parseDotenv`, `mergeEnv` for tests).
-- `infra/local/scripts/with-env.test.ts` — unit tests for the pure parts (or colocated where `yarn test` runs it — see Task 1).
-- `packages/frontend/env/.env.local` — committed non-secret defaults.
+- `infra/local/scripts/with-env.ts` — two-layer loader (exports pure `parseDotenv`, `mergeEnv`).
+- `infra/local/scripts/with-env.test.ts` — unit tests for the pure parts.
+- `infra/local/scripts/gen-tailscale-env.ts` — tailnet host generator (exports pure `dnsNameFromStatus`, `upsertEnvLine`).
+- `infra/local/scripts/gen-tailscale-env.test.ts` — unit tests for the pure parts.
+- `packages/frontend/env/.env.local` — committed non-secret defaults (`SERVICE_DOMAIN=www.mocco.work`, local `DATABASE_URL`).
 - `packages/frontend/env/.env.example` — template for the gitignored `env/.env`.
 
 **Modified**
-- `package.json` (root) — wrap `run-frontend`, `db:generate`, `db:migrate` with `with-env`; add `tsx` if absent.
-- `.gitignore` — commit `packages/frontend/env/.env.local` + `env/.env.example`; keep `env/.env` (+ stray root `.env*`) ignored.
+- `packages/backend/src/infra/config/env.ts` — `AUTH_URL` → `SERVICE_DOMAIN`.
+- `packages/backend/src/domain/auth/origins.ts` — `authUrl` → `serviceDomain`, scheme composition.
+- `packages/backend/src/domain/auth/instance.ts` — pass `serviceDomain`.
+- `packages/backend/src/domain/auth/origins.test.ts` — rewrite to `serviceDomain` + a localhost case.
+- `packages/e2e/playwright.config.ts` — `AUTH_URL: baseURL` → `SERVICE_DOMAIN: 'localhost:3100'`.
+- `package.json` (root) — wrap `run-frontend`/`db:generate`/`db:migrate` with `with-env`; add `env:tailscale`.
+- `.gitignore` — allowlist `env/.env.local` + `env/.env.example`; keep `env/.env` (+ stray root `.env*`) ignored.
 - Remove `packages/frontend/.env.example` (superseded by `env/.env.example`).
-- `AGENTS.md` + a new `docs/reference/env.md` — the env convention.
+- `AGENTS.md` + new `docs/reference/env.md` — the env convention.
 
 ---
 
-## Task 1: `with-env.ts` wrapper + pure-part tests
+## Task 1: `with-env.ts` two-layer loader + pure tests
 
 **Files:** Create `infra/local/scripts/with-env.ts`, `infra/local/scripts/with-env.test.ts`.
 
-Port from `~/Projects/algocare/algocare-home/infra/local/scripts/with-env.ts`, adapting paths to mocco (`packages/<app>/env/…`, not `apps/<app>/env/…`) and making the Tailscale URL configurable (not the hardcoded algocare bastion).
+Loader shape follows algocare-home's `with-env.ts` but **two files only, no remote fetch**, mocco paths (`packages/<app>/env/…`).
 
 **Interfaces (exported for tests):**
-- `parseDotenv(content: string): Record<string,string>` — trims, skips blank/`#`, splits on first `=`, strips matching surrounding quotes.
-- `mergeEnv(base, remote, override): Record<string,string>` — `{ ...base, ...remote, ...override }` (later wins).
+- `parseDotenv(content: string): Record<string,string>` — trims, skips blank/`#`, splits on first `=`, strips matching surrounding quotes, keeps `=` in values.
+- `mergeEnv(base, override): Record<string,string>` — `{ ...base, ...override }` (override wins).
 
-- [ ] **Step 1: Failing tests.** `parseDotenv`: parses `K=V`, strips `"…"`/`'…'`, skips `#`/blank, keeps `=` in values (`K=a=b`), trims whitespace. `mergeEnv`: override beats remote beats base; a key only in base survives.
-- [ ] **Step 2: Decide test placement + run — FAIL.** Place `with-env.test.ts` so root `yarn test` runs it: simplest is to add `infra/local/scripts/**/*.test.ts` to an existing vitest project's include (e.g. the backend or common vitest config's `test.include`), or a tiny dedicated vitest config wired into `test-*`. Pick the least-friction option; if none is clean, colocate under `packages/common` and import the script via relative path — document the choice. Confirm the test FAILS (module/exports absent).
-- [ ] **Step 3: Implement `with-env.ts`.** Structure (mirror the reference):
+- [ ] **Step 1: Failing tests.** `parseDotenv`: `K=V`, strips `"…"`/`'…'`, skips `#`/blank, keeps `=` in values (`K=a=b`), trims. `mergeEnv`: override beats base; a base-only key survives.
+- [ ] **Step 2: Test placement — FAIL.** Add `infra/local/scripts/**/*.test.ts` (repo-root-relative) to an existing vitest project's `test.include` (prefer `packages/backend/vitest.config.ts` or `packages/common`), OR a tiny dedicated vitest project wired into a root `test-*` script. Least-friction; if none clean, colocate under `packages/common/src` importing the script by relative path — document the choice. Confirm FAIL (exports absent).
+- [ ] **Step 3: Implement `with-env.ts`.**
   - `parseArgs(argv)` → `{ app, env='local', command[] }` from `--app <name> [--env <e>] -- <cmd…>`; usage error + exit 1 if missing.
-  - `loadFile(path)` → `parseDotenv(readFileSync)` or `{}` if absent (warn on read error).
-  - `fetchRemoteEnv(urlFromVars)` → if the configured URL (`MOCCO_TAILSCALE_ENV_URL`, read from the step-2 vars or `process.env`) is empty → return `{}` (skip). Else `fetch` with a 3s `AbortController` timeout; non-200 or throw → warn + `{}`. Success → `parseDotenv(text)` (memory only).
-  - `main()`: resolve `packages/<app>/env/`; `base = loadFile(env/.env.<env>)`; `remote = await fetchRemoteEnv(base.MOCCO_TAILSCALE_ENV_URL ?? process.env.MOCCO_TAILSCALE_ENV_URL)`; `override = loadFile(env/.env)`; `merged = mergeEnv(base, remote, override)`; `spawn(command, { stdio:'inherit', env:{...process.env, ...merged}, shell:true })`; propagate exit code; short banner (app, env, counts). Export `parseDotenv`/`mergeEnv`.
-  - Node date/random not needed. Keep it dependency-free.
+  - `loadFile(path)` → `parseDotenv(readFileSync)` or `{}` if absent (warn on non-ENOENT read error).
+  - `main()`: resolve `packages/<app>/env/`; `base = loadFile(.env.<env>)`; `override = loadFile(.env)`; `merged = mergeEnv(base, override)`; `spawn(command[0], command.slice(1), { stdio:'inherit', env:{...process.env, ...merged}, shell:true })`; propagate exit code; short banner (app, env, loaded counts). Export `parseDotenv`/`mergeEnv`. Dependency-free; no `Date.now`/random.
 - [ ] **Step 4: Run — PASS.**
-- [ ] **Step 5: Commit** — `chore(infra): with-env.ts wrapper (.env.local → tailscale → .env precedence)`
+- [ ] **Step 5: Commit** — `chore(infra): with-env.ts two-layer loader (.env.local → .env)`
 
 ---
 
-## Task 2: Env file layout + `.gitignore`
+## Task 2: `gen-tailscale-env.ts` generator + pure tests
 
-**Files:** Create `packages/frontend/env/.env.local`, `packages/frontend/env/.env.example`; Delete `packages/frontend/.env.example`; Modify `.gitignore`.
+**Files:** Create `infra/local/scripts/gen-tailscale-env.ts`, `infra/local/scripts/gen-tailscale-env.test.ts`.
 
-- [ ] **Step 1:** Create `packages/frontend/env/.env.local` (committed, non-secret defaults). Migrate the non-secret defaults currently documented in `packages/frontend/.env.example`; set `AUTH_URL=https://www.mocco.work`, a local `DATABASE_URL` default, and `MOCCO_TAILSCALE_ENV_URL=` (empty → Tailscale step skips). Do NOT put any secret here.
-- [ ] **Step 2:** Create `packages/frontend/env/.env.example` — the template for the gitignored `env/.env`: lists the secrets + personal overrides a dev fills in (`AUTH_SECRET`, `GITHUB_APP_*`, `GITHUB_WEBHOOK_SECRET`, `EXECUTOR_SECRET`, and the tailnet `AUTH_URL` override example `https://<your-mac>.<tailnet>.ts.net`). Copy the relevant entries from the old root `.env.example`.
-- [ ] **Step 3:** Delete the old `packages/frontend/.env.example` (superseded — its content now split across `env/.env.local` + `env/.env.example`).
-- [ ] **Step 4:** `.gitignore` — the repo currently ignores `.env` + `.env.*` (except `.env.example`). Add explicit allowlist so BOTH `packages/frontend/env/.env.local` and `packages/frontend/env/.env.example` are tracked, while `packages/frontend/env/.env` stays ignored (and any stray root `.env*` stays ignored). Verify with `git check-ignore -v` on all three paths.
-- [ ] **Step 5:** Confirm no `.env*` remains at `packages/frontend/` root (so Next's auto-loader finds nothing there). `git status` shows `env/.env.local` + `env/.env.example` staged, `env/.env` (if created for testing) untracked.
-- [ ] **Step 6: Commit** — `chore(env): move env to packages/frontend/env/ (committed .env.local + .env.example template)`
+The ONLY Tailscale-aware code. Run on demand; writes `SERVICE_DOMAIN=<host>` into `packages/frontend/env/.env`.
+
+**Interfaces (exported for tests):**
+- `dnsNameFromStatus(json: unknown): string` — reads `Self.DNSName`, strips the trailing `.`; throws a clear Error if absent/empty.
+- `upsertEnvLine(content: string, key: string, value: string): string` — replaces an existing `^<key>=` line in place, else appends `key=value` (with a trailing newline); preserves all other lines + comments.
+
+- [ ] **Step 1: Failing tests.** `dnsNameFromStatus`: `{Self:{DNSName:'mac-mini.tailfd5d.ts.net.'}}` → `mac-mini.tailfd5d.ts.net` (dot stripped); missing/empty `Self.DNSName` → throws. `upsertEnvLine`: appends when key absent; replaces in place when present (other lines untouched, order preserved); no duplicate lines.
+- [ ] **Step 2: Run — FAIL** (same vitest wiring as Task 1 picks it up).
+- [ ] **Step 3: Implement `gen-tailscale-env.ts`.**
+  - `readStatus()` → `execFileSync('tailscale', ['status','--json'])` → `JSON.parse`. On spawn failure (tailscale missing) → clear Error ("tailscale not found / not running").
+  - `main()`: `host = dnsNameFromStatus(readStatus())`; resolve `packages/frontend/env/.env`; read existing (or `''`); `next = upsertEnvLine(existing, 'SERVICE_DOMAIN', host)`; `writeFileSync`; log `SERVICE_DOMAIN=<host> → packages/frontend/env/.env`. Non-zero exit on any thrown error (explicit dev command → fail loudly). Export the two pure fns.
+- [ ] **Step 4: Run — PASS.**
+- [ ] **Step 5: Commit** — `chore(infra): gen-tailscale-env.ts (upsert SERVICE_DOMAIN from tailscale Self.DNSName)`
 
 ---
 
-## Task 3: Wire dev + db scripts through `with-env`
+## Task 3: `SERVICE_DOMAIN` product-code rename (RED→GREEN)
 
-**Files:** Modify root `package.json` (+ add `tsx` if absent).
+**Files:** Modify `env.ts`, `origins.ts`, `instance.ts`, `origins.test.ts`, `packages/e2e/playwright.config.ts`.
 
-- [ ] **Step 1:** Confirm `tsx` is available (root or a workspace dep). If not, add it exact-pinned to root devDependencies (`yarn add -D -W tsx@<current>`).
-- [ ] **Step 2:** Wrap the scripts:
-  - `run-frontend`: `tsx infra/local/scripts/with-env.ts --app frontend -- yarn frontend dev` (frontend `dev` stays `next dev -p 3100`). Root `dev` = `concurrently … yarn:run-frontend yarn:run-traefik` unchanged in shape.
+- [ ] **Step 1: Update the test first (RED).** Rewrite `origins.test.ts`: param `authUrl` → `serviceDomain`, values become **bare authorities** (`'www.mocco.club'`, `'mocco.work'`, `'www.mocco.work'`). Add a case: `serviceDomain: 'localhost:3100'` → `baseUrl 'http://localhost:3100'`. Preview cases keep `vercelUrl`/`vercelBranchUrl` (still https hosts) — drop the `authUrl` field there. The "no config" empty case stays. Run — FAIL (origins still takes `authUrl`).
+- [ ] **Step 2: Implement.**
+  - `origins.ts`: rename `AuthOriginEnv.authUrl` → `serviceDomain` (a bare authority). Add a private `schemeFor(host)` (loopback `localhost`/`127.`/`[::1]` → `http`, else `https`) and compose `const url = ${schemeFor(host)}://${serviceDomain}`; `baseUrl = new URL(url).origin`, `trustedOrigins = originVariants(url)`. Preview branch unchanged (already composes `https://${host}`). Update the doc comments (drop "AUTH_URL").
+  - `env.ts`: schema key `AUTH_URL` → `SERVICE_DOMAIN` (keep `.min(1).optional()`); update the jsdoc (`Canonical app host — prod www.mocco.club, local www.mocco.work; e2e localhost:3100`).
+  - `instance.ts`: `serviceDomain: env.SERVICE_DOMAIN` (was `authUrl: env.AUTH_URL`).
+  - `playwright.config.ts`: `AUTH_URL: baseURL` → `SERVICE_DOMAIN: 'localhost:3100'` (leave `baseURL`/`PORT` as-is; they still describe the browser target).
+- [ ] **Step 3: Run — PASS.** `yarn backend test` green; `git grep -n 'AUTH_URL\|authUrl'` returns nothing in `packages/**` src/test/config.
+- [ ] **Step 4: Commit** — `refactor(auth): SERVICE_DOMAIN replaces AUTH_URL; derive scheme (loopback→http)`
+
+---
+
+## Task 4: Env file layout + `.gitignore`
+
+**Files:** Create `packages/frontend/env/.env.local`, `packages/frontend/env/.env.example`; delete `packages/frontend/.env.example`; modify `.gitignore`.
+
+- [ ] **Step 1:** Create `packages/frontend/env/.env.local` (committed, non-secret): `SERVICE_DOMAIN=www.mocco.work`, a local `DATABASE_URL` default (mirror drizzle's `postgres://mocco:mocco@localhost:5432/mocco`). No secrets.
+- [ ] **Step 2:** Create `packages/frontend/env/.env.example` — template for the gitignored `env/.env`: the secrets a dev fills in (`AUTH_SECRET`, `GITHUB_APP_ID/SLUG/PRIVATE_KEY_B64/CLIENT_ID/CLIENT_SECRET`, `GITHUB_WEBHOOK_SECRET`, `EXECUTOR_SECRET` if present on this branch) + a commented `# SERVICE_DOMAIN=<your-mac>.<tailnet>.ts.net  # or run: yarn env:tailscale`. Migrate the relevant entries from the old `packages/frontend/.env.example`.
+- [ ] **Step 3:** Delete `packages/frontend/.env.example` (content now split across `env/.env.local` + `env/.env.example`).
+- [ ] **Step 4:** `.gitignore` — root currently: `.env`, `.env.*`, `!.env.example`. Add explicit allowlist so BOTH `packages/frontend/env/.env.local` and `packages/frontend/env/.env.example` are tracked, while `packages/frontend/env/.env` stays ignored (and any stray root `.env*` stays ignored). Verify with `git check-ignore -v` on all three paths (`.env.local` + `.env.example` → NOT ignored; `.env` → ignored).
+- [ ] **Step 5:** Confirm no `.env*` remains at `packages/frontend/` root. `git status` shows `env/.env.local` + `env/.env.example` staged, deletion of old `.env.example` staged, `env/.env` (if created) untracked.
+- [ ] **Step 6: Commit** — `chore(env): move env to packages/frontend/env/ (committed .env.local + .env.example)`
+
+---
+
+## Task 5: Wire dev + db scripts through `with-env`
+
+**Files:** Modify root `package.json`.
+
+- [ ] **Step 1:** `tsx@4.22.4` is already a root devDep — no add needed (confirm).
+- [ ] **Step 2:** Rewrite scripts:
+  - `run-frontend`: `tsx infra/local/scripts/with-env.ts --app frontend -- yarn frontend dev` (frontend `dev` stays `next dev -p 3100`; `dev`/`concurrently` unchanged in shape).
   - `db:generate`: `tsx infra/local/scripts/with-env.ts --app frontend -- drizzle-kit generate`.
   - `db:migrate`: `tsx infra/local/scripts/with-env.ts --app frontend -- drizzle-kit migrate`.
-  - Leave `db:drift`/`test`/`lint`/`build` as-is (they don't need the layered env, or CI supplies env directly).
-- [ ] **Step 3: Manual verify** — `yarn db:generate` runs and picks up `DATABASE_URL` from `env/.env.local` (banner prints; no "DATABASE_URL missing"); `yarn dev` boots Next on :3100 with the banner showing loaded counts (Ctrl-C after boot). If the Tailscale URL is empty, the banner/logs show the fetch skipped (not an error).
-- [ ] **Step 4: Commit** — `chore(scripts): run dev + drizzle through with-env`
+  - Add `env:tailscale`: `tsx infra/local/scripts/gen-tailscale-env.ts`.
+  - Leave `build`/`test`/`lint`/`db:drift`/`schema:*`/e2e as-is (CI/e2e supply env directly; drizzle keeps its localhost fallback).
+- [ ] **Step 3: Manual verify.** `yarn db:generate` runs picking up `DATABASE_URL` from `env/.env.local` (banner prints; no "DATABASE_URL missing"). `yarn dev` boots Next on :3100 with the banner (Ctrl-C after boot). `env/.env` (if present) overrides `env/.env.local`.
+- [ ] **Step 4: Commit** — `chore(scripts): run dev + drizzle through with-env; add env:tailscale`
 
 ---
 
-## Task 4: Verify, docs, PR
+## Task 6: Verify, docs, PR
 
-- [ ] **Step 1:** `yarn verify` — must stay green (the wrapper doesn't touch verify's steps; confirm nothing regressed, esp. that moving `.env.example` didn't break any path that referenced the old location — grep for `.env.example` / `frontend/.env`).
-- [ ] **Step 2: Docs.** New `docs/reference/env.md`: the three roles (`env/.env.local` committed defaults / Tailscale team secrets memory-only / `env/.env` gitignored personal), the precedence + why the wrapper (vs Next's inverted order), the `env/` subdir trick, and the tailnet `AUTH_URL`-override recipe (method A: `tailscale serve` + personal `env/.env`). Note the Tailscale endpoint is a pending ops task (URL unset → skip). Add an AGENTS.md one-liner pointing to it.
-- [ ] **Step 3: PR** (base `main`, `## Why`: env roles were mixed under Next's loader; adopt algocare-home's proven with-env precedence so committed defaults / team secrets / personal overrides are separate; unblocks clean per-dev tailnet `AUTH_URL`. Trade-offs: Tailscale fetch is wired but its endpoint is a later ops task (skips until set); dev/db now go through the wrapper). Do NOT merge.
+- [ ] **Step 1:** `yarn verify` green. Grep for stale refs: `git grep -n 'AUTH_URL\|frontend/.env.example'` — none outside docs/changelog. Confirm moving `.env.example` broke no referenced path.
+- [ ] **Step 2: Docs.** New `docs/reference/env.md`: the two file roles (`env/.env.local` committed defaults / `env/.env` gitignored personal), the precedence + why the wrapper (vs Next's inverted order), the `env/` subdir trick, `SERVICE_DOMAIN` (authority + derived scheme) as the single origin source, and the tailnet recipe (`yarn env:tailscale` → `tailscale serve` → phone on 443). Note `tailscale serve` setup is a documented manual step. Add an AGENTS.md one-liner pointing to it (and update any AGENTS.md `AUTH_URL` mention to `SERVICE_DOMAIN`).
+- [ ] **Step 3: PR** (base `main`, `## Why`: env roles were mixed under Next's inverted loader and auth read a full URL; adopt a single `SERVICE_DOMAIN` (host, scheme derived) + a two-layer `with-env` loader so committed defaults vs personal overrides are separate, and confine Tailscale to one generator so product code stays provider-blind; unblocks clean per-dev tailnet access. Trade-offs: dev/db now go through the wrapper; `AUTH_URL` renamed (coordinate the run-execution branch on rebase)). Do NOT merge.
 
 ---
 
 ## Notes
-- Reference `with-env.ts` (algocare-home) hardcodes its bastion URL + an `apps/<app>` layout and prints a domain/port banner map. Adapt: configurable URL, `packages/<app>` layout, a minimal banner. Don't copy the algocare domain/port maps.
-- This is independent of 3c (PR #72) and run-execution (local branch) — off `main`, no dependency either way.
+- Reference `with-env.ts` (algocare-home) also does a remote bastion fetch + `apps/<app>` layout + a domain/port banner map. We take only the file-loading shape: **two files, `packages/<app>` layout, minimal banner, no fetch.**
+- `AUTH_URL → SERVICE_DOMAIN` lands on `main`; the run-execution branch derives `callbackBaseUrl` via `resolveAuthOrigins`, so it picks this up on rebase — no separate change there.
+- Independent of 3c (PR #72) and run-execution (local branch) — off `main`, no dependency either way.

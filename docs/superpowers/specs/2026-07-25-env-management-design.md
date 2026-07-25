@@ -22,9 +22,9 @@ related:
 
 ### 1. `SERVICE_DOMAIN` — the canonical app host (product code)
 
-One env var answers "what host is this app served at?" — a **bare host**, no scheme, no path (e.g. `www.mocco.work`, `mac-mini.tailfd5d.ts.net`). Everything origin-dependent derives from it, always over **https** (every real environment terminates TLS on 443 — traefik+mkcert locally, `tailscale serve` on the tailnet, the platform in prod/preview):
+One env var answers "what host is this app served at?" — a **bare authority** (`host` or `host:port`), no scheme, no path (e.g. `www.mocco.work`, `mac-mini.tailfd5d.ts.net`, `localhost:3100`). The **scheme is derived** in code: a loopback host (`localhost`, `127.*`, `[::1]`) → `http`; everything else → `https` (every real deploy terminates TLS on 443 — traefik+mkcert locally on `www.mocco.work`, `tailscale serve` on the tailnet, the platform in prod/preview). This one rule keeps `SERVICE_DOMAIN` a plain host while still expressing the e2e server's `http://localhost:3100`.
 
-- `resolveAuthOrigins` takes `serviceDomain` (renamed from `authUrl`) and derives `baseUrl = https://${serviceDomain}` + `trustedOrigins` from it.
+- `resolveAuthOrigins` takes `serviceDomain` (renamed from `authUrl`) and derives `baseUrl = ${scheme}://${serviceDomain}` + `trustedOrigins` from it (via the existing `originVariants` www/apex toggle over the composed URL).
 - run-execution's `callbackBaseUrl` derives from the same (it already flows through `resolveAuthOrigins`).
 - **`AUTH_URL` is removed** — `SERVICE_DOMAIN` replaces it. `AUTH_SECRET`, `GITHUB_APP_*`, etc. are unchanged (they're secrets, not the host).
 
@@ -91,6 +91,12 @@ Method A (phone access via `tailscale serve`) becomes clean: `SERVICE_DOMAIN=www
 - **Coordination:** the `AUTH_URL`→`SERVICE_DOMAIN` rename lands on `main`; the run-execution branch (which derives `callbackBaseUrl` via `resolveAuthOrigins`) picks it up on rebase — no separate change needed there.
 - **Not** stacked on 3c/run-execution — independent chore off `main`.
 
-## Open question (confirm before implementing)
+## Consumers to migrate (AUTH_URL → SERVICE_DOMAIN)
 
-`SERVICE_DOMAIN` is a bare host and the scheme is always `https`. This drops the ability to express `http://localhost:3100` as the service origin. That's fine given ADR 0006 (local dev already runs over `https://www.mocco.work` via traefik+mkcert, not raw localhost) — but if a raw-localhost/http dev mode is ever wanted, it would need a port/scheme escape hatch. Flagged, not built (YAGNI).
+Every current `AUTH_URL`/`authUrl` site flips to `SERVICE_DOMAIN`/`serviceDomain`:
+- `infra/config/env.ts` — schema key `AUTH_URL` → `SERVICE_DOMAIN`.
+- `domain/auth/origins.ts` — param `authUrl` → `serviceDomain`, compose scheme (loopback→http else https), keep the `originVariants` www/apex toggle over the composed URL.
+- `domain/auth/instance.ts` — pass `serviceDomain: env.SERVICE_DOMAIN`.
+- `domain/auth/origins.test.ts` — rewrite cases to the `serviceDomain` param; add a `localhost:3100 → http://localhost:3100` case.
+- `packages/e2e/playwright.config.ts` — `AUTH_URL: baseURL` → `SERVICE_DOMAIN: 'localhost:3100'` (the webServer env; the derived scheme makes it `http://localhost:3100`, matching the current baseURL).
+- `packages/frontend/.env.example` / drizzle's localhost `DATABASE_URL` fallback — unaffected except the env-file move.
