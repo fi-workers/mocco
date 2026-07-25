@@ -19,7 +19,7 @@ export function getServices(): Services {
   if (!state.services) {
     const env = getEnv();
     const { baseUrl, trustedOrigins } = resolveAuthOrigins({
-      authUrl: env.AUTH_URL,
+      serviceDomain: env.SERVICE_DOMAIN,
       vercelEnv: env.VERCEL_ENV,
       vercelUrl: env.VERCEL_URL,
       vercelBranchUrl: env.VERCEL_BRANCH_URL,
