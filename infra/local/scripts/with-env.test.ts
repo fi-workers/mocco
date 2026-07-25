@@ -36,6 +36,20 @@ describe('parseDotenv', () => {
   it('trims surrounding whitespace on key and value', () => {
     expect(parseDotenv('  FOO  =  bar  ')).toEqual({ FOO: 'bar' });
   });
+
+  it('drops an inline # comment from an unquoted value', () => {
+    expect(parseDotenv('SERVICE_DOMAIN=my-mac.ts.net # my laptop')).toEqual({
+      SERVICE_DOMAIN: 'my-mac.ts.net',
+    });
+  });
+
+  it('keeps a # inside a quoted value (not treated as a comment)', () => {
+    expect(parseDotenv('PASS="a#b # c"')).toEqual({ PASS: 'a#b # c' });
+  });
+
+  it('keeps a leading # only when it is not preceded by a space (no false comment)', () => {
+    expect(parseDotenv('COLOR=#ffffff')).toEqual({ COLOR: '#ffffff' });
+  });
 });
 
 describe('mergeEnv', () => {

@@ -16,7 +16,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 interface ParsedArgs {
   app: string;
@@ -66,7 +66,15 @@ export function parseDotenv(content: string): Record<string, string> {
     const key = trimmed.slice(0, eqIndex).trim();
     let value = trimmed.slice(eqIndex + 1).trim();
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      // Quoted: strip the matching pair; anything inside (incl. `#`) is literal.
       value = value.slice(1, -1);
+    } else {
+      // Unquoted: an inline ` #…` is a trailing comment, not part of the value
+      // (matches dotenv). Guards the `SERVICE_DOMAIN=host # note` footgun.
+      const hashIndex = value.indexOf(' #');
+      if (hashIndex >= 0) {
+        value = value.slice(0, hashIndex).trimEnd();
+      }
     }
     result[key] = value;
   }
@@ -109,7 +117,11 @@ function main(): void {
     `[with-env] app=${app} env=${env} (.env.${env}: ${Object.keys(base).length} vars, .env: ${Object.keys(override).length} vars)`,
   );
 
-  const child = spawn(command[0]!, command.slice(1), {
+  // A single pre-joined string (not args-array) with shell:true — Node deprecates
+  // (DEP0190) passing an args array alongside shell:true, and it would print a
+  // warning on every dev command. Call sites are trusted plain-token package.json
+  // scripts, so the join is safe.
+  const child = spawn(command.join(' '), {
     stdio: 'inherit',
     env: { ...process.env, ...merged },
     shell: true,
@@ -121,7 +133,8 @@ function main(): void {
 }
 
 // Only run when executed directly (tsx infra/local/scripts/with-env.ts …),
-// not when imported by tests.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// not when imported by tests. Compare via pathToFileURL so a checkout path with
+// spaces/special chars (which import.meta.url percent-encodes) still matches.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
