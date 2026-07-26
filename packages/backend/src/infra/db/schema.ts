@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   bigserial,
+  integer,
   jsonb,
   index,
   uniqueIndex,
@@ -321,4 +322,104 @@ export const commitConfigs = pgTable(
     syncedAt: timestamp('synced_at').notNull().defaultNow(),
   },
   t => [uniqueIndex('mocco_commit_configs_commit_uq').on(t.commitId)],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Execution (slice 4) — a commit candidate becomes a Run pinned to that commit's
+// config snapshot, executed step-by-step through a neutral trigger → callback →
+// advance loop. run_steps are materialized from the pinned definition; run_events
+// is the append-only progression log that drives the live timeline (and is the
+// audit source in the audit slice). All three carry workspace_id for direct
+// tenant scoping. See docs/superpowers/specs/2026-07-26-slice4-runs-execution-design.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A run of a commit candidate, pinned to the commit and its config snapshot. */
+export const runs = pgTable(
+  'mocco_runs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // The candidate commit this run executes.
+    commitId: uuid('commit_id')
+      .notNull()
+      .references(() => commits.id, { onDelete: 'cascade' }),
+    // RESTRICT: the run pins this exact parsed definition — never orphan it.
+    commitConfigId: uuid('commit_config_id')
+      .notNull()
+      .references(() => commitConfigs.id, { onDelete: 'restrict' }),
+    // Gate states (awaiting_gate, rejected) are added in the gates slice.
+    state: text().notNull().default('queued'),
+    // Cursor into the pinned definition's steps; advances only on a step succeeding.
+    currentIndex: integer('current_index').notNull().default(0),
+    // sha-256 of the opaque per-run callback token; the plaintext is returned once and never stored.
+    callbackTokenHash: text('callback_token_hash').notNull(),
+    // SET NULL: a run outlives the user who triggered it.
+    triggeredByUserId: uuid('triggered_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    triggerSource: text('trigger_source').notNull().default('manual'),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_runs_workspace_state_idx').on(t.workspaceId, t.state),
+    index('mocco_runs_commit_idx').on(t.commitId),
+    uniqueIndex('mocco_runs_callback_token_hash_uq').on(t.callbackTokenHash),
+    check('mocco_runs_state_check', sql`${t.state} IN ('queued','running','succeeded','failed','canceled')`),
+  ],
+);
+
+/** A materialized step of a run — one row per step in the pinned definition. `handle`
+ * is an opaque adapter handle (keeps adapter words out of the core). */
+export const runSteps = pgTable(
+  'mocco_run_steps',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    stepIndex: integer('step_index').notNull(),
+    name: text().notNull(),
+    executor: text().notNull(),
+    // Adapter-specific options, free-form by contract (ADR 0004); absent in the config → null.
+    with: jsonb(),
+    status: text().notNull().default('pending'),
+    handle: text(),
+    logsUrl: text('logs_url'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_run_steps_run_step_uq').on(t.runId, t.stepIndex),
+    check(
+      'mocco_run_steps_status_check',
+      sql`${t.status} IN ('pending','dispatched','running','succeeded','failed','skipped','canceled')`,
+    ),
+  ],
+);
+
+/** Append-only run progression log. `seq` is a global bigserial cursor — simple and
+ * sufficient for the `sinceSeq` live poll (per-run ordinality isn't needed). */
+export const runEvents = pgTable(
+  'mocco_run_events',
+  {
+    seq: bigserial({ mode: 'bigint' }).primaryKey(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    type: text().notNull(),
+    payload: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt,
+  },
+  t => [index('mocco_run_events_run_seq_idx').on(t.runId, t.seq)],
 );
