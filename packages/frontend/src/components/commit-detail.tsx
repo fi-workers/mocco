@@ -1,9 +1,47 @@
+import { useRouter } from 'next/router';
+
 import { PipelineSteps } from '@frontend/components/pipeline-steps';
+import { Button } from '@frontend/components/ui/button';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { CommitDto, ConfigIssueDto } from '@mocco/common/integration';
 
 const SHA_SHORT_LENGTH = 7;
+
+/** Triggers a run for this commit, then navigates to the new run page. Enabled
+ * only when the commit's config is runnable (`present && valid`); otherwise
+ * disabled with a hint (the server enforces the same guard — this is UX only). */
+function RunButton({
+  workspaceId,
+  commitId,
+  isRunnable,
+}: {
+  workspaceId: string;
+  commitId: string;
+  isRunnable: boolean;
+}) {
+  const router = useRouter();
+  const { mutateAsync: trigger, isPending } = trpc.run.trigger.useMutation();
+
+  const run = async (): Promise<void> => {
+    const { run: created } = await trigger({ workspaceId, commitId });
+    await router.push(Routes.workspaceRun(workspaceId, created.id));
+  };
+
+  return (
+    <Button
+      pending={isPending}
+      disabled={!isRunnable}
+      title={isRunnable ? undefined : 'This commit has no valid .mocco.yml to run.'}
+      onClick={() => {
+        fireAndForget(run());
+      }}>
+      Run
+    </Button>
+  );
+}
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
@@ -64,6 +102,7 @@ export function CommitDetail({ workspaceId, commitId }: { workspaceId: string; c
   }
 
   const { commit, config } = query.data;
+  const isRunnable = config !== null && config.present && config.valid;
 
   const body = (() => {
     if (config === null) {
@@ -89,7 +128,10 @@ export function CommitDetail({ workspaceId, commitId }: { workspaceId: string; c
 
   return (
     <div className="flex flex-col gap-6">
-      <CommitHeader commit={commit} />
+      <div className="flex items-start justify-between gap-4">
+        <CommitHeader commit={commit} />
+        <RunButton workspaceId={workspaceId} commitId={commitId} isRunnable={isRunnable} />
+      </div>
       {body}
     </div>
   );
