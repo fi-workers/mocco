@@ -5,7 +5,6 @@ import { getIntegration } from '@mocco/backend/integration/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
-import { Configure } from '@frontend/lib/configure';
 import { Monitoring } from '@frontend/lib/monitoring';
 import { headersFromNode } from '@frontend/lib/node-headers';
 
@@ -25,7 +24,6 @@ export default createNextApiHandler({
       commitConfig: integration?.commitConfig,
       session: await auth.getSession(headers),
       headers,
-      debugEnabled: Configure.DebugEnabled,
     };
   },
   // The client only ever sees the masked message (errorFormatter); keep the real

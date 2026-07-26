@@ -45,8 +45,4 @@ export class Configure {
   // Sentry DSN (empty → Sentry is a no-op). The DSN is public, so client and
   // server both use this one value (see instrumentation.ts).
   static readonly SentryDsn: string = process.env.NEXT_PUBLIC_SENTRY_DSN ?? '';
-
-  // Debug/verification endpoints (/debug/*, /api/debug/*, debug tRPC) are gated
-  // on this flag — off by default, opt-in per environment to re-verify Sentry etc.
-  static readonly DebugEnabled: boolean = process.env.NEXT_PUBLIC_DEBUG === 'true';
 }
