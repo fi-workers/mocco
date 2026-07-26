@@ -3,6 +3,7 @@ import superjson from 'superjson';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import type { RunService } from '@backend/domain/execution/RunService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -19,6 +20,8 @@ export interface Context {
   commitSync?: CommitSyncService;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
   commitConfig?: CommitConfigService;
+  /** Always present — the execution domain has no external dependency to gate on. */
+  runs: RunService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

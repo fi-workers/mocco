@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
+import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
+import { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import { RunService } from '@backend/domain/execution/RunService';
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -23,6 +27,16 @@ import type { AvailableRepoDto } from '@mocco/common/integration';
 
 const REPO_A: AvailableRepoDto = { externalRepoId: '111', owner: 'fi-workers', name: 'api', defaultBranch: 'main' };
 const REPO_B: AvailableRepoDto = { externalRepoId: '222', owner: 'fi-workers', name: 'web', defaultBranch: 'trunk' };
+
+/** RunService wired to the test DB — always present in the tRPC context (no external gate). */
+const makeRuns = (db: TestDb['db']): RunService =>
+  new RunService({
+    runs: new RunRepo(db),
+    steps: new RunStepRepo(db),
+    events: new RunEventRepo(db),
+    commits: new CommitRepo(db),
+    configs: new CommitConfigRepo(db),
+  });
 
 function fakeProvider(): RepoLister & InstallationVerifier {
   return {
@@ -122,6 +136,7 @@ describe('integration router on pglite', () => {
       connection: hasConnection ? connection : undefined,
       commitSync: hasConnection ? commitSync : undefined,
       commitConfig: hasConnection ? commitConfig : undefined,
+      runs: makeRuns(t.db),
       session,
       headers,
     });
@@ -200,6 +215,7 @@ describe('integration router on pglite', () => {
       connection: revokedConnection,
       commitSync,
       commitConfig,
+      runs: makeRuns(t.db),
       session,
       headers,
     });

@@ -15,6 +15,7 @@ import {
   foreignKey,
 } from 'drizzle-orm/pg-core';
 
+import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { Provider } from '@mocco/common/integration';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -350,7 +351,9 @@ export const runs = pgTable(
       .notNull()
       .references(() => commitConfigs.id, { onDelete: 'restrict' }),
     // Gate states (awaiting_gate, rejected) are added in the gates slice.
-    state: text().notNull().default('queued'),
+    // `.$type` aligns the text column with the RunState union (SSOT in @mocco/common),
+    // mirroring `provider: text().$type<Provider>()` — the `.output` enum needs it.
+    state: text().$type<RunState>().notNull().default('queued'),
     // Cursor into the pinned definition's steps; advances only on a step succeeding.
     currentIndex: integer('current_index').notNull().default(0),
     // sha-256 of the opaque per-run callback token; the plaintext is returned once and never stored.
@@ -387,8 +390,9 @@ export const runSteps = pgTable(
     name: text().notNull(),
     executor: text().notNull(),
     // Adapter-specific options, free-form by contract (ADR 0004); absent in the config → null.
-    with: jsonb(),
-    status: text().notNull().default('pending'),
+    // `.$type` aligns the jsonb column with the wire `with` shape (Record | null via nullable).
+    with: jsonb().$type<Record<string, unknown>>(),
+    status: text().$type<RunStepStatus>().notNull().default('pending'),
     handle: text(),
     logsUrl: text('logs_url'),
     createdAt,
