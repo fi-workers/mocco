@@ -2,6 +2,7 @@
 // barrel — nothing is re-exported, a new router value is built).
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
+import { runRouter } from '@backend/transport/trpc/routers/run';
 import { workspaceRouter } from '@backend/transport/trpc/routers/workspace';
 import { publicProcedure, router } from '@backend/transport/trpc/trpc';
 
@@ -11,6 +12,7 @@ export const appRouter = router({
   workspace: workspaceRouter,
   integration: integrationRouter,
   pipeline: pipelineRouter,
+  run: runRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -9,3 +9,8 @@ export abstract class NotFoundError extends Error {}
 /** The caller's credentials/authorization for an external resource were revoked
  * or are no longer sufficient — maps to FORBIDDEN. */
 export abstract class ForbiddenError extends Error {}
+
+/** The request is well-formed but a precondition on the referenced resource's
+ * state makes it illegal (e.g. running a commit whose config isn't runnable) —
+ * maps to BAD_REQUEST. */
+export abstract class BadRequestError extends Error {}

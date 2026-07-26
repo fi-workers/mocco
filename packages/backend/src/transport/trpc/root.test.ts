@@ -3,11 +3,27 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
+import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
+import { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import { RunService } from '@backend/domain/execution/RunService';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
+import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createTrpcHandler } from '@backend/transport/trpc/handler';
 import { appRouter } from '@backend/transport/trpc/root';
 
 import type { Context } from '@backend/transport/trpc/trpc';
+
+/** RunService wired to the test DB — always present in the context (no external gate). */
+const makeRuns = (db: TestDb['db']): RunService =>
+  new RunService({
+    runs: new RunRepo(db),
+    steps: new RunStepRepo(db),
+    events: new RunEventRepo(db),
+    commits: new CommitRepo(db),
+    configs: new CommitConfigRepo(db),
+  });
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
 const signUpViaHttp = async (auth: AuthService, email: string) => {
@@ -29,7 +45,7 @@ describe('tRPC workspace router on pglite', () => {
   let workspace: WorkspaceService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ auth, workspace, session, headers });
+    appRouter.createCaller({ auth, workspace, runs: makeRuns(t.db), session, headers });
 
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
@@ -183,7 +199,7 @@ describe('trpcHandler over HTTP', () => {
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const trpcHandler = createTrpcHandler({ auth, workspace });
+    const trpcHandler = createTrpcHandler({ auth, workspace, runs: makeRuns(t.db) });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);
