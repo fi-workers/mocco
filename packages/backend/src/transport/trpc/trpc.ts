@@ -22,8 +22,6 @@ export interface Context {
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
-  /** Debug/verification procedures are gated on this (set by the HTTP handler). */
-  debugEnabled?: boolean;
 }
 
 /** Mask internal errors before they reach the client: an uncaught throw surfaces
