@@ -3,16 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
+import { expectOne } from '@backend/infra/db/rows';
 import { commitConfigs, commits, providerConnections, repos, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
-
-function one<T>(rows: T[]): T {
-  const [row] = rows;
-  if (row === undefined) {
-    throw new Error('expected one row');
-  }
-  return row;
-}
 
 describe('CommitConfigRepo (pglite)', () => {
   let t: TestDb;
@@ -28,14 +21,16 @@ describe('CommitConfigRepo (pglite)', () => {
   });
 
   async function seedCommit(): Promise<string> {
-    const workspaceId = one(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
-    const conn = one(
+    const workspaceId = expectOne(
+      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
+    ).id;
+    const conn = expectOne(
       await t.db
         .insert(providerConnections)
         .values({ workspaceId, provider: 'github', externalAccountId: randomUUID(), accountLogin: 'acme' })
         .returning(),
     );
-    const repoRow = one(
+    const repoRow = expectOne(
       await t.db
         .insert(repos)
         .values({
@@ -48,7 +43,7 @@ describe('CommitConfigRepo (pglite)', () => {
         })
         .returning(),
     );
-    return one(
+    return expectOne(
       await t.db
         .insert(commits)
         .values({

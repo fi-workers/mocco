@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { App } from '@octokit/app';
+import { z } from 'zod';
 
 import { BACKFILL_MAX_LIMIT } from '@backend/domain/integration/constants';
 import {
@@ -99,34 +100,32 @@ export function toListedCommit(raw: RawListedCommit): SourceCommit {
   };
 }
 
-/** Raw shape of a GitHub "get content" response we care about — narrower than
- * octokit's full union of file/directory/symlink/submodule variants. Only the
- * file variant carries a base64 `content`; a directory listing is an array,
- * and symlink/submodule objects have no `content` field at all. */
-interface RawContentFile {
-  content?: string;
-  encoding?: string;
-}
+/** The single base64-encoded file variant of a GitHub "get content" response —
+ * narrower than octokit's full union of file/directory/symlink/submodule. Only the
+ * file variant carries a base64 `content` string; a symlink/submodule has no
+ * `content`, and a directory listing is an array (rejected before parse). `content`
+ * is validated as a string so a non-string shape can't slip through to `Buffer`. */
+const base64ContentFileSchema = z.object({ content: z.string(), encoding: z.literal('base64') });
 
 /** Pure mapper: GitHub "get content" response -> decoded UTF-8 text. Unit-tested.
  * Rejects anything that isn't a single base64-encoded file — a directory (array),
- * or an object missing `content`/`encoding: 'base64'` (symlink, submodule, or an
- * oversized file GitHub declined to inline) — with a mapped `GithubApiError`
- * instead of crashing on an unexpected shape. `getConfigAtCommit` stays a thin
- * wrapper: this is where the only branching logic lives, and it's fully covered
- * here without any network call. */
+ * or an object failing `base64ContentFileSchema` (symlink, submodule, an oversized
+ * file GitHub declined to inline, or a non-string `content`) — with a mapped
+ * `GithubApiError` instead of crashing on an unexpected shape. `getConfigAtCommit`
+ * stays a thin wrapper: this is where the only branching logic lives, and it's
+ * fully covered here without any network call. */
 export function decodeGetContent(data: unknown): string {
-  if (Array.isArray(data) || typeof data !== 'object' || data === null) {
+  if (Array.isArray(data)) {
     throw new GithubApiError('expected a single file at the config path, got a directory listing', undefined);
   }
-  const file = data as RawContentFile;
-  if (file.content === undefined || file.encoding !== 'base64') {
+  const file = base64ContentFileSchema.safeParse(data);
+  if (!file.success) {
     throw new GithubApiError('expected a base64-encoded file at the config path', undefined);
   }
   // Uint8Array.fromBase64 is still V8-experimental (see env.ts's GITHUB_APP_PRIVATE_KEY_B64
   // transform) — Buffer is the only base64 decoder actually available on this runtime.
   // eslint-disable-next-line unicorn/prefer-uint8array-base64
-  return Buffer.from(file.content, 'base64').toString('utf8');
+  return Buffer.from(file.data.content, 'base64').toString('utf8');
 }
 
 /** Constant-time comparison of a `sha256=<hex>` webhook signature against one

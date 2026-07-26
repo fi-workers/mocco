@@ -128,6 +128,10 @@ describe('decodeGetContent', () => {
     const raw = { type: 'symlink', target: 'other/path', size: 4, name: '.mocco.yml', path: '.mocco.yml', sha: 'x' };
     expect(() => decodeGetContent(raw)).toThrow(GithubApiError);
   });
+
+  it('rejects a non-string content with a mapped GithubApiError instead of a bad Buffer', () => {
+    expect(() => decodeGetContent({ type: 'file', encoding: 'base64', content: 42 })).toThrow(GithubApiError);
+  });
 });
 
 describe('toRepo', () => {

@@ -3,16 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { expectOne } from '@backend/infra/db/rows';
 import { commitConfigs, commits, providerConnections, repos, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
-
-function one<T>(rows: T[]): T {
-  const [row] = rows;
-  if (row === undefined) {
-    throw new Error('expected an inserted row');
-  }
-  return row;
-}
 
 function commitValues(repoId: string, overrides: Partial<typeof commits.$inferInsert> = {}) {
   return {
@@ -39,14 +32,16 @@ describe('commit-config schema constraints (pglite)', () => {
   });
 
   async function seedCommit(): Promise<string> {
-    const workspaceId = one(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
-    const conn = one(
+    const workspaceId = expectOne(
+      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
+    ).id;
+    const conn = expectOne(
       await t.db
         .insert(providerConnections)
         .values({ workspaceId, provider: 'github', externalAccountId: randomUUID(), accountLogin: 'acme' })
         .returning(),
     );
-    const repoId = one(
+    const repoId = expectOne(
       await t.db
         .insert(repos)
         .values({
@@ -59,7 +54,7 @@ describe('commit-config schema constraints (pglite)', () => {
         })
         .returning(),
     ).id;
-    return one(await t.db.insert(commits).values(commitValues(repoId)).returning()).id;
+    return expectOne(await t.db.insert(commits).values(commitValues(repoId)).returning()).id;
   }
 
   it('rejects a second config for the same commit (1:1 via uniqueIndex on commit_id)', async () => {

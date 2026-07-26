@@ -8,18 +8,11 @@ import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-confi
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
 import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
+import { expectOne } from '@backend/infra/db/rows';
 import { commitConfigs, providerConnections, repos, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { CommitSource } from '@backend/domain/integration/ports';
-
-function one<T>(rows: T[]): T {
-  const [row] = rows;
-  if (row === undefined) {
-    throw new Error('expected one row');
-  }
-  return row;
-}
 
 type Ref = Parameters<CommitSource['getConfigAtCommit']>[0];
 
@@ -91,17 +84,17 @@ describe('CommitConfigService (pglite)', () => {
   }
 
   async function seedWorkspace(name = 'W'): Promise<string> {
-    return one(await t.db.insert(workspaces).values({ name, slug: randomUUID() }).returning()).id;
+    return expectOne(await t.db.insert(workspaces).values({ name, slug: randomUUID() }).returning()).id;
   }
 
   async function seedRepo(workspaceId: string) {
-    const conn = one(
+    const conn = expectOne(
       await t.db
         .insert(providerConnections)
         .values({ workspaceId, provider: 'github', externalAccountId: randomUUID(), accountLogin: 'acme' })
         .returning(),
     );
-    return one(
+    return expectOne(
       await t.db
         .insert(repos)
         .values({
