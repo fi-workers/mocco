@@ -7,6 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
+import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
+import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
+import { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import { RunService } from '@backend/domain/execution/RunService';
+import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -125,6 +130,22 @@ describe('ext GitHub webhook route (pglite)', () => {
         }),
       }),
       deliveries: new WebhookDeliveryRepo(t.db),
+      runs: new RunService({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        events: new RunEventRepo(t.db),
+        commits: new CommitRepo(t.db),
+        configs: new CommitConfigRepo(t.db),
+        executor: new FakeExecutor(),
+        callbackUrl: 'http://localhost:3100/api/ext/callback',
+        waitUntil: p => {
+          pending.push(p);
+        },
+      }),
+      callbackUrl: 'http://localhost:3100/api/ext/callback',
+      postJson: async () => {
+        /* webhook route never posts */
+      },
       webhookSecret: SECRET,
       waitUntil: p => {
         pending.push(p);

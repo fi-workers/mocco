@@ -79,3 +79,47 @@ export const runEventSchema = z.object({
   createdAt: z.date(),
 });
 export type RunEventDto = z.infer<typeof runEventSchema>;
+
+/**
+ * The status an executor reports for a step over the callback: a strict subset of
+ * the step lifecycle an adapter is allowed to drive from outside. `dispatched` is
+ * ours (set at trigger); terminal-branching states like `skipped`/`canceled` are
+ * driven by the core, never a callback.
+ */
+export const RunCallbackStatuses = {
+  running: 'running',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+export type RunCallbackStatus = (typeof RunCallbackStatuses)[keyof typeof RunCallbackStatuses];
+export const runCallbackStatusSchema = z.enum(
+  Object.values(RunCallbackStatuses) as [RunCallbackStatus, ...RunCallbackStatus[]],
+);
+
+/**
+ * The inbound callback an executor POSTs to `/api/ext/callback` as a step
+ * progresses. `token` is the opaque per-run secret (the auth — sha-256-compared
+ * against the run's stored hash); the rest identifies the step and its new status.
+ */
+export const runCallbackSchema = z.object({
+  runId: z.uuid(),
+  stepIndex: z.number().int().nonnegative(),
+  status: runCallbackStatusSchema,
+  token: z.string().min(1),
+  logsUrl: z.string().optional(),
+});
+export type RunCallbackDto = z.infer<typeof runCallbackSchema>;
+
+/**
+ * The neutral dispatch context handed to an executor at `start` and echoed back on
+ * every callback: which step of which run, where to call back, and the per-run
+ * token to authenticate with. Carries NO adapter/vendor words (ADR 0004). Also the
+ * wire body the generic-executor serverless fn parses at `/api/ext/executor/generic`.
+ */
+export const dispatchContextSchema = z.object({
+  runId: z.uuid(),
+  stepIndex: z.number().int().nonnegative(),
+  callbackUrl: z.url(),
+  callbackToken: z.string().min(1),
+});
+export type DispatchContext = z.infer<typeof dispatchContextSchema>;

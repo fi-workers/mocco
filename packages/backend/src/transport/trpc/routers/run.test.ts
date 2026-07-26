@@ -9,6 +9,7 @@ import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
+import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { expectOne } from '@backend/infra/db/rows';
@@ -64,6 +65,11 @@ describe('run router on pglite', () => {
       events: new RunEventRepo(t.db),
       commits,
       configs,
+      executor: new FakeExecutor(),
+      callbackUrl: 'http://localhost:3100/api/ext/callback',
+      waitUntil: () => {
+        /* router tests don't assert the outbound dispatch */
+      },
     });
 
   const signedInCaller = async (email: string) => {
@@ -131,7 +137,8 @@ describe('run router on pglite', () => {
       const commitId = await seedRunnableCommit(ws.id, 'sha-runnable');
 
       const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
-      expect(run.state).toBe('queued');
+      // trigger now starts the run: it is `running` (step 0 dispatched) on return.
+      expect(run.state).toBe('running');
       expect(run.commitId).toBe(commitId);
       expect(run).not.toHaveProperty('callbackTokenHash'); // egress-stripped by .output(runSchema)
     });
@@ -184,7 +191,7 @@ describe('run router on pglite', () => {
   });
 
   describe('get', () => {
-    it('returns the run with its materialized steps (all pending)', async () => {
+    it('returns the run with its materialized steps (step 0 dispatched, rest pending)', async () => {
       const api = await signedInCaller('get@example.com');
       const { workspace: ws } = await api.workspace.create({ name: 'W' });
       const commitId = await seedRunnableCommit(ws.id, 'sha-get');
@@ -194,7 +201,8 @@ describe('run router on pglite', () => {
       expect(detail.run.id).toBe(run.id);
       expect(detail.steps).toHaveLength(2);
       expect(detail.steps.map(step => step.name)).toEqual(['build', 'test']);
-      expect(detail.steps.every(step => step.status === 'pending')).toBe(true);
+      // trigger dispatches step 0; the rest stay pending until the loop advances.
+      expect(detail.steps.map(step => step.status)).toEqual(['dispatched', 'pending']);
     });
 
     it('a non-member cannot read a run in another workspace (NOT_FOUND)', async () => {
@@ -226,11 +234,11 @@ describe('run router on pglite', () => {
       const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
 
       const all = await api.run.events({ workspaceId: ws.id, runId: run.id, sinceSeq: '0' });
-      expect(all.events).toHaveLength(1);
-      expect(all.events[0]?.type).toBe('run.created');
+      // trigger emits run.created then step.dispatched (step 0 starts).
+      expect(all.events.map(event => event.type)).toEqual(['run.created', 'step.dispatched']);
       expect(typeof all.events[0]?.seq).toBe('string'); // bigserial serialized as a string on the wire
 
-      const latestSeq = all.events[0]?.seq ?? '0';
+      const latestSeq = all.events.at(-1)?.seq ?? '0';
       const since = await api.run.events({ workspaceId: ws.id, runId: run.id, sinceSeq: latestSeq });
       expect(since.events).toHaveLength(0);
       expect(since.run.id).toBe(run.id);
