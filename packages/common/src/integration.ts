@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { moccoConfigSchema } from './mocco-config';
+
 /**
  * Provider identities. GitHub is the only one today; the set is modeled as an
  * `as const` object + derived union (constants over enums) so a second provider
@@ -82,3 +84,34 @@ export const commitsPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type CommitsPageDto = z.infer<typeof commitsPageSchema>;
+
+/** A single validation problem found while parsing a `.mocco.yml` — mirrors the pipeline router's `issueSchema`. */
+export const configIssueSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+  code: z.string(),
+  line: z.number().optional(),
+});
+export type ConfigIssueDto = z.infer<typeof configIssueSchema>;
+
+/** The config snapshot for a single commit. `present: false` means no `.mocco.yml` existed at that commit. */
+export const commitConfigSchema = z.object({
+  present: z.boolean(),
+  valid: z.boolean(),
+  config: moccoConfigSchema.nullable(),
+  issues: z.array(configIssueSchema),
+});
+export type CommitConfigDto = z.infer<typeof commitConfigSchema>;
+
+export const commitDetailQueryInputSchema = z.object({
+  workspaceId: z.uuid(),
+  commitId: z.uuid(),
+});
+export type CommitDetailQueryInput = z.infer<typeof commitDetailQueryInputSchema>;
+
+/** A commit plus its config snapshot. `config: null` means the commit hasn't been snapshotted yet. */
+export const commitDetailSchema = z.object({
+  commit: commitSchema,
+  config: commitConfigSchema.nullable(),
+});
+export type CommitDetailDto = z.infer<typeof commitDetailSchema>;

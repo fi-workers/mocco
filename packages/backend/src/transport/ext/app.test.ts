@@ -3,13 +3,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createExtApp } from '@backend/transport/ext/app';
 
@@ -24,6 +28,7 @@ function fakeProvider(isOwner = true): GitHubProvider {
     verifyOwnership: async () => ({ ownerVerified: isOwner, accountLogin: 'acme', githubUserId: '77' }),
     installUrl: state => `https://example.test/install?state=${state}`,
     listCommits: async () => [],
+    getConfigAtCommit: async () => null,
   };
 }
 
@@ -62,6 +67,7 @@ describe('ext GitHub setup callback (pglite)', () => {
     const connections = new ProviderConnectionRepo(t.db);
     const repos = new RepoRepo(t.db);
     const connectStates = new ConnectStateRepo(t.db);
+    const source = fakeProvider();
     return {
       commitSync: new CommitSyncService({
         commits: new CommitRepo(t.db),
@@ -69,7 +75,13 @@ describe('ext GitHub setup callback (pglite)', () => {
         connections,
         repos,
         connectStates,
-        source: fakeProvider(),
+        source,
+        configs: new CommitConfigService({
+          configs: new CommitConfigRepo(t.db),
+          commits: new CommitRepo(t.db),
+          source,
+          parser: new MoccoConfigParser(decodeYaml),
+        }),
       }),
       deliveries: new WebhookDeliveryRepo(t.db),
       webhookSecret: undefined,

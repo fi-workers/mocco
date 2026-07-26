@@ -7,14 +7,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
+import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import { ConnectionStatuses } from '@backend/domain/integration/constants';
+import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
+import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { providerConnections, repos, webhookDeliveries, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createExtApp, type ExtDeps } from '@backend/transport/ext/app';
@@ -49,11 +53,14 @@ function fakeProvider(): GitHubProvider {
     verifyOwnership: async () => ({ ownerVerified: true, accountLogin: 'acme', githubUserId: '77' }),
     installUrl: state => `https://example.test/install?state=${state}`,
     listCommits: async () => [],
+    getConfigAtCommit: async () => null,
   };
 }
 
 /** CommitSource port — push handling never reaches it (only backfill does). */
-const fakeSource: CommitSource = { listCommits: async () => [] };
+const fakeSource: CommitSource = { listCommits: async () => [], getConfigAtCommit: async () => null };
+
+const parser = new MoccoConfigParser(decodeYaml);
 
 function sign(body: string, secret = SECRET): string {
   return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
@@ -110,6 +117,12 @@ describe('ext GitHub webhook route (pglite)', () => {
         repos: repoRepo,
         connectStates,
         source: fakeSource,
+        configs: new CommitConfigService({
+          configs: new CommitConfigRepo(t.db),
+          commits: new CommitRepo(t.db),
+          source: fakeSource,
+          parser,
+        }),
       }),
       deliveries: new WebhookDeliveryRepo(t.db),
       webhookSecret: SECRET,

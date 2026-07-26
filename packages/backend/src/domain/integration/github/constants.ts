@@ -53,3 +53,7 @@ export type GithubHeader = (typeof GithubHeaders)[keyof typeof GithubHeaders];
  * value with `<algorithm>=`; derive the prefix from this instead of duplicating
  * the literal. */
 export const SIGNATURE_ALGORITHM = 'sha256';
+
+/** Path (repo-root-relative) of Mocco's own pipeline config file, read via the
+ * GitHub "get content" API at a specific commit SHA. */
+export const CONFIG_FILE_PATH = '.mocco.yml';

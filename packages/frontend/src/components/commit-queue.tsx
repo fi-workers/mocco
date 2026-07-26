@@ -1,5 +1,8 @@
+import Link from 'next/link';
+
 import { Button } from '@frontend/components/ui/button';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { CommitDto } from '@mocco/common/integration';
@@ -36,19 +39,23 @@ function messageFirstLine(message: string): string {
   return firstLine ?? message;
 }
 
-function CommitRow({ commit }: { commit: CommitDto }) {
+function CommitRow({ workspaceId, commit }: { workspaceId: string; commit: CommitDto }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border px-4 py-3">
-      <code className="shrink-0 text-xs text-muted-foreground">{commit.sha.slice(0, SHA_SHORT_LENGTH)}</code>
-      <span className="min-w-0 flex-1 truncate text-sm">{messageFirstLine(commit.message)}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{commit.authorName}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(commit.committedAt)}</span>
+    <li className="rounded-xl border border-border">
+      <Link
+        href={Routes.workspaceCommit(workspaceId, commit.id)}
+        className="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-muted">
+        <code className="shrink-0 text-xs text-muted-foreground">{commit.sha.slice(0, SHA_SHORT_LENGTH)}</code>
+        <span className="min-w-0 flex-1 truncate text-sm">{messageFirstLine(commit.message)}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{commit.authorName}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(commit.committedAt)}</span>
+      </Link>
     </li>
   );
 }
 
 /** The candidate queue for a watched repo: synced commits, newest-first, paginated
- * via `nextCursor`. Read-only — no commit detail / .mocco.yml parsing (that's slice 3c). */
+ * via `nextCursor`. Each commit links to its detail page (`.mocco.yml` snapshot). */
 export function CommitQueue({ workspaceId, repoId }: { workspaceId: string; repoId: string }) {
   const query = trpc.integration.commits.useInfiniteQuery(
     { workspaceId, repoId, limit: COMMITS_PAGE_LIMIT },
@@ -69,7 +76,7 @@ export function CommitQueue({ workspaceId, repoId }: { workspaceId: string; repo
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-2">
         {commits.map(commit => (
-          <CommitRow key={commit.id} commit={commit} />
+          <CommitRow key={commit.id} workspaceId={workspaceId} commit={commit} />
         ))}
       </ul>
       {query.hasNextPage && (

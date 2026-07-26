@@ -3,6 +3,7 @@ import superjson from 'superjson';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { Session } from '@mocco/common/auth';
@@ -16,6 +17,8 @@ export interface Context {
   connection?: ConnectionService;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
   commitSync?: CommitSyncService;
+  /** Present only when the GitHub App is configured (same condition as `connection`). */
+  commitConfig?: CommitConfigService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

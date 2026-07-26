@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { commitSchema, commitsPageSchema, commitsQueryInputSchema } from './integration';
+import {
+  commitConfigSchema,
+  commitDetailQueryInputSchema,
+  commitDetailSchema,
+  commitSchema,
+  commitsPageSchema,
+  commitsQueryInputSchema,
+} from './integration';
 
 describe('commitSchema', () => {
   it('round-trips a neutral commit', () => {
@@ -84,5 +91,81 @@ describe('commitsQueryInputSchema', () => {
 
     expect(commitsQueryInputSchema.parse({ ...base, cursor: '42' }).cursor).toBe('42');
     expect(commitsQueryInputSchema.parse({ ...base, cursor: null }).cursor).toBeNull();
+  });
+});
+
+describe('commitConfigSchema', () => {
+  const validConfig = {
+    version: 1 as const,
+    pipeline: 'deploy',
+    steps: [{ run: 'build', executor: 'github-actions' }],
+  };
+
+  it('round-trips a present, valid config with no issues', () => {
+    const input = { present: true, valid: true, config: validConfig, issues: [] };
+
+    expect(commitConfigSchema.parse(input)).toEqual(input);
+  });
+
+  it('round-trips a present, invalid config with a null parsed config and issues', () => {
+    const input = {
+      present: true,
+      valid: false,
+      config: null,
+      issues: [{ path: 'steps.0.run', message: 'required', code: 'invalid_type', line: 3 }],
+    };
+
+    expect(commitConfigSchema.parse(input)).toEqual(input);
+  });
+
+  it('round-trips an absent config (no .mocco.yml at this commit)', () => {
+    const input = { present: false, valid: false, config: null, issues: [] };
+
+    expect(commitConfigSchema.parse(input)).toEqual(input);
+  });
+});
+
+describe('commitDetailSchema', () => {
+  const commit = {
+    id: '11111111-1111-4111-8111-111111111111',
+    repoId: '22222222-2222-4222-8222-222222222222',
+    seq: '9007199254740993',
+    sha: 'abc123def456',
+    branch: 'main',
+    message: 'fix: correct off-by-one',
+    authorName: 'Ada Lovelace',
+    authorEmail: 'ada@example.com',
+    committedAt: new Date('2026-07-01T00:00:00.000Z'),
+  };
+
+  it('round-trips a commit with a present config', () => {
+    const input = {
+      commit,
+      config: {
+        present: true,
+        valid: true,
+        config: { version: 1 as const, pipeline: 'deploy', steps: [{ run: 'build', executor: 'github-actions' }] },
+        issues: [],
+      },
+    };
+
+    expect(commitDetailSchema.parse(input)).toEqual(input);
+  });
+
+  it('round-trips a commit with config: null (not yet snapshotted)', () => {
+    const input = { commit, config: null };
+
+    expect(commitDetailSchema.parse(input)).toEqual(input);
+  });
+});
+
+describe('commitDetailQueryInputSchema', () => {
+  it('accepts a workspaceId and commitId pair', () => {
+    const input = {
+      workspaceId: '33333333-3333-4333-8333-333333333333',
+      commitId: '11111111-1111-4111-8111-111111111111',
+    };
+
+    expect(commitDetailQueryInputSchema.parse(input)).toEqual(input);
   });
 });
