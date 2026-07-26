@@ -25,7 +25,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://mocco:mocco@localhost:5432/mocco',
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'e2e-ephemeral-secret-not-for-prod',
-      AUTH_URL: baseURL,
+      SERVICE_DOMAIN: `localhost:${PORT}`,
     },
   },
 });
