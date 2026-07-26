@@ -23,3 +23,17 @@ export class ConfigNotRunnableError extends BadRequestError {
     this.name = 'ConfigNotRunnableError';
   }
 }
+
+/**
+ * A callback that can't be applied: an unknown run, a token that fails the
+ * constant-time hash check, or a step index that isn't the run's current cursor.
+ * It never reaches a tRPC router (callbacks are ext-only) — the ext route catches
+ * it and returns a fixed generic status, leaking neither existence nor detail.
+ * Extends `BadRequestError` (the illegal-state family) for a consistent base.
+ */
+export class RunCallbackRejectedError extends BadRequestError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`Run callback rejected: ${reason}`, options);
+    this.name = 'RunCallbackRejectedError';
+  }
+}

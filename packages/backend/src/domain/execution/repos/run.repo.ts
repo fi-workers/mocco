@@ -25,6 +25,27 @@ export class RunRepo {
     return getOrThrow(rows, `Run ${runId} was not found`);
   }
 
+  /** A run by its own id, workspace-agnostic — the callback funnel has no workspace
+   * context; the per-run token (verified against `callbackTokenHash`) is the auth.
+   * Returns undefined for an unknown id (the service maps that to a rejected callback). */
+  async findById(runId: string) {
+    const [row] = await this.db.select().from(schema.runs).where(eq(schema.runs.id, runId));
+    return row;
+  }
+
+  /** Patch mutable run fields (state/cursor/timestamps). Scoped by workspace_id even
+   * though the id is unique — writes stay tenant-scoped like every other repo write. */
+  async update(
+    workspaceId: string,
+    runId: string,
+    patch: Partial<Pick<typeof schema.runs.$inferInsert, 'state' | 'currentIndex' | 'startedAt' | 'finishedAt'>>,
+  ) {
+    await this.db
+      .update(schema.runs)
+      .set(patch)
+      .where(and(eq(schema.runs.id, runId), eq(schema.runs.workspaceId, workspaceId)));
+  }
+
   /** Runs for a commit, newest-first, scoped to the workspace. */
   async findByCommit(workspaceId: string, commitId: string) {
     return await this.db
