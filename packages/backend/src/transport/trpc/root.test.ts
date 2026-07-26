@@ -7,6 +7,7 @@ import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
+import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -23,6 +24,11 @@ const makeRuns = (db: TestDb['db']): RunService =>
     events: new RunEventRepo(db),
     commits: new CommitRepo(db),
     configs: new CommitConfigRepo(db),
+    executor: new FakeExecutor(),
+    callbackUrl: 'http://localhost:3100/api/ext/callback',
+    waitUntil: () => {
+      /* root tests don't exercise the run loop */
+    },
   });
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
