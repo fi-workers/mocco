@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
@@ -52,7 +53,7 @@ describe('GateService (pglite)', () => {
       resumes: new ResumeRepo(t.db),
       commits,
       configs,
-      executor,
+      executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: 'http://localhost:3100/api/ext/callback',
       waitUntil: () => {
         /* the outbound trigger is fire-and-forget; the FakeExecutor records synchronously */

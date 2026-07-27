@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
@@ -56,7 +57,7 @@ describe('role router on pglite', () => {
       resumes: new ResumeRepo(t.db),
       commits: new CommitRepo(t.db),
       configs: new CommitConfigRepo(t.db),
-      executor: new FakeExecutor(),
+      executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
       callbackUrl: 'http://localhost:3100/api/ext/callback',
       waitUntil: () => {
         /* role router tests don't exercise the run loop */

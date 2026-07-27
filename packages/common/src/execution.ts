@@ -37,6 +37,21 @@ export const TriggerSources = { manual: 'manual' } as const;
 export type TriggerSource = (typeof TriggerSources)[keyof typeof TriggerSources];
 
 /**
+ * Executor adapter ids (ADR 0004) — the SSOT a step's `executor` string is matched
+ * against at dispatch. Keys are camelCase; values follow the on-the-wire config
+ * casing (`github-actions` is kebab, an external contract). Modeled as an `as const`
+ * object + derived union (constants over enums). `generic` is the built-in adapter;
+ * `githubActions` is defined here but only registered at the composition root once
+ * the GitHub adapter lands (slice 6 PR2) — an unregistered id fails a run closed.
+ */
+export const ExecutorIds = {
+  generic: 'generic',
+  githubActions: 'github-actions',
+} as const;
+export type ExecutorId = (typeof ExecutorIds)[keyof typeof ExecutorIds];
+export const executorIdSchema = z.enum(Object.values(ExecutorIds) as [ExecutorId, ...ExecutorId[]]);
+
+/**
  * A run of a commit candidate, pinned to the commit and its config snapshot.
  * `callbackTokenHash` is deliberately absent: it is a secret the egress filter
  * (`.output(runSchema)`) strips from the row so it never crosses the wire.

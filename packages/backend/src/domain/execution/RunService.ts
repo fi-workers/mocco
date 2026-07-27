@@ -3,7 +3,12 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
-import { ConfigNotRunnableError, RunCallbackRejectedError, RunNotFoundError } from '@backend/domain/execution/errors';
+import {
+  ConfigNotRunnableError,
+  RunCallbackRejectedError,
+  RunNotFoundError,
+  UnknownExecutorError,
+} from '@backend/domain/execution/errors';
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
@@ -114,9 +119,12 @@ export interface RunServiceDeps {
   resumes: ResumeRepo;
   commits: CommitRepo;
   configs: CommitConfigRepo;
-  /** The executor the loop dispatches steps to (ADR 0004). Prod = the generic
-   * executor; tests inject a FakeExecutor. */
-  executor: Executor;
+  /** The executor registry the loop dispatches steps through, keyed by executor id
+   * (ADR 0004; the SSOT is `ExecutorIds`). `dispatchStep` resolves a step's adapter
+   * by its `executor` string; a miss fails the run closed (never a silent no-op).
+   * Prod registers the generic executor (the GitHub adapter lands in slice 6 PR2);
+   * tests register a FakeExecutor under the ids they exercise. */
+  executors: ReadonlyMap<string, Executor>;
   /** Absolute `/api/ext/callback` URL threaded to the executor as the report-back
    * target. Injected (derived from the app origin at the composition root) so tests
    * need no env. */
@@ -202,21 +210,52 @@ export class RunService {
     this.deps.waitUntil(this.startExecutor(run.workspaceId, step.id, dispatch, ctx));
   }
 
-  /** Fire the executor and record its opaque handle. Runs deferred (waitUntil); a
-   * trigger failure is logged and parked — the step stays `dispatched`, no callback
-   * will advance it (the reliability escalation is the deferred outbox, ADR 0005). */
+  /** Resolve the step's executor from the registry, fire it, and record its opaque
+   * handle. Runs deferred (waitUntil). An UNKNOWN executor id is fail-closed (ADR
+   * 0004): a throw here would only be logged and the step would stall `dispatched`
+   * forever — a silent no-op the spec forbids — so the run is actively failed
+   * instead (see `failStepAndRun`). A dispatch failure for a KNOWN executor is
+   * logged and parked — the step stays `dispatched`, no callback will advance it
+   * (the reliability escalation is the deferred outbox, ADR 0005). */
   private async startExecutor(
     workspaceId: string,
     stepId: string,
     dispatch: RunStepDispatch,
     ctx: DispatchContext,
   ): Promise<void> {
+    const executor = this.deps.executors.get(dispatch.executor);
+    if (executor === undefined) {
+      await this.failStepAndRun({ id: ctx.runId, workspaceId }, stepId, dispatch);
+      return;
+    }
     try {
-      const { handle } = await this.deps.executor.start(dispatch, ctx);
+      const { handle } = await executor.start(dispatch, ctx);
       await this.deps.steps.update(workspaceId, stepId, { handle });
     } catch (error) {
       console.error('[run] executor dispatch failed', error);
     }
+  }
+
+  /** Fail-closed for a step whose `executor` id has no registered adapter: fail the
+   * step, emit `step.failed` (naming the unknown executor) + `run.failed`, and log.
+   * Mirrors `applyCallback`'s failed-step path + `finishRun` — the same repos/events
+   * every terminal failure uses — so an unknown executor surfaces as a real run
+   * failure in the timeline, never a stalled step. */
+  private async failStepAndRun(
+    run: { id: string; workspaceId: string },
+    stepId: string,
+    dispatch: RunStepDispatch,
+  ): Promise<void> {
+    const error = new UnknownExecutorError(dispatch.executor);
+    console.error(`[run] fail-closed: ${error.message}`);
+    await this.deps.steps.update(run.workspaceId, stepId, { status: RunStepStatuses.failed });
+    await this.deps.events.append({
+      workspaceId: run.workspaceId,
+      runId: run.id,
+      type: RunEventTypes.stepFailed,
+      payload: { stepIndex: dispatch.index, name: dispatch.name, executor: dispatch.executor },
+    });
+    await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed);
   }
 
   /** Finish a run terminally: set the state + finished_at and append the run event. */

@@ -1,3 +1,4 @@
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
@@ -45,7 +46,7 @@ const makeRuns = (db: TestDb['db']): RunService =>
     resumes: new ResumeRepo(db),
     commits: new CommitRepo(db),
     configs: new CommitConfigRepo(db),
-    executor: new FakeExecutor(),
+    executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
     callbackUrl: 'http://localhost:3100/api/ext/callback',
     waitUntil: () => {
       /* integration tests don't exercise the run loop */

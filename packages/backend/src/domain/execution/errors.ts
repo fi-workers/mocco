@@ -37,3 +37,20 @@ export class RunCallbackRejectedError extends BadRequestError {
     this.name = 'RunCallbackRejectedError';
   }
 }
+
+/**
+ * A step whose pinned `executor` id has no adapter registered in the executor
+ * registry (ADR 0004). Fail-closed: the run is failed with a clear step/run event,
+ * never dispatched to a silent no-op. Unlike the other classes here it does NOT
+ * reach a tRPC router — the executor is resolved in the deferred (fire-and-forget)
+ * dispatch pass, so this is recorded on the run (a `step.failed`/`run.failed`) and
+ * logged, never thrown to a caller. It extends `BadRequestError` (the illegal-state
+ * family: an unknown executor in a config is an un-runnable precondition) for a
+ * consistent base and message shape.
+ */
+export class UnknownExecutorError extends BadRequestError {
+  constructor(executorId: string, options?: ErrorOptions) {
+    super(`No executor adapter is registered for '${executorId}'`, options);
+    this.name = 'UnknownExecutorError';
+  }
+}
