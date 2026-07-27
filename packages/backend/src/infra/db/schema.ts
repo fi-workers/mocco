@@ -1,3 +1,5 @@
+import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
+import { GateStates } from '@mocco/common/governance';
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
@@ -355,7 +357,7 @@ export const runs = pgTable(
     // mirroring `provider: text().$type<Provider>()` — the `.output` enum needs it.
     // `awaiting_gate` (paused at a gate) and `rejected` (a gate reject halted it)
     // land with the gates slice.
-    state: text().$type<RunState>().notNull().default('queued'),
+    state: text().$type<RunState>().notNull().default(RunStates.queued),
     // Cursor into the pinned definition's items; advances on a step succeeding or a
     // gate resolving. Points at a gate item while the run is `awaiting_gate`.
     currentIndex: integer('current_index').notNull().default(0),
@@ -363,7 +365,7 @@ export const runs = pgTable(
     callbackTokenHash: text('callback_token_hash').notNull(),
     // SET NULL: a run outlives the user who triggered it.
     triggeredByUserId: uuid('triggered_by_user_id').references(() => users.id, { onDelete: 'set null' }),
-    triggerSource: text('trigger_source').notNull().default('manual'),
+    triggerSource: text('trigger_source').notNull().default(TriggerSources.manual),
     startedAt: timestamp('started_at'),
     finishedAt: timestamp('finished_at'),
     createdAt,
@@ -398,7 +400,7 @@ export const runSteps = pgTable(
     // Adapter-specific options, free-form by contract (ADR 0004); absent in the config → null.
     // `.$type` aligns the jsonb column with the wire `with` shape (Record | null via nullable).
     with: jsonb().$type<Record<string, unknown>>(),
-    status: text().$type<RunStepStatus>().notNull().default('pending'),
+    status: text().$type<RunStepStatus>().notNull().default(RunStepStatuses.pending),
     handle: text(),
     logsUrl: text('logs_url'),
     createdAt,
@@ -508,7 +510,7 @@ export const runGates = pgTable(
     itemIndex: integer('item_index').notNull(),
     name: text().notNull(),
     // `.$type` aligns the text column with the GateState union (SSOT in @mocco/common).
-    state: text().$type<GateState>().notNull().default('pending'),
+    state: text().$type<GateState>().notNull().default(GateStates.pending),
     // The gate item's `resume`/`prevent_self`/`reason_required`, pinned at trigger.
     requirements: jsonb().$type<GateRequirements>().notNull(),
     resolvedAt: timestamp('resolved_at'),

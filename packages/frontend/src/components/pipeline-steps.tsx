@@ -1,3 +1,5 @@
+import { PipelineItemKinds } from '@mocco/common/mocco-config';
+
 import type { GateItem, MoccoConfig, Step, StepItem } from '@mocco/common/mocco-config';
 
 /** The `with` map for a step, if present — an adapter-specific key/value list (ADR 0004: opaque to the core). */
@@ -56,7 +58,7 @@ export function PipelineSteps({ config }: { config: MoccoConfig }) {
         {config.version === 1
           ? config.steps.map(step => <StepRow key={step.run} step={step} />)
           : config.steps.map(item =>
-              item.kind === 'gate' ? (
+              item.kind === PipelineItemKinds.gate ? (
                 <GateRow key={`gate:${item.name}`} gate={item} />
               ) : (
                 <StepRow key={`step:${item.run}`} step={item} />

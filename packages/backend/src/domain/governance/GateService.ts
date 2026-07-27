@@ -189,9 +189,9 @@ export class GateService {
 
     const outcome = evaluateGate(requirements.resume, await this.buildVotes(workspaceId, gate.id, requiredRoleNames));
 
-    if (outcome === 'rejected') {
+    if (outcome === GateStates.rejected) {
       await this.rejectRun(workspaceId, run, gate.id, gateItemIndex, gate.name);
-    } else if (outcome === 'resumed') {
+    } else if (outcome === GateStates.resumed) {
       await this.deps.runGates.updateState(workspaceId, gate.id, {
         state: GateStates.resumed,
         resolvedAt: new Date(),

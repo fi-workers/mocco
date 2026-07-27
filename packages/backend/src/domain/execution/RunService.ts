@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { RunCallbackStatuses, RunStates, RunStepStatuses } from '@mocco/common/execution';
-import { moccoConfigSchema } from '@mocco/common/mocco-config';
+import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
+import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
 import { ConfigNotRunnableError, RunCallbackRejectedError, RunNotFoundError } from '@backend/domain/execution/errors';
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
@@ -49,15 +49,21 @@ const TERMINAL_RUN_STATES = new Set<RunState>([
  * gate to pause at. `index` is the item's position — the shared cursor namespace for
  * run_steps (`step_index`) and run_gates (`item_index`). */
 type NormalizedItem =
-  | { kind: 'step'; index: number; name: string; executor: string; with: Record<string, unknown> | null }
-  | { kind: 'gate'; index: number; name: string; requirements: GateRequirements };
+  | {
+      kind: typeof PipelineItemKinds.step;
+      index: number;
+      name: string;
+      executor: string;
+      with: Record<string, unknown> | null;
+    }
+  | { kind: typeof PipelineItemKinds.gate; index: number; name: string; requirements: GateRequirements };
 
 /** Flatten a v1 (all steps) or v2 (steps + gates) config into positional items. v1
  * items are always steps — its behaviour is unchanged. */
 function normalizeItems(config: MoccoConfig): NormalizedItem[] {
   if (config.version === 1) {
     return config.steps.map((step, index) => ({
-      kind: 'step',
+      kind: PipelineItemKinds.step,
       index,
       name: step.run,
       executor: step.executor,
@@ -65,9 +71,9 @@ function normalizeItems(config: MoccoConfig): NormalizedItem[] {
     }));
   }
   return config.steps.map((item, index) =>
-    item.kind === 'gate'
+    item.kind === PipelineItemKinds.gate
       ? {
-          kind: 'gate',
+          kind: PipelineItemKinds.gate,
           index,
           name: item.name,
           requirements: {
@@ -76,7 +82,7 @@ function normalizeItems(config: MoccoConfig): NormalizedItem[] {
             reason_required: item.reason_required ?? false,
           },
         }
-      : { kind: 'step', index, name: item.run, executor: item.executor, with: item.with ?? null },
+      : { kind: PipelineItemKinds.step, index, name: item.run, executor: item.executor, with: item.with ?? null },
   );
 }
 
@@ -326,14 +332,14 @@ export class RunService {
       currentIndex: 0,
       callbackTokenHash: hashToken(callbackToken),
       triggeredByUserId: userId,
-      triggerSource: 'manual',
+      triggerSource: TriggerSources.manual,
     });
 
     // Materialize step items → run_steps and gate items → run_gates, each keyed by its
     // item position (the shared cursor index). A gate snapshots its requirements.
     await this.deps.steps.insertMany(
       items
-        .filter(item => item.kind === 'step')
+        .filter(item => item.kind === PipelineItemKinds.step)
         .map(item => ({
           workspaceId,
           runId: run.id,
@@ -346,7 +352,7 @@ export class RunService {
     );
     await this.deps.runGates.insertMany(
       items
-        .filter(item => item.kind === 'gate')
+        .filter(item => item.kind === PipelineItemKinds.gate)
         .map(item => ({
           workspaceId,
           runId: run.id,
@@ -360,7 +366,7 @@ export class RunService {
       workspaceId,
       runId: run.id,
       type: RunEventTypes.runCreated,
-      payload: { commitId, stepCount: items.filter(item => item.kind === 'step').length },
+      payload: { commitId, stepCount: items.filter(item => item.kind === PipelineItemKinds.step).length },
     });
 
     // Start the run: advance from item 0 (dispatch a step, pause at a gate, or — an

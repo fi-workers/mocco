@@ -31,6 +31,11 @@ export const RunStepStatuses = {
 export type RunStepStatus = (typeof RunStepStatuses)[keyof typeof RunStepStatuses];
 export const runStepStatusSchema = z.enum(Object.values(RunStepStatuses) as [RunStepStatus, ...RunStepStatus[]]);
 
+/** How a run was triggered — the SSOT for `trigger_source` (no magic strings).
+ * `manual` = a member clicked Run; adapter/scheduled sources land with later slices. */
+export const TriggerSources = { manual: 'manual' } as const;
+export type TriggerSource = (typeof TriggerSources)[keyof typeof TriggerSources];
+
 /**
  * A run of a commit candidate, pinned to the commit and its config snapshot.
  * `callbackTokenHash` is deliberately absent: it is a secret the egress filter

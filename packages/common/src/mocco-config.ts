@@ -15,15 +15,20 @@ export type Step = z.infer<typeof stepSchema>;
 export const requirementSchema = z.object({ role: z.string().min(1), count: z.number().int().positive() });
 export type Requirement = z.infer<typeof requirementSchema>;
 
+/** The pipeline-item `kind` discriminator values (ADR 0010) — the SSOT referenced by
+ * the schema literals and every `item.kind` comparison (no magic strings). */
+export const PipelineItemKinds = { step: 'step', gate: 'gate' } as const;
+export type PipelineItemKind = (typeof PipelineItemKinds)[keyof typeof PipelineItemKinds];
+
 /** v2 step item — a `stepSchema` tagged with the `kind` discriminator (ADR 0010). */
-export const stepItemSchema = stepSchema.extend({ kind: z.literal('step') }).strict();
+export const stepItemSchema = stepSchema.extend({ kind: z.literal(PipelineItemKinds.step) }).strict();
 export type StepItem = z.infer<typeof stepItemSchema>;
 
 /** v2 gate item — a pause point resumed under N-of-M AND role requirements, with
  * optional `prevent_self` (the triggerer can't self-approve) and `reason_required`. */
 export const gateItemSchema = z
   .object({
-    kind: z.literal('gate'),
+    kind: z.literal(PipelineItemKinds.gate),
     name: z.string().min(1),
     resume: z.array(requirementSchema).min(1),
     prevent_self: z.boolean().optional(),
@@ -52,7 +57,7 @@ const v2Schema = z
  * gate's `name`. The v1 `run`-based check broke on gates (no `run`), so uniqueness
  * moved here (ADR 0010). A v1 item is always a step. */
 function effectiveId(item: Step | PipelineItem): string {
-  return 'kind' in item && item.kind === 'gate' ? item.name : item.run;
+  return 'kind' in item && item.kind === PipelineItemKinds.gate ? item.name : item.run;
 }
 
 /**
