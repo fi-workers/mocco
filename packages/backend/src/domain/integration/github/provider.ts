@@ -28,6 +28,7 @@ import type {
   InstallationVerifier,
   OwnershipResult,
   RepoLister,
+  RepositoryDispatcher,
   SourceCommit,
 } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
@@ -193,7 +194,9 @@ async function mintInstallationOctokit(app: App, externalAccountId: string) {
   }
 }
 
-export function createGitHubProvider(config: GitHubConfig): RepoLister & InstallationVerifier & CommitSource {
+export function createGitHubProvider(
+  config: GitHubConfig,
+): RepoLister & InstallationVerifier & CommitSource & RepositoryDispatcher {
   const app = new App({
     appId: config.appId,
     privateKey: config.privateKey,
@@ -266,6 +269,24 @@ export function createGitHubProvider(config: GitHubConfig): RepoLister & Install
         throw new GithubApiError('failed to fetch config file', octokitStatus(error), { cause: error });
       }
       return decodeGetContent(data);
+    },
+
+    // Thin wrapper: mint the installation octokit and fire a repository_dispatch —
+    // the neutral trigger the GitHub executor uses to start a workflow. GitHub
+    // returns 204 with no body; nothing to map back. A failure is wrapped as a
+    // GithubApiError like every other call (the octokit error never escapes).
+    async dispatch(ref, eventType, clientPayload) {
+      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+      try {
+        await octokit.request('POST /repos/{owner}/{repo}/dispatches', {
+          owner: ref.owner,
+          repo: ref.name,
+          event_type: eventType,
+          client_payload: clientPayload,
+        });
+      } catch (error) {
+        throw new GithubApiError('failed to dispatch repository event', octokitStatus(error), { cause: error });
+      }
     },
   };
 }

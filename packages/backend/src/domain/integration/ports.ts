@@ -47,3 +47,17 @@ export interface CommitSource {
     sha: string,
   ): Promise<string | null>;
 }
+
+/** Fires an out-of-band event at a provider repo to kick off external execution
+ * (github: a `repository_dispatch`). The neutral seam the GitHub executor adapter
+ * (domain/execution/executors/github) triggers through — so the executor never
+ * imports octokit; token minting + the vendor request stay inside the adapter.
+ * `ref.externalAccountId` = github installation id; `eventType`/`clientPayload`
+ * map to the provider's `event_type`/`client_payload`. Consumed by GitHubExecutor. */
+export interface RepositoryDispatcher {
+  dispatch(
+    ref: { externalAccountId: string; owner: string; name: string },
+    eventType: string,
+    clientPayload: Record<string, unknown>,
+  ): Promise<void>;
+}
