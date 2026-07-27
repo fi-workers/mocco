@@ -62,6 +62,7 @@ function fakeProvider(): GitHubProvider {
     installUrl: state => `https://example.test/install?state=${state}`,
     listCommits: async () => [],
     getConfigAtCommit: async () => null,
+    dispatch: async () => {},
   };
 }
 

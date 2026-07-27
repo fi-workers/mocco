@@ -393,6 +393,49 @@ describe('RunService (pglite)', () => {
   });
 
   describe('executor registry', () => {
+    it('routes a github-actions step to the registered github executor, not the generic one', async () => {
+      // A registry with BOTH adapters registered (mirrors the composition root once
+      // the GitHub App is configured). A `github-actions` step must land on the
+      // github adapter, leaving the generic one untouched.
+      const githubExecutor = new FakeExecutor();
+      const routed = new RunService({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        events: new RunEventRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
+        commits,
+        configs,
+        executors: new Map([
+          [ExecutorIds.generic, executor],
+          [ExecutorIds.githubActions, githubExecutor],
+        ]),
+        callbackUrl: CALLBACK_URL,
+        waitUntil: p => {
+          pending.push(p);
+        },
+      });
+      const githubConfig: MoccoConfig = {
+        version: 1,
+        pipeline: 'deploy',
+        steps: [{ run: 'build', executor: ExecutorIds.githubActions }],
+      };
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId, { parsedJson: githubConfig });
+
+      const run = await routed.trigger(workspaceId, commitId, await seedUser());
+      await drain();
+
+      // The step's `github-actions` id resolved to the github executor.
+      expect(githubExecutor.dispatches).toHaveLength(1);
+      expect(githubExecutor.dispatches[0]?.dispatch.executor).toBe(ExecutorIds.githubActions);
+      // The generic executor was never handed this step.
+      expect(executor.dispatches).toHaveLength(0);
+      const detail = await routed.get(workspaceId, run.id);
+      expect(detail.run.state).toBe('running');
+      expect(detail.steps[0]?.status).toBe('dispatched');
+    });
+
     it('routes a generic step through the registry to the registered generic executor', async () => {
       const { workspaceId, commitId } = await seedCommitInWorkspace();
       await seedConfig(commitId);
