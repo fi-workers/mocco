@@ -41,6 +41,17 @@ export class RoleMembershipRepo {
       );
   }
 
+  /** The roles a user belongs to within a workspace — each as `{ roleId, name }`
+   * (joined with mocco_roles for the name). The gate service intersects these with a
+   * gate's required role names to authorize a vote and build the evaluator input. */
+  async listRolesForUser(workspaceId: string, userId: string) {
+    return await this.db
+      .select({ roleId: schema.roleMemberships.roleId, name: schema.roles.name })
+      .from(schema.roleMemberships)
+      .innerJoin(schema.roles, eq(schema.roleMemberships.roleId, schema.roles.id))
+      .where(and(eq(schema.roleMemberships.workspaceId, workspaceId), eq(schema.roleMemberships.userId, userId)));
+  }
+
   /** A role's memberships joined with each member's user (name/email) — the shape
    * the Access page's per-role member list needs. Scoped by workspace_id, name-ordered. */
   async listByRoleWithUser(workspaceId: string, roleId: string) {

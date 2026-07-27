@@ -11,9 +11,13 @@ import type { Executor, RunStepDispatch } from '@backend/domain/execution/ports'
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import type { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import type { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
+import type { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import type { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import type { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import type { DispatchContext, RunCallbackStatus, RunState, RunStepStatus } from '@mocco/common/execution';
+import type { GateRequirements } from '@mocco/common/governance';
+import type { MoccoConfig } from '@mocco/common/mocco-config';
 
 /** Byte length of the opaque per-run callback token. 32 bytes = 256 bits of entropy. */
 const CALLBACK_TOKEN_BYTES = 32;
@@ -27,13 +31,54 @@ const RunEventTypes = {
   stepRunning: 'step.running',
   stepSucceeded: 'step.succeeded',
   stepFailed: 'step.failed',
+  gatePending: 'gate.pending',
   runSucceeded: 'run.succeeded',
   runFailed: 'run.failed',
 } as const;
 
 /** Run states from which no callback can advance the machine — a redelivered final
- * callback after the run finished is a no-op. */
-const TERMINAL_RUN_STATES = new Set<RunState>([RunStates.succeeded, RunStates.failed, RunStates.canceled]);
+ * callback after the run finished (or was gate-rejected) is a no-op. */
+const TERMINAL_RUN_STATES = new Set<RunState>([
+  RunStates.succeeded,
+  RunStates.failed,
+  RunStates.canceled,
+  RunStates.rejected,
+]);
+
+/** A pinned config's pipeline flattened to positional items: a step to dispatch or a
+ * gate to pause at. `index` is the item's position — the shared cursor namespace for
+ * run_steps (`step_index`) and run_gates (`item_index`). */
+type NormalizedItem =
+  | { kind: 'step'; index: number; name: string; executor: string; with: Record<string, unknown> | null }
+  | { kind: 'gate'; index: number; name: string; requirements: GateRequirements };
+
+/** Flatten a v1 (all steps) or v2 (steps + gates) config into positional items. v1
+ * items are always steps — its behaviour is unchanged. */
+function normalizeItems(config: MoccoConfig): NormalizedItem[] {
+  if (config.version === 1) {
+    return config.steps.map((step, index) => ({
+      kind: 'step',
+      index,
+      name: step.run,
+      executor: step.executor,
+      with: step.with ?? null,
+    }));
+  }
+  return config.steps.map((item, index) =>
+    item.kind === 'gate'
+      ? {
+          kind: 'gate',
+          index,
+          name: item.name,
+          requirements: {
+            resume: item.resume,
+            prevent_self: item.prevent_self ?? false,
+            reason_required: item.reason_required ?? false,
+          },
+        }
+      : { kind: 'step', index, name: item.run, executor: item.executor, with: item.with ?? null },
+  );
+}
 
 /** Step statuses that are settled — a redelivered callback for such a step is idempotent. */
 const TERMINAL_STEP_STATUSES = new Set<RunStepStatus>([
@@ -55,6 +100,12 @@ export interface RunServiceDeps {
   runs: RunRepo;
   steps: RunStepRepo;
   events: RunEventRepo;
+  /** Gate items materialized at trigger; the advance loop pauses when the cursor
+   * points at one. Owned by the governance domain (cross-domain repo injection,
+   * like `commits`/`configs`). */
+  runGates: RunGateRepo;
+  /** Votes on a run's gates — read into the run-detail payload for the gate card. */
+  resumes: ResumeRepo;
   commits: CommitRepo;
   configs: CommitConfigRepo;
   /** The executor the loop dispatches steps to (ADR 0004). Prod = the generic
@@ -187,6 +238,59 @@ export class RunService {
   }
 
   /**
+   * Advance the cursor to `index` and act on the item there: a GATE pauses the run
+   * (`awaiting_gate`, the gate stays `pending`, emit `gate.pending` — no dispatch); a
+   * STEP is dispatched (`running`); nothing there means the pipeline is done (finish
+   * succeeded). Shared by `trigger` (item 0 may be a gate), `applyCallback`'s advance
+   * (the next item may be a gate), and `resumeFromGate` (continue past a gate).
+   */
+  private async advance(run: { id: string; workspaceId: string }, index: number, token: string): Promise<void> {
+    const gate = await this.deps.runGates.findByRunAndIndex(run.id, index);
+    if (gate !== undefined) {
+      await this.deps.runs.update(run.workspaceId, run.id, {
+        state: RunStates.awaitingGate,
+        currentIndex: index,
+      });
+      await this.appendGateEvent(run, RunEventTypes.gatePending, index, gate.name);
+      return;
+    }
+    const step = await this.deps.steps.findByRunAndIndex(run.id, index);
+    if (step === undefined) {
+      // Ran off the end of the pipeline — every item is done.
+      await this.finishRun(run, RunStates.succeeded, RunEventTypes.runSucceeded);
+      return;
+    }
+    await this.deps.runs.update(run.workspaceId, run.id, { state: RunStates.running, currentIndex: index });
+    await this.dispatchStep(run, index, token);
+  }
+
+  private async appendGateEvent(
+    run: { id: string; workspaceId: string },
+    type: string,
+    itemIndex: number,
+    name: string,
+  ): Promise<void> {
+    await this.deps.events.append({
+      workspaceId: run.workspaceId,
+      runId: run.id,
+      type,
+      payload: { itemIndex, name },
+    });
+  }
+
+  /**
+   * Continue a run once its current gate is resumed (called by GateService). Advances
+   * the cursor PAST the gate and acts on the next item (dispatch, pause at the next
+   * gate, or finish). A fresh callback token is minted for the next step — no step is
+   * in flight at a gate, so rotating it is safe (the plaintext is never persisted).
+   */
+  async resumeFromGate(run: { id: string; workspaceId: string }, gateItemIndex: number): Promise<void> {
+    const token = randomBytes(CALLBACK_TOKEN_BYTES).toString('hex');
+    await this.deps.runs.update(run.workspaceId, run.id, { callbackTokenHash: hashToken(token) });
+    await this.advance(run, gateItemIndex + 1, token);
+  }
+
+  /**
    * Create a run for a commit candidate, pinned to its config snapshot, and start it.
    *
    * Guards the config is `present && valid` (else `ConfigNotRunnableError`),
@@ -206,8 +310,9 @@ export class RunService {
     }
 
     // The stored parsedJson is already a validated MoccoConfig, but re-parse it
-    // through the zod SSOT to recover typed steps (never trust the raw jsonb shape).
-    const config = moccoConfigSchema.parse(snapshot.parsedJson);
+    // through the zod SSOT to recover typed items (never trust the raw jsonb shape),
+    // then flatten v1/v2 into positional items (steps to dispatch, gates to pause at).
+    const items = normalizeItems(moccoConfigSchema.parse(snapshot.parsedJson));
 
     // Mint the opaque per-run callback token; store only its hash. The plaintext is
     // used once now (threaded to the executor) and never persisted.
@@ -224,32 +329,48 @@ export class RunService {
       triggerSource: 'manual',
     });
 
+    // Materialize step items → run_steps and gate items → run_gates, each keyed by its
+    // item position (the shared cursor index). A gate snapshots its requirements.
     await this.deps.steps.insertMany(
-      config.steps.map((step, index) => ({
-        workspaceId,
-        runId: run.id,
-        stepIndex: index,
-        name: step.run,
-        executor: step.executor,
-        with: step.with ?? null,
-        status: RunStepStatuses.pending,
-      })),
+      items
+        .filter(item => item.kind === 'step')
+        .map(item => ({
+          workspaceId,
+          runId: run.id,
+          stepIndex: item.index,
+          name: item.name,
+          executor: item.executor,
+          with: item.with,
+          status: RunStepStatuses.pending,
+        })),
+    );
+    await this.deps.runGates.insertMany(
+      items
+        .filter(item => item.kind === 'gate')
+        .map(item => ({
+          workspaceId,
+          runId: run.id,
+          itemIndex: item.index,
+          name: item.name,
+          requirements: item.requirements,
+        })),
     );
 
     await this.deps.events.append({
       workspaceId,
       runId: run.id,
       type: RunEventTypes.runCreated,
-      payload: { commitId, stepCount: config.steps.length },
+      payload: { commitId, stepCount: items.filter(item => item.kind === 'step').length },
     });
 
-    // Start the run: mark it running and dispatch step 0 (the executor trigger is
-    // deferred inside dispatchStep). A step-less config finishes immediately.
-    if (config.steps.length === 0) {
+    // Start the run: advance from item 0 (dispatch a step, pause at a gate, or — an
+    // item-less config — finish immediately). The executor trigger is deferred inside
+    // dispatchStep.
+    if (items.length === 0) {
       await this.finishRun(run, RunStates.succeeded, RunEventTypes.runSucceeded);
     } else {
-      await this.deps.runs.update(workspaceId, run.id, { state: RunStates.running, startedAt: new Date() });
-      await this.dispatchStep(run, 0, callbackToken);
+      await this.deps.runs.update(workspaceId, run.id, { startedAt: new Date() });
+      await this.advance(run, 0, callbackToken);
     }
 
     // Return the run reflecting its post-start state (the create() row was `queued`).
@@ -298,31 +419,30 @@ export class RunService {
       await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed);
       return;
     }
-    // succeeded → settle the step, then advance to the next or finish the run.
+    // succeeded → settle the step, then advance to the next item (dispatch a step,
+    // pause at a gate, or finish the run).
     await this.deps.steps.update(run.workspaceId, step.id, { status: RunStepStatuses.succeeded, logsUrl });
     await this.appendStepEvent(run, RunEventTypes.stepSucceeded, update.stepIndex, step.name);
-
-    const nextIndex = update.stepIndex + 1;
-    const next = await this.deps.steps.findByRunAndIndex(run.id, nextIndex);
-    if (next === undefined) {
-      await this.finishRun(run, RunStates.succeeded, RunEventTypes.runSucceeded);
-      return;
-    }
-    await this.deps.runs.update(run.workspaceId, run.id, { currentIndex: nextIndex });
-    await this.dispatchStep(run, nextIndex, token);
+    await this.advance(run, update.stepIndex + 1, token);
   }
 
-  /** A run and its materialized steps, workspace-scoped. */
+  /** A run with its materialized steps, gates, and the votes cast — workspace-scoped.
+   * The gate card renders progress from the gates + resumes. */
   async get(workspaceId: string, runId: string) {
     const run = await this.requireRun(workspaceId, runId);
     const steps = await this.deps.steps.listByRun(workspaceId, runId);
-    return { run, steps };
+    const gates = await this.deps.runGates.findByRun(workspaceId, runId);
+    const resumes = await this.deps.resumes.listByRun(workspaceId, runId);
+    return { run, steps, gates, resumes };
   }
 
-  /** A run plus its progression events with `seq > sinceSeq` — the live poll read. */
+  /** A run plus its progression events with `seq > sinceSeq`, and its gates + votes —
+   * the live poll read (the gate card re-renders gate progress in place). */
   async observe(workspaceId: string, runId: string, sinceSeq: bigint) {
     const run = await this.requireRun(workspaceId, runId);
     const events = await this.deps.events.listSince(workspaceId, runId, sinceSeq);
-    return { run, events };
+    const gates = await this.deps.runGates.findByRun(workspaceId, runId);
+    const resumes = await this.deps.resumes.listByRun(workspaceId, runId);
+    return { run, events, gates, resumes };
   }
 }

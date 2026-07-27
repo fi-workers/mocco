@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
+import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -350,11 +351,13 @@ export const runs = pgTable(
     commitConfigId: uuid('commit_config_id')
       .notNull()
       .references(() => commitConfigs.id, { onDelete: 'restrict' }),
-    // Gate states (awaiting_gate, rejected) are added in the gates slice.
     // `.$type` aligns the text column with the RunState union (SSOT in @mocco/common),
     // mirroring `provider: text().$type<Provider>()` — the `.output` enum needs it.
+    // `awaiting_gate` (paused at a gate) and `rejected` (a gate reject halted it)
+    // land with the gates slice.
     state: text().$type<RunState>().notNull().default('queued'),
-    // Cursor into the pinned definition's steps; advances only on a step succeeding.
+    // Cursor into the pinned definition's items; advances on a step succeeding or a
+    // gate resolving. Points at a gate item while the run is `awaiting_gate`.
     currentIndex: integer('current_index').notNull().default(0),
     // sha-256 of the opaque per-run callback token; the plaintext is returned once and never stored.
     callbackTokenHash: text('callback_token_hash').notNull(),
@@ -370,7 +373,10 @@ export const runs = pgTable(
     index('mocco_runs_workspace_state_idx').on(t.workspaceId, t.state),
     index('mocco_runs_commit_idx').on(t.commitId),
     uniqueIndex('mocco_runs_callback_token_hash_uq').on(t.callbackTokenHash),
-    check('mocco_runs_state_check', sql`${t.state} IN ('queued','running','succeeded','failed','canceled')`),
+    check(
+      'mocco_runs_state_check',
+      sql`${t.state} IN ('queued','running','succeeded','failed','canceled','awaiting_gate','rejected')`,
+    ),
   ],
 );
 
@@ -473,5 +479,77 @@ export const roleMemberships = pgTable(
     // Serves role-scoped listing (composite prefix) and enforces one membership per person per role.
     uniqueIndex('mocco_role_memberships_role_user_uq').on(t.roleId, t.userId),
     index('mocco_role_memberships_user_id_idx').on(t.userId),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Governance — gates & resumes (slice 5, PR3). A v2 pipeline gate materializes a
+// `run_gate` per gate item when a run is triggered (its requirements snapshotted so
+// a later config/role change can't alter an in-flight gate). A paused run's gate
+// collects `resumes` — one vote per person — which the pure evaluator resolves into
+// resumed/rejected. Both carry workspace_id for direct tenant scoping. See
+// docs/superpowers/specs/2026-07-27-slice5-gates-approval-design.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A materialized gate on a run — one row per gate item in the pinned v2 pipeline,
+ * keyed by its `item_index` (the item's position, shared namespace with run_steps). */
+export const runGates = pgTable(
+  'mocco_run_gates',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    // Position of the gate item in the pipeline (mixed with steps); the run cursor
+    // points here while `awaiting_gate`.
+    itemIndex: integer('item_index').notNull(),
+    name: text().notNull(),
+    // `.$type` aligns the text column with the GateState union (SSOT in @mocco/common).
+    state: text().$type<GateState>().notNull().default('pending'),
+    // The gate item's `resume`/`prevent_self`/`reason_required`, pinned at trigger.
+    requirements: jsonb().$type<GateRequirements>().notNull(),
+    resolvedAt: timestamp('resolved_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_run_gates_run_item_uq').on(t.runId, t.itemIndex),
+    check('mocco_run_gates_state_check', sql`${t.state} IN ('pending','resumed','rejected','expired')`),
+  ],
+);
+
+/** A single recorded vote on a gate. `user_id` is RESTRICT — a vote's principal is
+ * never erased. `role_id` is nullable (SET NULL): the role a vote counted under may
+ * later be deleted without corrupting the record. One vote per (gate, user). */
+export const resumes = pgTable(
+  'mocco_resumes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    runGateId: uuid('run_gate_id')
+      .notNull()
+      .references(() => runGates.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    roleId: uuid('role_id').references(() => roles.id, { onDelete: 'set null' }),
+    // `.$type` aligns the text column with the ResumeDecision union (SSOT in @mocco/common).
+    decision: text().$type<ResumeDecision>().notNull(),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    // Enforces one vote per person per gate (and serves gate-scoped listing).
+    uniqueIndex('mocco_resumes_gate_user_uq').on(t.runGateId, t.userId),
+    index('mocco_resumes_run_id_idx').on(t.runId),
+    check('mocco_resumes_decision_check', sql`${t.decision} IN ('resume','reject')`),
   ],
 );

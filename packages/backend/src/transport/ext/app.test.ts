@@ -8,6 +8,8 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -93,6 +95,8 @@ describe('ext GitHub setup callback (pglite)', () => {
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),
         events: new RunEventRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
         commits: new CommitRepo(t.db),
         configs: new CommitConfigRepo(t.db),
         executor: new FakeExecutor(),

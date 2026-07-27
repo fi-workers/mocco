@@ -10,8 +10,11 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { GateService } from '@backend/domain/governance/GateService';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -66,6 +69,8 @@ describe('run router on pglite', () => {
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
       commits,
       configs,
       executor: new FakeExecutor(),
@@ -78,8 +83,35 @@ describe('run router on pglite', () => {
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
     const session = await auth.getSession(headers);
+    const runs = makeRuns();
     const roles = new RoleService({ roles: new RoleRepo(t.db), memberships: new RoleMembershipRepo(t.db) });
-    return appRouter.createCaller({ auth, workspace, runs: makeRuns(), roles, session, headers });
+    const gates = new GateService({
+      runs: new RunRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
+      memberships: new RoleMembershipRepo(t.db),
+      events: new RunEventRepo(t.db),
+      resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
+    });
+    return appRouter.createCaller({ auth, workspace, runs, roles, gates, session, headers });
+  };
+
+  // A caller that also exposes its user id, so a resumeGate test can assign it to a role.
+  const signedInWithId = async (email: string) => {
+    const headers = await signUpViaHttp(auth, email);
+    const session = await auth.getSession(headers);
+    const runs = makeRuns();
+    const roles = new RoleService({ roles: new RoleRepo(t.db), memberships: new RoleMembershipRepo(t.db) });
+    const gates = new GateService({
+      runs: new RunRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
+      memberships: new RoleMembershipRepo(t.db),
+      events: new RunEventRepo(t.db),
+      resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
+    });
+    const api = appRouter.createCaller({ auth, workspace, runs, roles, gates, session, headers });
+    return { api, userId: session?.user.id ?? '' };
   };
 
   /** Seed a repo + one commit under a workspace, returning the commit id. */
@@ -269,6 +301,124 @@ describe('run router on pglite', () => {
       await expect(stranger.run.events({ workspaceId: wsA.id, runId: run.id, sinceSeq: '0' })).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
+    });
+  });
+
+  describe('resumeGate', () => {
+    const GATED_CONFIG: MoccoConfig = {
+      version: 2,
+      pipeline: 'deploy',
+      steps: [
+        { kind: 'gate', name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        { kind: 'step', run: 'ship', executor: 'generic' },
+      ],
+    };
+    const PREVENT_SELF_CONFIG: MoccoConfig = {
+      version: 2,
+      pipeline: 'deploy',
+      steps: [
+        { kind: 'gate', name: 'approve', resume: [{ role: 'deployer', count: 1 }], prevent_self: true },
+        { kind: 'step', run: 'ship', executor: 'generic' },
+      ],
+    };
+
+    const seedGatedCommit = async (workspaceId: string, sha: string, config = GATED_CONFIG): Promise<string> => {
+      const commitId = await seedCommitId(workspaceId, sha);
+      await configs.upsert({
+        commitId,
+        present: true,
+        rawYaml: 'version: 2',
+        parsedJson: config,
+        valid: true,
+        validationErrors: [],
+      });
+      return commitId;
+    };
+
+    it('an authorized member resumes the current gate and the run continues', async () => {
+      const { api, userId } = await signedInWithId('resume-ok@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const { role } = await api.role.create({ workspaceId: ws.id, name: 'deployer' });
+      await api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId });
+      const commitId = await seedGatedCommit(ws.id, 'sha-gate-ok');
+
+      const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
+      expect(run.state).toBe('awaiting_gate');
+
+      const resumed = await api.run.resumeGate({
+        workspaceId: ws.id,
+        runId: run.id,
+        gateItemIndex: 0,
+        decision: 'resume',
+      });
+      expect(resumed.gate.state).toBe('resumed');
+      expect(resumed.run.state).toBe('running');
+    });
+
+    it('run.get exposes the run gates', async () => {
+      const { api, userId } = await signedInWithId('gate-get@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const { role } = await api.role.create({ workspaceId: ws.id, name: 'deployer' });
+      await api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId });
+      const commitId = await seedGatedCommit(ws.id, 'sha-gate-get');
+      const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
+
+      const detail = await api.run.get({ workspaceId: ws.id, runId: run.id });
+      expect(detail.gates).toHaveLength(1);
+      expect(detail.gates[0]).toMatchObject({ itemIndex: 0, name: 'approve', state: 'pending' });
+    });
+
+    it('a voter not in a required role is FORBIDDEN', async () => {
+      const { api } = await signedInWithId('resume-forbidden@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      // The role exists but the caller is not a member of it.
+      await api.role.create({ workspaceId: ws.id, name: 'deployer' });
+      const commitId = await seedGatedCommit(ws.id, 'sha-gate-forbidden');
+      const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
+
+      await expect(
+        api.run.resumeGate({ workspaceId: ws.id, runId: run.id, gateItemIndex: 0, decision: 'resume' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('prevent_self on the triggerer is BAD_REQUEST', async () => {
+      const { api, userId } = await signedInWithId('resume-self@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const { role } = await api.role.create({ workspaceId: ws.id, name: 'deployer' });
+      await api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId });
+      const commitId = await seedGatedCommit(ws.id, 'sha-gate-self', PREVENT_SELF_CONFIG);
+      const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
+
+      await expect(
+        api.run.resumeGate({ workspaceId: ws.id, runId: run.id, gateItemIndex: 0, decision: 'resume' }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    it('a gate index the run is not paused at is NOT_FOUND', async () => {
+      const { api, userId } = await signedInWithId('resume-notcurrent@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const { role } = await api.role.create({ workspaceId: ws.id, name: 'deployer' });
+      await api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId });
+      const commitId = await seedGatedCommit(ws.id, 'sha-gate-notcurrent');
+      const { run } = await api.run.trigger({ workspaceId: ws.id, commitId });
+
+      await expect(
+        api.run.resumeGate({ workspaceId: ws.id, runId: run.id, gateItemIndex: 1, decision: 'resume' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('a non-member cannot resume a gate in another workspace (NOT_FOUND)', async () => {
+      const { api: owner, userId } = await signedInWithId('resume-owner@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const { role } = await owner.role.create({ workspaceId: wsA.id, name: 'deployer' });
+      await owner.role.addMember({ workspaceId: wsA.id, roleId: role.id, userId });
+      const commitId = await seedGatedCommit(wsA.id, 'sha-gate-cross');
+      const { run } = await owner.run.trigger({ workspaceId: wsA.id, commitId });
+
+      const stranger = await signedInCaller('resume-stranger@example.com');
+      await expect(
+        stranger.run.resumeGate({ workspaceId: wsA.id, runId: run.id, gateItemIndex: 0, decision: 'resume' }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 });

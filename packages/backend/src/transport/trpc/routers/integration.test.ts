@@ -8,8 +8,11 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { GateService } from '@backend/domain/governance/GateService';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
@@ -38,6 +41,8 @@ const makeRuns = (db: TestDb['db']): RunService =>
     runs: new RunRepo(db),
     steps: new RunStepRepo(db),
     events: new RunEventRepo(db),
+    runGates: new RunGateRepo(db),
+    resumes: new ResumeRepo(db),
     commits: new CommitRepo(db),
     configs: new CommitConfigRepo(db),
     executor: new FakeExecutor(),
@@ -50,6 +55,17 @@ const makeRuns = (db: TestDb['db']): RunService =>
 /** RoleService wired to the test DB — always present in the tRPC context (no external gate). */
 const makeRoles = (db: TestDb['db']): RoleService =>
   new RoleService({ roles: new RoleRepo(db), memberships: new RoleMembershipRepo(db) });
+
+/** GateService wired to the test DB — always present in the tRPC context (no external gate). */
+const makeGates = (db: TestDb['db']): GateService =>
+  new GateService({
+    runs: new RunRepo(db),
+    runGates: new RunGateRepo(db),
+    resumes: new ResumeRepo(db),
+    memberships: new RoleMembershipRepo(db),
+    events: new RunEventRepo(db),
+    resumeRun: async (run, gateItemIndex) => await makeRuns(db).resumeFromGate(run, gateItemIndex),
+  });
 
 function fakeProvider(): RepoLister & InstallationVerifier {
   return {
@@ -151,6 +167,7 @@ describe('integration router on pglite', () => {
       commitConfig: hasConnection ? commitConfig : undefined,
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
+      gates: makeGates(t.db),
       session,
       headers,
     });
@@ -231,6 +248,7 @@ describe('integration router on pglite', () => {
       commitConfig,
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
+      gates: makeGates(t.db),
       session,
       headers,
     });

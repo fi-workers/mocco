@@ -7,7 +7,7 @@ import { moccoConfigSchema } from '../packages/common/src/mocco-config';
 
 const schema = {
   $id: 'https://mocco.club/mocco.schema.json',
-  title: '.mocco.yml (v1)',
+  title: '.mocco.yml (v1 & v2)',
   ...z.toJSONSchema(moccoConfigSchema, { target: 'draft-2020-12' }),
 };
 writeFileSync('docs/reference/mocco.schema.json', `${JSON.stringify(schema, null, 2)}\n`);
