@@ -10,8 +10,11 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { GateService } from '@backend/domain/governance/GateService';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -49,6 +52,8 @@ describe('role router on pglite', () => {
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
       commits: new CommitRepo(t.db),
       configs: new CommitConfigRepo(t.db),
       executor: new FakeExecutor(),
@@ -61,8 +66,17 @@ describe('role router on pglite', () => {
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
     const session = await auth.getSession(headers);
+    const runs = makeRuns();
     const roles = new RoleService({ roles: new RoleRepo(t.db), memberships: new RoleMembershipRepo(t.db) });
-    const api = appRouter.createCaller({ auth, workspace, runs: makeRuns(), roles, session, headers });
+    const gates = new GateService({
+      runs: new RunRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
+      memberships: new RoleMembershipRepo(t.db),
+      events: new RunEventRepo(t.db),
+      resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
+    });
+    const api = appRouter.createCaller({ auth, workspace, runs, roles, gates, session, headers });
     return { api, userId: session?.user.id ?? '' };
   };
 

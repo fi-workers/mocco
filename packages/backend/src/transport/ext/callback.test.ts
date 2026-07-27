@@ -9,6 +9,8 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { expectOne } from '@backend/infra/db/rows';
@@ -63,6 +65,8 @@ describe('ext execution routes (pglite)', () => {
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
       commits,
       configs,
       executor,

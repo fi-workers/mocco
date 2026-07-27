@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Run lifecycle states: `queued → running → (succeeded | failed | canceled)`.
- * Gate states (`awaiting_gate`, `rejected`) land in the gates slice. Modeled as an
- * `as const` object + derived union (constants over enums) so a new state is an
- * additive change here.
+ * Run lifecycle states: `queued → running → (succeeded | failed | canceled)`, plus
+ * the gate states `awaiting_gate` (paused at a gate, resumable) and `rejected` (a
+ * gate reject halted the run — terminal). Modeled as an `as const` object + derived
+ * union (constants over enums) so a new state is an additive change here.
  */
 export const RunStates = {
   queued: 'queued',
@@ -12,6 +12,8 @@ export const RunStates = {
   succeeded: 'succeeded',
   failed: 'failed',
   canceled: 'canceled',
+  awaitingGate: 'awaiting_gate',
+  rejected: 'rejected',
 } as const;
 export type RunState = (typeof RunStates)[keyof typeof RunStates];
 export const runStateSchema = z.enum(Object.values(RunStates) as [RunState, ...RunState[]]);
@@ -28,6 +30,11 @@ export const RunStepStatuses = {
 } as const;
 export type RunStepStatus = (typeof RunStepStatuses)[keyof typeof RunStepStatuses];
 export const runStepStatusSchema = z.enum(Object.values(RunStepStatuses) as [RunStepStatus, ...RunStepStatus[]]);
+
+/** How a run was triggered — the SSOT for `trigger_source` (no magic strings).
+ * `manual` = a member clicked Run; adapter/scheduled sources land with later slices. */
+export const TriggerSources = { manual: 'manual' } as const;
+export type TriggerSource = (typeof TriggerSources)[keyof typeof TriggerSources];
 
 /**
  * A run of a commit candidate, pinned to the commit and its config snapshot.

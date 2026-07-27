@@ -33,12 +33,16 @@ export class RunRepo {
     return row;
   }
 
-  /** Patch mutable run fields (state/cursor/timestamps). Scoped by workspace_id even
-   * though the id is unique — writes stay tenant-scoped like every other repo write. */
+  /** Patch mutable run fields (state/cursor/timestamps/token hash). Scoped by
+   * workspace_id even though the id is unique — writes stay tenant-scoped like every
+   * other repo write. `callbackTokenHash` rotates when a run resumes from a gate (a
+   * fresh token is minted for the next step; no step is in flight at a gate). */
   async update(
     workspaceId: string,
     runId: string,
-    patch: Partial<Pick<typeof schema.runs.$inferInsert, 'state' | 'currentIndex' | 'startedAt' | 'finishedAt'>>,
+    patch: Partial<
+      Pick<typeof schema.runs.$inferInsert, 'state' | 'currentIndex' | 'startedAt' | 'finishedAt' | 'callbackTokenHash'>
+    >,
   ) {
     await this.db
       .update(schema.runs)

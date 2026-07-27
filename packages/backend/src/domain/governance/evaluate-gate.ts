@@ -1,3 +1,7 @@
+import { GateStates, ResumeDecisions } from '@mocco/common/governance';
+
+import type { ResumeDecision } from '@mocco/common/governance';
+
 /** One required N-of-M slot on a gate: `count` distinct principals holding `role`
  * must resume for this requirement to be met. Kept plain and self-contained (NOT
  * derived from `moccoConfigSchema`) so the config schema can evolve independently
@@ -13,10 +17,12 @@ export interface GateRequirement {
 export interface ResumeVote {
   principalId: string;
   role: string;
-  decision: 'resume' | 'reject';
+  decision: ResumeDecision;
 }
 
-export type GateOutcome = 'pending' | 'resumed' | 'rejected';
+/** The evaluator's verdict — a subset of `GateStates` (never `expired`, a time-based
+ * transition, not a vote outcome). Values sourced from the `GateStates` SSOT. */
+export type GateOutcome = typeof GateStates.pending | typeof GateStates.resumed | typeof GateStates.rejected;
 
 /**
  * Evaluate a gate's outcome from its snapshotted requirements and the votes cast.
@@ -42,8 +48,8 @@ export type GateOutcome = 'pending' | 'resumed' | 'rejected';
  * upstream, deduped here defensively).
  */
 export function evaluateGate(requirements: GateRequirement[], votes: ResumeVote[]): GateOutcome {
-  if (votes.some(vote => vote.decision === 'reject')) {
-    return 'rejected';
+  if (votes.some(vote => vote.decision === ResumeDecisions.reject)) {
+    return GateStates.rejected;
   }
 
   // Expand each requirement into individual role-slots to fill. A count <= 0 adds
@@ -91,5 +97,7 @@ export function evaluateGate(requirements: GateRequirement[], votes: ResumeVote[
   // is satisfied. `.every` builds the matching incrementally and short-circuits
   // the moment a slot cannot be augmented into it — max-matching size is
   // order-independent, so one unfillable slot already proves it can't be perfect.
-  return slots.every((_, slotIndex) => canFillSlot(slotIndex, new Set<string>())) ? 'resumed' : 'pending';
+  return slots.every((_, slotIndex) => canFillSlot(slotIndex, new Set<string>()))
+    ? GateStates.resumed
+    : GateStates.pending;
 }

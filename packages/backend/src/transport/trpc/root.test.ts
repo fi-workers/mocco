@@ -8,8 +8,11 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { GateService } from '@backend/domain/governance/GateService';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -25,6 +28,8 @@ const makeRuns = (db: TestDb['db']): RunService =>
     runs: new RunRepo(db),
     steps: new RunStepRepo(db),
     events: new RunEventRepo(db),
+    runGates: new RunGateRepo(db),
+    resumes: new ResumeRepo(db),
     commits: new CommitRepo(db),
     configs: new CommitConfigRepo(db),
     executor: new FakeExecutor(),
@@ -37,6 +42,17 @@ const makeRuns = (db: TestDb['db']): RunService =>
 /** RoleService wired to the test DB — always present in the context (no external gate). */
 const makeRoles = (db: TestDb['db']): RoleService =>
   new RoleService({ roles: new RoleRepo(db), memberships: new RoleMembershipRepo(db) });
+
+/** GateService wired to the test DB — always present in the context (no external gate). */
+const makeGates = (db: TestDb['db']): GateService =>
+  new GateService({
+    runs: new RunRepo(db),
+    runGates: new RunGateRepo(db),
+    resumes: new ResumeRepo(db),
+    memberships: new RoleMembershipRepo(db),
+    events: new RunEventRepo(db),
+    resumeRun: async (run, gateItemIndex) => await makeRuns(db).resumeFromGate(run, gateItemIndex),
+  });
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
 const signUpViaHttp = async (auth: AuthService, email: string) => {
@@ -58,7 +74,15 @@ describe('tRPC workspace router on pglite', () => {
   let workspace: WorkspaceService;
 
   const caller = (headers: Headers, session: Context['session']) =>
-    appRouter.createCaller({ auth, workspace, runs: makeRuns(t.db), roles: makeRoles(t.db), session, headers });
+    appRouter.createCaller({
+      auth,
+      workspace,
+      runs: makeRuns(t.db),
+      roles: makeRoles(t.db),
+      gates: makeGates(t.db),
+      session,
+      headers,
+    });
 
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
@@ -212,7 +236,13 @@ describe('trpcHandler over HTTP', () => {
   });
 
   it('health responds; authed workspace.list round-trips a Date through superjson', async () => {
-    const trpcHandler = createTrpcHandler({ auth, workspace, runs: makeRuns(t.db), roles: makeRoles(t.db) });
+    const trpcHandler = createTrpcHandler({
+      auth,
+      workspace,
+      runs: makeRuns(t.db),
+      roles: makeRoles(t.db),
+      gates: makeGates(t.db),
+    });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
     expect(health.status).toBe(200);

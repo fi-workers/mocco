@@ -4,6 +4,7 @@ import superjson from 'superjson';
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
@@ -25,6 +26,8 @@ export interface Context {
   runs: RunService;
   /** Always present — the governance domain has no external dependency to gate on. */
   roles: RoleService;
+  /** Always present — resolves a run's gate; the run router's resumeGate delegates here. */
+  gates: GateService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

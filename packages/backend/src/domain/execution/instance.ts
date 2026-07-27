@@ -11,6 +11,8 @@ import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { getEnv } from '@backend/infra/config/env';
@@ -39,6 +41,8 @@ export function getExecution(): Execution {
         runs: new RunRepo(db),
         steps: new RunStepRepo(db),
         events: new RunEventRepo(db),
+        runGates: new RunGateRepo(db),
+        resumes: new ResumeRepo(db),
         commits: new CommitRepo(db),
         configs: new CommitConfigRepo(db),
         executor: new GenericExecutor({ endpoint: genericExecutorUrlFrom(baseOrigin), post: postJson }),

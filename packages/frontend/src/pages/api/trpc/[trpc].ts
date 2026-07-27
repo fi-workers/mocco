@@ -28,6 +28,7 @@ export default createNextApiHandler({
       commitConfig: integration?.commitConfig,
       runs: execution.runs,
       roles: governance.roles,
+      gates: governance.gates,
       session: await auth.getSession(headers),
       headers,
     };
