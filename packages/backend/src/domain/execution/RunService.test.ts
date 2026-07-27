@@ -8,6 +8,8 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -44,6 +46,8 @@ describe('RunService (pglite)', () => {
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
+      runGates: new RunGateRepo(t.db),
+      resumes: new ResumeRepo(t.db),
       commits,
       configs,
       executor,
@@ -369,6 +373,109 @@ describe('RunService (pglite)', () => {
       await service.applyCallback(token, { runId, stepIndex: 0, status: 'succeeded' });
       const detail = await service.get(workspaceId, runId);
       expect(detail.run.state).toBe('failed');
+    });
+  });
+
+  describe('v2 gates', () => {
+    const V2_CONFIG: MoccoConfig = {
+      version: 2,
+      pipeline: 'deploy',
+      steps: [
+        { kind: 'step', run: 'build', executor: 'generic' },
+        { kind: 'gate', name: 'approve', resume: [{ role: 'deployer', count: 2 }], prevent_self: true },
+        { kind: 'step', run: 'ship', executor: 'generic' },
+      ],
+    };
+
+    /** Trigger a v2 run and return its id + the token handed to the executor. */
+    async function startV2Run(config: MoccoConfig = V2_CONFIG): Promise<{ workspaceId: string; runId: string }> {
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId, { parsedJson: config });
+      const run = await service.trigger(workspaceId, commitId, await seedUser());
+      return { workspaceId, runId: run.id };
+    }
+
+    it('materializes steps and gates by item index (a gate snapshots its requirements)', async () => {
+      const { workspaceId, runId } = await startV2Run();
+
+      const detail = await service.get(workspaceId, runId);
+      // Two step items (indices 0, 2) and one gate item (index 1).
+      expect(detail.steps.map(step => step.stepIndex)).toEqual([0, 2]);
+      expect(detail.steps.map(step => step.name)).toEqual(['build', 'ship']);
+      expect(detail.gates).toHaveLength(1);
+      expect(detail.gates[0]).toMatchObject({ itemIndex: 1, name: 'approve', state: 'pending' });
+      expect(detail.gates[0]?.requirements).toEqual({
+        resume: [{ role: 'deployer', count: 2 }],
+        prevent_self: true,
+        reason_required: false,
+      });
+    });
+
+    it('pauses at a gate on advance — awaiting_gate, no dispatch, gate.pending emitted', async () => {
+      const { workspaceId, runId } = await startV2Run();
+      const token = tokenForLatestDispatch();
+      // Step 0 dispatched at trigger.
+      expect(executor.dispatches).toHaveLength(1);
+
+      // Step 0 succeeds → advance lands on the gate at item 1 → pause.
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'succeeded' });
+
+      const detail = await service.get(workspaceId, runId);
+      expect(detail.run.state).toBe('awaiting_gate');
+      expect(detail.run.currentIndex).toBe(1);
+      expect(detail.gates[0]?.state).toBe('pending');
+      // No further dispatch — the gated step is not started.
+      expect(executor.dispatches).toHaveLength(1);
+      expect(detail.steps.map(step => step.status)).toEqual(['succeeded', 'pending']);
+
+      const { events } = await service.observe(workspaceId, runId, 0n);
+      expect(events.map(event => event.type)).toEqual([
+        'run.created',
+        'step.dispatched',
+        'step.succeeded',
+        'gate.pending',
+      ]);
+    });
+
+    it('resumeFromGate advances past the gate and dispatches the next step', async () => {
+      const { workspaceId, runId } = await startV2Run();
+      const token = tokenForLatestDispatch();
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'succeeded' });
+
+      const paused = await service.get(workspaceId, runId);
+      await service.resumeFromGate(paused.run, 1);
+
+      const detail = await service.get(workspaceId, runId);
+      expect(detail.run.state).toBe('running');
+      expect(detail.run.currentIndex).toBe(2);
+      // The next step (ship, item 2) is now dispatched — a second executor dispatch.
+      expect(executor.dispatches).toHaveLength(2);
+      expect(executor.dispatches[1]?.ctx.stepIndex).toBe(2);
+      expect(detail.steps.map(step => step.status)).toEqual(['succeeded', 'dispatched']);
+
+      // resumeFromGate rotates the callback token; the next step's callback uses the new one.
+      const newToken = tokenForLatestDispatch();
+      await service.applyCallback(newToken, { runId, stepIndex: 2, status: 'succeeded' });
+      const done = await service.get(workspaceId, runId);
+      expect(done.run.state).toBe('succeeded');
+    });
+
+    it('pauses immediately when item 0 is a gate (no step dispatched at trigger)', async () => {
+      const gateFirst: MoccoConfig = {
+        version: 2,
+        pipeline: 'deploy',
+        steps: [
+          { kind: 'gate', name: 'gate-0', resume: [{ role: 'sre', count: 1 }] },
+          { kind: 'step', run: 'ship', executor: 'generic' },
+        ],
+      };
+      const { workspaceId, runId } = await startV2Run(gateFirst);
+
+      const detail = await service.get(workspaceId, runId);
+      expect(detail.run.state).toBe('awaiting_gate');
+      expect(detail.run.currentIndex).toBe(0);
+      expect(executor.dispatches).toHaveLength(0);
+      expect(detail.run.startedAt).not.toBeNull();
     });
   });
 

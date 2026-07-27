@@ -64,6 +64,13 @@
       "when": 1785111832507,
       "tag": "0008_wise_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785113575128,
+      "tag": "0009_slow_the_captain",
+      "breakpoints": true
     }
   ]
 }
