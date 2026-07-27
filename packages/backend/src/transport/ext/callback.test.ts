@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
@@ -69,7 +70,7 @@ describe('ext execution routes (pglite)', () => {
       resumes: new ResumeRepo(t.db),
       commits,
       configs,
-      executor,
+      executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: CALLBACK_URL,
       waitUntil: p => {
         pending.push(p);

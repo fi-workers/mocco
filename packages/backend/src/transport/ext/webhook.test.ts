@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { ExecutorIds } from '@mocco/common/execution';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -140,7 +141,7 @@ describe('ext GitHub webhook route (pglite)', () => {
         resumes: new ResumeRepo(t.db),
         commits: new CommitRepo(t.db),
         configs: new CommitConfigRepo(t.db),
-        executor: new FakeExecutor(),
+        executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
         callbackUrl: 'http://localhost:3100/api/ext/callback',
         waitUntil: p => {
           pending.push(p);

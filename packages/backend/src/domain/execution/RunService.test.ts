@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ConfigNotRunnableError, RunCallbackRejectedError, RunNotFoundError } from '@backend/domain/execution/errors';
@@ -36,12 +37,14 @@ describe('RunService (pglite)', () => {
   let configs: CommitConfigRepo;
   let service: RunService;
   let executor: FakeExecutor;
+  let pending: Promise<unknown>[];
 
   beforeEach(async () => {
     t = await createTestDb();
     commits = new CommitRepo(t.db);
     configs = new CommitConfigRepo(t.db);
     executor = new FakeExecutor();
+    pending = [];
     service = new RunService({
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
@@ -50,13 +53,17 @@ describe('RunService (pglite)', () => {
       resumes: new ResumeRepo(t.db),
       commits,
       configs,
-      executor,
+      // Only the generic adapter is registered; a step with any other executor id
+      // (e.g. an unregistered `github-actions`) fails its run closed.
+      executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: CALLBACK_URL,
-      // The outbound executor trigger is fire-and-forget; the FakeExecutor records
-      // synchronously when start() is invoked, so tests read the token and assert DB
-      // state without draining the deferred promise.
-      waitUntil: () => {
-        /* drop the deferred trigger — startExecutor catches its own errors */
+      // The outbound executor trigger is fire-and-forget. The FakeExecutor records
+      // synchronously when start() is invoked, so most tests read the token and
+      // assert DB state without draining; the deferred promises are collected here
+      // so the fail-closed path (which writes only in the deferred pass) can be
+      // drained when a test needs it.
+      waitUntil: p => {
+        pending.push(p);
       },
     });
   });
@@ -64,6 +71,15 @@ describe('RunService (pglite)', () => {
   afterEach(async () => {
     await t.close();
   });
+
+  /** Drain every collected deferred promise, including ones scheduled while draining. */
+  async function drain(): Promise<void> {
+    while (pending.length > 0) {
+      const p = pending.shift();
+      // eslint-disable-next-line no-await-in-loop
+      await p;
+    }
+  }
 
   /** The plaintext callback token for a run — recovered from what the executor was
    * handed at dispatch (the real loop delivers it back on the callback). */
@@ -373,6 +389,52 @@ describe('RunService (pglite)', () => {
       await service.applyCallback(token, { runId, stepIndex: 0, status: 'succeeded' });
       const detail = await service.get(workspaceId, runId);
       expect(detail.run.state).toBe('failed');
+    });
+  });
+
+  describe('executor registry', () => {
+    it('routes a generic step through the registry to the registered generic executor', async () => {
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId);
+
+      const run = await service.trigger(workspaceId, commitId, await seedUser());
+
+      // The step's `generic` id resolved to the registered executor and was dispatched.
+      expect(executor.dispatches).toHaveLength(1);
+      expect(executor.dispatches[0]?.dispatch.executor).toBe(ExecutorIds.generic);
+      await drain();
+      const detail = await service.get(workspaceId, run.id);
+      expect(detail.run.state).toBe('running');
+      expect(detail.steps[0]?.status).toBe('dispatched');
+    });
+
+    it('fails a run closed when a step has an unregistered executor (no dispatch)', async () => {
+      const unknownExecutorConfig: MoccoConfig = {
+        version: 1,
+        pipeline: 'deploy',
+        // `github-actions` is a defined id (ExecutorIds) but not registered in this
+        // service's registry — the fail-closed case (the PR2 adapter isn't wired yet).
+        steps: [{ run: 'build', executor: ExecutorIds.githubActions }],
+      };
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId, { parsedJson: unknownExecutorConfig });
+
+      const run = await service.trigger(workspaceId, commitId, await seedUser());
+      // The unresolved executor is discovered in the deferred dispatch pass.
+      await drain();
+
+      const detail = await service.get(workspaceId, run.id);
+      expect(detail.run.state).toBe('failed');
+      expect(detail.run.finishedAt).not.toBeNull();
+      expect(detail.steps.map(step => step.status)).toEqual(['failed']);
+      // Nothing was handed to any registered executor — fail-closed, not a silent stall.
+      expect(executor.dispatches).toHaveLength(0);
+
+      const { events } = await service.observe(workspaceId, run.id, 0n);
+      expect(events.map(event => event.type)).toEqual(['run.created', 'step.dispatched', 'step.failed', 'run.failed']);
+      // The step.failed payload names the unknown executor for the timeline.
+      const failed = events.find(event => event.type === 'step.failed');
+      expect(failed?.payload).toMatchObject({ stepIndex: 0, name: 'build', executor: ExecutorIds.githubActions });
     });
   });
 

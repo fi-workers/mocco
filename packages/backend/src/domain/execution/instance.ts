@@ -2,6 +2,7 @@
 // env at import. Unlike integration (gated on the GitHub App env), execution has
 // NO external dependency — it is always available, so `getExecution()` never
 // returns undefined and the tRPC context carries it non-optionally.
+import { ExecutorIds } from '@mocco/common/execution';
 import { waitUntil } from '@vercel/functions';
 
 import { callbackUrlFrom, genericExecutorUrlFrom, resolveBaseOrigin } from '@backend/domain/execution/endpoints';
@@ -45,7 +46,13 @@ export function getExecution(): Execution {
         resumes: new ResumeRepo(db),
         commits: new CommitRepo(db),
         configs: new CommitConfigRepo(db),
-        executor: new GenericExecutor({ endpoint: genericExecutorUrlFrom(baseOrigin), post: postJson }),
+        // The executor registry (ADR 0004). Only the generic adapter is registered
+        // now; the GitHub adapter (slice 6 PR2) adds `ExecutorIds.githubActions`,
+        // gated on the GitHub App config. A step whose `executor` id is absent here
+        // fails its run closed (RunService.startExecutor → failStepAndRun).
+        executors: new Map([
+          [ExecutorIds.generic, new GenericExecutor({ endpoint: genericExecutorUrlFrom(baseOrigin), post: postJson })],
+        ]),
         callbackUrl,
         waitUntil,
       }),

@@ -1,3 +1,4 @@
+import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
@@ -99,7 +100,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         resumes: new ResumeRepo(t.db),
         commits: new CommitRepo(t.db),
         configs: new CommitConfigRepo(t.db),
-        executor: new FakeExecutor(),
+        executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
         callbackUrl: 'http://localhost:3100/api/ext/callback',
         waitUntil: () => {
           /* setup route never reaches the run loop */
