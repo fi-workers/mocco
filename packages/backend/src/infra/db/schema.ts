@@ -427,3 +427,51 @@ export const runEvents = pgTable(
   },
   t => [index('mocco_run_events_run_seq_idx').on(t.runId, t.seq)],
 );
+
+// ─────────────────────────────────────────────────────────────
+// Governance — access (slice 5, PR1). A workspace defines named roles and assigns
+// its users to them; a role membership is the (role, user) join. This is the
+// authorization surface gates resume against (a gate requires N members of a role).
+// Both tables carry workspace_id for direct tenant scoping. Gates/resumes land in
+// later PRs of this slice. See docs/superpowers/specs/2026-07-27-slice5-gates-approval-design.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A named role within a workspace (e.g. "deployer", "sre"). Unique by name per workspace. */
+export const roles = pgTable(
+  'mocco_roles',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    createdAt,
+  },
+  t => [
+    // Serves workspace-scoped listing (composite prefix), so no standalone workspace_id index is needed.
+    uniqueIndex('mocco_roles_workspace_name_uq').on(t.workspaceId, t.name),
+  ],
+);
+
+/** A user's membership in a role. One row per (role, user). */
+export const roleMemberships = pgTable(
+  'mocco_role_memberships',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt,
+  },
+  t => [
+    // Serves role-scoped listing (composite prefix) and enforces one membership per person per role.
+    uniqueIndex('mocco_role_memberships_role_user_uq').on(t.roleId, t.userId),
+    index('mocco_role_memberships_user_id_idx').on(t.userId),
+  ],
+);

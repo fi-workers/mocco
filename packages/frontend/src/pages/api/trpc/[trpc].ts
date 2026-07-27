@@ -2,6 +2,7 @@
 // context from the neutral services (session read from the request headers).
 import { getServices } from '@mocco/backend/auth/instance';
 import { getExecution } from '@mocco/backend/execution/instance';
+import { getGovernance } from '@mocco/backend/governance/instance';
 import { getIntegration } from '@mocco/backend/integration/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
@@ -18,6 +19,7 @@ export default createNextApiHandler({
     const headers = headersFromNode(req.headers);
     const integration = getIntegration();
     const execution = getExecution();
+    const governance = getGovernance();
     return {
       auth,
       workspace,
@@ -25,6 +27,7 @@ export default createNextApiHandler({
       commitSync: integration?.commitSync,
       commitConfig: integration?.commitConfig,
       runs: execution.runs,
+      roles: governance.roles,
       session: await auth.getSession(headers),
       headers,
     };

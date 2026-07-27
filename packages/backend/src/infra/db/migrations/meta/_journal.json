@@ -57,6 +57,13 @@
       "when": 1785068516286,
       "tag": "0007_rich_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785111832507,
+      "tag": "0008_wise_firebrand",
+      "breakpoints": true
     }
   ]
 }

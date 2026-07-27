@@ -7,6 +7,7 @@
     "./auth/instance": "./src/domain/auth/instance.ts",
     "./execution/instance": "./src/domain/execution/instance.ts",
     "./ext/app": "./src/transport/ext/app.ts",
+    "./governance/instance": "./src/domain/governance/instance.ts",
     "./integration/instance": "./src/domain/integration/instance.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
     "./trpc/root": "./src/transport/trpc/root.ts",

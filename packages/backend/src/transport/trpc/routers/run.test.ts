@@ -10,6 +10,9 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
+import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { expectOne } from '@backend/infra/db/rows';
@@ -75,7 +78,8 @@ describe('run router on pglite', () => {
   const signedInCaller = async (email: string) => {
     const headers = await signUpViaHttp(auth, email);
     const session = await auth.getSession(headers);
-    return appRouter.createCaller({ auth, workspace, runs: makeRuns(), session, headers });
+    const roles = new RoleService({ roles: new RoleRepo(t.db), memberships: new RoleMembershipRepo(t.db) });
+    return appRouter.createCaller({ auth, workspace, runs: makeRuns(), roles, session, headers });
   };
 
   /** Seed a repo + one commit under a workspace, returning the commit id. */
