@@ -8,6 +8,9 @@ import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
+import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
+import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
+import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -43,6 +46,10 @@ const makeRuns = (db: TestDb['db']): RunService =>
       /* integration tests don't exercise the run loop */
     },
   });
+
+/** RoleService wired to the test DB — always present in the tRPC context (no external gate). */
+const makeRoles = (db: TestDb['db']): RoleService =>
+  new RoleService({ roles: new RoleRepo(db), memberships: new RoleMembershipRepo(db) });
 
 function fakeProvider(): RepoLister & InstallationVerifier {
   return {
@@ -143,6 +150,7 @@ describe('integration router on pglite', () => {
       commitSync: hasConnection ? commitSync : undefined,
       commitConfig: hasConnection ? commitConfig : undefined,
       runs: makeRuns(t.db),
+      roles: makeRoles(t.db),
       session,
       headers,
     });
@@ -222,6 +230,7 @@ describe('integration router on pglite', () => {
       commitSync,
       commitConfig,
       runs: makeRuns(t.db),
+      roles: makeRoles(t.db),
       session,
       headers,
     });

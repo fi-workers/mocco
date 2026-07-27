@@ -2,10 +2,12 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
 import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getGovernance } from '@backend/domain/governance/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -18,6 +20,7 @@ export interface TrpcDeps extends Services {
   commitSync?: CommitSyncService;
   commitConfig?: CommitConfigService;
   runs: RunService;
+  roles: RoleService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -41,6 +44,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         commitSync: deps.commitSync,
         commitConfig: deps.commitConfig,
         runs: deps.runs,
+        roles: deps.roles,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -56,5 +60,6 @@ export async function trpcHandler(request: Request): Promise<Response> {
     commitSync: integration?.commitSync,
     commitConfig: integration?.commitConfig,
     runs: getExecution().runs,
+    roles: getGovernance().roles,
   })(request);
 }

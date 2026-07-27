@@ -4,6 +4,7 @@ import superjson from 'superjson';
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -22,6 +23,8 @@ export interface Context {
   commitConfig?: CommitConfigService;
   /** Always present — the execution domain has no external dependency to gate on. */
   runs: RunService;
+  /** Always present — the governance domain has no external dependency to gate on. */
+  roles: RoleService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

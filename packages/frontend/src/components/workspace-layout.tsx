@@ -9,7 +9,7 @@ import { cn } from '@frontend/lib/utils';
 
 import type { ReactNode } from 'react';
 
-type Section = 'overview' | 'members' | 'settings';
+type Section = 'overview' | 'members' | 'access' | 'settings';
 
 interface Props {
   workspaceId: string;
@@ -60,6 +60,7 @@ export default function WorkspaceLayout({ workspaceId, active, children }: Props
   const nav: { key: Section; label: string; href: string }[] = [
     { key: 'overview', label: 'Overview', href: Routes.workspace(workspaceId) },
     { key: 'members', label: 'Members', href: Routes.workspaceMembers(workspaceId) },
+    { key: 'access', label: 'Access', href: Routes.workspaceAccess(workspaceId) },
     { key: 'settings', label: 'Settings', href: Routes.workspaceSettings(workspaceId) },
   ];
 

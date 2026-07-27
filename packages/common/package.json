@@ -6,6 +6,7 @@
   "exports": {
     "./auth": "./src/auth.ts",
     "./execution": "./src/execution.ts",
+    "./governance": "./src/governance.ts",
     "./integration": "./src/integration.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./workspace": "./src/workspace.ts"
