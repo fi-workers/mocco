@@ -2,12 +2,14 @@
 // App Router at /api/ext. The ONLY file importing hono. Handlers parse at the
 // boundary and delegate to domain services; no vendor/SQL detail is ever
 // returned to the caller.
+import { credentialRequestSchema } from '@mocco/common/credential';
 import { dispatchContextSchema, runCallbackSchema } from '@mocco/common/execution';
 import { Providers } from '@mocco/common/integration';
 import { waitUntil } from '@vercel/functions';
 import { Hono } from 'hono';
 
 import { getServices } from '@backend/domain/auth/instance';
+import { getCredential } from '@backend/domain/credential/instance';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
@@ -19,6 +21,7 @@ import { getIntegration } from '@backend/domain/integration/instance';
 import { getEnv } from '@backend/infra/config/env';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
+import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import type { HttpPost } from '@backend/domain/execution/ports';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
@@ -37,6 +40,9 @@ export interface ExtDeps {
   deliveries?: WebhookDeliveryRepo;
   /** The execution service — the callback funnel every executor reports through. */
   runs: RunService;
+  /** The credential broker — the fail-closed enforcement `/credentials` delegates to.
+   * Always present (the credential domain has no external dependency to gate on). */
+  broker: CredentialBroker;
   /** This deployment's own callback URL. `/executor/generic` posts callbacks HERE, never
    * to the URL in the request body — that endpoint is public, so trusting a caller-supplied
    * `callbackUrl` would be an SSRF (our server POSTing to an attacker-chosen host). */
@@ -197,6 +203,25 @@ export function createExtApp(deps: ExtDeps): Hono {
     return c.text('accepted', 202);
   });
 
+  // Credential broker (slice 7). A step's workflow asks for cloud credentials at
+  // runtime; the broker issues them ONLY on the all-checks-pass path (§3 fail-closed:
+  // valid per-run token, step actually dispatched by mocco, the step's gate resumed,
+  // and the request within the workspace allowlist). Unlike /callback this is NOT
+  // deferred — the caller needs the credentials in the response. Fail-closed: an
+  // unparseable body or ANY denial returns the SAME fixed generic 403, so which check
+  // failed is never revealed (the reason is logged inside the broker).
+  app.post('/credentials', async c => {
+    const parsed = credentialRequestSchema.safeParse(await readJson(c.req.raw));
+    if (!parsed.success) {
+      return c.text('denied', 403);
+    }
+    const result = await deps.broker.issue(parsed.data);
+    if (!result.ok) {
+      return c.text('denied', 403);
+    }
+    return c.json({ credentials: result.credentials }, 200);
+  });
+
   // The generic executor serverless fn (slice 4). Receives the neutral dispatch
   // context (which step of which run, where/how to report back), "runs" a trivial
   // bounded step, and POSTs its callbacks — authed by the per-run token it carries.
@@ -243,6 +268,7 @@ export async function extHandler(request: Request): Promise<Response> {
     commitSync: integration?.commitSync,
     deliveries: integration?.deliveries,
     runs: execution.runs,
+    broker: getCredential().broker,
     callbackUrl: execution.callbackUrl,
     postJson,
     // Undefined here → the webhook route 503s, mirroring the integration-unconfigured 503.

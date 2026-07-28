@@ -32,4 +32,13 @@ export class CommitConfigRepo {
     const [row] = await this.db.select().from(schema.commitConfigs).where(eq(schema.commitConfigs.commitId, commitId));
     return row;
   }
+
+  /** The exact snapshot a run pinned, keyed by the commit_config's own id
+   * (`run.commit_config_id`), or undefined. The credential broker reads a step's
+   * `credential` from THIS pinned row — never re-fetched — so it can't change after
+   * the run was triggered. */
+  async findById(id: string) {
+    const [row] = await this.db.select().from(schema.commitConfigs).where(eq(schema.commitConfigs.id, id));
+    return row;
+  }
 }

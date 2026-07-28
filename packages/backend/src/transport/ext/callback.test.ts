@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
+import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
+import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
+import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -87,6 +90,15 @@ describe('ext execution routes (pglite)', () => {
     return {
       auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
       runs,
+      broker: new CredentialBroker({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        configs,
+        commits,
+        grants: new CredentialGrantRepo(t.db),
+        provider: new StubCredentialProvider(),
+      }),
       callbackUrl: CALLBACK_URL,
       postJson: async (url, body) => {
         posted.push({ url, body });
