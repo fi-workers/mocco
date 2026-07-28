@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { GrantService } from '@backend/domain/credential/GrantService';
+import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -94,7 +96,8 @@ describe('run router on pglite', () => {
       events: new RunEventRepo(t.db),
       resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
     });
-    return appRouter.createCaller({ auth, workspace, runs, roles, gates, session, headers });
+    const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
+    return appRouter.createCaller({ auth, workspace, runs, roles, gates, grants, session, headers });
   };
 
   // A caller that also exposes its user id, so a resumeGate test can assign it to a role.
@@ -111,7 +114,8 @@ describe('run router on pglite', () => {
       events: new RunEventRepo(t.db),
       resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
     });
-    const api = appRouter.createCaller({ auth, workspace, runs, roles, gates, session, headers });
+    const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
+    const api = appRouter.createCaller({ auth, workspace, runs, roles, gates, grants, session, headers });
     return { api, userId: session?.user.id ?? '' };
   };
 

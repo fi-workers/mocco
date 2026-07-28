@@ -88,6 +88,35 @@
                   "kind": {
                     "type": "string",
                     "const": "step"
+                  },
+                  "credential": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "role": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "ttl": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "gate": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "role",
+                      "ttl",
+                      "gate"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

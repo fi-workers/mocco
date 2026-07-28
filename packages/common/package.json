@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./auth": "./src/auth.ts",
+    "./credential": "./src/credential.ts",
     "./execution": "./src/execution.ts",
     "./governance": "./src/governance.ts",
     "./integration": "./src/integration.ts",
