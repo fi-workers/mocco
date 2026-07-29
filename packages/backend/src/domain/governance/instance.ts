@@ -3,6 +3,7 @@
 // GitHub App env), governance has NO external dependency — it is always available,
 // so `getGovernance()` never returns undefined and the tRPC context carries it
 // non-optionally.
+import { getAudit } from '@backend/domain/audit/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -40,6 +41,7 @@ export function getGovernance(): Governance {
         memberships: new RoleMembershipRepo(db),
         events: new RunEventRepo(db),
         resumeRun: async (run, gateItemIndex) => await execution.runs.resumeFromGate(run, gateItemIndex),
+        audit: getAudit().audit,
       }),
     };
   }

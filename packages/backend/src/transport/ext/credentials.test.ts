@@ -4,6 +4,8 @@ import { ExecutorIds, RunStates, RunStepStatuses, TriggerSources } from '@mocco/
 import { GateStates } from '@mocco/common/governance';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -82,6 +84,7 @@ describe('ext POST /credentials (pglite)', () => {
       commits: new CommitRepo(t.db),
       grants: new CredentialGrantRepo(t.db),
       provider: new StubCredentialProvider(),
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
     });
   });
   afterEach(async () => {
@@ -192,6 +195,7 @@ describe('ext POST /credentials (pglite)', () => {
       configs: new CommitConfigRepo(t.db),
       executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
       callbackUrl: CALLBACK_URL,
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
       waitUntil: () => {
         /* the credentials route never defers */
       },

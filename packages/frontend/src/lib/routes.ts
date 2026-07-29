@@ -10,6 +10,7 @@ export const Routes = {
   workspace: (id: string) => `/workspaces/${id}`,
   workspaceMembers: (id: string) => `/workspaces/${id}/members`,
   workspaceAccess: (id: string) => `/workspaces/${id}/access`,
+  workspaceAudit: (id: string) => `/workspaces/${id}/audit`,
   workspaceSettings: (id: string) => `/workspaces/${id}/settings`,
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,

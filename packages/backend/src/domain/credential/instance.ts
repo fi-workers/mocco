@@ -4,6 +4,7 @@
 // broker's `CredentialProvider` is the stub this slice (the real AWS OIDC STS
 // provider is a later, user-side swap behind the port), so `getCredential()` never
 // returns undefined and the tRPC/ext contexts carry it non-optionally.
+import { getAudit } from '@backend/domain/audit/instance';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { GrantService } from '@backend/domain/credential/GrantService';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
@@ -38,6 +39,7 @@ export function getCredential(): Credential {
         commits: new CommitRepo(db),
         grants,
         provider: new StubCredentialProvider(),
+        audit: getAudit().audit,
       }),
     };
   }

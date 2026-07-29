@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { BrokerDenials, CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { hashToken } from '@backend/domain/execution/callback-token';
@@ -87,10 +90,12 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
   let t: TestDb;
   let provider: RecordingProvider;
   let broker: CredentialBroker;
+  let audit: AuditService;
 
   beforeEach(async () => {
     t = await createTestDb();
     provider = new RecordingProvider();
+    audit = new AuditService({ audit: new AuditRepo(t.db) });
     broker = new CredentialBroker({
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
@@ -99,6 +104,7 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       commits: new CommitRepo(t.db),
       grants: new CredentialGrantRepo(t.db),
       provider,
+      audit,
     });
   });
   afterEach(async () => {
@@ -304,5 +310,65 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
     const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
     expect(result.ok).toBe(false);
     expect(provider.calls).toHaveLength(0);
+  });
+
+  describe('audit write-path (slice 8)', () => {
+    it('an ALLOW appends credential.issued with the config triple (never the secret value) and the chain verifies', async () => {
+      const { runId, workspaceId } = await seed();
+
+      const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+      expect(result.ok).toBe(true);
+
+      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const issued = entries.find(entry => entry.action === AuditActions.credentialIssued);
+      expect(issued).toBeDefined();
+      expect(issued?.actorUserId).toBeNull(); // a machine/runtime request
+      expect(issued?.subjectType).toBe('run');
+      expect(issued?.subjectId).toBe(runId);
+      expect(issued?.payload).toMatchObject({ provider: 'aws', role: 'deployer', ttl: 900, gate: 'approve' });
+      // The minted secret is NEVER recorded.
+      expect(JSON.stringify(issued?.payload)).not.toContain('stub-credential');
+      expect(issued?.payload).not.toHaveProperty('value');
+      expect(await audit.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('a DENY appends credential.denied with the reason and the chain verifies', async () => {
+      const { runId, workspaceId } = await seed({ gateState: GateStates.pending });
+
+      const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+      expect(result.ok).toBe(false);
+
+      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const denied = entries.find(entry => entry.action === AuditActions.credentialDenied);
+      expect(denied).toBeDefined();
+      expect(denied?.actorUserId).toBeNull();
+      expect(denied?.subjectId).toBe(runId);
+      expect(denied?.payload).toMatchObject({ reason: BrokerDenials.gateNotResumed, stepIndex: STEP_INDEX });
+      expect(await audit.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('is fail-open — an ALLOW still issues when audit.record throws', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const boom = new Error('audit db down');
+      const throwingAudit = new AuditService({
+        audit: { lastHash: vi.fn().mockRejectedValue(boom), append: vi.fn().mockRejectedValue(boom) } as never,
+      });
+      const failing = new CredentialBroker({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        configs: new CommitConfigRepo(t.db),
+        commits: new CommitRepo(t.db),
+        grants: new CredentialGrantRepo(t.db),
+        provider,
+        audit: throwingAudit,
+      });
+      const { runId } = await seed();
+
+      const result = await failing.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+      // The verdict is unchanged despite the audit append failing.
+      expect(result.ok).toBe(true);
+      spy.mockRestore();
+    });
   });
 });

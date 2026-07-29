@@ -1,6 +1,8 @@
 import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
@@ -26,6 +28,8 @@ import { appRouter } from '@backend/transport/trpc/root';
 import type { Context } from '@backend/transport/trpc/trpc';
 
 /** RunService wired to the test DB — always present in the context (no external gate). */
+const makeAudit = (db: TestDb['db']): AuditService => new AuditService({ audit: new AuditRepo(db) });
+
 const makeRuns = (db: TestDb['db']): RunService =>
   new RunService({
     runs: new RunRepo(db),
@@ -37,6 +41,7 @@ const makeRuns = (db: TestDb['db']): RunService =>
     configs: new CommitConfigRepo(db),
     executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
     callbackUrl: 'http://localhost:3100/api/ext/callback',
+    audit: makeAudit(db),
     waitUntil: () => {
       /* root tests don't exercise the run loop */
     },
@@ -58,6 +63,7 @@ const makeGates = (db: TestDb['db']): GateService =>
     memberships: new RoleMembershipRepo(db),
     events: new RunEventRepo(db),
     resumeRun: async (run, gateItemIndex) => await makeRuns(db).resumeFromGate(run, gateItemIndex),
+    audit: makeAudit(db),
   });
 
 /** Sign up through the production auth handler (HTTP) and keep the session cookie. */
@@ -87,6 +93,7 @@ describe('tRPC workspace router on pglite', () => {
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
       grants: makeGrants(t.db),
+      audit: makeAudit(t.db),
       session,
       headers,
     });
@@ -250,6 +257,7 @@ describe('trpcHandler over HTTP', () => {
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
       grants: makeGrants(t.db),
+      audit: makeAudit(t.db),
     });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));

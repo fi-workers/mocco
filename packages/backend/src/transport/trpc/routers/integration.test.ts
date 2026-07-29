@@ -1,6 +1,8 @@
 import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
@@ -38,6 +40,9 @@ import type { AvailableRepoDto } from '@mocco/common/integration';
 const REPO_A: AvailableRepoDto = { externalRepoId: '111', owner: 'fi-workers', name: 'api', defaultBranch: 'main' };
 const REPO_B: AvailableRepoDto = { externalRepoId: '222', owner: 'fi-workers', name: 'web', defaultBranch: 'trunk' };
 
+/** AuditService wired to the test DB — always present in the tRPC context (no external gate). */
+const makeAudit = (db: TestDb['db']): AuditService => new AuditService({ audit: new AuditRepo(db) });
+
 /** RunService wired to the test DB — always present in the tRPC context (no external gate). */
 const makeRuns = (db: TestDb['db']): RunService =>
   new RunService({
@@ -50,6 +55,7 @@ const makeRuns = (db: TestDb['db']): RunService =>
     configs: new CommitConfigRepo(db),
     executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
     callbackUrl: 'http://localhost:3100/api/ext/callback',
+    audit: makeAudit(db),
     waitUntil: () => {
       /* integration tests don't exercise the run loop */
     },
@@ -68,6 +74,7 @@ const makeGates = (db: TestDb['db']): GateService =>
     memberships: new RoleMembershipRepo(db),
     events: new RunEventRepo(db),
     resumeRun: async (run, gateItemIndex) => await makeRuns(db).resumeFromGate(run, gateItemIndex),
+    audit: makeAudit(db),
   });
 
 /** GrantService wired to the test DB — always present in the tRPC context (no external gate). */
@@ -175,6 +182,7 @@ describe('integration router on pglite', () => {
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
       grants: makeGrants(t.db),
+      audit: makeAudit(t.db),
       session,
       headers,
     });
@@ -257,6 +265,7 @@ describe('integration router on pglite', () => {
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
       grants: makeGrants(t.db),
+      audit: makeAudit(t.db),
       session,
       headers,
     });

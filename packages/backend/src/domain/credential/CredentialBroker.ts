@@ -1,3 +1,4 @@
+import { AuditActions } from '@mocco/common/audit';
 import { RunStepStatuses } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
@@ -5,6 +6,7 @@ import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config
 import { evaluateGrant } from '@backend/domain/credential/evaluate-grant';
 import { isTokenValid } from '@backend/domain/execution/callback-token';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantDenial } from '@backend/domain/credential/evaluate-grant';
 import type { CredentialProvider, IssuedCredentials } from '@backend/domain/credential/ports';
 import type { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -75,6 +77,11 @@ export interface CredentialBrokerDeps {
   commits: CommitRepo;
   grants: CredentialGrantRepo;
   provider: CredentialProvider;
+  /** The append-only audit chain (slice 8). An ALLOW appends `credential.issued`
+   * (provider/role/ttl/gate — NEVER the secret value); each DENY appends
+   * `credential.denied` with the (loggable) reason. Fail-open (AuditService.record
+   * swallows + logs), so an audit failure never changes the broker's verdict. */
+  audit: AuditService;
 }
 
 /**
@@ -92,6 +99,25 @@ export interface CredentialBrokerDeps {
 export class CredentialBroker {
   constructor(private readonly deps: CredentialBrokerDeps) {}
 
+  /** Append a `credential.denied` entry on the run's workspace chain (the reason is
+   * loggable, never leaked to the caller) and return the typed DENY. Fail-open —
+   * `AuditService.record` swallows + logs, so a broken chain never changes the verdict.
+   * The machine/runtime request has no interactive actor, so `actorUserId` is null. */
+  private async denyAudited(
+    run: { id: string; workspaceId: string },
+    stepIndex: number,
+    reason: CredentialDenyReason,
+  ): Promise<{ ok: false; reason: CredentialDenyReason }> {
+    await this.deps.audit.record(run.workspaceId, {
+      actorUserId: null,
+      action: AuditActions.credentialDenied,
+      subjectType: 'run',
+      subjectId: run.id,
+      payload: { stepIndex, reason },
+    });
+    return deny(reason);
+  }
+
   /**
    * The §3 fail-closed decision, IN ORDER — each failure returns a DENY, only the
    * all-pass path issues credentials:
@@ -104,37 +130,39 @@ export class CredentialBroker {
    *   f. issue through the provider port
    */
   async issue(request: CredentialRequest): Promise<CredentialDecision> {
-    // (a) run + token — a manual dispatch has no token, so it dies here.
+    // (a) run + token — a manual dispatch has no token, so it dies here. A run that
+    // can't be resolved has no workspace to attribute an audit entry to (the chain is
+    // per-workspace), so this sole branch denies WITHOUT an audit append.
     const run = await this.deps.runs.findById(request.runId);
     if (run === undefined) {
       return deny(BrokerDenials.runNotFound);
     }
     if (!isTokenValid(request.token, run.callbackTokenHash)) {
-      return deny(BrokerDenials.badToken);
+      return await this.denyAudited(run, request.stepIndex, BrokerDenials.badToken);
     }
 
     // (b) the step must have been advanced to by mocco (dispatched|running).
     const step = await this.deps.steps.findByRunAndIndex(request.runId, request.stepIndex);
     if (step === undefined || !ISSUABLE_STEP_STATUSES.has(step.status)) {
-      return deny(BrokerDenials.stepNotDispatched);
+      return await this.denyAudited(run, request.stepIndex, BrokerDenials.stepNotDispatched);
     }
 
     // (c) read the credential request from the PINNED config snapshot — never the body.
     const snapshot = await this.deps.configs.findById(run.commitConfigId);
     if (snapshot === undefined) {
-      return deny(BrokerDenials.noCredentialOnStep);
+      return await this.denyAudited(run, request.stepIndex, BrokerDenials.noCredentialOnStep);
     }
     const config = moccoConfigSchema.parse(snapshot.parsedJson);
     const credential = credentialForStep(config, request.stepIndex);
     if (credential === undefined) {
-      return deny(BrokerDenials.noCredentialOnStep);
+      return await this.denyAudited(run, request.stepIndex, BrokerDenials.noCredentialOnStep);
     }
 
     // (d) the named gate must be resumed.
     const gates = await this.deps.runGates.findByRun(run.workspaceId, request.runId);
     const gate = gates.find(candidate => candidate.name === credential.gate);
     if (gate === undefined || gate.state !== GateStates.resumed) {
-      return deny(BrokerDenials.gateNotResumed);
+      return await this.denyAudited(run, request.stepIndex, BrokerDenials.gateNotResumed);
     }
 
     // (e) the allowlist is the authority — resolve repoId (run → commit → repo) +
@@ -152,7 +180,7 @@ export class CredentialBroker {
       grant,
     );
     if (!decision.allowed) {
-      return deny(decision.reason);
+      return await this.denyAudited(run, request.stepIndex, decision.reason);
     }
 
     // (f) every check passed — issue through the provider port.
@@ -160,6 +188,21 @@ export class CredentialBroker {
       provider: credential.provider,
       role: credential.role,
       ttlSeconds: credential.ttl,
+    });
+    // Audit AFTER the credential is minted — fail-open. Records the authoritative
+    // config triple + gate, NEVER the secret `value` the provider returned.
+    await this.deps.audit.record(run.workspaceId, {
+      actorUserId: null,
+      action: AuditActions.credentialIssued,
+      subjectType: 'run',
+      subjectId: run.id,
+      payload: {
+        stepIndex: request.stepIndex,
+        provider: credential.provider,
+        role: credential.role,
+        ttl: credential.ttl,
+        gate: credential.gate,
+      },
     });
     return { ok: true, credentials };
   }

@@ -1,5 +1,6 @@
 // The single composition point: domain routers merge here (composition, not a
 // barrel — nothing is re-exported, a new router value is built).
+import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
@@ -17,6 +18,7 @@ export const appRouter = router({
   run: runRouter,
   role: roleRouter,
   credentialGrant: credentialGrantRouter,
+  audit: auditRouter,
 });
 
 export type AppRouter = typeof appRouter;

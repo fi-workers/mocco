@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
@@ -64,6 +66,8 @@ describe('credentialGrant router on pglite', () => {
     await t.close();
   });
 
+  const makeAudit = (): AuditService => new AuditService({ audit: new AuditRepo(t.db) });
+
   const makeRuns = (): RunService =>
     new RunService({
       runs: new RunRepo(t.db),
@@ -75,6 +79,7 @@ describe('credentialGrant router on pglite', () => {
       configs: new CommitConfigRepo(t.db),
       executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
       callbackUrl: 'http://localhost:3100/api/ext/callback',
+      audit: makeAudit(),
       waitUntil: () => {
         /* grant router tests don't exercise the run loop */
       },
@@ -92,9 +97,20 @@ describe('credentialGrant router on pglite', () => {
       memberships: new RoleMembershipRepo(t.db),
       events: new RunEventRepo(t.db),
       resumeRun: async (run, gateItemIndex) => await runs.resumeFromGate(run, gateItemIndex),
+      audit: makeAudit(),
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
-    return appRouter.createCaller({ auth, workspace, runs, roles, gates, grants, session, headers });
+    return appRouter.createCaller({
+      auth,
+      workspace,
+      runs,
+      roles,
+      gates,
+      grants,
+      audit: makeAudit(),
+      session,
+      headers,
+    });
   };
 
   /** Seed a repo under a workspace (via a provider connection), returning its id. */
