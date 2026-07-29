@@ -17,6 +17,7 @@ import {
   foreignKey,
 } from 'drizzle-orm/pg-core';
 
+import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
@@ -590,4 +591,46 @@ export const credentialGrants = pgTable(
     // The allowlist tuple is unique (and serves workspace-scoped listing via its prefix).
     uniqueIndex('mocco_credential_grants_uq').on(t.workspaceId, t.repoId, t.pipeline, t.gateName, t.provider, t.role),
   ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Audit log (slice 8, PR1) — an append-only, per-workspace hash chain. Every
+// governance decision (gate resume/reject, credential issue/deny, run trigger)
+// appends an entry whose `hash = sha-256(prev_hash ?? '' || canonical(semantic
+// fields))`; anyone can re-walk the chain and prove it hasn't been altered or
+// back-dated (a system property, always on — ADR 0010). `seq` bigserial is the
+// monotonic chain order; `id` is a stable non-sequential handle for the UI/URL. The
+// hash covers the CONTENT (workspace/actor/action/subject/payload + prev_hash), NOT
+// the DB-assigned `seq`/`created_at`/`id`, so the chain is verifiable from content
+// alone. See docs/superpowers/specs/2026-07-29-slice8-audit-log-design.md.
+// ─────────────────────────────────────────────────────────────
+
+/** An append-only audit entry — one per governed decision, chained per workspace. */
+export const auditLog = pgTable(
+  'mocco_audit_log',
+  {
+    // Monotonic chain order (a gap on `verify` proves a removal). PK.
+    seq: bigserial({ mode: 'bigint' }).primaryKey(),
+    // Non-sequential stable handle — safe for UI/URL exposure (never the chain key).
+    id: uuid().notNull().defaultRandom().unique(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // SET NULL: an actor may be deleted; the entry (and its hash) outlives them.
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // `.$type` aligns the text column with the AuditAction union (SSOT in @mocco/common).
+    action: text().$type<AuditAction>().notNull(),
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    // `.$type` aligns the jsonb column with the canonicalized payload shape; always an object.
+    payload: jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Null = the workspace's first entry (no predecessor to bind to).
+    prevHash: text('prev_hash'),
+    hash: text().notNull(),
+    createdAt,
+  },
+  t => [index('mocco_audit_log_workspace_seq_idx').on(t.workspaceId, t.seq)],
 );
