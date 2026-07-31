@@ -1,6 +1,8 @@
 import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
@@ -104,6 +106,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         commits: new CommitRepo(t.db),
         grants: new CredentialGrantRepo(t.db),
         provider: new StubCredentialProvider(),
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
       }),
       runs: new RunService({
         runs: new RunRepo(t.db),
@@ -115,6 +118,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         configs: new CommitConfigRepo(t.db),
         executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
         callbackUrl: 'http://localhost:3100/api/ext/callback',
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
         waitUntil: () => {
           /* setup route never reaches the run loop */
         },

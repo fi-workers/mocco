@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
@@ -13,6 +14,7 @@ import {
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { Executor, RunStepDispatch } from '@backend/domain/execution/ports';
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
@@ -134,6 +136,10 @@ export interface RunServiceDeps {
    * executor trigger runs after the mutation returns; tests pass a collector so the
    * fire-and-forget dispatch is observable without vi.mock (ADR 0008). */
   waitUntil: (promise: Promise<unknown>) => void;
+  /** The append-only audit chain (slice 8). `trigger` appends `run.triggered` here;
+   * fail-open (AuditService.record swallows + logs), so an audit failure never breaks
+   * the trigger — the run is already durably created and started. */
+  audit: AuditService;
 }
 
 /**
@@ -404,6 +410,16 @@ export class RunService {
       await this.deps.runs.update(workspaceId, run.id, { startedAt: new Date() });
       await this.advance(run, 0, callbackToken);
     }
+
+    // Audit AFTER the run is durably created + started — fail-open (never breaks the
+    // trigger). The actor is the triggerer; the subject is the run.
+    await this.deps.audit.record(workspaceId, {
+      actorUserId: userId,
+      action: AuditActions.runTriggered,
+      subjectType: 'run',
+      subjectId: run.id,
+      payload: { commitId },
+    });
 
     // Return the run reflecting its post-start state (the create() row was `queued`).
     return await this.requireRun(workspaceId, run.id);

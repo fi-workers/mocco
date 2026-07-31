@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -37,6 +40,7 @@ describe('GateService (pglite)', () => {
   let roles: RoleRepo;
   let memberships: RoleMembershipRepo;
   let executor: FakeExecutor;
+  let audit: AuditService;
 
   beforeEach(async () => {
     t = await createTestDb();
@@ -45,6 +49,7 @@ describe('GateService (pglite)', () => {
     roles = new RoleRepo(t.db);
     memberships = new RoleMembershipRepo(t.db);
     executor = new FakeExecutor();
+    audit = new AuditService({ audit: new AuditRepo(t.db) });
     runService = new RunService({
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
@@ -55,6 +60,7 @@ describe('GateService (pglite)', () => {
       configs,
       executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: 'http://localhost:3100/api/ext/callback',
+      audit,
       waitUntil: () => {
         /* the outbound trigger is fire-and-forget; the FakeExecutor records synchronously */
       },
@@ -66,6 +72,7 @@ describe('GateService (pglite)', () => {
       memberships,
       events: new RunEventRepo(t.db),
       resumeRun: async (run, gateItemIndex) => await runService.resumeFromGate(run, gateItemIndex),
+      audit,
     });
   });
   afterEach(async () => {
@@ -367,6 +374,86 @@ describe('GateService (pglite)', () => {
       const { events } = await runService.observe(workspaceId, runId, 0n);
       expect(events.map(event => event.type)).toContain('gate.rejected');
       expect(events.map(event => event.type)).toContain('run.rejected');
+    });
+  });
+
+  describe('audit write-path (slice 8)', () => {
+    it('a resume appends gate.resumed (actor = voter, subject = gate, principals in payload) and the chain verifies', async () => {
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'resume');
+
+      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const resumed = entries.find(entry => entry.action === AuditActions.gateResumed);
+      expect(resumed).toBeDefined();
+      expect(resumed?.actorUserId).toBe(alice);
+      expect(resumed?.subjectType).toBe('run_gate');
+      expect(resumed?.subjectId).toBe(gate.id);
+      expect(resumed?.payload).toMatchObject({
+        gateName: 'approve',
+        principals: [{ userId: alice, role: 'deployer' }],
+      });
+      expect(await audit.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('a reject appends gate.rejected (actor = voter, with the reason) and the chain verifies', async () => {
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'reject', 'not safe');
+
+      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const rejected = entries.find(entry => entry.action === AuditActions.gateRejected);
+      expect(rejected).toBeDefined();
+      expect(rejected?.actorUserId).toBe(alice);
+      expect(rejected?.subjectType).toBe('run_gate');
+      expect(rejected?.subjectId).toBe(gate.id);
+      expect(rejected?.payload).toMatchObject({ gateName: 'approve', reason: 'not safe' });
+      expect(await audit.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('is fail-open — a resume still succeeds when audit.record throws', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const boom = new Error('audit db down');
+      const throwingAudit = new AuditService({
+        audit: { lastHash: vi.fn().mockRejectedValue(boom), append: vi.fn().mockRejectedValue(boom) } as never,
+      });
+      const failingGate = new GateService({
+        runs: new RunRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
+        memberships,
+        events: new RunEventRepo(t.db),
+        resumeRun: async (run, gateItemIndex) => await runService.resumeFromGate(run, gateItemIndex),
+        audit: throwingAudit,
+      });
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { gate, run } = await failingGate.resume(workspaceId, runId, 0, alice, 'resume');
+      // The governed action completed despite the audit append failing.
+      expect(gate.state).toBe('resumed');
+      expect(run.state).toBe('running');
+      spy.mockRestore();
     });
   });
 

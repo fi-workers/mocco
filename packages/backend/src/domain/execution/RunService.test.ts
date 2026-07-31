@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { ConfigNotRunnableError, RunCallbackRejectedError, RunNotFoundError } from '@backend/domain/execution/errors';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
@@ -57,6 +60,7 @@ describe('RunService (pglite)', () => {
       // (e.g. an unregistered `github-actions`) fails its run closed.
       executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: CALLBACK_URL,
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
       // The outbound executor trigger is fire-and-forget. The FakeExecutor records
       // synchronously when start() is invoked, so most tests read the token and
       // assert DB state without draining; the deferred promises are collected here
@@ -392,6 +396,58 @@ describe('RunService (pglite)', () => {
     });
   });
 
+  describe('audit write-path (slice 8)', () => {
+    it('appends a run.triggered entry (actor = triggerer, subject = run, payload = commitId) and the chain verifies', async () => {
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId);
+      const userId = await seedUser();
+
+      const run = await service.trigger(workspaceId, commitId, userId);
+
+      const auditRepo = new AuditRepo(t.db);
+      const entries = await auditRepo.all(workspaceId);
+      const triggered = entries.find(entry => entry.action === AuditActions.runTriggered);
+      expect(triggered).toBeDefined();
+      expect(triggered?.actorUserId).toBe(userId);
+      expect(triggered?.subjectType).toBe('run');
+      expect(triggered?.subjectId).toBe(run.id);
+      expect(triggered?.payload).toMatchObject({ commitId });
+
+      const verified = await new AuditService({ audit: auditRepo }).verify(workspaceId);
+      expect(verified).toEqual({ intact: true });
+    });
+
+    it('is fail-open — a run trigger still succeeds even when audit.record throws', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const boom = new Error('audit db down');
+      const throwingAudit = new AuditService({
+        audit: { lastHash: vi.fn().mockRejectedValue(boom), append: vi.fn().mockRejectedValue(boom) } as never,
+      });
+      const failing = new RunService({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        events: new RunEventRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
+        commits,
+        configs,
+        executors: new Map([[ExecutorIds.generic, executor]]),
+        callbackUrl: CALLBACK_URL,
+        audit: throwingAudit,
+        waitUntil: p => {
+          pending.push(p);
+        },
+      });
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId);
+
+      const run = await failing.trigger(workspaceId, commitId, await seedUser());
+      // The governed action completed despite the audit append failing.
+      expect(run.state).toBe('running');
+      spy.mockRestore();
+    });
+  });
+
   describe('executor registry', () => {
     it('routes a github-actions step to the registered github executor, not the generic one', async () => {
       // A registry with BOTH adapters registered (mirrors the composition root once
@@ -411,6 +467,7 @@ describe('RunService (pglite)', () => {
           [ExecutorIds.githubActions, githubExecutor],
         ]),
         callbackUrl: CALLBACK_URL,
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
         waitUntil: p => {
           pending.push(p);
         },

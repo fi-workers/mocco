@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -75,6 +77,7 @@ describe('ext execution routes (pglite)', () => {
       configs,
       executors: new Map([[ExecutorIds.generic, executor]]),
       callbackUrl: CALLBACK_URL,
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
       waitUntil: p => {
         pending.push(p);
       },
@@ -98,6 +101,7 @@ describe('ext execution routes (pglite)', () => {
         commits,
         grants: new CredentialGrantRepo(t.db),
         provider: new StubCredentialProvider(),
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
       }),
       callbackUrl: CALLBACK_URL,
       postJson: async (url, body) => {

@@ -1,3 +1,4 @@
+import { AuditActions } from '@mocco/common/audit';
 import { RunStates } from '@mocco/common/execution';
 import { GateStates, ResumeDecisions } from '@mocco/common/governance';
 
@@ -11,6 +12,7 @@ import {
 import { evaluateGate } from '@backend/domain/governance/evaluate-gate';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import type { ResumeVote } from '@backend/domain/governance/evaluate-gate';
@@ -31,6 +33,10 @@ export interface GateServiceDeps {
   events: RunEventRepo;
   /** RunService.resumeFromGate — continues a run once its current gate is resumed. */
   resumeRun: ResumeRun;
+  /** The append-only audit chain (slice 8). A gate outcome appends `gate.resumed` /
+   * `gate.rejected` here; the append is fail-open (AuditService.record swallows +
+   * logs), so an audit failure never breaks the resume/reject the caller drove. */
+  audit: AuditService;
 }
 
 /** Gate-related run events — the append-only progression log the timeline renders. */
@@ -187,10 +193,20 @@ export class GateService {
       reason: normalizedReason ?? null,
     });
 
-    const outcome = evaluateGate(requirements.resume, await this.buildVotes(workspaceId, gate.id, requiredRoleNames));
+    const votes = await this.buildVotes(workspaceId, gate.id, requiredRoleNames);
+    const outcome = evaluateGate(requirements.resume, votes);
 
     if (outcome === GateStates.rejected) {
       await this.rejectRun(workspaceId, run, gate.id, gateItemIndex, gate.name);
+      // Audit AFTER the run is durably halted — fail-open (never breaks the reject).
+      // The actor is the rejecting voter; a reject short-circuits so it is decisive.
+      await this.deps.audit.record(workspaceId, {
+        actorUserId: userId,
+        action: AuditActions.gateRejected,
+        subjectType: 'run_gate',
+        subjectId: gate.id,
+        payload: { runId, gateName: gate.name, itemIndex: gateItemIndex, reason: normalizedReason ?? null },
+      });
     } else if (outcome === GateStates.resumed) {
       await this.deps.runGates.updateState(workspaceId, gate.id, {
         state: GateStates.resumed,
@@ -205,6 +221,22 @@ export class GateService {
       // Continue the run from past the gate (dispatch the next item, pause at the
       // next gate, or finish) — the injected RunService slice.
       await this.deps.resumeRun(run, gateItemIndex);
+      // Audit AFTER the run is durably advanced — fail-open. Records the resuming
+      // principals + the role each vote counted under (ADR 0010, as-of-resume).
+      await this.deps.audit.record(workspaceId, {
+        actorUserId: userId,
+        action: AuditActions.gateResumed,
+        subjectType: 'run_gate',
+        subjectId: gate.id,
+        payload: {
+          runId,
+          gateName: gate.name,
+          itemIndex: gateItemIndex,
+          principals: votes
+            .filter(vote => vote.decision === ResumeDecisions.resume)
+            .map(vote => ({ userId: vote.principalId, role: vote.role })),
+        },
+      });
     }
     // `pending` → nothing; the gate waits for more votes.
 

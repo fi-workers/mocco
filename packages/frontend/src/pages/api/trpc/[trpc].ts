@@ -1,5 +1,6 @@
 // tRPC Pages Router API route. tRPC's own Node adapter builds the per-request
 // context from the neutral services (session read from the request headers).
+import { getAudit } from '@mocco/backend/audit/instance';
 import { getServices } from '@mocco/backend/auth/instance';
 import { getCredential } from '@mocco/backend/credential/instance';
 import { getExecution } from '@mocco/backend/execution/instance';
@@ -32,6 +33,7 @@ export default createNextApiHandler({
       roles: governance.roles,
       gates: governance.gates,
       grants: credential.grants,
+      audit: getAudit().audit,
       session: await auth.getSession(headers),
       headers,
     };

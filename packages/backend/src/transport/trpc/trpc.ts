@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
@@ -31,6 +32,8 @@ export interface Context {
   gates: GateService;
   /** Always present — the credential allowlist has no external dependency to gate on. */
   grants: GrantService;
+  /** Always present — the audit hash chain is self-contained (no external dependency). */
+  audit: AuditService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

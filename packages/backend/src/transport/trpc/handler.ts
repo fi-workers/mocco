@@ -1,5 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
+import { getAudit } from '@backend/domain/audit/instance';
 import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
@@ -7,6 +8,7 @@ import { getGovernance } from '@backend/domain/governance/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { GateService } from '@backend/domain/governance/GateService';
@@ -26,6 +28,7 @@ export interface TrpcDeps extends Services {
   roles: RoleService;
   gates: GateService;
   grants: GrantService;
+  audit: AuditService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -52,6 +55,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         roles: deps.roles,
         gates: deps.gates,
         grants: deps.grants,
+        audit: deps.audit,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -70,5 +74,6 @@ export async function trpcHandler(request: Request): Promise<Response> {
     roles: getGovernance().roles,
     gates: getGovernance().gates,
     grants: getCredential().grants,
+    audit: getAudit().audit,
   })(request);
 }

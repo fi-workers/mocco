@@ -6,6 +6,8 @@ import { ExecutorIds } from '@mocco/common/execution';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -145,6 +147,7 @@ describe('ext GitHub webhook route (pglite)', () => {
         commits: new CommitRepo(t.db),
         grants: new CredentialGrantRepo(t.db),
         provider: new StubCredentialProvider(),
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
       }),
       runs: new RunService({
         runs: new RunRepo(t.db),
@@ -156,6 +159,7 @@ describe('ext GitHub webhook route (pglite)', () => {
         configs: new CommitConfigRepo(t.db),
         executors: new Map([[ExecutorIds.generic, new FakeExecutor()]]),
         callbackUrl: 'http://localhost:3100/api/ext/callback',
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
         waitUntil: p => {
           pending.push(p);
         },
