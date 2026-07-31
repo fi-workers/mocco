@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./audit": "./src/audit.ts",
     "./auth": "./src/auth.ts",
     "./credential": "./src/credential.ts",
     "./execution": "./src/execution.ts",
