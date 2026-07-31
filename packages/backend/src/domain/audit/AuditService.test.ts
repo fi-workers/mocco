@@ -120,6 +120,40 @@ describe('AuditService (pglite)', () => {
     expect(Number(chain[2]?.seq ?? 0n)).toBeGreaterThan(Number(chain[1]?.seq ?? 0n));
   });
 
+  it('serializes concurrent appends — a raced chain still verifies intact', async () => {
+    const workspaceId = await seedWorkspace();
+
+    // Two governed actions land at once (two approvers resuming a gate, or a run
+    // trigger racing a credential decision). Both read the chain head and both
+    // append; without per-workspace serialization they share one prev_hash and
+    // `verify` reports the second as a tamper — a false "Chain broken" on the
+    // compliance surface. Each append must bind to the other's hash instead.
+    await Promise.all([
+      service.record(workspaceId, {
+        actorUserId: null,
+        action: AuditActions.gateResumed,
+        subjectType: 'run_gate',
+        subjectId: 'g1',
+        payload: {},
+      }),
+      service.record(workspaceId, {
+        actorUserId: null,
+        action: AuditActions.runTriggered,
+        subjectType: 'run',
+        subjectId: 'r1',
+        payload: {},
+      }),
+    ]);
+
+    const chain = await allRows(workspaceId);
+    // Neither append was lost (record is fail-open, so a dropped one would be silent).
+    expect(chain).toHaveLength(2);
+    // Exactly one genesis entry; the other binds to it.
+    expect(chain[0]?.prevHash).toBeNull();
+    expect(chain[1]?.prevHash).toBe(chain[0]?.hash);
+    expect(await service.verify(workspaceId)).toEqual({ intact: true });
+  });
+
   it('verify → intact for a clean chain', async () => {
     const workspaceId = await seedWorkspace();
     await recordSubjects(workspaceId, ['a', 'b', 'c']);
@@ -158,8 +192,7 @@ describe('AuditService (pglite)', () => {
   it('record is fail-open — a repo that throws is logged, the caller is unaffected', async () => {
     const boom = new Error('db down');
     const throwingRepo = {
-      lastHash: vi.fn().mockRejectedValue(boom),
-      append: vi.fn().mockRejectedValue(boom),
+      appendChained: vi.fn().mockRejectedValue(boom),
     } as unknown as AuditRepo;
     const failing = new AuditService({ audit: throwingRepo });
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});

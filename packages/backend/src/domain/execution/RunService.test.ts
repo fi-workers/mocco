@@ -421,7 +421,7 @@ describe('RunService (pglite)', () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const boom = new Error('audit db down');
       const throwingAudit = new AuditService({
-        audit: { lastHash: vi.fn().mockRejectedValue(boom), append: vi.fn().mockRejectedValue(boom) } as never,
+        audit: { appendChained: vi.fn().mockRejectedValue(boom) } as never,
       });
       const failing = new RunService({
         runs: new RunRepo(t.db),
