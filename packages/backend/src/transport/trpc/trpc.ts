@@ -3,6 +3,7 @@ import superjson from 'superjson';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
@@ -28,6 +29,8 @@ export interface Context {
   roles: RoleService;
   /** Always present — resolves a run's gate; the run router's resumeGate delegates here. */
   gates: GateService;
+  /** Always present — the credential allowlist has no external dependency to gate on. */
+  grants: GrantService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

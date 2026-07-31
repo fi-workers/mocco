@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { GrantService } from '@backend/domain/credential/GrantService';
+import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -67,6 +69,9 @@ const makeGates = (db: TestDb['db']): GateService =>
     events: new RunEventRepo(db),
     resumeRun: async (run, gateItemIndex) => await makeRuns(db).resumeFromGate(run, gateItemIndex),
   });
+
+/** GrantService wired to the test DB — always present in the tRPC context (no external gate). */
+const makeGrants = (db: TestDb['db']): GrantService => new GrantService({ grants: new CredentialGrantRepo(db) });
 
 function fakeProvider(): RepoLister & InstallationVerifier {
   return {
@@ -169,6 +174,7 @@ describe('integration router on pglite', () => {
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
+      grants: makeGrants(t.db),
       session,
       headers,
     });
@@ -250,6 +256,7 @@ describe('integration router on pglite', () => {
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
+      grants: makeGrants(t.db),
       session,
       headers,
     });

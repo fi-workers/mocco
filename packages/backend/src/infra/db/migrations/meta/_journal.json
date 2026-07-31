@@ -71,6 +71,13 @@
       "when": 1785113575128,
       "tag": "0009_slow_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785253390775,
+      "tag": "0010_nosy_triathlon",
+      "breakpoints": true
     }
   ]
 }

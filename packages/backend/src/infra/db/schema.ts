@@ -555,3 +555,39 @@ export const resumes = pgTable(
     check('mocco_resumes_decision_check', sql`${t.decision} IN ('resume','reject')`),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────
+// Credential broker (slice 7, PR1) — the workspace allowlist that makes `.mocco.yml`
+// a request, not a grant. A row authorizes: "for this repo+pipeline, a step gated
+// behind `gate_name` may receive `role` from `provider` for up to `max_ttl_seconds`."
+// The broker (PR2) matches a step's pinned `credential` request against these rows;
+// no matching row → DENY (fail-closed). Carries workspace_id for direct tenant
+// scoping. See docs/superpowers/specs/2026-07-29-slice7-credential-broker-design.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A workspace's credential allowlist entry — the authority a step's `credential`
+ * request is matched against. Unique per (workspace, repo, pipeline, gate, provider, role). */
+export const credentialGrants = pgTable(
+  'mocco_credential_grants',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    pipeline: text().notNull(),
+    gateName: text('gate_name').notNull(),
+    // Cloud provider identifier (e.g. 'aws') — free-form, distinct from the git
+    // `Provider` union; the broker's provider port interprets it, not the core.
+    provider: text().notNull(),
+    role: text().notNull(),
+    maxTtlSeconds: integer('max_ttl_seconds').notNull(),
+    createdAt,
+  },
+  t => [
+    // The allowlist tuple is unique (and serves workspace-scoped listing via its prefix).
+    uniqueIndex('mocco_credential_grants_uq').on(t.workspaceId, t.repoId, t.pipeline, t.gateName, t.provider, t.role),
+  ],
+);

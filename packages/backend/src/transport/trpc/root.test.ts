@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { GrantService } from '@backend/domain/credential/GrantService';
+import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -44,6 +46,9 @@ const makeRuns = (db: TestDb['db']): RunService =>
 const makeRoles = (db: TestDb['db']): RoleService =>
   new RoleService({ roles: new RoleRepo(db), memberships: new RoleMembershipRepo(db) });
 
+/** GrantService wired to the test DB — always present in the context (no external gate). */
+const makeGrants = (db: TestDb['db']): GrantService => new GrantService({ grants: new CredentialGrantRepo(db) });
+
 /** GateService wired to the test DB — always present in the context (no external gate). */
 const makeGates = (db: TestDb['db']): GateService =>
   new GateService({
@@ -81,6 +86,7 @@ describe('tRPC workspace router on pglite', () => {
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
+      grants: makeGrants(t.db),
       session,
       headers,
     });
@@ -243,6 +249,7 @@ describe('trpcHandler over HTTP', () => {
       runs: makeRuns(t.db),
       roles: makeRoles(t.db),
       gates: makeGates(t.db),
+      grants: makeGrants(t.db),
     });
 
     const health = await trpcHandler(new Request('https://local.test/api/trpc/health'));
