@@ -34,15 +34,21 @@ export class AuditService {
 
   /**
    * Append an entry to the workspace's chain: read the chain head (`prev_hash`),
-   * compute the next `hash` from the semantic content, insert. Fail-open — any
-   * failure is logged and swallowed so the caller (the governed action) is never
-   * affected. Never throws.
+   * compute the next `hash` from the semantic content, insert — atomically, so
+   * concurrent appends to one workspace link up instead of forking (the repo owns
+   * that serialization). Fail-open — any failure is logged and swallowed so the
+   * caller (the governed action) is never affected. Never throws.
    */
   async record(workspaceId: string, input: AuditRecordInput): Promise<void> {
     try {
-      const prevHash = await this.deps.audit.lastHash(workspaceId);
-      const { hash } = chainEntry(prevHash, { workspaceId, ...input });
-      await this.deps.audit.append({ workspaceId, prevHash, hash, ...input });
+      // The repo holds the per-workspace lock while it reads the head and inserts,
+      // and calls back here for the hash once `prevHash` is known — so the chain
+      // math stays the pure `chainEntry` SSOT and the linkage stays atomic.
+      await this.deps.audit.appendChained(
+        workspaceId,
+        input,
+        prevHash => chainEntry(prevHash, { workspaceId, ...input }).hash,
+      );
     } catch (error) {
       // The governed action already happened; audit is a durability best-effort here.
       console.error(`[audit] record failed for workspace ${workspaceId} action ${input.action}`, error);
