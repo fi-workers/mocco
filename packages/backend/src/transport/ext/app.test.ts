@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '@backend/domain/auth/AuthService';
 import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
+import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
+import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -93,6 +96,15 @@ describe('ext GitHub setup callback (pglite)', () => {
         }),
       }),
       deliveries: new WebhookDeliveryRepo(t.db),
+      broker: new CredentialBroker({
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        configs: new CommitConfigRepo(t.db),
+        commits: new CommitRepo(t.db),
+        grants: new CredentialGrantRepo(t.db),
+        provider: new StubCredentialProvider(),
+      }),
       runs: new RunService({
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),

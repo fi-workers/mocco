@@ -1,8 +1,9 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
+import { hashToken, isTokenValid } from '@backend/domain/execution/callback-token';
 import {
   ConfigNotRunnableError,
   RunCallbackRejectedError,
@@ -133,20 +134,6 @@ export interface RunServiceDeps {
    * executor trigger runs after the mutation returns; tests pass a collector so the
    * fire-and-forget dispatch is observable without vi.mock (ADR 0008). */
   waitUntil: (promise: Promise<unknown>) => void;
-}
-
-/** The sha-256 hash (hex) of an opaque token — what we store; the plaintext is never persisted. */
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-
-/** Constant-time compare of the token's hash against the stored hash — never a `===`
- * on secrets (that leaks length/prefix via timing). Length-guarded because
- * `timingSafeEqual` throws on unequal-length buffers. */
-function isTokenValid(token: string, storedHash: string): boolean {
-  const provided = Buffer.from(hashToken(token), 'hex');
-  const stored = Buffer.from(storedHash, 'hex');
-  return provided.length === stored.length && timingSafeEqual(provided, stored);
 }
 
 /**

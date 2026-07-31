@@ -32,3 +32,18 @@ export const credentialGrantCreateInputSchema = z.object({
   maxTtlSeconds: z.number().int().positive(),
 });
 export type CredentialGrantCreateInput = z.infer<typeof credentialGrantCreateInputSchema>;
+
+/** The broker request body (slice 7, PR2) a step's workflow POSTs to
+ * `POST /api/ext/credentials`. It carries ONLY the run coordinates and the per-run
+ * token — never `provider`/`role`/`ttl`/`gate`: those are authoritative from the
+ * run's immutable pinned config, so a compromised runner cannot tamper them. The
+ * token (sha-256 vs the run's stored hash) is the workflow's auth to the broker; a
+ * manual `workflow_dispatch` never has it, so it can't even ask. */
+export const credentialRequestSchema = z
+  .object({
+    runId: z.uuid(),
+    stepIndex: z.number().int().nonnegative(),
+    token: z.string().min(1),
+  })
+  .strict();
+export type CredentialRequest = z.infer<typeof credentialRequestSchema>;
