@@ -18,6 +18,18 @@ related:
 What changed in the docs, oldest first. Entry format and rules: [conventions](./meta/conventions.md#changelog-and-log).
 Structural changes to the wiki itself also get their rationale in the [meta changelog](./meta/changelog.md).
 
+## 2026-09-24 — Mocco as an all-in-one platform: roadmap, research, designs
+
+- Repositioned Mocco as an all-in-one developer platform in `index.md` (and the root `README.md` / `AGENTS.md`);
+  deploy governance is its first product line and `reference/feature-map.md` now scopes only that line.
+- Added [the product roadmap](./reference/roadmap.md), competitor research for ten product lines plus all-in-one
+  platforms under `research/` (new folder), and one implementation design per product plus the shared
+  [platform foundations design](./specs/2026-09-24-platform-foundations-design.md) under `specs/`. Research is
+  `confidence: medium`; claims marked "(unverified)" were not confirmed.
+- Docs touched: `index.md`, `reference/feature-map.md`, `reference/roadmap.md`, `research/*`, `specs/2026-09-24-*`,
+  `meta/changelog.md`
+- Source: PR #107
+
 ## 2026-09-24 — Agent orchestration harness and docs lint
 
 - Added `yarn docs:lint` and made every document pass it: frontmatter for the 7 superpowers specs/plans that had none,

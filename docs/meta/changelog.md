@@ -30,3 +30,5 @@ Records the rationale whenever the wiki structure/schema/constitution (AGENTS.md
 - Added `../log.md`, the chronological record of doc changes, and its entry format in `conventions.md`.
 - Fixed documents that did not meet the schema: frontmatter for 7 superpowers specs/plans, `type: design` / `design-spec` → `spec`, missing `updated` / `confidence` / `tags`.
 - Reason: unattended agents (`../../WORKFLOW.md`) read and update the wiki, so the rules have to be checked by a machine instead of by memory.
+- Added `docs/research/` for `type: research` documents (competitor research per product line). The type already existed in the schema; this is its first folder. Filenames follow the stable-topic rule: `{topic}-competitors.md`.
+- Repositioned the wiki's top-level description: Mocco is an all-in-one developer platform, deploy governance is its first product line, and `reference/roadmap.md` holds the other product lines.
