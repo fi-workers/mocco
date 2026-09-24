@@ -72,33 +72,48 @@ const expandHome = path => path.replace(/^~(?=\/|$)/, homedir());
 
 // ── WORKFLOW.md ────────────────────────────────────────────────────────────
 
-// The WORKFLOW.md front matter uses only "key: value", two-space nesting, and "[a, b]" arrays.
-// A key may also be a path (`src/app/`).
+// The WORKFLOW.md front matter uses "key: value", indentation nesting, and arrays. A key may also be a path (`src/app/`).
+// Arrays may be one line "[a, b]", multi-line "[\n  a,\n  b,\n]" (prettier rewrites long arrays this way), or "- a" lists.
 function parseFrontmatter(yaml) {
+  // Join multi-line flow arrays into one line.
+  const text = yaml.replace(/:\s*\n\s*\[([^\]]*)\]/g, (_, inner) => `: [${inner.replace(/\s*\n\s*/g, ' ')}]`);
   const root = {};
-  const stack = [{ indent: -1, node: root }];
-  for (const raw of yaml.split('\n')) {
+  const stack = [{ indent: -1, node: root, key: null, parent: null }];
+  for (const raw of text.split('\n')) {
     const line = raw.replace(/\s+#.*$/, '');
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const indent = line.length - line.trimStart().length;
+    const item = line.trim().match(/^-\s+(.*)$/);
+    if (item) {
+      // Turn the "key:" opened just above (an empty map) into an array.
+      const top = stack.at(-1);
+      if (top.parent && !Array.isArray(top.parent[top.key])) top.parent[top.key] = [];
+      top.parent?.[top.key]?.push(scalar(item[1].trim()));
+      continue;
+    }
     const [, key, value] = line.trim().match(/^([^\s:][^:]*?):\s*(.*)$/) ?? [];
     if (!key) continue;
     while (stack.at(-1).indent >= indent) stack.pop();
     const parent = stack.at(-1).node;
     if (value === '') {
       parent[key] = {};
-      stack.push({ indent, node: parent[key] });
+      stack.push({ indent, node: parent[key], key, parent });
     } else if (value.startsWith('[')) {
       parent[key] = value
-        .slice(1, -1)
+        .slice(1, value.lastIndexOf(']'))
         .split(',')
         .map(v => v.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(scalar);
     } else {
-      parent[key] = /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value;
+      parent[key] = scalar(value);
     }
   }
   return root;
+}
+
+function scalar(value) {
+  return /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value;
 }
 
 function readAtRef(path) {
@@ -331,7 +346,21 @@ function triage({ config, root }) {
 // ── work ───────────────────────────────────────────────────────────────────
 
 const WORK_ALLOWED = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash', 'Skill', 'TodoWrite'];
+// Block pushes to the default branch by its actual name (not every repo uses main).
+// Extra per-repo blocks go in WORKFLOW.md agent.disallowed_tools (e.g. deploy scripts, docker, ssh).
+function workDisallowed(config) {
+  return [
+    ...WORK_DISALLOWED,
+    `Bash(git push origin ${base}:*)`,
+    `Bash(git push origin HEAD:${base}:*)`,
+    ...(config.agent.disallowed_tools ?? []),
+  ];
+}
+
 const WORK_DISALLOWED = [
+  'Bash(vercel:*)',
+  'Bash(npx vercel:*)',
+  'Bash(yarn vercel:*)',
   'Bash(git push --force:*)',
   'Bash(git push -f:*)',
   'Bash(git push origin main:*)',
@@ -377,8 +406,14 @@ function independentCheck(config, path) {
 }
 
 function pickIssues(repo, config) {
+  const excluded = new Set(config.tracker.exclude_labels ?? []);
   if (option('issue')) {
-    return [ghJson(['issue', 'view', option('issue'), '--repo', repo, '--json', 'number,title,body,labels'])];
+    const issue = ghJson(['issue', 'view', option('issue'), '--repo', repo, '--json', 'number,title,body,labels']);
+    const hit = issue.labels.map(l => l.name).filter(name => excluded.has(name));
+    if (hit.length > 0 && !flag('force')) {
+      throw new Error(`#${issue.number} has excluded label(s) (${hit.join(', ')}). Pass --force to run it anyway`);
+    }
+    return [issue];
   }
   const list = label =>
     ghJson([
@@ -397,7 +432,6 @@ function pickIssues(repo, config) {
     ]);
   // tracker.exclude_labels: issues carrying one of these labels are skipped even when agent:ready
   // (e.g. deploy or live-data work)
-  const excluded = new Set(config.tracker.exclude_labels ?? []);
   const active = config.tracker.active_states
     .flatMap(label => list(label).sort((a, b) => a.number - b.number))
     .filter(issue => !issue.labels.some(l => excluded.has(l.name)));
@@ -471,7 +505,7 @@ function workOne({ config, root, template }, issue) {
     cwd: workspace.path,
     prompt,
     allowed: WORK_ALLOWED,
-    disallowed: WORK_DISALLOWED,
+    disallowed: workDisallowed(config),
     budget: config.agent.max_budget_usd,
     timeoutMinutes: config.agent.timeout_minutes,
     name: `issue-${number}`,
