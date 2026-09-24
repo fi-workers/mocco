@@ -4,7 +4,7 @@ description: Records the rationale behind changes to the wiki's own structure, s
 type: meta
 status: active
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-09-24
 confidence: high
 owner: andrea
 tags: [meta, changelog]
@@ -22,3 +22,8 @@ Records the rationale whenever the wiki structure/schema/constitution (AGENTS.md
 - Established the initial wiki structure. Based on llm-wiki research (the owner's PKM conventions + 2025–2026 AGENTS.md/ADR best practices).
 - Decisions: AGENTS.md as single source + CLAUDE.md mirror / relative-path links / three-layer ADR·journal·CHANGELOG / 7 required frontmatter keys.
 - Research source: an internal note (not imported into the public wiki)
+
+## 2026-09-24
+
+- Added `docs/research/` for `type: research` documents (competitor research per product line). The type already existed in the schema; this is its first folder. Filenames follow the stable-topic rule: `{topic}-competitors.md`.
+- Repositioned the wiki's top-level description: Mocco is an all-in-one developer platform, deploy governance is its first product line, and `reference/roadmap.md` holds the other product lines.

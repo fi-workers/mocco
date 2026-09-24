@@ -4,7 +4,7 @@ Context for AI coding agents working on this repository. Human-oriented docs liv
 
 ## Project
 
-Mocco is a **deploy governance control plane** on top of GitHub Actions. Core idea: **write ≠ deploy** — pipelines pause at gates, and only an authorized role can resume them; production deploys can't obtain cloud credentials (OIDC/STS) without a resumed, verified run. License: AGPL-3.0.
+Mocco is an **all-in-one SaaS for developers**. Its first product line is **deploy governance** on top of GitHub Actions, with the core idea **write ≠ deploy**: pipelines pause at gates, and only an authorized role can resume them; production deploys can't obtain cloud credentials (OIDC/STS) without a resumed, verified run. Further product lines (OTA, feature flags, status page, reviews, feedback, messenger, help center, forum, deep links, end-user identity) are planned in [docs/reference/roadmap.md](./docs/reference/roadmap.md); treat them as in scope, not as scope creep. License: AGPL-3.0.
 
 ## Structure
 

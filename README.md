@@ -2,10 +2,11 @@
 
 [![CI](https://github.com/fi-workers/mocco/actions/workflows/ci.yml/badge.svg)](https://github.com/fi-workers/mocco/actions/workflows/ci.yml)
 
-> A **deploy governance control plane** on top of GitHub Actions. GitHub Actions runs your pipelines; Mocco owns the **pause/resume gates** — approvals, separation of duties, audit, and credential gating.
-> Long-term vision: a unified ops control plane covering health checks and monitoring.
+> An **all-in-one platform for developers**: shipping, operating, and supporting a product from one workspace.
+> The first product is **deploy governance** on top of GitHub Actions. GitHub Actions runs your pipelines; Mocco owns the **pause/resume gates** (approvals, separation of duties, audit, and credential gating).
+> Next on the [roadmap](./docs/reference/roadmap.md): OTA release management, feature flags, status pages, app-review analysis, feedback boards, customer messaging, help center, forum, deep links, and end-user auth. They all build on one advantage: Mocco knows what reached production, when, and who approved it.
 
-**Core idea — write ≠ deploy.** Having GitHub write access does not mean you can deploy. Unless someone with the right Mocco role resumes the gate, the production deploy never obtains cloud credentials (OIDC/STS). That's why deleting the verify step doesn't bypass anything.
+**Deploy governance: write ≠ deploy.** Having GitHub write access does not mean you can deploy. Unless someone with the right Mocco role resumes the gate, the production deploy never obtains cloud credentials (OIDC/STS). That's why deleting the verify step doesn't bypass anything.
 
 ## Quickstart (local)
 

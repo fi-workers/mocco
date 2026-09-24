@@ -1,10 +1,10 @@
 ---
 title: Feature map — MVP scope
-description: Sorts features into MVP versus Post-MVP against the "GitHub write ≠ deploy" wedge.
+description: Sorts deploy-governance features into MVP versus Post-MVP against the "GitHub write ≠ deploy" wedge.
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-07-20
+updated: 2026-09-24
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -13,10 +13,13 @@ related:
   - ../adr/0003-core-model-is-pause-resume-gates-no-env.md
   - ../adr/0004-executor-agnostic-core-with-adapter-contract.md
   - ../adr/0005-tech-stack-vercel-native-next-fullstack.md
+  - ./roadmap.md
 ---
 
 # Feature map — MVP scope
 
+> Scope of the **deploy governance** product line only. Mocco's other product lines and their order are in the [roadmap](./roadmap.md).
+>
 > Based on the prototype click-through + ADR 0002–0005. Organizes "what to ship first (MVP) and what to defer (Post-MVP)" against the wedge.
 
 ## Wedge (the cutting criterion)
@@ -85,5 +88,5 @@ Many are already drawn in the prototype (designed, but deferrable).
 | Slack notifications | Prototype | Approval-request/deploy/override events → channel. Convenience (not correctness) |
 | Org policy override | Prototype | WS rules a repo can't weaken (monotonic hardening). An enterprise concern |
 | Multi-cloud (GCP WIF) | Not drawn | A second broker beyond AWS STS. One is enough to prove the model |
-| Ops — Monitors/Incidents | Not drawn | Post-deploy health/incident integration. Roadmap (not the wedge) |
+| Ops — Monitors/Incidents | Not drawn | Post-deploy health/incident integration. Now its own product line — see the status page in the [roadmap](./roadmap.md) (#103) |
 | Billing / Plan | Not drawn | Usage/plans. Needed for billing, unnecessary to prove value |
