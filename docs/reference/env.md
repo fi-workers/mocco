@@ -4,6 +4,8 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
+updated: 2026-07-25
+confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
 ---

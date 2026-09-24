@@ -4,6 +4,8 @@ description: A second executor adapter (ADR 0004) — a run step with executor `
 type: spec
 status: active
 created: 2026-07-28
+updated: 2026-07-28
+confidence: medium
 owner: andrea
 tags: [spec, slice, executor, github, adapter]
 related:

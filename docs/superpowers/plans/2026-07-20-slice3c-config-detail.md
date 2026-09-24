@@ -1,3 +1,18 @@
+---
+title: Slice 3c — Config parse & commit detail implementation plan
+description: Executed plan for slice 3c — fetch each synced commit's .mocco.yml at its SHA, parse and snapshot it into mocco_commit_configs, and expose a commit-detail read that renders the parsed steps or the validation errors.
+type: spec
+status: archived
+created: 2026-07-20
+updated: 2026-07-20
+confidence: medium
+owner: andrea
+tags: [spec, plan, slice, github, mocco-yml]
+related:
+  - ../specs/2026-07-13-slice3-github-integration-observation-design.md
+  - ./2026-07-20-slice3b-commit-sync.md
+---
+
 # Slice 3c — Config Parse & Commit Detail Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

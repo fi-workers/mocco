@@ -4,6 +4,8 @@ description: A pipeline can contain gates; a run pauses at a gate and an authori
 type: spec
 status: active
 created: 2026-07-27
+updated: 2026-07-27
+confidence: medium
 owner: andrea
 tags: [spec, slice, gates, approval, pause-resume, roles, access]
 related:

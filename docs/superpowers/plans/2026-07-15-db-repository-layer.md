@@ -1,3 +1,19 @@
+---
+title: DB repository layer refactor — implementation plan
+description: Executed plan that moved ConnectionService's drizzle queries into per-table repository classes under domain/integration/repos/, with find*/get* naming and EntityNotFoundError mapped to domain errors by the service.
+type: spec
+status: archived
+created: 2026-07-15
+updated: 2026-07-15
+confidence: medium
+owner: andrea
+tags: [spec, plan, backend, repository, drizzle]
+related:
+  - ../specs/2026-07-14-db-repository-layer-design.md
+  - ../../adr/0012-repository-per-table-for-db-owning-domains.md
+  - ./2026-07-15-backend-hash-imports-sweep.md
+---
+
 # DB Repository Layer Refactor — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

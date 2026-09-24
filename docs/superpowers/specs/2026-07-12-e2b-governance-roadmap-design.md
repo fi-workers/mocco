@@ -1,10 +1,13 @@
 ---
 title: E2b — Pipeline governance core (design & slice roadmap)
 description: Design and slice roadmap for the E2b pipeline-governance core, with slice 1 (preview-only .mocco.yml parsing) specified in implementable detail.
-type: design-spec
+type: spec
 status: draft
 created: 2026-07-12
+updated: 2026-07-13
+confidence: medium
 owner: andrea
+tags: [spec, e2b, governance, roadmap, mocco-yml]
 related:
   - ../../adr/0003-core-model-is-pause-resume-gates-no-env.md
   - ../../adr/0004-executor-agnostic-core-with-adapter-contract.md

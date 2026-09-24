@@ -1,10 +1,13 @@
 ---
 title: Env management — SERVICE_DOMAIN + with-env loader + tailnet generator (design)
 description: Introduce a single canonical SERVICE_DOMAIN (bare host) that the app URL and auth origins derive from (always https); load env via an explicit two-layer with-env wrapper (committed env/.env.local defaults → gitignored env/.env personal override, which wins); and confine all Tailscale knowledge to one dev-only generator that writes SERVICE_DOMAIN=<tailnet host> into env/.env. Product code and the loader never know Tailscale exists.
-type: design
+type: spec
 status: active
 created: 2026-07-25
+updated: 2026-07-25
+confidence: medium
 owner: andrea
+tags: [spec, env, config, tailscale]
 related:
   - ../../adr/0005-tech-stack-vercel-native-next-fullstack.md
   - ../../adr/0006-domains-mocco-club-prod-mocco-work-local.md

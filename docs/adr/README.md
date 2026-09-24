@@ -4,7 +4,7 @@ description: Chronological index of all architecture decision records with their
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-09-24
 confidence: high
 owner: andrea
 tags: [adr, index]
@@ -22,7 +22,11 @@ related:
 | [0004](./0004-executor-agnostic-core-with-adapter-contract.md) | Executor-agnostic core + adapter contract (trigger + callback + credentials) | accepted | 2026-06-30 |
 | [0005](./0005-tech-stack-vercel-native-next-fullstack.md) | Tech stack = Vercel-native Next full stack (yarn4, Drizzle, Better Auth) | accepted | 2026-07-01 |
 | [0006](./0006-domains-mocco-club-prod-mocco-work-local.md) | Domains — prod mocco.club, local mocco.work | accepted | 2026-07-01 |
+| [0007](./0007-pglite-testing-and-local-lint-base.md) | pglite for tests, local lint base (amends 0005) | accepted | 2026-07-04 |
+| [0008](./0008-vitest-replaces-jest.md) | vitest replaces jest (amends 0005/0007) | accepted | 2026-07-06 |
+| [0009](./0009-frontend-uses-the-pages-router.md) | Frontend uses the Pages Router | accepted | 2026-07-11 |
+| [0010](./0010-mocco-yml-lean-core-and-enforcement-invariants.md) | `.mocco.yml` stays a lean governance file; enforcement invariants are broker-side | accepted | 2026-07-12 |
+| [0011](./0011-external-api-surface-architecture.md) | External API surface — Hono on the App Router | accepted | 2026-07-14 |
+| [0012](./0012-repository-per-table-for-db-owning-domains.md) | Repository per table for DB-owning domains | accepted | 2026-07-15 |
 
 > Add new decisions as `{NNNN}-{imperative-kebab}.md`. Reversals become a new ADR + `superseded_by` on the old one. No after-the-fact edits to the body.
-- [0007 — pglite for tests, local lint base (amends 0005)](./0007-pglite-testing-and-local-lint-base.md)
-- [0008 — vitest replaces jest (amends 0005/0007)](./0008-vitest-replaces-jest.md)

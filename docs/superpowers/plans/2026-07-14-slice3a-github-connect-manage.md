@@ -1,3 +1,18 @@
+---
+title: Slice 3a — GitHub Connect & Manage implementation plan
+description: Executed task-by-task plan for slice 3a — connect a GitHub App installation with proven ownership, register repositories with a watched branch, and list real repos on the dashboard; read-only, tenant-isolated, no commit sync.
+type: spec
+status: archived
+created: 2026-07-14
+updated: 2026-07-14
+confidence: medium
+owner: andrea
+tags: [spec, plan, slice, github, integration]
+related:
+  - ../specs/2026-07-13-slice3-github-integration-observation-design.md
+  - ../../adr/0011-external-api-surface-architecture.md
+---
+
 # Slice 3a — GitHub Connect & Manage Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -56,7 +71,7 @@
   - **Concrete paths:** setup callback `GET /api/ext/github/setup`; webhook (3b) `POST /api/ext/github/webhook`.
   - **Supersedes:** roadmap §8 (which mounted ext at a Pages route) and resolves roadmap §10 open-Q3; reconciles ADR 0006's `/api/webhooks/github` path.
   - **Tunnel exception (3b):** local dev webhook target is `hooks.mocco.club` (a `mocco.club` subdomain), a recorded exception to ADR 0006's `mocco.work = local` split, because `mocco.work` is not on public DNS while `mocco.club` is already on Cloudflare.
-- [ ] **Step 2: Add the AGENTS.md pointer** — under "PR conventions" / API surfaces, add: "External inbound (webhooks, setup callbacks) is a Hono app on the App Router — see [ADR 0011](./docs/adr/0011-external-api-surface-architecture.md)."
+- [ ] **Step 2: Add the AGENTS.md pointer** — under "PR conventions" / API surfaces, add: `External inbound (webhooks, setup callbacks) is a Hono app on the App Router — see [ADR 0011](./docs/adr/0011-external-api-surface-architecture.md).`
 - [ ] **Step 3: Commit** — `git add docs/adr/0011-external-api-surface-architecture.md AGENTS.md && git commit -m "docs: ADR 0011 — external API surface on the App Router"`
 
 _No test (docs). This lands first because the whole slice's transport shape depends on it._

@@ -4,6 +4,8 @@ description: A step's workflow requests cloud credentials from mocco at runtime;
 type: spec
 status: active
 created: 2026-07-29
+updated: 2026-07-29
+confidence: medium
 owner: andrea
 tags: [spec, slice, credential-broker, enforcement, security]
 related:

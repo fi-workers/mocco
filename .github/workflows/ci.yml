@@ -41,6 +41,7 @@ jobs:
       matrix:
         step:
           - format:check
+          - docs:lint
           - lint-common
           - lint-backend
           - lint-frontend

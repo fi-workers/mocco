@@ -1,7 +1,7 @@
 ---
 title: Slice 3 — GitHub integration (observation) design
 description: Design for the observation slice of Mocco's GitHub integration — connect a provider, sync a watched branch's commits into a candidate queue, and view each commit's parsed .mocco.yml pipeline. GitHub is the first provider plugging into a provider-agnostic core; read-only, tenant-isolated, no execution/gates. Refined by a 6-lens adversarial review.
-type: design
+type: spec
 status: active
 created: 2026-07-13
 updated: 2026-07-13
