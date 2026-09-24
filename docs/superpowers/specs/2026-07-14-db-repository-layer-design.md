@@ -1,3 +1,18 @@
+---
+title: DB repository layer for table-owning domains (design)
+description: Design for moving a DB-owning domain's drizzle queries into per-table, constructor-injected repository classes — the fi-workers house repo pattern adapted to Mocco's no-singleton, pglite-tested rules. The decision is recorded in ADR 0012.
+type: spec
+status: active
+created: 2026-07-14
+updated: 2026-07-15
+confidence: medium
+owner: andrea
+tags: [spec, backend, repository, drizzle, data-access]
+related:
+  - ../../adr/0012-repository-per-table-for-db-owning-domains.md
+  - ../plans/2026-07-15-db-repository-layer.md
+---
+
 # DB repository layer for table-owning domains
 
 Date: 2026-07-14

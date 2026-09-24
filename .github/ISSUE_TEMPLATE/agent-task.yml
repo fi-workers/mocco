@@ -1,0 +1,49 @@
+name: Agent task
+description: Work an agent can pick up, build, and verify. It needs acceptance criteria before it can be labeled agent:ready.
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An agent works this issue unattended (see `docs/guides/agent-orchestration.md`). It stops and asks
+        (`agent:blocked`) when the acceptance criteria are missing or can be read two ways. Keep it to one PR-sized concern.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What changes and why, in one or two sentences.
+    validations:
+      required: true
+  - type: input
+    id: plan
+    attributes:
+      label: Spec or plan
+      description: Path to the merged superpowers spec or plan this issue implements, if any. The agent follows a linked plan task by task.
+      placeholder: docs/superpowers/plans/2026-07-20-slice3b-commit-sync.md
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements that say when the work is done.
+      placeholder: |
+        - [ ] A workspace member can list the runs of a repository, newest first
+        - [ ] A non-member gets NOT_FOUND
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Tests to add or extend (pglite), and anything beyond `yarn verify` a reviewer should check by hand.
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this issue must not touch, so the agent does not widen the change.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related ADRs, docs/reference pages, files, previous issues or PRs.

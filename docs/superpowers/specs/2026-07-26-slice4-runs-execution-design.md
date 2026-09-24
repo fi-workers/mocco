@@ -4,6 +4,8 @@ description: First execution slice. A commit candidate becomes a Run pinned to t
 type: spec
 status: active
 created: 2026-07-26
+updated: 2026-07-26
+confidence: medium
 owner: andrea
 tags: [spec, slice, runs, execution, executor, pause-resume]
 related:

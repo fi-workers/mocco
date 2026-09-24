@@ -4,6 +4,8 @@ description: An always-on, tamper-evident audit trail — every governance event
 type: spec
 status: active
 created: 2026-07-29
+updated: 2026-07-29
+confidence: medium
 owner: andrea
 tags: [spec, slice, audit, hash-chain, compliance]
 related:

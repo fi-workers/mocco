@@ -1,3 +1,17 @@
+---
+title: Backend `#backend` absolute imports sweep — implementation plan
+description: Executed plan that gave @mocco/backend a `#backend/*` Node subpath-import prefix and banned parent-relative imports. Later replaced by the `@backend/*` tsconfig alias and a ban on all relative imports (see AGENTS.md).
+type: spec
+status: archived
+created: 2026-07-15
+updated: 2026-07-15
+confidence: medium
+owner: andrea
+tags: [spec, plan, backend, imports, lint]
+related:
+  - ./2026-07-15-db-repository-layer.md
+---
+
 # Backend `#backend` Absolute Imports Sweep — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -30,6 +30,7 @@ yarn db:generate && yarn db:migrate
 
 yarn test                         # vitest (backend) — includes pglite integration tests
 yarn verify                       # every check, serially (same scripts CI runs) — REQUIRED green before any push (pre-push enforces)
+yarn docs:lint                    # docs/ frontmatter schema + relative links (part of verify)
 yarn backend lint / ts-check      # per-workspace lint & typecheck
 yarn format                       # prettier
 make dev                          # https://www.mocco.work (traefik → Next :3100)
@@ -71,6 +72,10 @@ Full workflow: [docs/guides/pr-workflow.md](./docs/guides/pr-workflow.md) — or
 - **Parse, don't validate**: external data (API/webhook/URL/storage) crosses boundaries only via zod `safeParse`; domain ids use `.brand<'GitSha'>()`-style branded types; `as` only inside parsers.
 - **URL is state**: shareable view state (filters/tabs/ranges) lives in `searchParams`, not component state.
 - CI workflows follow [docs/reference/ci-conventions.md](./docs/reference/ci-conventions.md) — SHA-pinned actions, no `pull_request_target`, no cross-boundary caches, minimal `permissions`.
+
+## Unattended agents
+
+[WORKFLOW.md](./WORKFLOW.md) is the config and prompt for the issue-driven orchestrator (`scripts/agents/orchestrator.mjs`): an `agent:ready` issue is worked in its own worktree on branch `agent/<number>` and ends as a PR for human review. The rules above still apply; the guide is [docs/guides/agent-orchestration.md](./docs/guides/agent-orchestration.md).
 
 ## Key decisions (read before large changes)
 

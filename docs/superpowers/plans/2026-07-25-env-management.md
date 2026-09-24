@@ -1,3 +1,18 @@
+---
+title: Env management (SERVICE_DOMAIN + with-env loader + tailnet generator) implementation plan
+description: Executed plan that introduced the canonical SERVICE_DOMAIN, the two-layer with-env loader (env/.env.local then env/.env), and a dev-only Tailscale generator that writes SERVICE_DOMAIN into env/.env.
+type: spec
+status: archived
+created: 2026-07-25
+updated: 2026-07-25
+confidence: medium
+owner: andrea
+tags: [spec, plan, env, config, tailscale]
+related:
+  - ../specs/2026-07-25-env-management-design.md
+  - ../../reference/env.md
+---
+
 # Env Management (SERVICE_DOMAIN + with-env loader + tailnet generator) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

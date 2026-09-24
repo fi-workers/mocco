@@ -5,7 +5,7 @@ okf_version: "0.1"
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-07-04
+updated: 2026-09-24
 confidence: high
 owner: andrea
 tags: [index, moc]
@@ -28,16 +28,26 @@ related:
 - [ADR index](./adr/README.md)
 - [0001 — Name the product Mocco](./adr/0001-name-the-product-mocco.md)
 - [0002 — Mocco is an independent authorization layer](./adr/0002-mocco-is-an-independent-authorization-layer.md)
+- [0003 — Core model is pause/resume gates, no env](./adr/0003-core-model-is-pause-resume-gates-no-env.md)
+- [0004 — Executor-agnostic core + adapter contract](./adr/0004-executor-agnostic-core-with-adapter-contract.md)
+- [0005 — Tech stack: Vercel-native Next full stack](./adr/0005-tech-stack-vercel-native-next-fullstack.md)
+- [0006 — Domains: prod mocco.club, local mocco.work](./adr/0006-domains-mocco-club-prod-mocco-work-local.md)
 - [0007 — pglite tests, local lint base (amends 0005)](./adr/0007-pglite-testing-and-local-lint-base.md)
+- [0008 — vitest replaces jest (amends 0005/0007)](./adr/0008-vitest-replaces-jest.md)
+- [0009 — Frontend uses the Pages Router](./adr/0009-frontend-uses-the-pages-router.md)
+- [0010 — `.mocco.yml` lean core; enforcement invariants are broker-side](./adr/0010-mocco-yml-lean-core-and-enforcement-invariants.md)
+- [0011 — External API surface: Hono on the App Router](./adr/0011-external-api-surface-architecture.md)
+- [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
 
 ## Implementation
 
-- `src/` — the actual code monorepo (ADR 0005 stack). `@mocco/{frontend,backend}` (`common` returns with the governance domain)
+- `packages/` — the code monorepo (ADR 0005 stack): `@mocco/{backend,frontend,common,e2e}`. Layout and commands: [AGENTS.md](../AGENTS.md)
 
 ## Guides
 
 - [Local development setup](./guides/local-setup.md) — local domains, env, auth setup
 - [PR workflow](./guides/pr-workflow.md) — one concern per PR, review pipeline, feedback promotion
+- [Agent orchestration](./guides/agent-orchestration.md) — GitHub issues as the queue for unattended agents (`WORKFLOW.md`), labels, safety limits
 
 ## Concepts
 
@@ -49,11 +59,35 @@ related:
 - [Feature map — MVP scope](./reference/feature-map.md) — MVP vs Post-MVP
 - [Prototype scope & IA](./specs/2026-06-30-prototype-scope.md) — click-through screen definitions ([prototype itself](./prototype/README.md))
 - [Workspace model](./reference/workspace.md) — tables, invariants, contracts, known gaps
-- [Frontend conventions](./reference/frontend-conventions.md) — RSC-first, adopted 2026 patterns, lint stack
+- [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
+- [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
+- [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access
 - [CI conventions](./reference/ci-conventions.md) — supply-chain hardening rules
 - [DB conventions (Drizzle)](./reference/db-conventions.md) — mocco_ prefix, id, timestamp, indexes
 - [.mocco.yml file format spec](./reference/mocco-yml-spec.md) + [JSON Schema](./reference/mocco.schema.json) — pipeline + gate definitions (draft v1)
 
+## Superpowers specs and plans
+
+Feature designs (`specs/`) and the task-by-task plans that executed them (`plans/`). Executed plans are `status: archived`.
+
+- Specs
+  - [E2b — Pipeline governance core (design & slice roadmap)](./superpowers/specs/2026-07-12-e2b-governance-roadmap-design.md)
+  - [Slice 3 — GitHub integration (observation)](./superpowers/specs/2026-07-13-slice3-github-integration-observation-design.md)
+  - [DB repository layer for table-owning domains](./superpowers/specs/2026-07-14-db-repository-layer-design.md)
+  - [Env management — SERVICE_DOMAIN + with-env + tailnet generator](./superpowers/specs/2026-07-25-env-management-design.md)
+  - [Slice 4 — Runs & the generic-executor live loop](./superpowers/specs/2026-07-26-slice4-runs-execution-design.md)
+  - [Slice 5 — Gates & approval (pause / resume)](./superpowers/specs/2026-07-27-slice5-gates-approval-design.md)
+  - [Slice 6 — GitHub Actions executor adapter](./superpowers/specs/2026-07-28-slice6-github-adapter-design.md)
+  - [Slice 7 — Credential broker](./superpowers/specs/2026-07-29-slice7-credential-broker-design.md)
+  - [Slice 8 — Audit log (per-workspace hash chain)](./superpowers/specs/2026-07-29-slice8-audit-log-design.md)
+- Plans
+  - [Slice 3a — GitHub Connect & Manage](./superpowers/plans/2026-07-14-slice3a-github-connect-manage.md)
+  - [Backend `#backend` imports sweep](./superpowers/plans/2026-07-15-backend-hash-imports-sweep.md) (later replaced by `@backend/*`)
+  - [DB repository layer refactor](./superpowers/plans/2026-07-15-db-repository-layer.md)
+  - [Slice 3b — Commit sync](./superpowers/plans/2026-07-20-slice3b-commit-sync.md)
+  - [Slice 3c — Config parse & commit detail](./superpowers/plans/2026-07-20-slice3c-config-detail.md)
+  - [Env management](./superpowers/plans/2026-07-25-env-management.md)
+
 ## Meta
 
-- [frontmatter schema](./meta/schema.md) · [conventions](./meta/conventions.md) · [meta changelog](./meta/changelog.md)
+- [frontmatter schema](./meta/schema.md) · [conventions](./meta/conventions.md) · [meta changelog](./meta/changelog.md) · [log](./log.md)

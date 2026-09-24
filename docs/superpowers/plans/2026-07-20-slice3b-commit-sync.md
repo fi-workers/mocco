@@ -1,3 +1,18 @@
+---
+title: Slice 3b — Commit sync implementation plan
+description: Executed plan for slice 3b — receive GitHub push and installation-lifecycle webhooks on the ext surface and sync a watched branch's commits into a per-repo candidate queue (verify-first, fast-ACK, deferred write).
+type: spec
+status: archived
+created: 2026-07-20
+updated: 2026-07-20
+confidence: medium
+owner: andrea
+tags: [spec, plan, slice, github, webhooks, commits]
+related:
+  - ../specs/2026-07-13-slice3-github-integration-observation-design.md
+  - ./2026-07-14-slice3a-github-connect-manage.md
+---
+
 # Slice 3b — Commit Sync Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

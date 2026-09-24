@@ -4,7 +4,7 @@ description: Orientation for how LLM agents and humans should read, navigate, an
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-07-04
+updated: 2026-09-24
 confidence: high
 owner: andrea
 tags: [meta, wiki, howto]
@@ -20,6 +20,7 @@ These docs conform to the [Open Knowledge Format (OKF) v0.1](https://github.com/
 
 1. `docs/index.md` — top-level MOC, category map
 2. The document for your work topic → follow the links
+3. `docs/log.md` — recent doc changes, when you need to know what moved lately
 
 ## Folder roles
 
@@ -30,7 +31,9 @@ These docs conform to the [Open Knowledge Format (OKF) v0.1](https://github.com/
 | `concepts/` | Domain knowledge and the "why" | Rarely changes |
 | `guides/` | How-tos and procedures | Update when procedures change |
 | `specs/` | Feature design (pre-implementation) | Written before implementation |
+| `superpowers/` | `specs/` designs and the `plans/` that executed them (superpowers workflow) | A plan is `archived` once executed |
 | `meta/` | Rules for the wiki itself | schema/conventions/changelog |
+| `log.md` | Chronological record of doc changes | Append one entry per PR that changes docs |
 
 ## Authoring rules (summary — full version in `meta/conventions.md`)
 
@@ -39,6 +42,8 @@ These docs conform to the [Open Knowledge Format (OKF) v0.1](https://github.com/
 - Filenames: lowercase-hyphen, no spaces, emoji, or special characters. Content is in English by default
 - One document = one topic. Self-contained (understandable without other documents)
 - State the source for facts (code path/commit/external link). Mark guesses and unverified claims as `confidence: low`
+- Append an entry to `log.md` when a PR changes docs
+- `yarn docs:lint` must pass (it is part of `yarn verify`)
 
 ## Two-layer decision record
 
