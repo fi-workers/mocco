@@ -39,6 +39,10 @@ export class SecretBox {
     if (first === undefined) {
       throw new SecretBoxError('SecretBox needs at least one key');
     }
+    const badId = keys.find(({ id }) => !KEY_ID.test(id));
+    if (badId !== undefined) {
+      throw new SecretBoxError('key id must match [A-Za-z0-9_-]{1,32}');
+    }
     const wrongLength = keys.find(({ key }) => key.length !== KEY_BYTES);
     if (wrongLength !== undefined) {
       throw new SecretBoxError(`key "${wrongLength.id}" must be ${KEY_BYTES} bytes`);
@@ -72,23 +76,29 @@ export class SecretBox {
     }
     const iv = decode(ivPart, 'base64url');
     const tag = decode(tagPart, 'base64url');
-    if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
+    const ciphertext = decode(ciphertextPart, 'base64url');
+    // Reject non-canonical encodings (unused low bits set), so one sealed value has
+    // exactly one string form — sealed strings stay safe to compare.
+    const isCanonical = encode(iv) === ivPart && encode(tag) === tagPart && encode(ciphertext) === ciphertextPart;
+    if (!isCanonical || iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
       throw new SecretBoxError('sealed value is malformed');
     }
     try {
       const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: TAG_BYTES });
       decipher.setAAD(Buffer.from(aad, 'utf8'));
       decipher.setAuthTag(tag);
-      return Buffer.concat([decipher.update(decode(ciphertextPart, 'base64url')), decipher.final()]).toString('utf8');
+      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     } catch (error) {
       // Wrong key, wrong AAD, or tampered bytes — GCM authentication failed.
       throw new SecretBoxError('sealed value failed authentication', { cause: error });
     }
   }
 
-  /** True when `sealed` was made with a key other than the current sealing key. */
+  /** True when `sealed` is a well-formed envelope made with a key other than the
+   * current sealing key. Malformed values return false — `open` reports those. */
   needsReseal(sealed: string): boolean {
-    return ENVELOPE.exec(sealed)?.[1] !== this.current.id;
+    const keyId = ENVELOPE.exec(sealed)?.[1];
+    return keyId !== undefined && keyId !== this.current.id;
   }
 }
 
@@ -116,7 +126,10 @@ export function parseSecretKeys(raw: string): SecretKey[] {
       throw new SecretBoxError(`SECRETS_ENCRYPTION_KEYS entry ${index + 1} has an invalid key id`);
     }
     const key = decode(encoded, 'base64');
-    if (key.length !== KEY_BYTES) {
+    // Buffer's base64 decoder skips characters it doesn't know, so a key pasted with
+    // stray characters would still decode — require the canonical encoding instead.
+    // eslint-disable-next-line unicorn/prefer-uint8array-base64 -- see encode/decode above.
+    if (key.length !== KEY_BYTES || key.toString('base64') !== encoded) {
       throw new SecretBoxError(`key "${id}" must be ${KEY_BYTES} bytes (openssl rand -base64 32)`);
     }
     return { id, key };

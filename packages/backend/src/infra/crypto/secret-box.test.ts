@@ -65,6 +65,36 @@ describe('SecretBox', () => {
     expect(() => new SecretBox([keyB]).open(sealedWithA, AAD)).toThrow(/unknown key id "a"/);
   });
 
+  it('rejects key ids the envelope cannot carry', () => {
+    expect(() => new SecretBox([{ id: 'a.b', key: randomBytes(32) }])).toThrow(SecretBoxError);
+    expect(() => new SecretBox([{ id: 'x'.repeat(33), key: randomBytes(32) }])).toThrow(SecretBoxError);
+  });
+
+  it('refuses a tampered iv and non-canonical base64url parts', () => {
+    const box = new SecretBox([keyA]);
+    const [v, id, iv = '', ct, tag = ''] = box.seal('secret', AAD).split('.');
+    expect(() => box.open([v, id, flip(iv), ct, tag].join('.'), AAD)).toThrow(SecretBoxError);
+    // A 16-byte tag encodes to 22 chars whose last carries 4 unused bits; setting one
+    // keeps the decoded bytes but changes the string.
+    const last = tag.at(-1) ?? 'A';
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const bumped = alphabet[alphabet.indexOf(last) + 1] ?? 'A';
+    expect(() => box.open([v, id, iv, ct, `${tag.slice(0, -1)}${bumped}`].join('.'), AAD)).toThrow(SecretBoxError);
+  });
+
+  it('seals and opens with an empty aad', () => {
+    const box = new SecretBox([keyA]);
+    expect(box.open(box.seal('x', ''), '')).toBe('x');
+  });
+
+  it('reports malformed values as not needing reseal', () => {
+    expect(new SecretBox([keyA]).needsReseal('garbage')).toBe(false);
+  });
+
+  it('names itself in logs', () => {
+    expect(String(new SecretBoxError('m'))).toBe('SecretBoxError: m');
+  });
+
   it('requires at least one 32-byte key with unique ids', () => {
     expect(() => new SecretBox([])).toThrow(SecretBoxError);
     expect(() => new SecretBox([{ id: 'short', key: randomBytes(16) }])).toThrow(/"short"/);
@@ -100,6 +130,11 @@ describe('parseSecretKeys', () => {
     const short = randomKeyB64(8);
     expect(() => parseSecretKeys(`k1:${short}`)).toThrow(/"k1"/);
     expect(() => parseSecretKeys(`k1:${short}`)).not.toThrow(short);
+  });
+
+  it('rejects a key with stray characters Buffer would silently skip', () => {
+    const encoded = randomKeyB64();
+    expect(() => parseSecretKeys(`k1:${encoded.slice(0, 20)}!!!!${encoded.slice(20)}`)).toThrow(/"k1"/);
   });
 
   it('rejects an empty list', () => {

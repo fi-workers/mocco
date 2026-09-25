@@ -120,8 +120,10 @@ sealed with `SecretBox` (`infra/crypto/secret-box.ts`, AES-256-GCM) before they 
 - Columns holding sealed values are named `*_sealed`. They never appear in a zod `.output()`;
   services project `hasSecret: boolean` instead, and a secret Mocco generates is returned once, at
   creation or rotation.
-- The AAD is `'<table>:<row id>'`, so a sealed value copied into another row fails to open. Generate
-  the row's uuid in the service (or insert first) and seal in the same service call.
+- The AAD is `'<table>:<row id>'`, so a sealed value copied into another row fails to open. The
+  service generates the row's id with `randomUUID()` (from `node:crypto`), seals with it, and passes
+  both on insert. This is the one exception to DB-generated uuids; the column keeps its
+  `defaultRandom()` default, and `*_sealed` columns stay `NOT NULL`.
 - Keys come from `SECRETS_ENCRYPTION_KEYS` (`keyId:base64key,…`). The first key seals, all keys
   open. To rotate: prepend a new key, reseal (`needsReseal` finds old values; the `secrets.reseal`
   job lands with the job queue), then drop the old key.
