@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-07-20
+updated: 2026-09-25
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -111,6 +111,23 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 - Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
 
 This can't be statically lint-enforced, so it is covered by **cross-tenant tests**: a non-member passing the victim's `workspaceId` must be rejected on every procedure (read, write, and install).
+
+## Secrets at rest (SecretBox)
+
+Third-party secrets a customer gives Mocco (webhook signing secrets, bot tokens, store keys) are
+sealed with `SecretBox` (`infra/crypto/secret-box.ts`, AES-256-GCM) before they reach the DB.
+
+- Columns holding sealed values are named `*_sealed`. They never appear in a zod `.output()`;
+  services project `hasSecret: boolean` instead, and a secret Mocco generates is returned once, at
+  creation or rotation.
+- The AAD is `'<table>:<row id>'`, so a sealed value copied into another row fails to open. Generate
+  the row's uuid in the service (or insert first) and seal in the same service call.
+- Keys come from `SECRETS_ENCRYPTION_KEYS` (`keyId:base64key,…`). The first key seals, all keys
+  open. To rotate: prepend a new key, reseal (`needsReseal` finds old values; the `secrets.reseal`
+  job lands with the job queue), then drop the old key.
+- Services receive the box by constructor injection (`getSecretBox()` in the composition root);
+  tests build one with a random key. A deploy without the env var boots; only sealing fails, with
+  a `SecretBoxError` naming the variable.
 
 ## Types & schemas
 
