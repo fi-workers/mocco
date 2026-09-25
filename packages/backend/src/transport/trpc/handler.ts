@@ -6,6 +6,7 @@ import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { getProjectDomain } from '@backend/domain/project/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
@@ -16,6 +17,8 @@ import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
+import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Context } from '@backend/transport/trpc/trpc';
 
 /** Injected per-handler deps. `connection`/`commitSync`/`commitConfig` are present only
@@ -29,6 +32,8 @@ export interface TrpcDeps extends Services {
   gates: GateService;
   grants: GrantService;
   audit: AuditService;
+  projects: ProjectService;
+  products: ProductEnablementService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -56,6 +61,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         gates: deps.gates,
         grants: deps.grants,
         audit: deps.audit,
+        projects: deps.projects,
+        products: deps.products,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -75,5 +82,7 @@ export async function trpcHandler(request: Request): Promise<Response> {
     gates: getGovernance().gates,
     grants: getCredential().grants,
     audit: getAudit().audit,
+    projects: getProjectDomain().projects,
+    products: getProjectDomain().products,
   })(request);
 }

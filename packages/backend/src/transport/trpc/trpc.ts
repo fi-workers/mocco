@@ -11,6 +11,8 @@ import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
+import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. */
@@ -34,6 +36,10 @@ export interface Context {
   grants: GrantService;
   /** Always present — the audit hash chain is self-contained (no external dependency). */
   audit: AuditService;
+  /** Always present — projects have no external dependency to gate on (ADR 0013). */
+  projects: ProjectService;
+  /** Always present — which product lines the workspace has enabled. */
+  products: ProductEnablementService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
