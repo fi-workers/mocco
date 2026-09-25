@@ -4,7 +4,11 @@ import { RunStates } from '@mocco/common/execution';
 import { GateStates, ResumeDecisions } from '@mocco/common/governance';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
-import { EventSubjectTypes, loadRunEventSubject } from '@backend/domain/execution/run-event-subject';
+import {
+  EventSubjectTypes,
+  governanceDedupeKey,
+  loadRunEventSubject,
+} from '@backend/domain/execution/run-event-subject';
 import {
   DuplicateVoteError,
   GateNotCurrentError,
@@ -229,6 +233,7 @@ export class GateService {
         type: DomainEventTypes.gateRejected,
         workspaceId,
         subject: { type: EventSubjectTypes.runGate, id: gate.id },
+        dedupeKey: governanceDedupeKey(DomainEventTypes.gateRejected, gate.id),
         payload: {
           ...(await this.gateEventSubject(workspaceId, runId, gate, gateItemIndex)),
           actorUserId: userId,
@@ -249,12 +254,14 @@ export class GateService {
       const resumedBy = votes
         .filter(vote => vote.decision === ResumeDecisions.resume)
         .map(vote => ({ userId: vote.principalId, role: vote.role }));
-      // Published before the run continues, so subscribers see `gate.resumed` ahead of
-      // whatever the continuation publishes (`gate.pending` at the next gate, `run.*`).
+      // Published before the run continues, so its `seq` precedes whatever the
+      // continuation publishes (`gate.pending` at the next gate, `run.*`). That is publish
+      // order only: deliveries run as separate jobs and may reach a subscriber in any order.
       await publishBestEffort(this.deps.bus, DomainEventTypes.gateResumed, async () => ({
         type: DomainEventTypes.gateResumed,
         workspaceId,
         subject: { type: EventSubjectTypes.runGate, id: gate.id },
+        dedupeKey: governanceDedupeKey(DomainEventTypes.gateResumed, gate.id),
         payload: {
           ...(await this.gateEventSubject(workspaceId, runId, gate, gateItemIndex)),
           actorUserId: userId,

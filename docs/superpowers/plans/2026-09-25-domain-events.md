@@ -51,6 +51,17 @@ is a no-op. Governance publishes after its state change through `publishBestEffo
 - [x] Docs: ADR 0018, `reference/events.md`, composition notes in `reference/jobs.md` and backend
       conventions.
 
+## Review follow-ups
+
+- [x] A repeat publish with an existing dedupe key fans out again (job dedupe + ledger make it
+      idempotent), so a retry repairs a fan-out that crashed between the insert and the enqueue.
+- [x] Governance dedupe keys `<type>:<runId|gateId>`, so racing callbacks or votes publish once.
+- [x] Ordering documented as publish order (`seq`) only; `seq` is not a gap-free cursor.
+- [x] Payload additions with defaults: `triggeredByUserId` / `triggeredByName` on every governance
+      event, `failedStep` / `logsUrl` on `run.failed`, `requirements` on `gate.pending`.
+- [x] Catalog changes stay backward-compatible for 30 days; delivery is "normally once".
+- [x] `events.prune` deletes in bounded batches and counts instead of returning ids.
+
 ## Deferred
 
 - The 16 inbound event types: they come from `@mocco/common/inbound` (#249), which is not on this

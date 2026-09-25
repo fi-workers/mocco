@@ -469,10 +469,11 @@ describe('GateService (pglite)', () => {
       const workspaceId = await seedWorkspace();
       const alice = await seedUser();
       await seedRole(workspaceId, 'deployer', [alice]);
+      const triggerer = await seedUser();
       const runId = await triggerGatedRun(
         workspaceId,
         { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
-        await seedUser(),
+        triggerer,
       );
 
       const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'resume');
@@ -488,12 +489,19 @@ describe('GateService (pglite)', () => {
         gateName: 'approve',
         gateItemIndex: 0,
         facts: { repo: 'fi-workers/api', pipeline: 'deploy', gate: 'approve' },
+        triggeredByUserId: triggerer,
       };
-      expect(events[0]).toMatchObject({ subjectType: 'run_gate', subjectId: gate.id, payload: subject });
+      expect(events[0]).toMatchObject({
+        subjectType: 'run_gate',
+        subjectId: gate.id,
+        dedupeKey: `gate.pending:${gate.id}`,
+        payload: { ...subject, requirements: [{ role: 'deployer', count: 1 }] },
+      });
       expect(events[1]).toMatchObject({
         workspaceId,
         subjectType: 'run_gate',
         subjectId: gate.id,
+        dedupeKey: `gate.resumed:${gate.id}`,
         payload: { ...subject, actorUserId: alice, resumedBy: [{ userId: alice, role: 'deployer' }] },
       });
     });
@@ -512,7 +520,10 @@ describe('GateService (pglite)', () => {
 
       const events = await published();
       expect(events.map(event => event.type)).toEqual(['gate.pending', 'gate.rejected']);
-      expect(events[1]?.payload).toMatchObject({ runId, gateName: 'approve', actorUserId: alice, reason: 'not safe' });
+      expect(events[1]).toMatchObject({
+        dedupeKey: expect.stringMatching(/^gate\.rejected:/),
+        payload: { runId, gateName: 'approve', actorUserId: alice, reason: 'not safe' },
+      });
     });
 
     it('a failing bus never fails the resume — the gate resolves and the run continues', async () => {

@@ -28,9 +28,22 @@ export function createDeliverEventHandler(bus: EventBus) {
   });
 }
 
-export function createPruneEventsHandler(events: DomainEventRepo) {
+/** Rows one prune statement deletes, so a large backlog never becomes one huge delete. */
+export const EVENT_PRUNE_BATCH_SIZE = 1000;
+
+/** Deletes old events batch by batch until none are left or the run's lock is about to
+ * expire (the next daily run continues). */
+export function createPruneEventsHandler(events: DomainEventRepo, options: { batchSize?: number } = {}) {
+  const { batchSize = EVENT_PRUNE_BATCH_SIZE } = options;
   return handleJob(pruneEvents, async (_payload, ctx) => {
-    await events.pruneBefore(new Date(ctx.now().getTime() - EVENT_RETENTION_MS));
+    const before = new Date(ctx.now().getTime() - EVENT_RETENTION_MS);
+    const pruneFrom = async (): Promise<void> => {
+      const deleted = await events.pruneBefore(before, batchSize);
+      if (deleted === batchSize && ctx.now() < ctx.deadline) {
+        await pruneFrom();
+      }
+    };
+    await pruneFrom();
   });
 }
 

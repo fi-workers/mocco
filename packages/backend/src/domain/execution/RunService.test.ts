@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -470,6 +470,7 @@ describe('RunService (pglite)', () => {
         subjectType: 'run',
         subjectId: runId,
         projectId: null,
+        dedupeKey: `run.succeeded:${runId}`,
         payload: {
           workspaceId,
           runId,
@@ -482,11 +483,38 @@ describe('RunService (pglite)', () => {
       });
     });
 
-    it('publishes run.failed when a step fails', async () => {
-      const { runId, token } = await startRun();
+    it('publishes run.failed with the failed step, its logs url and the triggerer', async () => {
+      const { workspaceId, runId, token } = await startRun();
+      const { run } = await service.get(workspaceId, runId);
+      await t.db
+        .update(users)
+        .set({ name: 'Alice' })
+        .where(eq(users.id, run.triggeredByUserId ?? ''));
+
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'running', logsUrl: 'https://logs.test/0' });
       await service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' });
+
       const events = await published();
       expect(events.map(event => event.type)).toEqual(['run.failed']);
+      expect(events[0]).toMatchObject({
+        dedupeKey: `run.failed:${runId}`,
+        payload: {
+          failedStep: { name: 'build', index: 0 },
+          logsUrl: 'https://logs.test/0',
+          triggeredByUserId: run.triggeredByUserId,
+          triggeredByName: 'Alice',
+        },
+      });
+    });
+
+    it('publishes one run.failed when two failure callbacks race', async () => {
+      const { runId, token } = await startRun();
+      const results = await Promise.allSettled([
+        service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' }),
+        service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' }),
+      ]);
+      expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled']);
+      expect(await published()).toHaveLength(1);
     });
 
     it('publishes nothing for a redelivered final callback', async () => {
@@ -686,7 +714,14 @@ describe('RunService (pglite)', () => {
         type: 'gate.pending',
         subjectType: 'run_gate',
         subjectId: detail.gates[0]?.id,
-        payload: { runId, gateName: 'approve', gateItemIndex: 1, facts: { gate: 'approve' } },
+        dedupeKey: `gate.pending:${detail.gates[0]?.id}`,
+        payload: {
+          runId,
+          gateName: 'approve',
+          gateItemIndex: 1,
+          facts: { gate: 'approve' },
+          requirements: [{ role: 'deployer', count: 2 }],
+        },
       });
     });
 

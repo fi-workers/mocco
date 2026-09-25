@@ -13,7 +13,11 @@ import {
   RunNotFoundError,
   UnknownExecutorError,
 } from '@backend/domain/execution/errors';
-import { EventSubjectTypes, loadRunEventSubject } from '@backend/domain/execution/run-event-subject';
+import {
+  EventSubjectTypes,
+  governanceDedupeKey,
+  loadRunEventSubject,
+} from '@backend/domain/execution/run-event-subject';
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
@@ -256,23 +260,43 @@ export class RunService {
       type: RunEventTypes.stepFailed,
       payload: { stepIndex: dispatch.index, name: dispatch.name, executor: dispatch.executor },
     });
-    await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed);
+    await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed, {
+      failedStep: { name: dispatch.name, index: dispatch.index },
+      logsUrl: null,
+    });
   }
 
-  /** Finish a run terminally: set the state + finished_at and append the run event. */
+  /** Finish a run terminally: set the state + finished_at, append the run event, and
+   * publish `run.succeeded` / `run.failed` (with the failed step when known). */
   private async finishRun(
     run: { id: string; workspaceId: string },
     state: typeof RunStates.succeeded | typeof RunStates.failed,
     type: typeof RunEventTypes.runSucceeded | typeof RunEventTypes.runFailed,
+    failure: { failedStep: { name: string; index: number }; logsUrl: string | null } | null = null,
   ): Promise<void> {
     await this.deps.runs.update(run.workspaceId, run.id, { state, finishedAt: new Date() });
     await this.deps.events.append({ workspaceId: run.workspaceId, runId: run.id, type, payload: {} });
-    const eventType = state === RunStates.succeeded ? DomainEventTypes.runSucceeded : DomainEventTypes.runFailed;
-    await publishBestEffort(this.deps.bus, eventType, async () => ({
-      type: eventType,
+    const subject = { type: EventSubjectTypes.run, id: run.id };
+    if (state === RunStates.succeeded) {
+      await publishBestEffort(this.deps.bus, DomainEventTypes.runSucceeded, async () => ({
+        type: DomainEventTypes.runSucceeded,
+        workspaceId: run.workspaceId,
+        subject,
+        dedupeKey: governanceDedupeKey(DomainEventTypes.runSucceeded, run.id),
+        payload: await loadRunEventSubject(this.deps.runs, run.workspaceId, run.id),
+      }));
+      return;
+    }
+    await publishBestEffort(this.deps.bus, DomainEventTypes.runFailed, async () => ({
+      type: DomainEventTypes.runFailed,
       workspaceId: run.workspaceId,
-      subject: { type: EventSubjectTypes.run, id: run.id },
-      payload: await loadRunEventSubject(this.deps.runs, run.workspaceId, run.id),
+      subject,
+      dedupeKey: governanceDedupeKey(DomainEventTypes.runFailed, run.id),
+      payload: {
+        ...(await loadRunEventSubject(this.deps.runs, run.workspaceId, run.id)),
+        failedStep: failure?.failedStep ?? null,
+        logsUrl: failure?.logsUrl ?? null,
+      },
     }));
   }
 
@@ -311,11 +335,13 @@ export class RunService {
           type: DomainEventTypes.gatePending,
           workspaceId: run.workspaceId,
           subject: { type: EventSubjectTypes.runGate, id: gate.id },
+          dedupeKey: governanceDedupeKey(DomainEventTypes.gatePending, gate.id),
           payload: {
             ...subject,
             gateName: gate.name,
             gateItemIndex: index,
             facts: { ...subject.facts, gate: gate.name },
+            requirements: gate.requirements.resume.map(({ role, count }) => ({ role, count })),
           },
         };
       });
@@ -493,7 +519,10 @@ export class RunService {
     if (update.status === RunCallbackStatuses.failed) {
       await this.deps.steps.update(run.workspaceId, step.id, { status: RunStepStatuses.failed, logsUrl });
       await this.appendStepEvent(run, RunEventTypes.stepFailed, update.stepIndex, step.name);
-      await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed);
+      await this.finishRun(run, RunStates.failed, RunEventTypes.runFailed, {
+        failedStep: { name: step.name, index: update.stepIndex },
+        logsUrl: logsUrl ?? step.logsUrl,
+      });
       return;
     }
     // succeeded → settle the step, then advance to the next item (dispatch a step,
