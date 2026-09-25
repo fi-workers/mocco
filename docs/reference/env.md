@@ -80,6 +80,12 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 `CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. See [Background jobs and schedules](./jobs.md#env).
 
+## Discord vars
+
+`DISCORD_BOT_TOKEN` (the Mocco bot's token, used by every Discord call) and `DISCORD_CLIENT_ID` /
+`DISCORD_CLIENT_SECRET` (the bot install OAuth pair) configure notifications. All are optional;
+without the token, deliveries wait instead of sending. See [Notifications](./notifications.md#env).
+
 ## Scripts
 
 - `yarn dev` (→ `run-frontend`), `yarn db:generate`, `yarn db:migrate` all run through `with-env`, so `next dev`/`drizzle-kit` see the merged `env/.env.local` → `env/.env`.

@@ -236,12 +236,13 @@ Fixtures: the relay's test payloads plus payloads captured from real deliveries,
 
 - Env: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` (optional, like the GitHub
   vars; the Discord surfaces answer "not configured" when absent).
-- `GET /api/ext/discord/install?workspaceId=…` (signed-in member) issues a single-use state bound to
+- `GET /api/ext/discord/install?workspaceId=…` (signed-in owner or admin) issues a single-use state bound to
   user and workspace (`mocco_discord_connect_states`, same shape as the GitHub connect states) and
   redirects to Discord's OAuth2 authorize URL with `scope=bot identify`, `permissions` =
   View Channel + Send Messages + Embed Links + Read Message History, and the state. Adding a
   non-bot scope makes Discord return a `code`.
-- `GET /api/ext/discord/callback` consumes the state, exchanges the code, and takes the guild from
+- `GET /api/ext/discord/callback` consumes the state, checks the user is still an owner or admin,
+  exchanges the code, and takes the guild from
   the token response (not from the `guild_id` query parameter, which is only a hint). Result:
   `mocco_discord_guilds (id, workspace_id, guild_id, guild_name, installed_by_user_id, created_at,
   UNIQUE (workspace_id, guild_id))`.

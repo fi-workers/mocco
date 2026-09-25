@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { createProvider, type Provider } from '@backend/domain/auth/provider';
-import { parseMemberRoles, WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 /** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
@@ -220,7 +220,7 @@ describe('workspace (organization plugin) on pglite', () => {
 
   describe('assertAdmin', () => {
     // mocco_members_role_check stores only comma-joined known roles without spaces, so
-    // the trimming of ' admin' is covered by parseMemberRoles below.
+    // these are the role strings a member row can actually hold.
     it.each(['member,admin', 'admin', 'owner'])('passes for a member with the role %j', async role => {
       const { service, workspaceId, other } = await joined(role);
       await expect(service.assertAdmin(other.headers, workspaceId)).resolves.toBeUndefined();
@@ -244,16 +244,6 @@ describe('workspace (organization plugin) on pglite', () => {
     it("callerRoles returns the caller's stored roles as a list", async () => {
       const { service, workspaceId, other } = await joined('member,admin');
       expect(await service.callerRoles(other.headers, workspaceId)).toEqual(['member', 'admin']);
-    });
-
-    it.each([
-      ['member,admin', ['member', 'admin']],
-      [' admin', ['admin']],
-      ['admin, member', ['admin', 'member']],
-      ['owner', ['owner']],
-      ['member', ['member']],
-    ])('parseMemberRoles(%j) is %j', (role, expected) => {
-      expect(parseMemberRoles(role)).toEqual(expected);
     });
   });
 

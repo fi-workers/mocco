@@ -30,11 +30,7 @@ export const workspaceSchema = z.object({
 });
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
 
-/**
- * A member's role in a workspace. `owner` and `admin` manage workspace settings
- * (inbound sources, notification channels); `member` reads them. The stored value
- * may list several roles, comma-separated.
- */
+/** A member's role in a workspace (the vendor's organization roles; `mocco_members_role_check`). */
 export const WorkspaceMemberRoles = {
   owner: 'owner',
   admin: 'admin',

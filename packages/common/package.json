@@ -15,6 +15,7 @@
     "./jobs": "./src/jobs.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./notification": "./src/notification.ts",
+    "./notification-presets": "./src/notification-presets.ts",
     "./project": "./src/project.ts",
     "./workspace": "./src/workspace.ts"
   },

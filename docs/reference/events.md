@@ -151,6 +151,10 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
 - `createEventBus` builds subscriber services from repos and classes over its `db` (or calls a
   pure `domain/<x>/subscribers.ts` factory). It never imports an `instance.ts`, which keeps the
   composition free of import cycles (see [jobs: composition](./jobs.md#composition)).
+- Registered today: the notification fan-out (`registerNotificationSubscribers`,
+  `domain/notification/subscribers.ts`) on `gate.*`, `run.*`, `sentry.*`, `vercel.*` and `github.*`
+  (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
+  the links in its messages.
 
 ## Delivery
 

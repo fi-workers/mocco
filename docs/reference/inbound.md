@@ -13,6 +13,7 @@ related:
   - ../superpowers/specs/2026-09-25-notification-relay-design.md
   - ./events.md
   - ./jobs.md
+  - ./notifications.md
 code_refs:
   - packages/backend/src/domain/inbound/InboundService.ts
   - packages/backend/src/domain/inbound/SourceService.ts
@@ -138,6 +139,17 @@ still answered `202`: the trace shows the drop.
 
 Because the dedupe key is the receipt id, a republish that races a slow original returns the same
 event instead of publishing a second one.
+
+## Routing to channels
+
+Creating a source applies no rules: channels are chosen later. The notification router's
+`notification.applyDefaultRules({ workspaceId, channelId, preset, sourceId? })` adds the preset for
+a source kind (relay design §7, `rulePresetRules` in `@mocco/common/notification-presets`):
+`sentry` → `sentry.issue.created`; `vercel` → `vercel.deployment.succeeded` with
+`{ target: 'production' }`, `.error`, `.canceled`; `github` → `github.push` with
+`{ hasCommits: true }`, the four `pull_request` types, the three `issues` types,
+`release.published` and `workflow_run.failed`. Passing `sourceId` scopes the rules to that source.
+See [notifications](./notifications.md).
 
 ## tRPC: `inbound`
 

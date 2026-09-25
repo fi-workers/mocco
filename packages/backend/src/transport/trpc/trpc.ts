@@ -12,6 +12,7 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Session } from '@mocco/common/auth';
@@ -44,6 +45,8 @@ export interface Context {
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
   inbound?: InboundDomain;
+  /** Notification channels, rules and deliveries; the notification router asserts it. */
+  notifications?: ChannelService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

@@ -8,6 +8,7 @@
 // composition free of import cycles.
 import { EventBus } from '@backend/domain/events/EventBus';
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
+import { registerNotificationSubscribers } from '@backend/domain/notification/subscribers';
 
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -16,12 +17,14 @@ export interface EventBusCompositionDeps {
   db: Db;
   queue: JobQueue;
   now: () => Date;
+  /** The app's origin (`resolveBaseOrigin`), for links in notification messages. */
+  appOrigin: string;
 }
 
 /** A bus with every subscriber registered. */
 export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   const bus = new EventBus({ events: new DomainEventRepo(deps.db), queue: deps.queue, now: deps.now });
-  // Register each subscriber here under a stable name, e.g. (the notification slice, #117):
-  //   bus.subscribe('gate.*', 'notification.fan-out', async event => await notifications.handle(event));
+  // Register each subscriber here under a stable name.
+  registerNotificationSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin });
   return bus;
 }
