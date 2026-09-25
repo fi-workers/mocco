@@ -185,7 +185,7 @@ tRPC; the create/rotate response for GitHub returns the generated secret once.
 
 ### Ingest flow (`POST /api/ext/inbound/:ingestKey`)
 
-1. Read the raw body (ADR 0011). Look up the source by `ingest_key`; unknown or paused → `404`
+1. Read the raw body as bytes (`arrayBuffer()`; see Source adapters for why not `text()`). Look up the source by `ingest_key`; unknown or paused → `404`
    with no detail.
 2. Open the secret, verify the signature for the source's kind (constant-time compare). Invalid →
    `401`, nothing written.
@@ -216,10 +216,16 @@ Retention: receipts older than 30 days are pruned by a daily job, matching domai
 `packages/backend/src/domain/inbound/sources/{sentry,vercel,github}.ts`, each exporting:
 
 ```ts
-verify(rawBody: string, headers: Headers, secret: string): boolean
-deliveryId(rawBody: string, headers: Headers): string | undefined
-parse(rawBody: string, headers: Headers): { type: InboundEventType; facts; message } | { ignored: string }
+verify(rawBody: Uint8Array, headers: Headers, secret: string): boolean   // HMAC over the exact received bytes
+decodeBody(rawBody: Uint8Array): string | undefined                       // strict UTF-8; undefined → ignored
+deliveryId(body: string, headers: Headers): string | undefined
+parse(body: string, headers: Headers): { kind: 'event'; type; facts; message } | { kind: 'ignored'; reason }
 ```
+
+The route reads the body with `arrayBuffer()`, not `text()`: `text()` strips a byte-order mark and
+replaces invalid UTF-8, so the bytes it would re-encode are not always the bytes the vendor signed.
+Every string that reaches the DB is sanitized (well-formed UTF-16, no `\u0000`), and lookups by
+payload-controlled names are own-property guarded.
 
 Payloads cross the boundary only through zod `safeParse` (lenient schemas: only the fields used).
 The relay's filters move here as *mapping* (which payloads become which event types), while the
