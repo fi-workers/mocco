@@ -15,8 +15,8 @@ export class WorkspaceNotFoundError extends NotFoundError {
 /** The caller is a member of the workspace but not an owner or admin, which the
  * operation requires. */
 export class WorkspaceAdminRequiredError extends ForbiddenError {
-  constructor(workspaceId: string) {
-    super(`Only an owner or admin of workspace ${workspaceId} can do this`);
+  constructor(workspaceId: string, options?: ErrorOptions) {
+    super(`Only an owner or admin of workspace ${workspaceId} can do this`, options);
     this.name = 'WorkspaceAdminRequiredError';
   }
 }

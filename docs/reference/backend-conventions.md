@@ -117,7 +117,7 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 - Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
 - Writes that change workspace settings (inbound sources, later notification channels) also need
   an owner or admin: `WorkspaceService.assertAdmin(headers, workspaceId)` looks up the caller's
-  own role once and throws `WorkspaceNotFoundError` (→ `NOT_FOUND`) for a non-member and
+  own roles once (`callerRoles`, better-auth `getActiveMemberRole`, comma-split and trimmed) and throws `WorkspaceNotFoundError` (→ `NOT_FOUND`) for a non-member and
   `WorkspaceAdminRequiredError` (→ `FORBIDDEN`) for a plain member. It implies membership, so an
   admin-only procedure calls it instead of `assertMember` (see `adminInboundProcedure` in the
   inbound router).

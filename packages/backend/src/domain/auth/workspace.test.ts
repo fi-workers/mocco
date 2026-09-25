@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { createProvider, type Provider } from '@backend/domain/auth/provider';
-import { hasAdminRole, WorkspaceService } from '@backend/domain/auth/WorkspaceService';
+import { parseMemberRoles, WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 /** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
@@ -219,36 +219,42 @@ describe('workspace (organization plugin) on pglite', () => {
   };
 
   describe('assertAdmin', () => {
-    it('passes for the owner and for a member whose roles include admin', async () => {
-      const { service, workspaceId, owner } = await joined('member,admin');
+    // mocco_members_role_check stores only comma-joined known roles without spaces, so
+    // the trimming of ' admin' is covered by parseMemberRoles below.
+    it.each(['member,admin', 'admin', 'owner'])('passes for a member with the role %j', async role => {
+      const { service, workspaceId, other } = await joined(role);
+      await expect(service.assertAdmin(other.headers, workspaceId)).resolves.toBeUndefined();
+    });
+
+    it('passes for the workspace creator (owner)', async () => {
+      const { service, workspaceId, owner } = await joined('member');
       await expect(service.assertAdmin(owner.headers, workspaceId)).resolves.toBeUndefined();
-      const multi = await joined('member,admin');
-      await expect(multi.service.assertAdmin(multi.other.headers, multi.workspaceId)).resolves.toBeUndefined();
     });
 
-    it('is FORBIDDEN-family for a plain member and NOT_FOUND-family for a non-member', async () => {
-      const member = await joined('member');
-      await expect(member.service.assertAdmin(member.other.headers, member.workspaceId)).rejects.toThrow(
-        WorkspaceAdminRequiredError,
-      );
-      const stranger = await joined('');
-      await expect(stranger.service.assertAdmin(stranger.other.headers, stranger.workspaceId)).rejects.toThrow(
-        WorkspaceNotFoundError,
-      );
+    it('refuses a plain member (FORBIDDEN family)', async () => {
+      const { service, workspaceId, other } = await joined('member');
+      await expect(service.assertAdmin(other.headers, workspaceId)).rejects.toThrow(WorkspaceAdminRequiredError);
     });
-  });
 
-  it.each([
-    ['owner', true],
-    ['admin', true],
-    [' admin', true],
-    ['member,admin', true],
-    ['admin, member', true],
-    ['member', false],
-    ['', false],
-    ['administrator', false],
-  ])('hasAdminRole(%j) is %s', (role, expected) => {
-    expect(hasAdminRole(role)).toBe(expected);
+    it('refuses a non-member as not found', async () => {
+      const { service, workspaceId, other } = await joined('');
+      await expect(service.assertAdmin(other.headers, workspaceId)).rejects.toThrow(WorkspaceNotFoundError);
+    });
+
+    it("callerRoles returns the caller's stored roles as a list", async () => {
+      const { service, workspaceId, other } = await joined('member,admin');
+      expect(await service.callerRoles(other.headers, workspaceId)).toEqual(['member', 'admin']);
+    });
+
+    it.each([
+      ['member,admin', ['member', 'admin']],
+      [' admin', ['admin']],
+      ['admin, member', ['admin', 'member']],
+      ['owner', ['owner']],
+      ['member', ['member']],
+    ])('parseMemberRoles(%j) is %j', (role, expected) => {
+      expect(parseMemberRoles(role)).toEqual(expected);
+    });
   });
 
   it('sign-up alone creates no workspace (zero-workspace contract for onboarding UI)', async () => {

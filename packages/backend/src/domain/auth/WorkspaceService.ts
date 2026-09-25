@@ -15,14 +15,12 @@ import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 /** Roles that may change workspace settings. */
 const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
 
-/**
- * Does a stored member role grant owner or admin? The vendor stores several roles
- * comma-separated (`member,admin`); surrounding whitespace is ignored.
- */
-export function hasAdminRole(role: string): boolean {
+/** A stored member role as a list: the vendor joins several with commas (`member,admin`);
+ * each part is trimmed. */
+export function parseMemberRoles(role: string): string[] {
   // sonarjs/null-dereference is a false positive: `role` and split()'s parts are strings.
   // eslint-disable-next-line sonarjs/null-dereference
-  return role.split(',').some(part => ADMIN_ROLES.has(part.trim()));
+  return role.split(',').map(part => part.trim());
 }
 
 export class WorkspaceService {
@@ -116,17 +114,26 @@ export class WorkspaceService {
    * this alone.
    */
   async assertAdmin(headers: Headers, workspaceId: string): Promise<void> {
-    let role: string;
+    const roles = await this.callerRoles(headers, workspaceId);
+    if (roles.every(role => !ADMIN_ROLES.has(role))) {
+      throw new WorkspaceAdminRequiredError(workspaceId);
+    }
+  }
+
+  /**
+   * The caller's roles in the workspace, one vendor lookup. The vendor stores several
+   * roles comma-separated (`member,admin`); each is trimmed. A non-member (or any vendor
+   * refusal) gets WorkspaceNotFoundError.
+   */
+  async callerRoles(headers: Headers, workspaceId: string): Promise<string[]> {
     try {
-      ({ role } = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers }));
+      const { role } = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers });
+      return parseMemberRoles(role);
     } catch (error) {
       if (isAPIError(error)) {
         throw new WorkspaceNotFoundError(workspaceId, { cause: error });
       }
       throw error;
-    }
-    if (!hasAdminRole(role)) {
-      throw new WorkspaceAdminRequiredError(workspaceId);
     }
   }
 
