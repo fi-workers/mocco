@@ -14,3 +14,6 @@ export abstract class ForbiddenError extends Error {}
  * state makes it illegal (e.g. running a commit whose config isn't runnable) —
  * maps to BAD_REQUEST. */
 export abstract class BadRequestError extends Error {}
+
+/** The request conflicts with existing state (e.g. a handle already taken) — maps to CONFLICT. */
+export abstract class ConflictError extends Error {}
