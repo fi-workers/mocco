@@ -16,6 +16,7 @@ import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { GateService } from '@backend/domain/governance/GateService';
+import { createApprovalService } from '@backend/domain/governance/instance';
 import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
@@ -91,6 +92,7 @@ describe('audit router on pglite', () => {
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     return appRouter.createCaller({
       ...createProjectDomain(t.db),
+      approvals: createApprovalService(t.db, new AuditService({ audit: new AuditRepo(t.db) })),
       auth,
       workspace,
       runs,

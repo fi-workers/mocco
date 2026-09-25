@@ -10,16 +10,17 @@ import {
   ReasonRequiredError,
 } from '@backend/domain/governance/errors';
 import { evaluateGate } from '@backend/domain/governance/evaluate-gate';
+import { checkVote, toEvaluatorVotes, VoteDenials } from '@backend/domain/governance/vote-policy';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunRepo } from '@backend/domain/execution/repos/run.repo';
-import type { ResumeVote } from '@backend/domain/governance/evaluate-gate';
 import type { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import type { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import type { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
-import type { ResumeDecision } from '@mocco/common/governance';
+import type { VoteDenial } from '@backend/domain/governance/vote-policy';
+import type { GateRequirements, ResumeDecision } from '@mocco/common/governance';
 
 /** Advance a run past a satisfied gate — the narrow slice of `RunService` the gate
  * service drives (injected as a callback to keep composition acyclic). */
@@ -45,6 +46,17 @@ const GateEventTypes = {
   gateRejected: 'gate.rejected',
   runRejected: 'run.rejected',
 } as const;
+
+/** The gate-worded domain error for a refused vote. */
+function gateVoteError(denial: VoteDenial): Error {
+  if (denial === VoteDenials.self) {
+    return new PreventSelfError();
+  }
+  if (denial === VoteDenials.notAuthorized) {
+    return new NotAuthorizedToResumeError();
+  }
+  return new ReasonRequiredError();
+}
 
 /**
  * Owns gate-resume policy: a paused run's current gate collects votes under N-of-M
@@ -92,29 +104,18 @@ export class GateService {
     await this.deps.events.append({ workspaceId, runId: run.id, type: GateEventTypes.runRejected, payload: {} });
   }
 
-  /**
-   * Build the evaluator input from ALL votes on a gate — the distinct-principal core.
-   * For each vote look up the voter's role memberships, keep those the gate requires,
-   * and emit one `resume` vote PER required role the voter holds (so the evaluator's
-   * bipartite matching lets a two-role voter fill only one slot). A `reject` vote
-   * emits a single vote (its role is irrelevant — a reject short-circuits).
-   */
-  private async buildVotes(workspaceId: string, gateId: string, requiredRoleNames: Set<string>): Promise<ResumeVote[]> {
+  /** Build the evaluator input from ALL votes on a gate (the distinct-principal core
+   * lives in the shared `toEvaluatorVotes`). */
+  private async buildVotes(workspaceId: string, gateId: string, requirements: GateRequirements) {
     const resumes = await this.deps.resumes.listByRunGate(workspaceId, gateId);
-    const perVote = await Promise.all(
-      resumes.map(async resume => {
-        const memberRoles = await this.deps.memberships.listRolesForUser(workspaceId, resume.userId);
-        const roles = memberRoles.map(role => role.name).filter(name => requiredRoleNames.has(name));
-        if (resume.decision === ResumeDecisions.reject) {
-          const role = roles[0] ?? [...requiredRoleNames][0] ?? '';
-          return [{ principalId: resume.userId, role, decision: ResumeDecisions.reject } satisfies ResumeVote];
-        }
-        return roles.map(
-          role => ({ principalId: resume.userId, role, decision: ResumeDecisions.resume }) satisfies ResumeVote,
-        );
-      }),
+    const votes = await Promise.all(
+      resumes.map(async resume => ({
+        userId: resume.userId,
+        approves: resume.decision === ResumeDecisions.resume,
+        roles: await this.deps.memberships.listRolesForUser(workspaceId, resume.userId),
+      })),
     );
-    return perVote.flat();
+    return toEvaluatorVotes(requirements, votes);
   }
 
   /** The run + its current gate after a vote — the mutation's return payload. */
@@ -156,27 +157,20 @@ export class GateService {
     }
     const { requirements } = gate;
 
-    // prevent_self (this slice = the triggerer only; the fuller identity set is
-    // deferred, fail-closed). A run whose triggerer was cleared can't match here.
-    if (requirements.prevent_self && userId === run.triggeredByUserId) {
-      throw new PreventSelfError();
-    }
-
-    // The voter must be a member of at least one role the gate requires. The role the
-    // vote counts under is recorded (nullable if that role is later deleted).
-    const requiredRoleNames = new Set(requirements.resume.map(requirement => requirement.role));
+    // The shared voter guards (prevent_self against the run's triggerer — the fuller
+    // identity set is deferred, fail-closed; required-role membership; reason_required).
     const memberRoles = await this.deps.memberships.listRolesForUser(workspaceId, userId);
-    const votedRole = memberRoles.find(role => requiredRoleNames.has(role.name));
-    if (votedRole === undefined) {
-      throw new NotAuthorizedToResumeError();
+    const check = checkVote({
+      requirements,
+      voterUserId: userId,
+      subjectOwnerUserId: run.triggeredByUserId,
+      voterRoles: memberRoles,
+      reason,
+    });
+    if (!check.ok) {
+      throw gateVoteError(check.denial);
     }
-
-    // Normalize the reason once (empty/whitespace → absent) — the reason_required guard.
-    const trimmed = reason?.trim();
-    const normalizedReason = trimmed !== undefined && trimmed !== '' ? trimmed : undefined;
-    if (requirements.reason_required && normalizedReason === undefined) {
-      throw new ReasonRequiredError();
-    }
+    const { votedRole, reason: normalizedReason } = check;
 
     // One vote per person per gate. The DB unique constraint backstops a race.
     const existing = await this.deps.resumes.findByGateAndUser(workspaceId, gate.id, userId);
@@ -193,7 +187,7 @@ export class GateService {
       reason: normalizedReason ?? null,
     });
 
-    const votes = await this.buildVotes(workspaceId, gate.id, requiredRoleNames);
+    const votes = await this.buildVotes(workspaceId, gate.id, requirements);
     const outcome = evaluateGate(requirements.resume, votes);
 
     if (outcome === GateStates.rejected) {

@@ -1,5 +1,5 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
-import { GateStates } from '@mocco/common/governance';
+import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
@@ -21,7 +21,14 @@ import {
 
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
-import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
+import type {
+  ApprovalDecision,
+  ApprovalKind,
+  ApprovalState,
+  GateRequirements,
+  GateState,
+  ResumeDecision,
+} from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
@@ -758,6 +765,78 @@ export const workspaceProducts = pgTable(
     check(
       'mocco_workspace_products_product_check',
       sql`${t.product} IN (${sqlInList(Object.values(Products).filter(product => product !== Products.governance))})`,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Approvals outside runs (#114). A pinned change any domain asks to make (OTA
+// promotion, a version-policy change, a flag changeset) collects votes under the
+// same GateRequirements a run gate uses, evaluated by the same pure evaluator.
+// `review` requests record the post-hoc review of a change applied at once.
+// ─────────────────────────────────────────────────────────────
+
+/** A request to approve (or review) one pinned change. */
+export const approvalRequests = pgTable(
+  'mocco_approval_requests',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<ApprovalKind>().notNull(),
+    // What the change is about, e.g. ('ota.version_policy', <appId>). Opaque to governance.
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    // The pinned intended (or, for a review, applied) change. Handlers apply exactly this.
+    action: jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Snapshot at creation — a later policy edit never rewrites a pending request.
+    requirements: jsonb().$type<GateRequirements>().notNull(),
+    // SET NULL: a request outlives its requester; prevent_self then can't match (fail-closed).
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    state: text().$type<ApprovalState>().notNull().default(ApprovalStates.pending),
+    expiresAt: timestamp('expires_at'),
+    resolvedAt: timestamp('resolved_at'),
+    createdAt,
+  },
+  t => [
+    index('mocco_approval_requests_workspace_state_idx').on(t.workspaceId, t.state, t.createdAt),
+    index('mocco_approval_requests_subject_idx').on(t.workspaceId, t.subjectType, t.subjectId),
+    check('mocco_approval_requests_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ApprovalKinds))})`),
+    check('mocco_approval_requests_state_check', sql`${t.state} IN (${sqlInList(Object.values(ApprovalStates))})`),
+  ],
+);
+
+/** One person's vote on an approval request. */
+export const approvalVotes = pgTable(
+  'mocco_approval_votes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => approvalRequests.id, { onDelete: 'cascade' }),
+    // RESTRICT like mocco_resumes: a vote is evidence and keeps its voter.
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    // The required role the vote counted under (SET NULL if the role is later deleted).
+    roleId: uuid('role_id').references(() => roles.id, { onDelete: 'set null' }),
+    decision: text().$type<ApprovalDecision>().notNull(),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    // One vote per person per request (and serves request-scoped listing).
+    uniqueIndex('mocco_approval_votes_request_user_uq').on(t.requestId, t.userId),
+    check(
+      'mocco_approval_votes_decision_check',
+      sql`${t.decision} IN (${sqlInList(Object.values(ApprovalDecisions))})`,
     ),
   ],
 );

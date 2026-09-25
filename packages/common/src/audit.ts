@@ -19,6 +19,11 @@ export const AuditActions = {
   credentialIssued: 'credential.issued',
   credentialDenied: 'credential.denied',
   runTriggered: 'run.triggered',
+  approvalRequested: 'approval.requested',
+  approvalApproved: 'approval.approved',
+  approvalRejected: 'approval.rejected',
+  approvalSuperseded: 'approval.superseded',
+  approvalExpired: 'approval.expired',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);

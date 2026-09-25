@@ -12,6 +12,7 @@ import { appRouter } from '@backend/transport/trpc/root';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
@@ -30,6 +31,7 @@ export interface TrpcDeps extends Services {
   runs: RunService;
   roles: RoleService;
   gates: GateService;
+  approvals: ApprovalService;
   grants: GrantService;
   audit: AuditService;
   projects: ProjectService;
@@ -59,6 +61,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         runs: deps.runs,
         roles: deps.roles,
         gates: deps.gates,
+        approvals: deps.approvals,
         grants: deps.grants,
         audit: deps.audit,
         projects: deps.projects,
@@ -80,6 +83,7 @@ export async function trpcHandler(request: Request): Promise<Response> {
     runs: getExecution().runs,
     roles: getGovernance().roles,
     gates: getGovernance().gates,
+    approvals: getGovernance().approvals,
     grants: getCredential().grants,
     audit: getAudit().audit,
     projects: getProjectDomain().projects,

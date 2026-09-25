@@ -18,6 +18,7 @@ related:
   - ../research/codepush-market.md
   - ../reference/roadmap.md
   - ../reference/project.md
+  - ../reference/approvals.md
 ---
 
 # OTA release control — phased scope and design
@@ -51,9 +52,9 @@ One rule set applies to every release change. The classification is a pure funct
 | Roll back, roll back to embedded, disable a release | relax | immediate, audited, post-hoc approval |
 | Lower minimum or recommended version, remove a blocked version | relax | immediate, audited, post-hoc approval |
 
-**Post-hoc approval.** Every relax change creates an approval request in state `pending_review` that references the applied change. It uses the same requirements as the tighten path. Until it is approved, the release screen and the audit export flag it as an unreviewed emergency change. An unreviewed change never blocks operations; it is an evidence gap the team can see.
+**Post-hoc approval.** Every relax change creates an approval request of kind `review` that references the applied change. It uses the same requirements as the tighten path. Until it is approved, the release screen and the audit export flag it as an unreviewed emergency change. An unreviewed change never blocks operations; it is an evidence gap the team can see.
 
-Implementation: the platform slice *approvals outside runs* (#114) provides `ApprovalService` and the vote policy extracted from `GateService`. This spec adds the `pending_review` state and the `review` kind to it.
+Implementation: the platform slice *approvals outside runs* (#114) provides `ApprovalService`, the `pre_approval` and `review` kinds, and the vote policy extracted from `GateService`. See [approvals reference](../reference/approvals.md).
 
 ## 3. Phase 1 — gate existing OTA tools
 
@@ -207,7 +208,7 @@ When a candidate's adoption rises and its crash rate (from a Sentry or Crashlyti
 | Needs | Phase | Status |
 |---|---|---|
 | Project/app entity (#108) | 1–5 | PR #242 |
-| Approvals outside runs (#114) + `pending_review` | 1–5 | next in this stack |
+| Approvals outside runs (#114), including `review` requests | 1–5 | stacked PR after this one |
 | SecretBox (#110) | 1 | PR #248 |
 | Public `/v1` surface on the ext app | 2 | v1 uses app id only; keys from #113 later |
 | SDK packaging (#115) | 2 (client package), 3 | open |
@@ -219,7 +220,7 @@ When a candidate's adoption rises and its crash rate (from a Sentry or Crashlyti
 
 In dependency order. Issue numbers are attached under #99.
 
-1. `feat(platform)`: approvals outside runs with post-hoc review (#114, extended here).
+1. `feat(platform)`: approvals outside runs with post-hoc review (#114).
 2. `feat(ota)`: version policy domain, direction-aware changes and history.
 3. `feat(ota)`: public version-check endpoint with caching and per-version counts.
 4. `feat(ota)`: version policy console panel.

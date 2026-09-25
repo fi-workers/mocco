@@ -34,6 +34,7 @@ export default createNextApiHandler({
       runs: execution.runs,
       roles: governance.roles,
       gates: governance.gates,
+      approvals: governance.approvals,
       grants: credential.grants,
       audit: getAudit().audit,
       projects: project.projects,

@@ -60,3 +60,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `specs/2026-09-25-ota-release-control-design.md`, `specs/2026-09-24-ota-design.md`,
   `research/codepush-technical.md`, `research/codepush-market.md`, `reference/roadmap.md`, `index.md`
 - Source: branch `docs/ota-release-control`
+
+## 2026-09-25 — Approvals outside runs
+
+- Added the approvals reference: `pre_approval` and `review` requests, pinned requirements, the voter guards
+  shared with run gates, and the audit actions. The OTA release control design now points at it instead of a
+  `pending_review` state.
+- Docs touched: `reference/approvals.md`, `specs/2026-09-25-ota-release-control-design.md`, `index.md`
+- Source: branch `feat/approvals-outside-runs` (issue #114)
