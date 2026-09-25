@@ -1,5 +1,6 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
+import { JobStatuses } from '@mocco/common/jobs';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
@@ -23,6 +24,7 @@ import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
+import type { JobStatus } from '@mocco/common/jobs';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -759,5 +761,100 @@ export const workspaceProducts = pgTable(
       'mocco_workspace_products_product_check',
       sql`${t.product} IN (${sqlInList(Object.values(Products).filter(product => product !== Products.governance))})`,
     ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Background jobs and schedules (ADR 0014). A job is one small, idempotent unit of
+// work; `JobRunner.tick` (driven by Vercel Cron, a self-host cron or curl) claims due
+// rows with FOR UPDATE SKIP LOCKED. A schedule enqueues a job per slot, deduped by
+// `<scheduleId>:<slot>`. See docs/reference/jobs.md.
+// ─────────────────────────────────────────────────────────────
+
+/** One unit of background work. */
+export const jobs = pgTable(
+  'mocco_jobs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // The handler key (`jobs.prune`, `notification.deliver`, …).
+    kind: text().notNull(),
+    // Null for platform jobs; set for tenant work so a deleted workspace takes its jobs along.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    payload: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: text().$type<JobStatus>().notNull().default(JobStatuses.queued),
+    runAt: timestamp('run_at').notNull().defaultNow(),
+    // Incremented at claim, so a crashed run counts as an attempt.
+    attempts: integer().notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(8),
+    // Consecutive RetryAt reschedules; reset by any other outcome. Caps a handler that
+    // keeps asking to be retried later (see domain/jobs/policy.ts).
+    deferrals: integer().notNull().default(0),
+    lockedUntil: timestamp('locked_until'),
+    // The claim token of the runner holding the row; every post-claim write checks it.
+    lockedBy: text('locked_by'),
+    dedupeKey: text('dedupe_key'),
+    lastError: text('last_error'),
+    createdAt,
+    finishedAt: timestamp('finished_at'),
+  },
+  t => [
+    // The claim path: due queued jobs in run_at order.
+    index('mocco_jobs_status_run_at_idx')
+      .on(t.status, t.runAt)
+      .where(sql`${t.status} = 'queued'`),
+    // The reclaim path: running jobs whose lock expired.
+    index('mocco_jobs_locked_until_idx')
+      .on(t.lockedUntil)
+      .where(sql`${t.status} = 'running'`),
+    // At most one live job per (kind, dedupe_key); finished jobs don't block a new one.
+    uniqueIndex('mocco_jobs_kind_dedupe_key_uq')
+      .on(t.kind, t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL AND ${t.status} IN ('queued','running')`),
+    check('mocco_jobs_status_check', sql`${t.status} IN (${sqlInList(Object.values(JobStatuses))})`),
+    check('mocco_jobs_attempts_check', sql`${t.attempts} >= 0 AND ${t.maxAttempts} >= 1 AND ${t.deferrals} >= 0`),
+  ],
+);
+
+/** A recurring job: every `interval_seconds` (cron expressions are reserved, not yet evaluated). */
+export const jobSchedules = pgTable(
+  'mocco_job_schedules',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    kind: text().notNull(),
+    // Null for platform (system) schedules.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id'),
+    payload: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    cron: text(),
+    intervalSeconds: integer('interval_seconds'),
+    nextRunAt: timestamp('next_run_at').notNull(),
+    enabled: boolean().notNull().default(true),
+    lastEnqueuedAt: timestamp('last_enqueued_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    // The tick's due-schedule scan.
+    index('mocco_job_schedules_next_run_at_idx')
+      .on(t.nextRunAt)
+      .where(sql`${t.enabled}`),
+    // One system schedule per kind, so the runner can ensure them with ON CONFLICT DO NOTHING.
+    uniqueIndex('mocco_job_schedules_system_kind_uq')
+      .on(t.kind)
+      .where(sql`${t.workspaceId} IS NULL`),
+    // A project schedule is pinned to its workspace (skipped by Postgres while project_id is null).
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_job_schedules_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_job_schedules_project_check', sql`${t.projectId} IS NULL OR ${t.workspaceId} IS NOT NULL`),
+    // Exactly one of cron / interval_seconds.
+    check('mocco_job_schedules_timing_check', sql`(${t.cron} IS NULL) <> (${t.intervalSeconds} IS NULL)`),
+    check('mocco_job_schedules_interval_check', sql`${t.intervalSeconds} IS NULL OR ${t.intervalSeconds} > 0`),
   ],
 );

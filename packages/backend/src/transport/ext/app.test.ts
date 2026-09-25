@@ -144,6 +144,12 @@ describe('ext GitHub setup callback (pglite)', () => {
     return { headers, workspaceId, state };
   }
 
+  it('mounts the job tick under /api/ext and 503s without a tick secret', async () => {
+    const app = createExtApp({ auth, ...webhookDeps() });
+    expect(await app.request('/api/ext/internal/jobs/tick')).toMatchObject({ status: 503 });
+    expect(await app.request('/api/ext/internal/jobs/tick', { method: 'POST' })).toMatchObject({ status: 503 });
+  });
+
   it('redirects to sign-in when unauthenticated', async () => {
     const app = createExtApp({
       auth,

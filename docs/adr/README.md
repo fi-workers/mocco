@@ -29,5 +29,6 @@ related:
 | [0011](./0011-external-api-surface-architecture.md) | External API surface — Hono on the App Router | accepted | 2026-07-14 |
 | [0012](./0012-repository-per-table-for-db-owning-domains.md) | Repository per table for DB-owning domains | accepted | 2026-07-15 |
 | [0013](./0013-mocco-is-a-multi-product-platform.md) | Mocco is a multi-product platform — projects below workspaces, per-workspace product enablement | draft | 2026-09-25 |
+| [0014](./0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md) | Background jobs on a Postgres job table driven by a tick | draft | 2026-09-25 |
 
 > Add new decisions as `{NNNN}-{imperative-kebab}.md`. Reversals become a new ADR + `superseded_by` on the old one. No after-the-fact edits to the body.
