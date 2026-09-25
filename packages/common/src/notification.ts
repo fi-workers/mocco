@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import { GovernanceEventTypes } from './events';
+import { InboundEventTypes } from './inbound';
+
 /**
  * How loud a notification is. Senders map it to their own presentation (the
  * Discord sender picks the embed color and emoji from it); producers never pick
@@ -130,3 +133,127 @@ export type DiscordChannelConfig = z.infer<typeof discordChannelConfigSchema>;
  */
 export const ruleFilterSchema = z.record(z.string(), z.union([z.string(), z.boolean()]));
 export type RuleFilter = z.infer<typeof ruleFilterSchema>;
+
+/**
+ * An event type a rule can name: an exact type (`vercel.deployment.error`) or a
+ * dotted prefix wildcard (`github.*`, `github.pull_request.*`). Whether an exact
+ * type is known is checked by the service against the catalog.
+ */
+export const ruleEventTypeSchema = z
+  .string()
+  .regex(
+    /^[a-z][a-z_]*(?:\.[a-z][a-z_]*)*(?:\.\*)?$/u,
+    'an event type like `gate.pending` or a prefix like `github.*`',
+  );
+
+/**
+ * Default rule sets (relay design §7), applied to a channel in one action. Each
+ * rule is an event type and a filter; the customer can remove or add rules after.
+ */
+export const RulePresets = {
+  mocco: 'mocco',
+  sentry: 'sentry',
+  vercel: 'vercel',
+  github: 'github',
+} as const;
+export type RulePreset = (typeof RulePresets)[keyof typeof RulePresets];
+export const rulePresetSchema = z.enum(Object.values(RulePresets) as [RulePreset, ...RulePreset[]]);
+
+export interface PresetRule {
+  eventType: string;
+  filter: RuleFilter;
+}
+
+export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>> = {
+  [RulePresets.mocco]: [
+    { eventType: GovernanceEventTypes.gatePending, filter: {} },
+    { eventType: GovernanceEventTypes.gateResumed, filter: {} },
+    { eventType: GovernanceEventTypes.gateRejected, filter: {} },
+    { eventType: GovernanceEventTypes.runFailed, filter: {} },
+  ],
+  [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
+  [RulePresets.vercel]: [
+    { eventType: InboundEventTypes['vercel.deployment.succeeded'], filter: { target: 'production' } },
+    { eventType: InboundEventTypes['vercel.deployment.error'], filter: {} },
+    { eventType: InboundEventTypes['vercel.deployment.canceled'], filter: {} },
+  ],
+  [RulePresets.github]: [
+    { eventType: InboundEventTypes['github.push'], filter: { hasCommits: true } },
+    { eventType: InboundEventTypes['github.pull_request.opened'], filter: {} },
+    { eventType: InboundEventTypes['github.pull_request.reopened'], filter: {} },
+    { eventType: InboundEventTypes['github.pull_request.merged'], filter: {} },
+    { eventType: InboundEventTypes['github.pull_request.closed'], filter: {} },
+    { eventType: InboundEventTypes['github.issues.opened'], filter: {} },
+    { eventType: InboundEventTypes['github.issues.reopened'], filter: {} },
+    { eventType: InboundEventTypes['github.issues.closed'], filter: {} },
+    { eventType: InboundEventTypes['github.release.published'], filter: {} },
+    { eventType: InboundEventTypes['github.workflow_run.failed'], filter: {} },
+  ],
+};
+
+// Wire shapes of the `notification` tRPC router. `z.object` strips unknown keys at
+// runtime, so a repo row passed through `.output()` loses every column not listed
+// here (`secret_sealed`, `external_id`, the workspace id).
+
+export const discordGuildSchema = z.object({
+  id: z.string(),
+  guildId: z.string(),
+  guildName: z.string(),
+  createdAt: z.date(),
+});
+export type DiscordGuildDto = z.infer<typeof discordGuildSchema>;
+
+export const discordTextChannelSchema = z.object({ id: z.string(), name: z.string(), type: z.number() });
+export type DiscordTextChannelDto = z.infer<typeof discordTextChannelSchema>;
+
+export const notificationChannelSchema = z.object({
+  id: z.string(),
+  kind: channelKindSchema,
+  name: z.string(),
+  config: discordChannelConfigSchema,
+  status: channelStatusSchema,
+  disabledReason: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type NotificationChannelDto = z.infer<typeof notificationChannelSchema>;
+
+/** The test message sent when a channel is created: shown right away, so a missing
+ * permission surfaces at setup instead of on the first real event. */
+export const channelTestResultSchema = z.object({
+  sent: z.boolean(),
+  reason: z.string().nullable(),
+  /** The bot cannot reach the channel; it was created disabled. */
+  channelDisabled: z.boolean(),
+});
+export type ChannelTestResult = z.infer<typeof channelTestResultSchema>;
+
+export const notificationRuleSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  eventType: z.string(),
+  sourceId: z.string().nullable(),
+  filter: ruleFilterSchema,
+  createdAt: z.date(),
+});
+export type NotificationRuleDto = z.infer<typeof notificationRuleSchema>;
+
+export const notificationDeliverySchema = z.object({
+  id: z.string(),
+  channelId: z.string().nullable(),
+  eventId: z.string(),
+  ruleId: z.string().nullable(),
+  status: deliveryStatusSchema,
+  attempts: z.number(),
+  responseCode: z.number().nullable(),
+  error: z.string().nullable(),
+  externalMessageId: z.string().nullable(),
+  message: neutralMessageShape,
+  nextAttemptAt: z.date().nullable(),
+  sentAt: z.date().nullable(),
+  createdAt: z.date(),
+});
+export type NotificationDeliveryDto = z.infer<typeof notificationDeliverySchema>;
+
+/** Most deliveries one `deliveries` read returns. */
+export const DELIVERY_LIST_MAX = 100;

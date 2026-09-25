@@ -4,11 +4,15 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
-import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { WorkspaceRoles, type WorkspaceCreateInput } from '@mocco/common/workspace';
+
+import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { isAPIError } from '@backend/domain/auth/provider';
 
 import type { Provider } from '@backend/domain/auth/provider';
-import type { WorkspaceCreateInput } from '@mocco/common/workspace';
+
+/** Workspace roles that may change workspace-level settings (the org plugin's owner/admin). */
+const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceRoles.owner, WorkspaceRoles.admin]);
 
 export class WorkspaceService {
   constructor(private readonly provider: Provider) {}
@@ -91,6 +95,26 @@ export class WorkspaceService {
    */
   async assertMember(headers: Headers, workspaceId: string): Promise<void> {
     await this.listMembers(headers, workspaceId);
+  }
+
+  /**
+   * Assert the caller is an owner or admin of a workspace. A non-member gets
+   * WorkspaceNotFoundError (NOT_FOUND, as in `assertMember`); a plain member gets
+   * WorkspaceAdminRequiredError (FORBIDDEN). The vendor may store a comma-joined
+   * role set (`owner,admin`), so the role is split before it is checked.
+   */
+  async assertAdmin(headers: Headers, workspaceId: string, userId: string): Promise<void> {
+    const members = await this.listMembers(headers, workspaceId);
+    const member = members.find(candidate => candidate.userId === userId);
+    if (member === undefined) {
+      throw new WorkspaceNotFoundError(workspaceId);
+    }
+    // sonarjs/null-dereference is a false positive: `role` is a non-nullable string.
+    // eslint-disable-next-line sonarjs/null-dereference
+    const roles = member.role.split(',').map(role => role.trim());
+    if (roles.every(role => !ADMIN_ROLES.has(role))) {
+      throw new WorkspaceAdminRequiredError(workspaceId);
+    }
   }
 
   /**

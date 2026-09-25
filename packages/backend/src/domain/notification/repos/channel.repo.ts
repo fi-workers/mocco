@@ -1,6 +1,7 @@
 import { ChannelStatuses } from '@mocco/common/notification';
 import { and, asc, eq } from 'drizzle-orm';
 
+import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
@@ -18,8 +19,42 @@ export type NewChannel = Pick<
 export class ChannelRepo {
   constructor(private readonly db: Db) {}
 
+  /** Insert a channel. The same vendor destination twice in a workspace throws
+   * UniqueConstraintError (`mocco_notification_channels_workspace_kind_external_uq`). */
   async insert(values: NewChannel): Promise<ChannelRow> {
-    return expectOne(await this.db.insert(notificationChannels).values(values).returning());
+    try {
+      return expectOne(await this.db.insert(notificationChannels).values(values).returning());
+    } catch (error) {
+      return rethrowUniqueViolation(error);
+    }
+  }
+
+  /** Every channel of a workspace, oldest first. */
+  async findByWorkspace(workspaceId: string): Promise<ChannelRow[]> {
+    return await this.db
+      .select()
+      .from(notificationChannels)
+      .where(eq(notificationChannels.workspaceId, workspaceId))
+      .orderBy(asc(notificationChannels.createdAt), asc(notificationChannels.id));
+  }
+
+  /** Delete a channel (its rules cascade; its deliveries keep a null channel). Returns false when absent. */
+  async delete(workspaceId: string, id: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(notificationChannels)
+      .where(and(eq(notificationChannels.workspaceId, workspaceId), eq(notificationChannels.id, id)))
+      .returning({ id: notificationChannels.id });
+    return deleted.length > 0;
+  }
+
+  /** Deliver to a channel again. Returns the updated row (undefined if gone). */
+  async enable(workspaceId: string, id: string): Promise<ChannelRow | undefined> {
+    const [row] = await this.db
+      .update(notificationChannels)
+      .set({ status: ChannelStatuses.active, disabledReason: null })
+      .where(and(eq(notificationChannels.workspaceId, workspaceId), eq(notificationChannels.id, id)))
+      .returning();
+    return row;
   }
 
   async findById(workspaceId: string, id: string): Promise<ChannelRow | undefined> {

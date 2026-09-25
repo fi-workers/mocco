@@ -1081,3 +1081,39 @@ export const discordRateLimits = pgTable('mocco_discord_rate_limits', {
   bucket: text().primaryKey(),
   blockedUntil: timestamp('blocked_until').notNull(),
 });
+
+/** A Discord server the Mocco bot was installed into for a workspace (relay design §6). */
+export const discordGuilds = pgTable(
+  'mocco_discord_guilds',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Discord's guild id, taken from the OAuth token response (never the callback query).
+    guildId: text('guild_id').notNull(),
+    guildName: text('guild_name').notNull(),
+    // SET NULL: the install outlives the user who made it.
+    installedByUserId: uuid('installed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  // Its prefix serves workspace listing.
+  t => [uniqueIndex('mocco_discord_guilds_workspace_guild_uq').on(t.workspaceId, t.guildId)],
+);
+
+/** Discord bot install handshake state — single-use, TTL'd, bound to the user and workspace
+ * (same shape as mocco_github_connect_states). */
+export const discordConnectStates = pgTable(
+  'mocco_discord_connect_states',
+  {
+    state: text().primaryKey(),
+    userId: uuid('user_id').notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdAt,
+    expiresAt: timestamp('expires_at').notNull(),
+    consumedAt: timestamp('consumed_at'),
+  },
+  t => [index('mocco_discord_connect_states_workspace_idx').on(t.workspaceId)],
+);

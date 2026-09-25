@@ -19,8 +19,10 @@ import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { parseWebhook, verify } from '@backend/domain/integration/github/provider';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
+import { getNotification } from '@backend/domain/notification/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
+import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
@@ -61,6 +63,10 @@ export interface ExtDeps {
   /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
    * JOBS_TICK_SECRET is set, and the route 503s. */
   jobTick?: JobTickDeps;
+  /** The Discord bot install (`/discord/install`, `/discord/callback`); undefined when
+   * DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_BOT_TOKEN are not all set, and
+   * both routes 503. */
+  discord?: DiscordInstallDeps;
 }
 
 const WORKSPACES = '/workspaces';
@@ -253,6 +259,9 @@ export function createExtApp(deps: ExtDeps): Hono {
     return c.text('accepted', 202);
   });
 
+  // Discord bot install (relay design §6): /discord/install and /discord/callback.
+  app.route('/', createDiscordInstallRoutes({ auth: deps.auth, discord: deps.discord }));
+
   // Job tick (ADR 0014): Vercel Cron (GET), a self-host cron or curl drives JobRunner.tick.
   app.route('/', createJobTickRoutes(deps.jobTick));
 
@@ -272,8 +281,10 @@ export async function extHandler(request: Request): Promise<Response> {
   const execution = getExecution();
   const env = getEnv();
   const tickSecrets = [env.CRON_SECRET, env.JOBS_TICK_SECRET].filter(secret => secret !== undefined);
+  const services = getServices();
+  const discordInstall = getNotification().install;
   const app = createExtApp({
-    auth: getServices().auth,
+    auth: services.auth,
     connection: integration?.connection,
     provider: integration?.provider,
     commitSync: integration?.commitSync,
@@ -295,6 +306,7 @@ export async function extHandler(request: Request): Promise<Response> {
             maxJobs: DEFAULT_TICK_MAX_JOBS,
           }
         : undefined,
+    discord: discordInstall === undefined ? undefined : { install: discordInstall, workspace: services.workspace },
   });
   return await app.fetch(request);
 }

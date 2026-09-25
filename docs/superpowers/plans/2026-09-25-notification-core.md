@@ -19,8 +19,8 @@ related:
 # Notifications core implementation plan
 
 Part of #117 (platform foundations §12 F9, notification relay design §6–§8). Stacked on the domain
-events slice (#254) and the Discord client (#253). The Discord install flow, the channel picker,
-the `notification` tRPC router and the default rule presets come in the next PR
+events slice (#254) and the Discord client (#253). Part 2 (below) adds the Discord install flow, the
+channel picker, the `notification` tRPC router and the default rule presets
 (`feat/notification-discord-install`).
 
 ## Tasks
@@ -61,6 +61,34 @@ the `notification` tRPC router and the default rule presets come in the next PR
 - **Inbound types are not added to the catalog here**: the ingest slice (#243) adds them. The
   prefix subscriptions exist now and receive events once those types land; the inbound template
   branch parses `payload.message` at runtime and is tested with a hand-built event.
+
+## Part 2: Discord install, channels and the router (`feat/notification-discord-install`)
+
+1. **Schema** (migration `0016`): `mocco_discord_guilds` (unique per workspace and guild, installer
+   set null) and `mocco_discord_connect_states` (the GitHub connect-state shape).
+2. **`DiscordInstallService`**: `startInstall(userId, workspaceId)` → authorize URL with a
+   single-use, 10-minute state; `completeInstall(state, code, userId)` consumes atomically,
+   exchanges through the `DiscordOAuth` port, upserts the guild from the token response.
+3. **`ChannelService`**: guilds, a guild's text channels, channels create (bound only when the bot
+   lists the channel in the workspace's guild; test message result returned; unreachable →
+   disabled) / delete / re-enable, rules list / add / remove, `applyDefaultRules` with the presets
+   from `rulePresetRules`, recent deliveries.
+4. **Hono** `transport/ext/discord.ts`: `GET /discord/install`, `GET /discord/callback`, `503`
+   without the Discord env.
+5. **tRPC** `notification` router: member reads, owner/admin writes through
+   `WorkspaceService.assertAdmin` (new; `WorkspaceRoles` in `@mocco/common/workspace`).
+6. **Tests**: `createFakeDiscordOAuth`, install service and routes, channel service, router
+   cross-tenant and role sweeps.
+
+Decisions:
+
+- **The client names a guild by Mocco's row id and a channel by Discord's id, and the channel must
+  be listed by the bot in that guild.** The bot is shared, so trusting a channel id alone would let
+  a workspace post into any server the bot is in.
+- **A failed test message still stores the channel** (disabled when the bot cannot reach it), so the
+  reason sits next to the channel and re-enable is one action after the fix.
+- **Install is member-level, channel writes admin-level**, as the task specifies: installing the
+  bot only records a guild; nothing is sent until an admin creates a channel.
 
 ## Verification
 
