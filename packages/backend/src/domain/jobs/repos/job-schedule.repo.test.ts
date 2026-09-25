@@ -90,6 +90,14 @@ describe('JobScheduleRepo (pglite)', () => {
     expect(rows[0]).toMatchObject({ kind: 'jobs.prune', workspaceId: null, nextRunAt: T0 });
   });
 
+  it('ensureSystem updates the interval of an existing platform schedule', async () => {
+    await schedules.ensureSystem({ kind: 'jobs.prune', payload: {}, intervalSeconds: 86_400 }, T0);
+    await schedules.ensureSystem({ kind: 'jobs.prune', payload: {}, intervalSeconds: 3600 }, at(MINUTE));
+    const rows = await t.db.select().from(jobSchedules);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ intervalSeconds: 3600, nextRunAt: T0 });
+  });
+
   it('rejects a schedule with neither cron nor interval at the DB', async () => {
     await expect(t.db.insert(jobSchedules).values({ kind: 'test.bad', nextRunAt: T0 })).rejects.toThrow();
   });

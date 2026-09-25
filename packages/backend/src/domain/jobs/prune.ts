@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { defineJob, handleJob } from '@backend/domain/jobs/handlers';
+import { defineJob, handleJob, type JobHandler } from '@backend/domain/jobs/handlers';
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
 import type { JobRepo } from '@backend/domain/jobs/repos/job.repo';
@@ -17,6 +17,12 @@ export function createPruneHandler(jobs: JobRepo) {
   return handleJob(pruneJobs, async (_payload, ctx) => {
     await jobs.prune(ctx.now());
   });
+}
+
+/** The jobs domain's handlers, for the runtime registry (runtime/jobs.ts). Other domains
+ * expose the same shape from `domain/<x>/jobs.ts`. */
+export function createPruneHandlers(jobs: JobRepo): JobHandler[] {
+  return [createPruneHandler(jobs)];
 }
 
 /** Daily, as a platform schedule ensured by every tick. */

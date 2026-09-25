@@ -939,6 +939,21 @@
         }
       },
       "indexes": {
+        "mocco_job_schedules_workspace_idx": {
+          "name": "mocco_job_schedules_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "mocco_job_schedules_next_run_at_idx": {
           "name": "mocco_job_schedules_next_run_at_idx",
           "columns": [
@@ -1143,6 +1158,21 @@
           ],
           "isUnique": false,
           "where": "\"mocco_jobs\".\"status\" = 'queued'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_jobs_workspace_idx": {
+          "name": "mocco_jobs_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

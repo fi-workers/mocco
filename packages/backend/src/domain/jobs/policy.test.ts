@@ -1,6 +1,9 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
-import { JobPolicy, nextIntervalSlot, retryDelayMs } from '@backend/domain/jobs/policy';
+import { JobPolicy, JobTiming, nextIntervalSlot, retryDelayMs } from '@backend/domain/jobs/policy';
 
 const SECOND = 1000;
 const HOUR = 3600 * SECOND;
@@ -42,5 +45,25 @@ describe('nextIntervalSlot', () => {
     expect(nextIntervalSlot(slot, 60, new Date('2026-09-25T00:02:00.000Z')).toISOString()).toBe(
       '2026-09-25T00:03:00.000Z',
     );
+  });
+});
+
+describe('JobTiming', () => {
+  it('keeps visibility > function max duration > max tick budget >= default tick budget', () => {
+    // A lock must outlive the function that holds it, or a live run gets reclaimed; the
+    // tick must stop claiming before the function is killed.
+    expect(JobTiming.visibilityMs).toBeGreaterThan(JobTiming.functionMaxDurationMs);
+    expect(JobTiming.functionMaxDurationMs).toBeGreaterThan(JobTiming.maxTickBudgetMs);
+    expect(JobTiming.maxTickBudgetMs).toBeGreaterThanOrEqual(JobTiming.defaultTickBudgetMs);
+  });
+
+  it('matches the maxDuration the ext route handler exports', async () => {
+    // Next reads `maxDuration` statically, so route.ts holds a literal; this keeps it in sync.
+    const route = await readFile(
+      fileURLToPath(new URL('../../../../frontend/src/app/api/ext/[[...route]]/route.ts', import.meta.url)),
+      'utf8',
+    );
+    const match = /export const maxDuration = (\d+);/.exec(route);
+    expect(Number(match?.[1]) * 1000).toBe(JobTiming.functionMaxDurationMs);
   });
 });

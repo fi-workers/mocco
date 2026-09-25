@@ -39,8 +39,10 @@ CREATE TABLE "mocco_jobs" (
 ALTER TABLE "mocco_job_schedules" ADD CONSTRAINT "mocco_job_schedules_workspace_id_mocco_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."mocco_workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "mocco_job_schedules" ADD CONSTRAINT "mocco_job_schedules_project_workspace_fk" FOREIGN KEY ("project_id","workspace_id") REFERENCES "public"."mocco_projects"("id","workspace_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "mocco_jobs" ADD CONSTRAINT "mocco_jobs_workspace_id_mocco_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."mocco_workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "mocco_job_schedules_workspace_idx" ON "mocco_job_schedules" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "mocco_job_schedules_next_run_at_idx" ON "mocco_job_schedules" USING btree ("next_run_at") WHERE "mocco_job_schedules"."enabled";--> statement-breakpoint
 CREATE UNIQUE INDEX "mocco_job_schedules_system_kind_uq" ON "mocco_job_schedules" USING btree ("kind") WHERE "mocco_job_schedules"."workspace_id" IS NULL;--> statement-breakpoint
 CREATE INDEX "mocco_jobs_status_run_at_idx" ON "mocco_jobs" USING btree ("status","run_at") WHERE "mocco_jobs"."status" = 'queued';--> statement-breakpoint
+CREATE INDEX "mocco_jobs_workspace_idx" ON "mocco_jobs" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "mocco_jobs_locked_until_idx" ON "mocco_jobs" USING btree ("locked_until") WHERE "mocco_jobs"."status" = 'running';--> statement-breakpoint
 CREATE UNIQUE INDEX "mocco_jobs_kind_dedupe_key_uq" ON "mocco_jobs" USING btree ("kind","dedupe_key") WHERE "mocco_jobs"."dedupe_key" IS NOT NULL AND "mocco_jobs"."status" IN ('queued','running');

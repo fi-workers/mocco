@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { defineJob, handleJob, JobHandlerRegistry, type JobHandler } from '@backend/domain/jobs/handlers';
-import { JobRunner } from '@backend/domain/jobs/JobRunner';
-import { JobPolicy } from '@backend/domain/jobs/policy';
+import { JobRunner, TickPhases } from '@backend/domain/jobs/JobRunner';
+import { JobPolicy, JobTiming } from '@backend/domain/jobs/policy';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { createPruneHandler, pruneSchedule } from '@backend/domain/jobs/prune';
 import { JobScheduleRepo } from '@backend/domain/jobs/repos/job-schedule.repo';
@@ -28,6 +28,7 @@ describe('JobRunner (pglite)', () => {
   let clock: { now: Date };
   let repo: JobRepo;
   let ran: { n: number; attempt: number }[];
+  let deadlines: Date[];
   let runner: JobRunner;
   let queue: PostgresJobQueue;
   let kicked: Promise<unknown>[];
@@ -41,11 +42,13 @@ describe('JobRunner (pglite)', () => {
     t = await createTestDb();
     clock = { now: T0 };
     ran = [];
+    deadlines = [];
     kicked = [];
     repo = new JobRepo(t.db);
     const handlers: JobHandler[] = [
       handleJob(echoJob, async (payload, ctx) => {
         ran.push({ n: payload.n, attempt: ctx.attempt });
+        deadlines.push(ctx.deadline);
       }),
       handleJob(failJob, async () => {
         throw new Error('boom');
@@ -97,6 +100,36 @@ describe('JobRunner (pglite)', () => {
     expect(ran).toEqual([{ n: 7, attempt: 1 }]);
     expect(report.outcomes.succeeded).toBe(1);
     expect(await read(job.id)).toMatchObject({ status: JobStatuses.succeeded, finishedAt: T0 });
+  });
+
+  it('passes the lock expiry to the handler as ctx.deadline', async () => {
+    await queue.enqueue(echoJob, { n: 1 });
+    await tick();
+    expect(deadlines).toEqual([new Date(T0.getTime() + JobTiming.visibilityMs)]);
+  });
+
+  it('keeps draining when an earlier tick phase fails, and reports the error', async () => {
+    class BrokenSchedules extends JobScheduleRepo {
+      readonly failure = new Error('schedules down');
+
+      override async advanceDue(): Promise<never> {
+        throw this.failure;
+      }
+    }
+    const resilient = new JobRunner({
+      jobs: repo,
+      schedules: new BrokenSchedules(t.db, repo),
+      handlers: new JobHandlerRegistry([handleJob(echoJob, async () => {})]),
+      now,
+      random: () => 0,
+      workerId: 'test',
+    });
+    await queue.enqueue(echoJob, { n: 1 });
+
+    const report = await resilient.tick({ budgetMs: 50 * SECOND, maxJobs: 10 });
+
+    expect(report.errors).toEqual([{ phase: TickPhases.advanceDue, message: 'schedules down' }]);
+    expect(report.outcomes.succeeded).toBe(1);
   });
 
   it('retries a throwing handler with backoff and dead-letters it after max_attempts', async () => {
@@ -269,6 +302,36 @@ describe('JobRunner (pglite)', () => {
       const second = await queue.enqueue(echoJob, { n: 1 }, { dedupeKey: 'once', kick: true });
       expect(second.created).toBe(false);
       expect(kicked).toHaveLength(0);
+    });
+
+    it('enqueues inside a caller transaction and rolls back with it', async () => {
+      await expect(
+        t.db.transaction(async tx => {
+          await queue.enqueue(echoJob, { n: 1 }, { executor: tx });
+          throw new Error('rollback');
+        }),
+      ).rejects.toThrow('rollback');
+      expect(await t.db.select().from(jobs)).toHaveLength(0);
+
+      const job = await t.db.transaction(async tx => {
+        const result = await queue.enqueue(echoJob, { n: 2 }, { executor: tx });
+        return result.job;
+      });
+      expect(await read(job.id)).toMatchObject({ status: JobStatuses.queued });
+    });
+
+    it('refuses kick together with an executor; the caller kicks after commit', async () => {
+      await expect(
+        t.db.transaction(async tx => await queue.enqueue(echoJob, { n: 1 }, { executor: tx, kick: true })),
+      ).rejects.toThrow(/kick/);
+
+      const job = await t.db.transaction(async tx => {
+        const result = await queue.enqueue(echoJob, { n: 5 }, { executor: tx });
+        return result.job;
+      });
+      queue.kick(job.id);
+      await Promise.all(kicked);
+      expect(ran).toEqual([{ n: 5, attempt: 1 }]);
     });
 
     it('rejects a payload that does not match the job schema', async () => {

@@ -191,7 +191,8 @@ export class JobRepo {
 
   /**
    * Recover runs whose runner died: a running job past `locked_until` goes back to
-   * queued (the crashed attempt stays counted), or dead when it has no attempts left.
+   * queued (the crashed attempt stays counted, the RetryAt streak resets), or dead when
+   * it has no attempts left.
    * Returns the number of rows recovered.
    */
   async reclaimExpired(now: Date): Promise<number> {
@@ -200,12 +201,12 @@ export class JobRepo {
     return await this.db.transaction(async tx => {
       const dead = await tx
         .update(jobs)
-        .set({ status: JobStatuses.dead, finishedAt: now, lockedUntil: null, lastError })
+        .set({ status: JobStatuses.dead, finishedAt: now, lockedUntil: null, lastError, deferrals: 0 })
         .where(and(expired, gte(jobs.attempts, jobs.maxAttempts)))
         .returning({ id: jobs.id });
       const requeued = await tx
         .update(jobs)
-        .set({ status: JobStatuses.queued, runAt: now, lockedUntil: null, lastError })
+        .set({ status: JobStatuses.queued, runAt: now, lockedUntil: null, lastError, deferrals: 0 })
         .where(expired)
         .returning({ id: jobs.id });
       return dead.length + requeued.length;

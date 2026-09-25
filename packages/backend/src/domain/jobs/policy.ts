@@ -5,6 +5,27 @@ const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+/**
+ * Time limits that must stay ordered: `visibilityMs > functionMaxDurationMs >
+ * maxTickBudgetMs >= defaultTickBudgetMs` (unit-tested).
+ *
+ * - A claim's lock must outlive the function running it, or a run that is still going
+ *   gets reclaimed and started a second time.
+ * - A tick must stop claiming well before the platform kills the function, so the job it
+ *   is on can finish.
+ *
+ * `functionMaxDurationMs` mirrors the literal `export const maxDuration = 300` in
+ * packages/frontend/src/app/api/ext/[[...route]]/route.ts (Next reads it statically; a
+ * test keeps the two equal). `defaultTickBudgetMs` mirrors the JOBS_TICK_BUDGET_MS default.
+ */
+export const JobTiming = {
+  visibilityMs: 10 * MINUTE,
+  functionMaxDurationMs: 300 * SECOND,
+  /** JOBS_TICK_BUDGET_MS is clamped to this. */
+  maxTickBudgetMs: 240 * SECOND,
+  defaultTickBudgetMs: 50 * SECOND,
+} as const;
+
 export const JobPolicy = {
   /** First retry waits 2^1 × this. */
   baseDelayMs: 15 * SECOND,
@@ -15,7 +36,7 @@ export const JobPolicy = {
   /** Attempts a job gets unless its enqueuer says otherwise (matches the DB default). */
   defaultMaxAttempts: 8,
   /** How long a claim holds a job before `reclaimExpired` hands it to another runner. */
-  defaultVisibilityMs: 5 * MINUTE,
+  defaultVisibilityMs: JobTiming.visibilityMs,
   /**
    * RetryAt reschedules in a row that do not spend an attempt. Past this, each further
    * RetryAt counts as an attempt, so a handler that always asks for "later" still ends

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { JobTiming } from '@backend/domain/jobs/policy';
+
 const base = {
   DATABASE_URL: 'postgres://x',
   GITHUB_APP_ID: '4284809',
@@ -71,7 +73,7 @@ describe('getEnv', () => {
     const env = getEnv();
     expect(env.CRON_SECRET).toBeUndefined();
     expect(env.JOBS_TICK_SECRET).toBeUndefined();
-    expect(env.JOBS_TICK_BUDGET_MS).toBe(50_000);
+    expect(env.JOBS_TICK_BUDGET_MS).toBe(JobTiming.defaultTickBudgetMs);
   });
 
   it('parses the job tick vars when set', async () => {

@@ -43,12 +43,19 @@ export class JobScheduleRepo {
     return expectOne(await this.db.insert(jobSchedules).values(values).returning());
   }
 
-  /** Create the platform schedule for `kind` if it doesn't exist; first run at `now`. */
+  /** Create the platform schedule for `kind` (first run at `now`), or update its interval
+   * when the code changed it. `next_run_at` is left alone; the new interval applies from
+   * the next slot. Writes nothing when the interval is unchanged. */
   async ensureSystem(schedule: SystemSchedule, now: Date): Promise<void> {
     await this.db
       .insert(jobSchedules)
       .values({ ...schedule, workspaceId: null, nextRunAt: now })
-      .onConflictDoNothing({ target: jobSchedules.kind, where: sql.raw('workspace_id IS NULL') });
+      .onConflictDoUpdate({
+        target: jobSchedules.kind,
+        targetWhere: sql.raw('workspace_id IS NULL'),
+        set: { intervalSeconds: schedule.intervalSeconds },
+        setWhere: sql`${jobSchedules.intervalSeconds} IS DISTINCT FROM excluded.interval_seconds`,
+      });
   }
 
   /**
@@ -72,28 +79,28 @@ export class JobScheduleRepo {
         .orderBy(asc(jobSchedules.nextRunAt))
         .limit(limit)
         .for('update', { skipLocked: true });
-      const results = await Promise.all(
-        due.map(async schedule => {
-          const nextRunAt = next(schedule, now);
-          if (nextRunAt === null) {
-            await tx.update(jobSchedules).set({ enabled: false }).where(eq(jobSchedules.id, schedule.id));
-            return null;
-          }
-          const { job, created } = await this.jobs.insert(
-            {
-              kind: schedule.kind,
-              payload: schedule.payload,
-              workspaceId: schedule.workspaceId,
-              runAt: now,
-              dedupeKey: `${schedule.id}:${schedule.nextRunAt.toISOString()}`,
-            },
-            tx,
-          );
-          await tx.update(jobSchedules).set({ nextRunAt, lastEnqueuedAt: now }).where(eq(jobSchedules.id, schedule.id));
-          return { scheduleId: schedule.id, jobId: job.id, created };
-        }),
-      );
-      return results.filter(result => result !== null);
+      // One statement at a time: a transaction is one connection, and pg deprecates
+      // concurrent queries on a single client.
+      return await due.reduce<Promise<ScheduledJob[]>>(async (previous, schedule) => {
+        const done = await previous;
+        const nextRunAt = next(schedule, now);
+        if (nextRunAt === null) {
+          await tx.update(jobSchedules).set({ enabled: false }).where(eq(jobSchedules.id, schedule.id));
+          return done;
+        }
+        const { job, created } = await this.jobs.insert(
+          {
+            kind: schedule.kind,
+            payload: schedule.payload,
+            workspaceId: schedule.workspaceId,
+            runAt: now,
+            dedupeKey: `${schedule.id}:${schedule.nextRunAt.toISOString()}`,
+          },
+          tx,
+        );
+        await tx.update(jobSchedules).set({ nextRunAt, lastEnqueuedAt: now }).where(eq(jobSchedules.id, schedule.id));
+        return [...done, { scheduleId: schedule.id, jobId: job.id, created }];
+      }, Promise.resolve([]));
     });
   }
 }

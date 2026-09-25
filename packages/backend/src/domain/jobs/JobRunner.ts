@@ -18,6 +18,21 @@ export const JobOutcomes = {
 } as const;
 export type JobOutcome = (typeof JobOutcomes)[keyof typeof JobOutcomes];
 
+/** The steps of a tick. Each is isolated: one failing is logged and reported, and the
+ * rest still run, so a broken schedule never stops queued jobs from draining. */
+export const TickPhases = {
+  ensureSchedules: 'ensureSchedules',
+  reclaimExpired: 'reclaimExpired',
+  advanceDue: 'advanceDue',
+  drain: 'drain',
+} as const;
+export type TickPhase = (typeof TickPhases)[keyof typeof TickPhases];
+
+export interface TickError {
+  phase: TickPhase;
+  message: string;
+}
+
 export interface TickOptions {
   /** Stop claiming new jobs once this much time has passed since the tick started. */
   budgetMs: number;
@@ -31,6 +46,8 @@ export interface TickReport {
   scheduled: number;
   ran: number;
   outcomes: Record<JobOutcome, number>;
+  /** Phases that threw (empty on a clean tick). */
+  errors: TickError[];
 }
 
 export interface JobRunnerDeps {
@@ -57,6 +74,20 @@ const tally = (outcomes: readonly JobOutcome[]): Record<JobOutcome, number> =>
     lost: 0,
   });
 
+/** Run one tick phase; a throw is logged and returned as a TickError instead. */
+async function guarded<T>(
+  phase: TickPhase,
+  fallback: T,
+  step: () => Promise<T>,
+): Promise<{ value: T; error?: TickError }> {
+  try {
+    return { value: await step() };
+  } catch (error) {
+    console.error(`[jobs] tick phase ${phase} failed`, error);
+    return { value: fallback, error: { phase, message: describeError(error) } };
+  }
+}
+
 /** A post-claim write that matched no row means another runner reclaimed the job. */
 const unlessLost = (isWritten: boolean, outcome: JobOutcome): JobOutcome => (isWritten ? outcome : JobOutcomes.lost);
 
@@ -74,21 +105,27 @@ export class JobRunner {
     this.visibilityMs = deps.visibilityMs ?? JobPolicy.defaultVisibilityMs;
   }
 
-  private async drain(
-    deadline: number,
-    remaining: number,
-    done: readonly Job[],
-    outcomes: readonly JobOutcome[],
-  ): Promise<readonly JobOutcome[]> {
+  /** Run due jobs one at a time. `outcomes` is appended to in place, so a failure
+   * mid-drain still reports what already ran. */
+  private async drain(deadline: number, remaining: number, done: readonly Job[], outcomes: JobOutcome[]) {
     if (remaining <= 0 || this.deps.now().getTime() >= deadline) {
-      return outcomes;
+      return;
     }
     const [job] = await this.claim({ excludeIds: done.map(entry => entry.id) });
     if (!job) {
-      return outcomes;
+      return;
     }
-    const outcome = await this.execute(job);
-    return await this.drain(deadline, remaining - 1, [...done, job], [...outcomes, outcome]);
+    outcomes.push(await this.execute(job));
+    await this.drain(deadline, remaining - 1, [...done, job], outcomes);
+  }
+
+  private async ensureSchedules(): Promise<void> {
+    const { schedules, systemSchedules = [] } = this.deps;
+    // Sequential: pg deprecates concurrent queries on one client.
+    await systemSchedules.reduce<Promise<void>>(async (previous, schedule) => {
+      await previous;
+      await schedules.ensureSystem(schedule, this.deps.now());
+    }, Promise.resolve());
   }
 
   private async claim(filter: { id?: string; excludeIds?: readonly string[] }): Promise<Job[]> {
@@ -123,6 +160,7 @@ export class JobRunner {
         attempt: job.attempts,
         workspaceId: job.workspaceId,
         now: this.deps.now,
+        deadline: job.lockedUntil ?? new Date(this.deps.now().getTime() + this.visibilityMs),
       });
     } catch (error) {
       return error instanceof RetryAt ? await this.deferred(job, error) : await this.failed(job, error);
@@ -165,21 +203,31 @@ export class JobRunner {
   }
 
   async tick(options: TickOptions): Promise<TickReport> {
-    const { jobs, schedules, systemSchedules = [] } = this.deps;
+    const { jobs, schedules } = this.deps;
     const deadline = this.deps.now().getTime() + options.budgetMs;
-    await Promise.all(systemSchedules.map(async schedule => await schedules.ensureSystem(schedule, this.deps.now())));
-    const reclaimed = await jobs.reclaimExpired(this.deps.now());
-    const enqueued = await schedules.advanceDue({
-      now: this.deps.now(),
-      limit: options.maxJobs,
-      next: nextScheduleRun,
+    const ensured = await guarded(TickPhases.ensureSchedules, undefined, async () => {
+      await this.ensureSchedules();
     });
-    const outcomes = await this.drain(deadline, options.maxJobs, [], []);
+    const reclaimed = await guarded(
+      TickPhases.reclaimExpired,
+      0,
+      async () => await jobs.reclaimExpired(this.deps.now()),
+    );
+    const enqueued = await guarded(
+      TickPhases.advanceDue,
+      [],
+      async () => await schedules.advanceDue({ now: this.deps.now(), limit: options.maxJobs, next: nextScheduleRun }),
+    );
+    const outcomes: JobOutcome[] = [];
+    const drained = await guarded(TickPhases.drain, undefined, async () => {
+      await this.drain(deadline, options.maxJobs, [], outcomes);
+    });
     return {
-      reclaimed,
-      scheduled: enqueued.filter(entry => entry.created).length,
+      reclaimed: reclaimed.value,
+      scheduled: enqueued.value.filter(entry => entry.created).length,
       ran: outcomes.length,
       outcomes: tally(outcomes),
+      errors: [ensured.error, reclaimed.error, enqueued.error, drained.error].filter(error => error !== undefined),
     };
   }
 

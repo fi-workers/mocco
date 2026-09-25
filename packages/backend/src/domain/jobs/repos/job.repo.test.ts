@@ -1,5 +1,5 @@
 import { JobStatuses } from '@mocco/common/jobs';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
@@ -196,12 +196,29 @@ describe('JobRepo (pglite)', () => {
       expect(await read(live.id)).toMatchObject({ status: JobStatuses.running });
     });
 
+    it('resets the consecutive deferral count of a reclaimed job', async () => {
+      await enqueue();
+      await repo.defer(await claimOne(), { runAt: T0, reason: 'later', refundAttempt: true });
+      await repo.claim({ now: T0, limit: 1, visibilityMs: MINUTE, workerId: 'w1' });
+      await repo.reclaimExpired(at(2 * MINUTE));
+      const [row] = await t.db.select().from(jobs);
+      expect(row).toMatchObject({ status: JobStatuses.queued, deferrals: 0 });
+    });
+
     it('dead-letters an expired job that has no attempts left', async () => {
       const job = await enqueue({ maxAttempts: 1 });
       await repo.claim({ now: T0, limit: 1, visibilityMs: MINUTE, workerId: 'w1', id: job.id });
       expect(await repo.reclaimExpired(at(2 * MINUTE))).toBe(1);
       expect(await read(job.id)).toMatchObject({ status: JobStatuses.dead, finishedAt: at(2 * MINUTE) });
     });
+  });
+
+  it('indexes workspace_id on both job tables', async () => {
+    const result = await t.db.execute<{ indexname: string }>(
+      sql`SELECT indexname FROM pg_indexes WHERE tablename IN ('mocco_jobs', 'mocco_job_schedules')`,
+    );
+    const names = result.rows.map(row => row.indexname);
+    expect(names).toEqual(expect.arrayContaining(['mocco_jobs_workspace_idx', 'mocco_job_schedules_workspace_idx']));
   });
 
   describe('prune', () => {

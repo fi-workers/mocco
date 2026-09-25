@@ -18,8 +18,9 @@ import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/g
 import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { parseWebhook, verify } from '@backend/domain/integration/github/provider';
 import { getIntegration } from '@backend/domain/integration/instance';
-import { DEFAULT_TICK_MAX_JOBS, getJobs } from '@backend/domain/jobs/instance';
+import { JobTiming } from '@backend/domain/jobs/policy';
 import { getEnv } from '@backend/infra/config/env';
+import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
@@ -56,9 +57,8 @@ export interface ExtDeps {
   webhookSecret: string | undefined;
   /** Injection seam: prod passes `@vercel/functions`'s waitUntil; tests pass a
    * synchronous collector so the deferred sync is observable without vi.mock. */
-  waitUntil: (
-    promise: Promise<unknown>,
-  ) => void; /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
+  waitUntil: (promise: Promise<unknown>) => void;
+  /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
    * JOBS_TICK_SECRET is set, and the route 503s. */
   jobTick?: JobTickDeps;
 }
@@ -288,9 +288,10 @@ export async function extHandler(request: Request): Promise<Response> {
     jobTick:
       tickSecrets.length > 0
         ? {
-            runner: getJobs().runner,
+            runner: getJobRunner(),
             secrets: tickSecrets,
-            budgetMs: env.JOBS_TICK_BUDGET_MS,
+            // Clamped so a misconfigured budget can't outlast the function (JobTiming).
+            budgetMs: Math.min(env.JOBS_TICK_BUDGET_MS, JobTiming.maxTickBudgetMs),
             maxJobs: DEFAULT_TICK_MAX_JOBS,
           }
         : undefined,

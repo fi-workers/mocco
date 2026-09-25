@@ -14,6 +14,11 @@ export interface JobContext {
   attempt: number;
   workspaceId: string | null;
   now: () => Date;
+  /** When this run's lock expires (`locked_until`). After it, the job may be reclaimed and
+   * started again by another runner while this run is still going, so a long handler
+   * should stop starting new side effects past it, and every side effect must tolerate
+   * running twice. */
+  deadline: Date;
 }
 
 /** A registered handler. `run` resolves on success; it throws to fail (generic backoff)

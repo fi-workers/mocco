@@ -804,6 +804,8 @@ export const jobs = pgTable(
     index('mocco_jobs_status_run_at_idx')
       .on(t.status, t.runAt)
       .where(sql`${t.status} = 'queued'`),
+    // Workspace-scoped reads and the FK cascade on workspace delete.
+    index('mocco_jobs_workspace_idx').on(t.workspaceId),
     // The reclaim path: running jobs whose lock expired.
     index('mocco_jobs_locked_until_idx')
       .on(t.lockedUntil)
@@ -838,6 +840,8 @@ export const jobSchedules = pgTable(
     updatedAt,
   },
   t => [
+    // Workspace-scoped reads and the FK cascade on workspace delete.
+    index('mocco_job_schedules_workspace_idx').on(t.workspaceId),
     // The tick's due-schedule scan.
     index('mocco_job_schedules_next_run_at_idx')
       .on(t.nextRunAt)
