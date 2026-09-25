@@ -6,6 +6,7 @@ import { getCredential } from '@mocco/backend/credential/instance';
 import { getExecution } from '@mocco/backend/execution/instance';
 import { getGovernance } from '@mocco/backend/governance/instance';
 import { getIntegration } from '@mocco/backend/integration/instance';
+import { getProjectDomain } from '@mocco/backend/project/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
@@ -23,6 +24,7 @@ export default createNextApiHandler({
     const execution = getExecution();
     const governance = getGovernance();
     const credential = getCredential();
+    const project = getProjectDomain();
     return {
       auth,
       workspace,
@@ -34,6 +36,8 @@ export default createNextApiHandler({
       gates: governance.gates,
       grants: credential.grants,
       audit: getAudit().audit,
+      projects: project.projects,
+      products: project.products,
       session: await auth.getSession(headers),
       headers,
     };

@@ -5,7 +5,7 @@ okf_version: "0.1"
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-09-24
+updated: 2026-09-25
 confidence: high
 owner: andrea
 tags: [index, moc]
@@ -38,6 +38,7 @@ related:
 - [0010 — `.mocco.yml` lean core; enforcement invariants are broker-side](./adr/0010-mocco-yml-lean-core-and-enforcement-invariants.md)
 - [0011 — External API surface: Hono on the App Router](./adr/0011-external-api-surface-architecture.md)
 - [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
+- [0013 — Mocco is a multi-product platform (draft)](./adr/0013-mocco-is-a-multi-product-platform.md)
 
 ## Implementation
 
@@ -66,6 +67,7 @@ related:
 - [Feature map — MVP scope](./reference/feature-map.md) — deploy governance MVP vs Post-MVP
 - [Prototype scope & IA](./specs/2026-06-30-prototype-scope.md) — click-through screen definitions ([prototype itself](./prototype/README.md))
 - [Workspace model](./reference/workspace.md) — tables, invariants, contracts, known gaps
+- [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access

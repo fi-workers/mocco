@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -42,3 +42,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `meta/changelog.md`, `guides/agent-orchestration.md`, `guides/pr-workflow.md`, `reference/env.md`, `superpowers/specs/*`,
   `superpowers/plans/*`
 - Source: branch `chore/agent-harness`
+
+## 2026-09-25 — Projects and product enablement (ADR 0013)
+
+- Added ADR 0013 (draft): projects sit below workspaces and scope every product after deploy governance; products
+  are enabled per workspace, governance always on. Added the project model reference and pointed the backend
+  conventions at the shared project procedures and the unique-constraint error path.
+- Docs touched: `adr/0013-mocco-is-a-multi-product-platform.md`, `adr/README.md`, `reference/project.md`,
+  `reference/backend-conventions.md`, `index.md`
+- Source: branch `feat/platform-projects` (issue #108)

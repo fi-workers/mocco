@@ -1,5 +1,6 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
+import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
@@ -15,12 +16,14 @@ import {
   unique,
   check,
   foreignKey,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
+import type { AppPlatform, Product } from '@mocco/common/project';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
@@ -239,6 +242,8 @@ export const repos = pgTable(
       name: 'mocco_repos_connection_workspace_fk',
     }),
     check('mocco_repos_status_check', sql`${t.status} IN ('active','inactive')`),
+    // A UNIQUE CONSTRAINT so mocco_project_repos' composite FK can reference (id, workspace_id).
+    unique('mocco_repos_id_workspace_uq').on(t.id, t.workspaceId),
   ],
 );
 
@@ -633,4 +638,126 @@ export const auditLog = pgTable(
     createdAt,
   },
   t => [index('mocco_audit_log_workspace_seq_idx').on(t.workspaceId, t.seq)],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Projects & product enablement (ADR 0013). A workspace stays the team/billing
+// boundary; a project is "a product the team ships" and scopes every product line
+// after deploy governance. A project has apps (one per build target) and links to
+// repos. Governance data (runs, gates, audit) stays workspace-scoped and relates to
+// projects only through mocco_project_repos, so the governance domain is unchanged.
+// See docs/reference/project.md.
+// ─────────────────────────────────────────────────────────────
+
+/** SQL `IN (...)` list from a constants object — keeps DB checks tied to the SSOT in
+ * @mocco/common instead of a hand-copied string list. Values are our own constants. */
+const sqlInList = (values: readonly string[]) => sql.raw(values.map(value => `'${value}'`).join(','));
+
+/** A product the team ships (e.g. "Acme mobile"), scoped to a workspace. */
+export const projects = pgTable(
+  'mocco_projects',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    // url-safe, unique per workspace; later the default public-site host label.
+    handle: text().notNull(),
+    defaultLocale: text('default_locale').notNull().default('en'),
+    createdAt,
+    updatedAt,
+    // Archived projects keep their data but are hidden from default listings.
+    archivedAt: timestamp('archived_at'),
+  },
+  t => [
+    // Serves workspace-scoped listing (composite prefix), so no standalone workspace_id index is needed.
+    uniqueIndex('mocco_projects_workspace_handle_uq').on(t.workspaceId, t.handle),
+    // A UNIQUE CONSTRAINT so child tables' composite FKs can reference (id, workspace_id).
+    unique('mocco_projects_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_projects_handle_check', sql`${t.handle} ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'`),
+  ],
+);
+
+/** A build target of a project (iOS app, Android app, web app, …). */
+export const projectApps = pgTable(
+  'mocco_project_apps',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    platform: text().$type<AppPlatform>().notNull(),
+    name: text().notNull(),
+    // iOS bundle id / Android application id.
+    bundleId: text('bundle_id'),
+    // App Store numeric id / Play package — used by reviews and deep links later.
+    storeAppId: text('store_app_id'),
+    // Origin allowlist for publishable keys and embedded widgets later.
+    webOrigins: text('web_origins').array(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_project_apps_project_idx').on(t.projectId),
+    // One app per bundle id per platform within a project.
+    uniqueIndex('mocco_project_apps_project_platform_bundle_uq')
+      .on(t.projectId, t.platform, t.bundleId)
+      .where(sql`${t.bundleId} IS NOT NULL`),
+    // Composite FK guards the denormalized workspace_id against drift.
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_project_apps_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_project_apps_platform_check', sql`${t.platform} IN (${sqlInList(Object.values(AppPlatforms))})`),
+  ],
+);
+
+/** A repo linked to a project. A repo may belong to several projects (a monorepo). */
+export const projectRepos = pgTable(
+  'mocco_project_repos',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    repoId: uuid('repo_id').notNull(),
+    createdAt,
+  },
+  t => [
+    primaryKey({ columns: [t.projectId, t.repoId], name: 'mocco_project_repos_pk' }),
+    // Serves the run → project lookup (a run knows its repo).
+    index('mocco_project_repos_repo_idx').on(t.repoId),
+    // Both composite FKs pin project and repo to the SAME workspace — a project can
+    // never link a foreign workspace's repo, even through a direct insert.
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_project_repos_project_workspace_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.repoId, t.workspaceId],
+      foreignColumns: [repos.id, repos.workspaceId],
+      name: 'mocco_project_repos_repo_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A product a workspace has turned on. `governance` is implicit and never stored. */
+export const workspaceProducts = pgTable(
+  'mocco_workspace_products',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    product: text().$type<Product>().notNull(),
+    enabledAt: timestamp('enabled_at').notNull().defaultNow(),
+    // SET NULL: the enablement outlives the user who turned it on.
+    enabledByUserId: uuid('enabled_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  },
+  t => [
+    primaryKey({ columns: [t.workspaceId, t.product], name: 'mocco_workspace_products_pk' }),
+    check(
+      'mocco_workspace_products_product_check',
+      sql`${t.product} IN (${sqlInList(Object.values(Products).filter(product => product !== Products.governance))})`,
+    ),
+  ],
 );

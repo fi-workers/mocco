@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-07-20
+updated: 2026-09-25
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -66,6 +66,8 @@ Vendor/DB failures become **domain errors at the service**; the **transport maps
    export class WorkspaceNotFoundError extends NotFoundError { /* … */ }
    ```
 
+   Unique-constraint violations follow the same path: the repo catches the driver error with `rethrowUniqueViolation` and throws the DB-layer `UniqueConstraintError` naming the constraint (like `EntityNotFoundError`); the service maps the constraints it owns to a domain error extending `ConflictError` (→ `CONFLICT`).
+
 3. **Map per router, not centrally.** Each router declares a **router-scoped middleware** composed onto `protectedProcedure` and reuses it across its procedures. A single central middleware would accumulate every domain's mapping over time and couple the transport core to all domains; keeping the mapping with the router that raises the error keeps `trpc.ts` generic and ownership obvious.
 
    ```ts
@@ -110,7 +112,28 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 - Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
 - Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
 
+**Project-scoped domains** (every product after deploy governance, [ADR 0013](../adr/0013-mocco-is-a-multi-product-platform.md)) don't hand-roll this: their routers compose `protectedProjectProcedure` / `productProcedure(product)` from `transport/trpc/project-procedures.ts`, which run `assertMember` and prove the `projectId` belongs to the workspace before any resolver. See [project model](./project.md).
+
 This can't be statically lint-enforced, so it is covered by **cross-tenant tests**: a non-member passing the victim's `workspaceId` must be rejected on every procedure (read, write, and install).
+
+## Secrets at rest (SecretBox)
+
+Third-party secrets a customer gives Mocco (webhook signing secrets, bot tokens, store keys) are
+sealed with `SecretBox` (`infra/crypto/secret-box.ts`, AES-256-GCM) before they reach the DB.
+
+- Columns holding sealed values are named `*_sealed`. They never appear in a zod `.output()`;
+  services project `hasSecret: boolean` instead, and a secret Mocco generates is returned once, at
+  creation or rotation.
+- The AAD is `'<table>:<row id>'`, so a sealed value copied into another row fails to open. The
+  service generates the row's id with `randomUUID()` (from `node:crypto`), seals with it, and passes
+  both on insert. This is the one exception to DB-generated uuids; the column keeps its
+  `defaultRandom()` default, and `*_sealed` columns stay `NOT NULL`.
+- Keys come from `SECRETS_ENCRYPTION_KEYS` (`keyId:base64key,…`). The first key seals, all keys
+  open. To rotate: prepend a new key, reseal (`needsReseal` finds old values; the `secrets.reseal`
+  job lands with the job queue), then drop the old key.
+- Services receive the box by constructor injection (`getSecretBox()` in the composition root);
+  tests build one with a random key. A deploy without the env var boots; only sealing fails, with
+  a `SecretBoxError` naming the variable.
 
 ## Types & schemas
 

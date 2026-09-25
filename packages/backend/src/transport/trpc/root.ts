@@ -4,6 +4,8 @@ import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
+import { productRouter } from '@backend/transport/trpc/routers/product';
+import { projectRouter } from '@backend/transport/trpc/routers/project';
 import { roleRouter } from '@backend/transport/trpc/routers/role';
 import { runRouter } from '@backend/transport/trpc/routers/run';
 import { workspaceRouter } from '@backend/transport/trpc/routers/workspace';
@@ -19,6 +21,8 @@ export const appRouter = router({
   role: roleRouter,
   credentialGrant: credentialGrantRouter,
   audit: auditRouter,
+  project: projectRouter,
+  product: productRouter,
 });
 
 export type AppRouter = typeof appRouter;

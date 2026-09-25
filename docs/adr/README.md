@@ -4,7 +4,7 @@ description: Chronological index of all architecture decision records with their
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-09-24
+updated: 2026-09-25
 confidence: high
 owner: andrea
 tags: [adr, index]
@@ -28,5 +28,6 @@ related:
 | [0010](./0010-mocco-yml-lean-core-and-enforcement-invariants.md) | `.mocco.yml` stays a lean governance file; enforcement invariants are broker-side | accepted | 2026-07-12 |
 | [0011](./0011-external-api-surface-architecture.md) | External API surface — Hono on the App Router | accepted | 2026-07-14 |
 | [0012](./0012-repository-per-table-for-db-owning-domains.md) | Repository per table for DB-owning domains | accepted | 2026-07-15 |
+| [0013](./0013-mocco-is-a-multi-product-platform.md) | Mocco is a multi-product platform — projects below workspaces, per-workspace product enablement | draft | 2026-09-25 |
 
 > Add new decisions as `{NNNN}-{imperative-kebab}.md`. Reversals become a new ADR + `superseded_by` on the old one. No after-the-fact edits to the body.
