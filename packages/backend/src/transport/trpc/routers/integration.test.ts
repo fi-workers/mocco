@@ -14,7 +14,6 @@ import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { GateService } from '@backend/domain/governance/GateService';
-import { createApprovalService } from '@backend/domain/governance/instance';
 import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
@@ -32,9 +31,9 @@ import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
 import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 import type { CommitSource, InstallationVerifier, RepoLister, SourceCommit } from '@backend/domain/integration/ports';
 import type { AvailableRepoDto } from '@mocco/common/integration';
@@ -175,8 +174,7 @@ describe('integration router on pglite', () => {
     const headers = await signUpViaHttp(auth, email);
     const session = await auth.getSession(headers);
     return appRouter.createCaller({
-      ...createProjectDomain(t.db),
-      approvals: createApprovalService(t.db, new AuditService({ audit: new AuditRepo(t.db) })),
+      ...contextServices(t.db),
       auth,
       workspace,
       connection: hasConnection ? connection : undefined,
@@ -260,8 +258,7 @@ describe('integration router on pglite', () => {
     const headers = await signUpViaHttp(auth, 'revoked@example.com');
     const session = await auth.getSession(headers);
     const api = appRouter.createCaller({
-      ...createProjectDomain(t.db),
-      approvals: createApprovalService(t.db, new AuditService({ audit: new AuditRepo(t.db) })),
+      ...contextServices(t.db),
       auth,
       workspace,
       connection: revokedConnection,

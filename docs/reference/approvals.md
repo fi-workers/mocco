@@ -43,6 +43,7 @@ States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All
 - **Voter guards** are shared with run gates (`vote-policy.ts`): `prevent_self` bars the requester (a deleted requester never matches, so the guard stays fail-closed), the voter must hold a required role, `reason_required` needs a non-blank reason. Each caller maps a denial to its own error class.
 - **Distinct principals.** An approving voter contributes one evaluator vote per required role they hold, and `evaluateGate`'s bipartite matching lets them fill only one slot.
 - **One vote per person**, backed by the unique index.
+- **Superseding** only touches pending `pre_approval` requests; a pending `review` is evidence about an applied change and is never superseded.
 - **Expiry.** A vote on a request past `expires_at` marks it `expired` and is refused. `expireDue` expires the rest (to be driven by the job queue).
 - **Audit.** `approval.requested` on creation; `approval.approved` (with the approving principals and roles), `approval.rejected`, `approval.superseded` and `approval.expired` on resolution.
 

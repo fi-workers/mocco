@@ -236,9 +236,10 @@ export class ApprovalService {
     return await this.get(workspaceId, requestId);
   }
 
-  /** Supersede every pending request for a subject (a newer change replaces them). Returns how many. */
+  /** Supersede every pending pre-approval for a subject (a newer change replaces them);
+   * pending reviews are left alone. Returns how many. */
   async supersedePending(workspaceId: string, subjectType: string, subjectId: string, actorUserId: string | null) {
-    const pending = await this.deps.requests.listPendingForSubject(workspaceId, subjectType, subjectId);
+    const pending = await this.deps.requests.listPendingPreApprovalsForSubject(workspaceId, subjectType, subjectId);
     const resolved = await Promise.all(
       pending.map(
         async request =>

@@ -4,6 +4,7 @@ import { approvalRouter } from '@backend/transport/trpc/routers/approval';
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
+import { otaRouter } from '@backend/transport/trpc/routers/ota';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
 import { productRouter } from '@backend/transport/trpc/routers/product';
 import { projectRouter } from '@backend/transport/trpc/routers/project';
@@ -25,6 +26,7 @@ export const appRouter = router({
   approval: approvalRouter,
   project: projectRouter,
   product: productRouter,
+  ota: otaRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,5 +1,6 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
+import { PolicyDirections } from '@mocco/common/ota';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
@@ -30,6 +31,7 @@ import type {
   ResumeDecision,
 } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
+import type { PolicyDirection, VersionMessage, VersionPolicyRules } from '@mocco/common/ota';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -717,6 +719,8 @@ export const projectApps = pgTable(
       name: 'mocco_project_apps_project_workspace_fk',
     }).onDelete('cascade'),
     check('mocco_project_apps_platform_check', sql`${t.platform} IN (${sqlInList(Object.values(AppPlatforms))})`),
+    // A UNIQUE CONSTRAINT so per-app tables' composite FKs can reference (id, workspace_id).
+    unique('mocco_project_apps_id_workspace_uq').on(t.id, t.workspaceId),
   ],
 );
 
@@ -837,6 +841,86 @@ export const approvalVotes = pgTable(
     check(
       'mocco_approval_votes_decision_check',
       sql`${t.decision} IN (${sqlInList(Object.values(ApprovalDecisions))})`,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// OTA release control — version policy and native force update (phase 2 of
+// docs/specs/2026-09-25-ota-release-control-design.md). One policy per store app
+// (an iOS or Android project app); every applied change is kept in an append-only
+// history with its direction and, for a gated change, the approval that applied it.
+// ─────────────────────────────────────────────────────────────
+
+/** A store app's version policy: the floors that trigger hard / soft update prompts. */
+export const appVersionPolicies = pgTable(
+  'mocco_app_version_policies',
+  {
+    appId: uuid('app_id').primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    minSupportedVersion: text('min_supported_version'),
+    recommendedVersion: text('recommended_version'),
+    blockedVersions: text('blocked_versions')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    messages: jsonb()
+      .$type<Record<string, VersionMessage>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    storeUrl: text('store_url'),
+    softPromptIntervalHours: integer('soft_prompt_interval_hours').notNull().default(72),
+    // Requirements for tightening changes; null = they apply without approval.
+    approvalPolicy: jsonb('approval_policy').$type<GateRequirements>(),
+    // Incremented on every applied change; the cache key and the optimistic-concurrency token.
+    revision: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [projectApps.id, projectApps.workspaceId],
+      name: 'mocco_app_version_policies_app_workspace_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_app_version_policies_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_app_version_policies_interval_check', sql`${t.softPromptIntervalHours} BETWEEN 1 AND 8760`),
+    check('mocco_app_version_policies_revision_check', sql`${t.revision} >= 1`),
+  ],
+);
+
+/** An applied version-policy change — append-only evidence. */
+export const appVersionPolicyChanges = pgTable(
+  'mocco_app_version_policy_changes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    before: jsonb().$type<VersionPolicyRules>(),
+    after: jsonb().$type<VersionPolicyRules>().notNull(),
+    direction: text().$type<PolicyDirection>().notNull(),
+    // SET NULL: the change outlives the person who made it.
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // The approval that applied a gated change (null for ungated / relaxing changes).
+    approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    index('mocco_app_version_policy_changes_app_idx').on(t.appId, t.createdAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [projectApps.id, projectApps.workspaceId],
+      name: 'mocco_app_version_policy_changes_app_workspace_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_app_version_policy_changes_direction_check',
+      sql`${t.direction} IN (${sqlInList(Object.values(PolicyDirections))})`,
     ),
   ],
 );

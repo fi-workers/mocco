@@ -24,6 +24,8 @@ export const AuditActions = {
   approvalRejected: 'approval.rejected',
   approvalSuperseded: 'approval.superseded',
   approvalExpired: 'approval.expired',
+  versionPolicyChanged: 'ota.version_policy.changed',
+  versionPolicyApprovalStale: 'ota.version_policy.approval_stale',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);

@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
-
 import { ExecutorIds } from '@mocco/common/execution';
-import { ApprovalKinds } from '@mocco/common/governance';
+import { Products } from '@mocco/common/project';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -39,7 +37,7 @@ const signUpViaHttp = async (auth: AuthService, email: string) => {
   return new Headers({ cookie: response.headers.get('set-cookie') ?? '' });
 };
 
-describe('approval router on pglite', () => {
+describe('ota router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
   let workspace: WorkspaceService;
@@ -69,7 +67,7 @@ describe('approval router on pglite', () => {
       callbackUrl: 'http://localhost:3100/api/ext/callback',
       audit: makeAudit(),
       waitUntil: () => {
-        /* approval router tests don't exercise the run loop */
+        /* ota router tests don't exercise the run loop */
       },
     });
 
@@ -103,46 +101,88 @@ describe('approval router on pglite', () => {
     return { api: appRouter.createCaller(ctx), ctx, userId: session?.user.id ?? '' };
   };
 
-  it('lists, gets and votes on a request; approval maps FORBIDDEN for a voter without the role', async () => {
-    const owner = await signedInCaller('owner@example.com');
-    const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
-    const { role } = await owner.api.role.create({ workspaceId: ws.id, name: 'release' });
-    const request = await owner.ctx.approvals.request(ws.id, {
-      kind: ApprovalKinds.review,
-      subjectType: 'test.change',
-      subjectId: 'x',
-      action: { a: 1 },
-      requirements: { resume: [{ role: 'release', count: 1 }], prevent_self: false, reason_required: false },
-      requestedByUserId: null,
+  const policyRules = {
+    minSupportedVersion: '2.0.0',
+    recommendedVersion: null,
+    blockedVersions: [],
+    messages: { en: { title: 'Update', body: 'Please update.', action: 'Update' } },
+    storeUrl: null,
+    softPromptIntervalHours: 72,
+    approvalPolicy: null,
+  };
+
+  const setup = async (email: string) => {
+    const caller = await signedInCaller(email);
+    const { workspace: ws } = await caller.api.workspace.create({ name: 'W' });
+    const { project } = await caller.api.project.create({ workspaceId: ws.id, name: 'Acme', handle: 'acme' });
+    const { app } = await caller.api.project.addApp({
+      workspaceId: ws.id,
+      projectId: project.id,
+      platform: 'android',
+      name: 'Acme Android',
+      bundleId: 'com.acme',
     });
+    return { ...caller, scope: { workspaceId: ws.id, projectId: project.id, appId: app.id } };
+  };
 
-    const { requests } = await owner.api.approval.list({ workspaceId: ws.id });
-    expect(requests.map(row => row.id)).toEqual([request.id]);
-    await expect(
-      owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  it('is FORBIDDEN until the OTA product is enabled, then sets and reads a policy', async () => {
+    const { api, scope } = await setup('ota@example.com');
+    await expect(api.ota.versionPolicy.get(scope)).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
-    await owner.api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId: owner.userId });
-    const voted = await owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' });
-    expect(voted.request.state).toBe('approved');
-    expect(voted.votes).toHaveLength(1);
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.ota });
+    expect(await api.ota.versionPolicy.get(scope)).toEqual({ policy: null });
+
     await expect(
-      owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' }),
+      api.ota.versionPolicy.change({ ...scope, rules: policyRules, storeLiveAttested: false }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const changed = await api.ota.versionPolicy.change({ ...scope, rules: policyRules, storeLiveAttested: true });
+    expect(changed).toMatchObject({ outcome: 'applied', requestId: null });
+    const { changes } = await api.ota.versionPolicy.history(scope);
+    expect(changes).toHaveLength(1);
   });
 
-  it('a non-member gets NOT_FOUND on every approval procedure', async () => {
-    const owner = await signedInCaller('owner-2@example.com');
-    const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
-    const stranger = await signedInCaller('stranger@example.com');
-    const requestId = randomUUID();
-
-    await expect(stranger.api.approval.list({ workspaceId: ws.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(stranger.api.approval.get({ workspaceId: ws.id, requestId })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
+  it('gates a tightening change through the approval router', async () => {
+    const owner = await setup('ota-owner@example.com');
+    await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.ota });
+    const { role } = await owner.api.role.create({ workspaceId: owner.scope.workspaceId, name: 'release' });
+    const gate = { resume: [{ role: 'release', count: 1 }], prevent_self: false, reason_required: false };
+    await owner.api.ota.versionPolicy.change({
+      ...owner.scope,
+      rules: { ...policyRules, approvalPolicy: gate },
+      storeLiveAttested: true,
     });
+
+    const pending = await owner.api.ota.versionPolicy.change({
+      ...owner.scope,
+      rules: { ...policyRules, approvalPolicy: gate, minSupportedVersion: '2.1.0' },
+      storeLiveAttested: true,
+    });
+    expect(pending.outcome).toBe('pending_approval');
+
+    await owner.api.role.addMember({ workspaceId: owner.scope.workspaceId, roleId: role.id, userId: owner.userId });
+    await owner.api.approval.vote({
+      workspaceId: owner.scope.workspaceId,
+      requestId: pending.requestId ?? '',
+      decision: 'approve',
+    });
+    const { policy } = await owner.api.ota.versionPolicy.get(owner.scope);
+    expect(policy).toMatchObject({ minSupportedVersion: '2.1.0', revision: 2 });
+  });
+
+  it("a project from another workspace is NOT_FOUND even with OTA enabled in the caller's own", async () => {
+    const victim = await setup('victim@example.com');
+    const attacker = await setup('attacker@example.com');
+    await attacker.api.product.enable({ workspaceId: attacker.scope.workspaceId, product: Products.ota });
+
     await expect(
-      stranger.api.approval.vote({ workspaceId: ws.id, requestId, decision: 'approve' }),
+      attacker.api.ota.versionPolicy.get({ ...victim.scope, workspaceId: attacker.scope.workspaceId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      attacker.api.ota.versionPolicy.get({
+        workspaceId: attacker.scope.workspaceId,
+        projectId: attacker.scope.projectId,
+        appId: victim.scope.appId,
+      }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

@@ -68,3 +68,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `pending_review` state.
 - Docs touched: `reference/approvals.md`, `specs/2026-09-25-ota-release-control-design.md`, `index.md`
 - Source: branch `feat/approvals-outside-runs` (issue #114)
+
+## 2026-09-25 — OTA version policy
+
+- Added the OTA version policy reference (rules, change classification, gating, concurrency, history). Noted in the
+  approvals reference that superseding never touches pending reviews. Corrected two details in the OTA release
+  control design (where the recommended ≥ minimum rule is checked; `revision` type).
+- Docs touched: `reference/ota-version-policy.md`, `reference/approvals.md`,
+  `specs/2026-09-25-ota-release-control-design.md`, `index.md`
+- Source: branch `feat/ota-version-policy`

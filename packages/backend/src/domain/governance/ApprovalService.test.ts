@@ -213,12 +213,14 @@ describe('ApprovalService (pglite)', () => {
     expect(await service.expireDue(workspaceId)).toBe(1);
   });
 
-  it('supersedes pending requests for a subject', async () => {
+  it('supersedes pending pre-approvals for a subject, never pending reviews', async () => {
     const requester = await seedUser('release');
     await open(requester);
     await open(requester);
+    const review = await open(requester, {}, ApprovalKinds.review);
     expect(await service.supersedePending(workspaceId, SUBJECT, 'app-1', requester)).toBe(2);
-    expect(await service.list(workspaceId, { state: ApprovalStates.pending })).toHaveLength(0);
+    const pending = await service.list(workspaceId, { state: ApprovalStates.pending });
+    expect(pending.map(row => row.id)).toEqual([review.id]);
   });
 
   it('never resolves a request through another workspace', async () => {

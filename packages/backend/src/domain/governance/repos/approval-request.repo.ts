@@ -1,4 +1,4 @@
-import { ApprovalStates } from '@mocco/common/governance';
+import { ApprovalKinds, ApprovalStates } from '@mocco/common/governance';
 import { and, desc, eq, lte } from 'drizzle-orm';
 
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
@@ -68,9 +68,15 @@ export class ApprovalRequestRepo {
     return row;
   }
 
-  /** Pending requests for a subject — the ones a newer change supersedes. */
-  async listPendingForSubject(workspaceId: string, subjectType: string, subjectId: string) {
-    return await this.list(workspaceId, { state: ApprovalStates.pending, subjectType, subjectId });
+  /** Pending pre-approvals for a subject — the ones a newer change supersedes. Reviews
+   * are never superseded: they are evidence about a change that was already applied. */
+  async listPendingPreApprovalsForSubject(workspaceId: string, subjectType: string, subjectId: string) {
+    return await this.list(workspaceId, {
+      state: ApprovalStates.pending,
+      kind: ApprovalKinds.preApproval,
+      subjectType,
+      subjectId,
+    });
   }
 
   /** Pending requests whose expiry has passed. */

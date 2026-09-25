@@ -16,7 +16,6 @@ import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunService } from '@backend/domain/execution/RunService';
 import { FakeExecutor } from '@backend/domain/execution/testing/fake-executor';
 import { GateService } from '@backend/domain/governance/GateService';
-import { createApprovalService } from '@backend/domain/governance/instance';
 import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
@@ -24,11 +23,11 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
 import { providerConnections, repos } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 import type { MoccoConfig } from '@mocco/common/mocco-config';
 
@@ -106,8 +105,7 @@ describe('run router on pglite', () => {
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     return appRouter.createCaller({
-      ...createProjectDomain(t.db),
-      approvals: createApprovalService(t.db, new AuditService({ audit: new AuditRepo(t.db) })),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,
@@ -137,8 +135,7 @@ describe('run router on pglite', () => {
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     const api = appRouter.createCaller({
-      ...createProjectDomain(t.db),
-      approvals: createApprovalService(t.db, new AuditService({ audit: new AuditRepo(t.db) })),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,

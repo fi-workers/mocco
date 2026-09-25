@@ -6,6 +6,7 @@ import { getCredential } from '@mocco/backend/credential/instance';
 import { getExecution } from '@mocco/backend/execution/instance';
 import { getGovernance } from '@mocco/backend/governance/instance';
 import { getIntegration } from '@mocco/backend/integration/instance';
+import { getOtaDomain } from '@mocco/backend/ota/instance';
 import { getProjectDomain } from '@mocco/backend/project/instance';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
@@ -39,6 +40,7 @@ export default createNextApiHandler({
       audit: getAudit().audit,
       projects: project.projects,
       products: project.products,
+      versionPolicies: getOtaDomain().versionPolicies,
       session: await auth.getSession(headers),
       headers,
     };

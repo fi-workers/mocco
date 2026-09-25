@@ -19,6 +19,7 @@ related:
   - ../reference/roadmap.md
   - ../reference/project.md
   - ../reference/approvals.md
+  - ../reference/ota-version-policy.md
 ---
 
 # OTA release control — phased scope and design
@@ -138,7 +139,7 @@ A policy applies to one `mocco_project_apps` row whose platform is `ios` or `and
 | `store_url` | text, nullable. Defaults from `store_app_id`. |
 | `soft_prompt_interval_hours` | int, default 72 |
 | `approval_policy` | jsonb `GateRequirements`, nullable. Null means tighten changes apply without approval (small teams). |
-| `revision` | bigint, incremented on every change. It is the cache key. |
+| `revision` | int, incremented on every change. It is the cache key and the optimistic-concurrency token. |
 | `updated_at` | |
 
 `mocco_app_version_policy_changes` (append-only history): `id`, `workspace_id`, `app_id`, `before` jsonb, `after` jsonb, `direction` (`tighten` \| `relax`), `actor_user_id`, `approval_request_id` (nullable), `reason`, `created_at`.
@@ -146,7 +147,7 @@ A policy applies to one `mocco_project_apps` row whose platform is `ios` or `and
 ### Invariants
 
 - Versions are dotted numeric (`^\d+(\.\d+){0,3}$`) and compare segment by segment, with missing segments treated as 0 (`2.3` equals `2.3.0`). One pure `compareVersions` in `@mocco/common`, with property tests.
-- `recommended_version ≥ min_supported_version` when both are set (checked in the service and as a DB check on the parsed form, which is stored alongside).
+- `recommended_version ≥ min_supported_version` when both are set (checked by the shared rules schema at the boundary; versions are stored as text).
 - **Store-live check.** A tighten change to version X requires confirmation that X is live on the store. In v1 this is an explicit operator attestation, recorded in the change and the audit entry. Once store sync (#94) exists, it becomes an automatic check against the store's current version.
 - A tighten change on an app with an `approval_policy` becomes an `ApprovalService` request whose pinned action is the full `after` policy. It applies only if the policy's `revision` has not moved since the request was made; otherwise the request is superseded.
 
