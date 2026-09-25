@@ -124,6 +124,15 @@ describe('exchangeCode', () => {
     });
   });
 
+  it('marks a 429 as transient', async () => {
+    const { client } = oauth(jsonResponse(429, { message: 'You are being rate limited.', retry_after: 1 }));
+    expect(await client.exchangeCode('the-code')).toMatchObject({
+      kind: DiscordOAuthResultKinds.failed,
+      status: 429,
+      transient: true,
+    });
+  });
+
   it('marks a timeout as transient', async () => {
     const { client } = oauth({ hang: true });
     expect(await client.exchangeCode('the-code')).toMatchObject({

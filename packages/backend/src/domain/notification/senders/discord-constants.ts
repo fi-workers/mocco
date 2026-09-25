@@ -12,10 +12,11 @@ export const DISCORD_API_BASE = 'https://discord.com/api/v10';
 export const DISCORD_AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
 
 /**
- * Discord asks every bot to send `DiscordBot ($url, $versionNumber)`.
+ * Discord asks every bot to send `DiscordBot ($url, $versionNumber)`; the URL is the
+ * production host (ADR 0006).
  * https://docs.discord.com/developers/reference (User Agent).
  */
-export const DISCORD_USER_AGENT = 'DiscordBot (https://www.mocco.work, 1)';
+export const DISCORD_USER_AGENT = 'DiscordBot (https://www.mocco.club, 1)';
 
 /** Spec §6: a Discord call that has not answered in 5 s is a transient failure. */
 export const DISCORD_DEFAULT_TIMEOUT_MS = 5000;
@@ -25,6 +26,17 @@ export const DISCORD_DEFAULT_TIMEOUT_MS = 5000;
  * Cloudflare ban page). Deliberately long: guessing short would keep hammering.
  */
 export const DISCORD_FALLBACK_RETRY_AFTER_SECONDS = 60;
+
+/**
+ * A 429 with neither `X-RateLimit-Scope` nor Discord's JSON body comes from
+ * Cloudflare, not Discord: the egress IP is banned (after 10,000 invalid requests
+ * in 10 minutes), which blocks every send. Wait at least this long before trying
+ * again. https://docs.discord.com/developers/topics/rate-limits (invalid request limit).
+ */
+export const DISCORD_CLOUDFLARE_BAN_RETRY_SECONDS = 15 * 60;
+
+/** Cap on a stored failure reason (Discord's message can be long). */
+export const DISCORD_REASON_MAX = 300;
 
 /** https://docs.discord.com/developers/topics/permissions (bitwise permission flags). */
 export const DiscordPermissions = {
@@ -54,6 +66,8 @@ export const DiscordJsonErrorCodes = {
   UnknownChannel: 10_003,
   UnknownGuild: 10_004,
   UnknownMessage: 10_008,
+  /** Cloudflare is blocking the request (often a bad User-Agent): nothing will get through. */
+  CloudflareBlocked: 40_333,
   MissingAccess: 50_001,
   MissingPermissions: 50_013,
   InvalidFormBody: 50_035,
@@ -78,6 +92,7 @@ export type DiscordChannelType = (typeof DiscordChannelTypes)[keyof typeof Disco
 /** https://docs.discord.com/developers/topics/rate-limits (header format). */
 export const DiscordRateLimitHeaders = {
   Remaining: 'X-RateLimit-Remaining',
+  Reset: 'X-RateLimit-Reset',
   ResetAfter: 'X-RateLimit-Reset-After',
   Global: 'X-RateLimit-Global',
   Scope: 'X-RateLimit-Scope',

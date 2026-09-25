@@ -35,22 +35,30 @@ consume these results.
 
 ## Behaviour
 
-1. Render one embed: the severity picks the color and the title emoji; the prefix is charged to the
-   title so the embed stays within Discord's 256-character title and 6000-character total.
+1. Render one embed: the severity picks the color and the title emoji. The prefix is charged to the
+   256-character title and to the 6000-character total; a message that would overflow gives up the
+   difference from its description, or drops the prefix when there is no description long enough.
+   Links (`url`, author `url` / `icon_url`) that are not http(s) are dropped.
 2. Post with `allowed_mentions: { parse: [] }`, so customer text never pings anyone.
 3. Classify without throwing:
-   - 2xx: `sent`, with the `channel:<id>` bucket and `blockedUntil` when `X-RateLimit-Remaining` is 0.
-   - 429: `rate_limited`, retrying at `retry_after` (then `Retry-After`, then `Reset-After`, then 60 s),
-     on the global bucket when the limit is global, and flagged `shared` for a shared-scope limit.
-   - 401: `permanent`, disabling the sender. 403, 404 and codes 50001, 50013, 10003, 10004:
-     `permanent`, disabling the channel. 10008 (unknown message, a canary delete): `permanent`,
-     disabling nothing. Other 4xx such as 400 / 50035: `permanent`, disabling nothing.
-   - 5xx, a timeout (AbortController, 5 s default) or a network error: `transient`.
+   - 2xx: `sent`, with the `channel:<id>` bucket and `blockedUntil` when `X-RateLimit-Remaining` is 0
+     (from `Reset-After`, else `Reset` in epoch seconds). DELETE shares the POST channel bucket.
+   - 429 from Discord: `rate_limited`, retrying at `retry_after` (then `Retry-After`, then
+     `Reset-After`, then 60 s), on the global bucket when the limit is global, and flagged `shared`
+     for a shared-scope limit.
+   - 429 with no `X-RateLimit-Scope` and no Discord JSON body (a Cloudflare IP ban): global, retrying
+     after at least `DISCORD_CLOUDFLARE_BAN_RETRY_SECONDS` (15 minutes).
+   - Codes 50001, 50013, 10003, 10004: `permanent`, disabling the channel.
+   - 401, a 403/404 with no code or code 0, and 40333 (Cloudflare block): `permanent`, disabling the
+     sender, so a bad route, User-Agent or block stops everything once.
+   - Anything else in 4xx (400 / 50035, 10008 on a canary delete): `permanent`, disabling nothing.
+   - 5xx, a timeout (AbortController, 5 s default, combined with the caller's signal) or a network
+     error: `transient`.
 4. Reasons carry only the status, Discord's `code` and `message`, redacted of the bot token (or the
    client secret for OAuth), with NUL removed and a length cap.
 5. OAuth: authorize with `scope=bot identify`, `permissions=84992`, `integration_type=0`,
    `response_type=code`; exchange the code form-encoded with HTTP Basic client credentials and take
-   the guild from the token response's `guild` object only.
+   the guild from the token response's `guild` object only. A 429, 5xx or timeout is `transient`.
 
 ## Verification
 

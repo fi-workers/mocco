@@ -8,6 +8,7 @@ import {
   DISCORD_BOT_SCOPES,
   DISCORD_DEFAULT_TIMEOUT_MS,
   DISCORD_GUILD_INSTALL,
+  DISCORD_REASON_MAX,
   DISCORD_USER_AGENT,
 } from '@backend/domain/notification/senders/discord-constants';
 
@@ -27,7 +28,7 @@ export type DiscordOAuthResult =
       kind: typeof DiscordOAuthResultKinds.failed;
       reason: string;
       status?: number;
-      /** A timeout, network error or 5xx: the user may simply try the install again. */
+      /** A timeout, network error, 429 or 5xx: the user may simply try the install again. */
       transient: boolean;
     };
 
@@ -46,8 +47,6 @@ export interface DiscordOAuthDeps {
   timeoutMs?: number;
 }
 
-const REASON_MAX = 300;
-
 /** The token response of a `bot`-scope grant carries the guild the bot joined. */
 const tokenResponseSchema = z.object({
   guild: z.object({ id: z.string().min(1), name: z.string() }).optional(),
@@ -63,7 +62,7 @@ export function createDiscordOAuth(deps: DiscordOAuthDeps): DiscordOAuth {
   const secrets = [deps.clientSecret];
   const failed = (reason: string, retry: { transient: boolean; status?: number }): DiscordOAuthResult => ({
     kind: DiscordOAuthResultKinds.failed,
-    reason: truncate(redact(reason, secrets), REASON_MAX),
+    reason: truncate(redact(reason, secrets), DISCORD_REASON_MAX),
     ...retry,
   });
 
@@ -116,7 +115,7 @@ export function createDiscordOAuth(deps: DiscordOAuthDeps): DiscordOAuth {
         const detail = parsed.success ? (parsed.data.error_description ?? parsed.data.error) : undefined;
         const suffix = detail === undefined ? '' : `: ${detail}`;
         return failed(`Discord token exchange ${response.status}${suffix}`, {
-          transient: response.status >= 500,
+          transient: response.status >= 500 || response.status === 429,
           status: response.status,
         });
       }

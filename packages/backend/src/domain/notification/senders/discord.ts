@@ -4,9 +4,11 @@ import { z } from 'zod';
 import {
   CHANNEL_DISABLING_CODES,
   DISCORD_API_BASE,
+  DISCORD_CLOUDFLARE_BAN_RETRY_SECONDS,
   DISCORD_DEFAULT_TIMEOUT_MS,
   DISCORD_FALLBACK_RETRY_AFTER_SECONDS,
   DISCORD_GLOBAL_BUCKET,
+  DISCORD_REASON_MAX,
   DISCORD_USER_AGENT,
   DiscordChannelTypes,
   DiscordEmbedLimits,
@@ -108,7 +110,6 @@ export interface DiscordApiDeps {
   timeoutMs?: number;
 }
 
-const REASON_MAX = 300;
 const ELLIPSIS = '…';
 const HIGH_SURROGATE_MIN = 0xd8_00;
 const HIGH_SURROGATE_MAX = 0xdb_ff;
@@ -118,8 +119,9 @@ const errorBodySchema = z.object({
   message: z.string().optional(),
 });
 
+/** Discord's own 429 body; a 429 without it (and without a scope header) is Cloudflare's. */
 const rateLimitBodySchema = z.object({
-  retry_after: z.number().nonnegative().optional(),
+  retry_after: z.number().nonnegative(),
   global: z.boolean().optional(),
 });
 
@@ -171,26 +173,39 @@ function secondsHeader(headers: Headers, name: string): number | undefined {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }
 
+/** `value` when it is an absolute http(s) URL; anything else (javascript:, ftp:, …) is dropped. */
+function httpUrl(value: string | undefined): string | undefined {
+  if (value === undefined || !URL.canParse(value)) {
+    return undefined;
+  }
+  const { protocol } = new URL(value);
+  return protocol === 'http:' || protocol === 'https:' ? value : undefined;
+}
+
 /**
- * The Discord embed for `message`. The severity emoji prefixes the title; the
- * prefix is charged to the title so the embed stays inside Discord's title and
- * 6000-character caps that `neutralMessageSchema` already enforces.
+ * The Discord embed for `message`. The severity emoji prefixes the title. The
+ * prefix is charged to the title (256) and to the embed total (6000): when a
+ * message already near the total would overflow, the description gives up the
+ * difference, and without a description long enough the prefix is dropped
+ * (`neutralMessageSchema` guarantees the unprefixed message fits).
  */
 export function renderEmbed(message: NeutralMessage, timestamp: Date) {
   const style = DiscordSeverityStyles[message.severity];
-  const prefix = `${style.emoji} `;
-  const overflow = Math.max(0, neutralMessageLength(message) + prefix.length - DiscordEmbedLimits.total);
-  const titleBudget = DiscordEmbedLimits.title - prefix.length - overflow;
+  const prefixedTitle = truncate(`${style.emoji} ${message.title}`, DiscordEmbedLimits.title);
+  const overflow = neutralMessageLength({ ...message, title: prefixedTitle }) - DiscordEmbedLimits.total;
+  const { description } = message;
+  const canShortenDescription = overflow > 0 && description !== undefined && description.length > overflow;
+  const isPrefixDropped = overflow > 0 && !canShortenDescription;
   return {
-    title: prefix + truncate(message.title, titleBudget),
-    url: message.url,
-    description: message.description,
+    title: isPrefixDropped ? message.title : prefixedTitle,
+    url: httpUrl(message.url),
+    description: canShortenDescription ? truncate(description, description.length - overflow) : description,
     color: style.color,
     timestamp: timestamp.toISOString(),
     author: message.actor && {
       name: message.actor.name,
-      url: message.actor.url,
-      icon_url: message.actor.avatarUrl,
+      url: httpUrl(message.actor.url),
+      icon_url: httpUrl(message.actor.avatarUrl),
     },
     fields: message.fields.map(field => ({ name: field.name, value: field.value, inline: field.inline ?? false })),
     footer: { text: message.footer },
@@ -208,9 +223,10 @@ export interface TimedResponse {
 export type TimedFetchOutcome = TimedResponse | DiscordTransient;
 
 /**
- * `fetchImpl(url, init)` with a timeout covering the headers and the body. Resolves
- * to a transient failure on timeout or network error instead of rejecting. The
- * Discord OAuth exchange reuses it, so every Discord request goes through here.
+ * `fetchImpl(url, init)` with a timeout covering the headers and the body, combined
+ * with the caller's own `init.signal`. Resolves to a transient failure on timeout,
+ * cancellation or network error instead of rejecting. The Discord OAuth exchange
+ * reuses it, so every Discord request goes through here.
  */
 export async function timedFetch(
   fetchImpl: typeof fetch,
@@ -218,23 +234,28 @@ export async function timedFetch(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<TimedFetchOutcome> {
-  const controller = new AbortController();
+  const timeout = new AbortController();
   const timer = setTimeout(() => {
-    controller.abort();
+    timeout.abort();
   }, timeoutMs);
+  const callerSignal = init.signal ?? undefined;
+  const signal = callerSignal === undefined ? timeout.signal : AbortSignal.any([timeout.signal, callerSignal]);
   try {
-    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const response = await fetchImpl(url, { ...init, signal });
     const text = await response.text();
-    clearTimeout(timer);
     return { kind: 'response', response, text };
   } catch (error) {
-    clearTimeout(timer);
-    if (controller.signal.aborted) {
+    if (timeout.signal.aborted) {
       return { kind: DiscordResultKinds.transient, reason: `Discord did not answer within ${timeoutMs} ms` };
+    }
+    if (callerSignal?.aborted === true) {
+      return { kind: DiscordResultKinds.transient, reason: 'request to Discord was cancelled' };
     }
     // Only the error's class name: a fetch error message may echo request details.
     const name = error instanceof Error ? error.name : 'unknown error';
     return { kind: DiscordResultKinds.transient, reason: `network error reaching Discord (${name})` };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -267,6 +288,7 @@ interface Disabling {
 }
 
 const DISABLE_NOTHING: Disabling = { disableChannel: false, disableSender: false };
+const SENDER_LEVEL: Disabling = { disableChannel: false, disableSender: true };
 
 export class DiscordApi {
   private readonly timeoutMs: number;
@@ -291,13 +313,26 @@ export class DiscordApi {
     );
   }
 
+  /** When an exhausted bucket resets: `Reset-After` (seconds from now), else `Reset` (epoch seconds). */
+  // eslint-disable-next-line sonarjs/function-return-type -- undefined is a legitimate "no information" answer
+  private resetTime(headers: Headers): Date | undefined {
+    const resetAfter = secondsHeader(headers, DiscordRateLimitHeaders.ResetAfter);
+    if (resetAfter !== undefined) {
+      return addSeconds(this.deps.now(), resetAfter);
+    }
+    const resetEpoch = secondsHeader(headers, DiscordRateLimitHeaders.Reset);
+    return resetEpoch === undefined ? undefined : new Date(Math.ceil(resetEpoch * 1000));
+  }
+
   /** The bucket of a 2xx response (none without rate limit headers); `blockedUntil` once remaining hits 0. */
+  // eslint-disable-next-line sonarjs/function-return-type -- undefined is a legitimate "no information" answer
   private bucket(response: Response, key: string): DiscordBucket | undefined {
     const remaining = response.headers.get(DiscordRateLimitHeaders.Remaining);
-    const resetAfter = secondsHeader(response.headers, DiscordRateLimitHeaders.ResetAfter);
-    const isExhausted = remaining !== null && Number(remaining) <= 0 && resetAfter !== undefined;
-    const blocked = isExhausted ? { blockedUntil: addSeconds(this.deps.now(), resetAfter) } : {};
-    return remaining === null ? undefined : { key, ...blocked };
+    if (remaining === null) {
+      return undefined;
+    }
+    const blockedUntil = Number(remaining) <= 0 ? this.resetTime(response.headers) : undefined;
+    return blockedUntil === undefined ? { key } : { key, blockedUntil };
   }
 
   // eslint-disable-next-line sonarjs/function-return-type -- each branch is one member of the DiscordFailure union
@@ -314,21 +349,37 @@ export class DiscordApi {
       return { kind: DiscordResultKinds.transient, reason: this.clean(reason), status };
     }
     if (status === 401) {
-      return this.permanent(reason, code, { disableChannel: false, disableSender: true });
+      return this.permanent(reason, code, SENDER_LEVEL);
     }
-    // A missing canary message is not a broken channel.
-    if (code === DiscordJsonErrorCodes.UnknownMessage) {
-      return this.permanent(reason, code, DISABLE_NOTHING);
+    // Only Discord's own "this channel is gone / closed to the bot" codes disable a
+    // channel. Other codes (10008 on a canary delete, 50035, 50008) disable nothing.
+    if (code !== undefined && CHANNEL_DISABLING_CODES.has(code)) {
+      return this.permanent(reason, code, { disableChannel: true, disableSender: false });
     }
-    const shouldDisableChannel =
-      status === 403 || status === 404 || (code !== undefined && CHANNEL_DISABLING_CODES.has(code));
-    return this.permanent(reason, code, { disableChannel: shouldDisableChannel, disableSender: false });
+    // A 403/404 without a Discord code (or code 0), or Cloudflare's 40333, never got
+    // to a channel decision: a bad route, User-Agent or block that hits every tenant.
+    // Stop the sender once instead of disabling channels one by one.
+    const isUncoded = code === undefined || code === 0;
+    const isSenderLevel =
+      code === DiscordJsonErrorCodes.CloudflareBlocked || ((status === 403 || status === 404) && isUncoded);
+    return this.permanent(reason, code, isSenderLevel ? SENDER_LEVEL : DISABLE_NOTHING);
   }
 
   private rateLimited(headers: Headers, json: unknown, bucketKey?: string): DiscordRateLimited {
     const parsed = rateLimitBodySchema.safeParse(json);
-    const body = parsed.success ? parsed.data : {};
     const scope = headers.get(DiscordRateLimitHeaders.Scope)?.trim().toLowerCase();
+    if (scope === undefined && !parsed.success) {
+      // Cloudflare's IP ban, not a Discord limit: it blocks every send from this IP.
+      const retryAfter = secondsHeader(headers, DiscordRateLimitHeaders.RetryAfter) ?? 0;
+      return {
+        kind: DiscordResultKinds.rate_limited,
+        retryAt: addSeconds(this.deps.now(), Math.max(retryAfter, DISCORD_CLOUDFLARE_BAN_RETRY_SECONDS)),
+        global: true,
+        shared: false,
+        bucketKey: DISCORD_GLOBAL_BUCKET,
+      };
+    }
+    const body: { retry_after?: number; global?: boolean } = parsed.success ? parsed.data : {};
     const isGlobal =
       body.global === true || headers.has(DiscordRateLimitHeaders.Global) || scope === DiscordRateLimitScopes.global;
     const seconds =
@@ -356,7 +407,7 @@ export class DiscordApi {
 
   private clean(reason: string): string {
     // NUL is stripped: reasons land in Postgres text columns, which reject it.
-    return truncate(redact(reason, [this.deps.botToken]).replaceAll('\u{0}', ''), REASON_MAX);
+    return truncate(redact(reason, [this.deps.botToken]).replaceAll('\u{0}', ''), DISCORD_REASON_MAX);
   }
 
   /** Post `message` as one embed. Mentions are never parsed: customer text must not ping @everyone. */
@@ -379,7 +430,11 @@ export class DiscordApi {
     return { kind: DiscordResultKinds.sent, messageId: created.data.id, bucket: this.bucket(response, bucketKey) };
   }
 
-  /** Delete a message the bot posted (the stage0 canary cleans up after itself). */
+  /**
+   * Delete a message the bot posted (the stage0 canary cleans up after itself).
+   * Discord buckets DELETE separately from POST, but both are reported on the same
+   * `channel:<id>` bucket: pacing them together is the conservative choice.
+   */
   async deleteMessage(channelId: string, messageId: string): Promise<DiscordDeleteResult> {
     const bucketKey = discordChannelBucket(channelId);
     const path = `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`;

@@ -1,7 +1,7 @@
 import { NeutralMessageLimits, Severities } from '@mocco/common/notification';
 import { describe, expect, it } from 'vitest';
 
-import { DiscordApi, DiscordResultKinds, renderEmbed } from '@backend/domain/notification/senders/discord';
+import { DiscordApi, DiscordResultKinds, renderEmbed, timedFetch } from '@backend/domain/notification/senders/discord';
 import { DiscordChannelTypes, DiscordJsonErrorCodes } from '@backend/domain/notification/senders/discord-constants';
 import {
   createFakeDiscordFetch,
@@ -45,6 +45,17 @@ function sentBody(requests: ReturnType<typeof api>['requests']) {
   return JSON.parse(body) as { embeds: Record<string, unknown>[]; allowed_mentions: unknown };
 }
 
+/** Characters Discord counts against the 6000 embed total. */
+function embedLength(embed: ReturnType<typeof renderEmbed>): number {
+  return (
+    embed.title.length +
+    (embed.description?.length ?? 0) +
+    embed.fields.reduce((sum, field) => sum + field.name.length + field.value.length, 0) +
+    embed.footer.text.length +
+    (embed.author?.name.length ?? 0)
+  );
+}
+
 describe('renderEmbed', () => {
   const styles: [Severity, number, string][] = [
     [Severities.error, 0xc2_40_36, '🔴'],
@@ -86,6 +97,39 @@ describe('renderEmbed', () => {
     expect(title.length).toBeLessThanOrEqual(NeutralMessageLimits.title);
     expect(title.endsWith('…')).toBe(true);
   });
+
+  it('keeps a short title plus a near-limit message inside the 6000 total', () => {
+    const full: NeutralMessage = {
+      title: 'Down',
+      description: 'd'.repeat(NeutralMessageLimits.description),
+      severity: Severities.error,
+      fields: Array.from({ length: 3 }, (_, index) => ({ name: `f${index}`, value: 'v'.repeat(1024) })),
+      footer: 'f'.repeat(NeutralMessageLimits.total - 4 - NeutralMessageLimits.description - 3 * (2 + 1024)),
+    };
+    const embed = renderEmbed(full, NOW);
+    expect(embedLength(embed)).toBeLessThanOrEqual(NeutralMessageLimits.total);
+    expect(embed.title).toBe('🔴 Down');
+    expect(embed.description?.endsWith('…')).toBe(true);
+  });
+
+  it('drops the emoji prefix when there is no description to shorten', () => {
+    const full: NeutralMessage = {
+      title: 'Down',
+      severity: Severities.error,
+      fields: Array.from({ length: 5 }, (_, index) => ({ name: `f${index}`, value: 'v'.repeat(1024) })),
+      footer: 'f'.repeat(NeutralMessageLimits.total - 4 - 5 * (2 + 1024)),
+    };
+    const embed = renderEmbed(full, NOW);
+    expect(embedLength(embed)).toBeLessThanOrEqual(NeutralMessageLimits.total);
+    expect(embed.title).toBe('Down');
+  });
+
+  // eslint-disable-next-line no-script-url -- the hostile input under test
+  it.each(['javascript:alert(1)', 'ftp://files.example/x'])('drops a non-http(s) link: %s', link => {
+    const embed = renderEmbed({ ...message, url: link, actor: { name: 'octocat', url: link, avatarUrl: link } }, NOW);
+    expect(embed.url).toBeUndefined();
+    expect(embed.author).toEqual({ name: 'octocat', url: undefined, icon_url: undefined });
+  });
 });
 
 describe('DiscordApi.sendMessage', () => {
@@ -98,7 +142,7 @@ describe('DiscordApi.sendMessage', () => {
     expect(requests[0]?.url).toBe(`https://discord.com/api/v10/channels/${CHANNEL}/messages`);
     expect(requests[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`);
     expect(requests[0]?.headers.get('content-type')).toBe('application/json');
-    expect(requests[0]?.headers.get('user-agent')).toMatch(/^DiscordBot \(/u);
+    expect(requests[0]?.headers.get('user-agent')).toBe('DiscordBot (https://www.mocco.club, 1)');
     const body = sentBody(requests);
     expect(body.allowed_mentions).toEqual({ parse: [] });
     expect(body.embeds).toEqual([renderEmbed(message, NOW)]);
@@ -119,6 +163,16 @@ describe('DiscordApi.sendMessage', () => {
       kind: DiscordResultKinds.sent,
       messageId: '999',
       bucket: { key: `channel:${CHANNEL}`, blockedUntil: new Date('2026-09-25T12:00:01.500Z') },
+    });
+  });
+
+  it('falls back to X-RateLimit-Reset (epoch seconds) when Reset-After is missing', async () => {
+    const reset = String(Date.parse('2026-09-25T12:00:04.000Z') / 1000);
+    const { discord } = api(created({ 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': reset }));
+    expect(await discord.sendMessage(CHANNEL, message)).toEqual({
+      kind: DiscordResultKinds.sent,
+      messageId: '999',
+      bucket: { key: `channel:${CHANNEL}`, blockedUntil: new Date('2026-09-25T12:00:04.000Z') },
     });
   });
 
@@ -188,19 +242,37 @@ describe('DiscordApi.sendMessage', () => {
       });
     });
 
-    it('falls back to the Retry-After header without a JSON body', async () => {
-      const { discord } = api(new Response('<html>banned</html>', { status: 429, headers: { 'Retry-After': '10' } }));
-      expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({
+    it('treats an HTML 429 without a scope header as a Cloudflare ban: global, at least 15 minutes', async () => {
+      const { discord } = api(
+        new Response('<html>banned</html>', {
+          status: 429,
+          headers: { 'content-type': 'text/html', 'Retry-After': '10' },
+        }),
+      );
+      expect(await discord.sendMessage(CHANNEL, message)).toEqual({
         kind: DiscordResultKinds.rate_limited,
-        retryAt: new Date('2026-09-25T12:00:10.000Z'),
+        retryAt: new Date('2026-09-25T12:15:00.000Z'),
+        global: true,
+        shared: false,
+        bucketKey: 'global',
       });
     });
 
-    it('waits a conservative default when nothing says how long', async () => {
-      const { discord } = api(emptyResponse(429));
+    it('keeps a longer Cloudflare Retry-After', async () => {
+      const { discord } = api(new Response('<html>banned</html>', { status: 429, headers: { 'Retry-After': '3600' } }));
+      expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({
+        retryAt: new Date('2026-09-25T13:00:00.000Z'),
+        global: true,
+      });
+    });
+
+    it('waits a conservative default for a scoped 429 that says nothing about how long', async () => {
+      const { discord } = api(emptyResponse(429, { 'X-RateLimit-Scope': 'user' }));
       expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({
         kind: DiscordResultKinds.rate_limited,
         retryAt: new Date('2026-09-25T12:01:00.000Z'),
+        global: false,
+        bucketKey: `channel:${CHANNEL}`,
       });
     });
   });
@@ -235,10 +307,24 @@ describe('DiscordApi.sendMessage', () => {
       });
     });
 
-    it('disables the channel on a bare 403 or 404', async () => {
-      const { discord } = api(emptyResponse(403), emptyResponse(404));
-      expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({ disableChannel: true });
-      expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({ disableChannel: true });
+    const senderLevel: [string, Response][] = [
+      ['a bare 403', emptyResponse(403)],
+      ['a bare 404', emptyResponse(404)],
+      ['a 403 with code 0', jsonResponse(403, { message: 'Forbidden', code: 0 })],
+      ['a 404 with code 0', jsonResponse(404, { message: '404: Not Found', code: 0 })],
+      [
+        'a 403 with code 40333',
+        jsonResponse(403, { message: 'internal network error', code: DiscordJsonErrorCodes.CloudflareBlocked }),
+      ],
+    ];
+
+    it.each(senderLevel)('disables the sender, not the channel, on %s', async (_label, response) => {
+      const { discord } = api(response);
+      expect(await discord.sendMessage(CHANNEL, message)).toMatchObject({
+        kind: DiscordResultKinds.permanent,
+        disableChannel: false,
+        disableSender: true,
+      });
     });
 
     it('disables the channel on a disabling code under another status', async () => {
@@ -324,6 +410,16 @@ describe('DiscordApi.sendMessage', () => {
     expect(serialized).not.toContain(BOT_TOKEN);
     expect(serialized).not.toContain('Authorization');
     expect(serialized).toContain('[redacted]');
+  });
+});
+
+describe('timedFetch', () => {
+  it('stops when the caller aborts, before the timeout', async () => {
+    const fake = createFakeDiscordFetch({ hang: true });
+    const caller = new AbortController();
+    const pending = timedFetch(fake.fetch, 'https://discord.com/api/v10/x', { signal: caller.signal }, 60_000);
+    caller.abort();
+    expect(await pending).toEqual({ kind: DiscordResultKinds.transient, reason: 'request to Discord was cancelled' });
   });
 });
 
