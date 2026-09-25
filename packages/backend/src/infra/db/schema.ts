@@ -875,7 +875,9 @@ export const domainEvents = pgTable(
   'mocco_domain_events',
   {
     id: uuid().primaryKey().defaultRandom(),
-    // Publish order across the table (a cursor for reconcilers and debugging).
+    // Insert order across the table, for ordering and debugging. Assigned at insert, not
+    // at commit, so a concurrent publish can become visible with a lower seq than one
+    // already read: not a gap-free cursor for reconcilers.
     seq: bigserial({ mode: 'bigint' }).notNull().unique('mocco_domain_events_seq_uq'),
     workspaceId: uuid('workspace_id')
       .notNull()

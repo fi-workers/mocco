@@ -39,11 +39,24 @@ const runSubjectShape = {
   commitSha: z.string().min(1),
   /** App-relative path of the run page, e.g. `/workspaces/<id>/runs/<id>`. */
   linkPath: z.string().startsWith('/'),
+  // Fields added after the first release default, so a payload stored before them still
+  // parses on delivery (events are kept 30 days and re-parsed; see docs/reference/events.md).
+  /** Who triggered the run (null once that user is deleted, or for a system trigger). */
+  triggeredByUserId: z.uuid().nullable().default(null),
+  /** Their display name, when the account has one. */
+  triggeredByName: z.string().nullable().default(null),
 };
 
 export const runEventPayloadSchema = z.object({
   ...runSubjectShape,
   facts: z.object({ repo: z.string(), pipeline: z.string() }),
+});
+
+/** `run.failed` also says which step failed and where its logs are, when known (an
+ * executor that never reported has neither). */
+export const runFailedPayloadSchema = runEventPayloadSchema.extend({
+  failedStep: z.object({ name: z.string(), index: z.int().nonnegative() }).nullable().default(null),
+  logsUrl: z.string().nullable().default(null),
 });
 
 const gateShape = {
@@ -54,7 +67,11 @@ const gateShape = {
   facts: z.object({ repo: z.string(), pipeline: z.string(), gate: z.string() }),
 };
 
-export const gatePendingPayloadSchema = z.object(gateShape);
+export const gatePendingPayloadSchema = z.object({
+  ...gateShape,
+  /** The gate's resume requirements as snapshotted on the run: N members of each role. */
+  requirements: z.array(z.object({ role: z.string(), count: z.int().positive() })).default([]),
+});
 
 export const gateResumedPayloadSchema = z.object({
   ...gateShape,
@@ -73,7 +90,7 @@ export const gateRejectedPayloadSchema = z.object({
 
 export const governanceEventPayloadSchemas = {
   [GovernanceEventTypes.runSucceeded]: runEventPayloadSchema,
-  [GovernanceEventTypes.runFailed]: runEventPayloadSchema,
+  [GovernanceEventTypes.runFailed]: runFailedPayloadSchema,
   [GovernanceEventTypes.gatePending]: gatePendingPayloadSchema,
   [GovernanceEventTypes.gateResumed]: gateResumedPayloadSchema,
   [GovernanceEventTypes.gateRejected]: gateRejectedPayloadSchema,

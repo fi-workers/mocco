@@ -47,7 +47,9 @@ export type PublishInput = {
     /** When it happened; defaults to now. Retention counts from here. */
     occurredAt?: Date;
     /** Publish idempotently: a second publish with the same key in the workspace returns
-     * the first event and enqueues nothing. */
+     * the first event (`created: false`) and enqueues its deliveries again, which the job
+     * dedupe and the delivery ledger make no-ops — so a retry repairs a fan-out that
+     * crashed between the insert and the enqueue. */
     dedupeKey?: string;
   };
 }[DomainEventType];
@@ -56,7 +58,7 @@ export interface PublishResult {
   event: DomainEventRow;
   /** false when an event with the same dedupe key already existed (that event is returned). */
   created: boolean;
-  /** Subscribers a delivery job was enqueued for (empty when `created` is false). */
+  /** Subscribers a delivery was enqueued for (or found already live), also on a repeat. */
   subscribers: string[];
 }
 
@@ -138,7 +140,9 @@ export class EventBus {
   /**
    * Validate, store, and fan out. Throws `UnknownDomainEventTypeError` /
    * `DomainEventPayloadError` before anything is written. A duplicate `dedupeKey`
-   * returns the existing event and enqueues nothing.
+   * returns the existing event and fans it out again: a live delivery job dedupes, a
+   * finished one is a ledger no-op, and a missing one (a crash after the insert) is
+   * created — so repeating a publish is always safe.
    */
   async publish(input: PublishInput): Promise<PublishResult> {
     if (!isDomainEventType(input.type)) {
@@ -158,9 +162,6 @@ export class EventBus {
       dedupeKey: input.dedupeKey ?? null,
       occurredAt: input.occurredAt ?? this.deps.now(),
     });
-    if (!created) {
-      return { event, created, subscribers: [] };
-    }
     const subscribers = this.subscribersFor(event.type);
     // One enqueue at a time: production's pool is a single connection.
     await subscribers.reduce(async (previous, subscriber) => {

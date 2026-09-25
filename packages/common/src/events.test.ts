@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DomainEventTypes,
   domainEventPayloadSchemas,
+  gatePendingPayloadSchema,
   gateResumedPayloadSchema,
   isDomainEventType,
   isEventPatternMatch,
   runEventPayloadSchema,
+  runFailedPayloadSchema,
 } from './events';
 
 const RUN_SUBJECT = {
@@ -31,8 +33,44 @@ describe('domain event catalog', () => {
 
   it('parses a run payload and rejects a missing fact', () => {
     const facts = { repo: 'fi-workers/api', pipeline: 'deploy' };
-    expect(runEventPayloadSchema.parse({ ...RUN_SUBJECT, facts })).toEqual({ ...RUN_SUBJECT, facts });
+    expect(runEventPayloadSchema.parse({ ...RUN_SUBJECT, facts })).toMatchObject({ ...RUN_SUBJECT, facts });
     expect(runEventPayloadSchema.safeParse({ ...RUN_SUBJECT, facts: { repo: 'x' } }).success).toBe(false);
+  });
+
+  it('defaults the fields added after the first release, so older stored payloads still parse', () => {
+    const facts = { repo: 'fi-workers/api', pipeline: 'deploy' };
+    expect(runEventPayloadSchema.parse({ ...RUN_SUBJECT, facts })).toMatchObject({
+      triggeredByUserId: null,
+      triggeredByName: null,
+    });
+    expect(runFailedPayloadSchema.parse({ ...RUN_SUBJECT, facts })).toMatchObject({ failedStep: null, logsUrl: null });
+    expect(
+      gatePendingPayloadSchema.parse({
+        ...RUN_SUBJECT,
+        gateName: 'prod',
+        gateItemIndex: 1,
+        facts: { ...facts, gate: 'prod' },
+      }).requirements,
+    ).toEqual([]);
+  });
+
+  it('carries the failed step and the gate requirements when known', () => {
+    const facts = { repo: 'fi-workers/api', pipeline: 'deploy' };
+    const failed = runFailedPayloadSchema.parse({
+      ...RUN_SUBJECT,
+      facts,
+      failedStep: { name: 'build', index: 0 },
+      logsUrl: 'https://logs.test/0',
+    });
+    expect(failed).toMatchObject({ failedStep: { name: 'build', index: 0 }, logsUrl: 'https://logs.test/0' });
+    const pending = gatePendingPayloadSchema.parse({
+      ...RUN_SUBJECT,
+      gateName: 'prod',
+      gateItemIndex: 1,
+      facts: { ...facts, gate: 'prod' },
+      requirements: [{ role: 'sre', count: 2 }],
+    });
+    expect(pending.requirements).toEqual([{ role: 'sre', count: 2 }]);
   });
 
   it('requires the resuming principals on gate.resumed', () => {

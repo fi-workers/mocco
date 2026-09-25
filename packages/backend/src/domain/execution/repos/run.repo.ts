@@ -25,16 +25,23 @@ export class RunRepo {
     return getOrThrow(rows, `Run ${runId} was not found`);
   }
 
-  /** A run with the commit, repo and pinned config snapshot it ran — what a domain event
-   * about the run names (repo, pipeline, commit). Workspace-scoped; throws
-   * EntityNotFoundError for a foreign or unknown id. */
+  /** A run with the commit, repo and pinned config snapshot it ran, and the user who
+   * triggered it (null once deleted) — what a domain event about the run names.
+   * Workspace-scoped; throws EntityNotFoundError for a foreign or unknown id. */
   async getWithContextInWorkspace(workspaceId: string, runId: string) {
     const rows = await this.db
-      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos, config: schema.commitConfigs })
+      .select({
+        run: schema.runs,
+        commit: schema.commits,
+        repo: schema.repos,
+        config: schema.commitConfigs,
+        triggeredBy: schema.users,
+      })
       .from(schema.runs)
       .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
       .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
       .innerJoin(schema.commitConfigs, eq(schema.runs.commitConfigId, schema.commitConfigs.id))
+      .leftJoin(schema.users, eq(schema.runs.triggeredByUserId, schema.users.id))
       .where(and(eq(schema.runs.id, runId), eq(schema.runs.workspaceId, workspaceId)));
     return getOrThrow(rows, `Run ${runId} was not found`);
   }

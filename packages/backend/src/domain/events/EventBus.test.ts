@@ -165,14 +165,45 @@ describe('EventBus (pglite)', () => {
       await expect(bus.publish(unknown)).rejects.toBeInstanceOf(UnknownDomainEventTypeError);
     });
 
-    it('is idempotent on a dedupe key: the second publish returns the first event and enqueues nothing', async () => {
-      bus.subscribe('run.*', 'test.any', async () => {});
+    it('is idempotent on a dedupe key: the second publish returns the first event, and the subscriber runs once', async () => {
+      let calls = 0;
+      bus.subscribe('run.*', 'test.any', async () => {
+        calls += 1;
+      });
       const first = await bus.publish(runSucceeded({ dedupeKey: 'receipt-1' }));
+      await drainKicks();
       const second = await bus.publish(runSucceeded({ dedupeKey: 'receipt-1' }));
+      await drainKicks();
 
-      expect(second).toEqual({ event: first.event, created: false, subscribers: [] });
+      expect(second).toEqual({ event: first.event, created: false, subscribers: ['test.any'] });
       expect(await t.db.select().from(domainEvents)).toHaveLength(1);
-      expect(await jobRows()).toHaveLength(1);
+      // The repeat re-enqueues (the first job had finished), and the ledger makes it a no-op.
+      expect(calls).toBe(1);
+      expect(await jobStatuses()).toEqual([JobStatuses.succeeded, JobStatuses.succeeded]);
+    });
+
+    it('a repeat publish repairs a fan-out that died between the insert and the enqueue', async () => {
+      bus.subscribe('run.succeeded', 'test.repair', async () => {});
+      const input = runSucceeded({ dedupeKey: 'run.succeeded:crashed' });
+      // The event row exists but its delivery jobs were never written (crash after insert).
+      await events.insert({
+        workspaceId,
+        projectId: null,
+        type: input.type,
+        subjectType: input.subject.type,
+        subjectId: input.subject.id,
+        payload: input.payload,
+        dedupeKey: 'run.succeeded:crashed',
+        occurredAt: T0,
+      });
+      expect(await jobRows()).toHaveLength(0);
+
+      const retry = await bus.publish(input);
+      await drainKicks();
+
+      expect(retry).toMatchObject({ created: false, subscribers: ['test.repair'] });
+      expect(await jobStatuses()).toEqual([JobStatuses.succeeded]);
+      expect(await t.db.select().from(domainEventDeliveries)).toHaveLength(1);
     });
 
     it('scopes the dedupe key to the workspace', async () => {
@@ -312,6 +343,36 @@ describe('EventBus (pglite)', () => {
       expect(remaining.map(row => row.id)).toEqual([recent.event.id]);
       expect(deliveries.map(row => row.eventId)).toEqual([recent.event.id]);
       expect(old.created).toBe(true);
+    });
+
+    it('deletes in bounded batches and reports the count', async () => {
+      const stale = new Date(T0.getTime() - EVENT_RETENTION_MS - DAY);
+      await Promise.all(Array.from({ length: 5 }, async () => await bus.publish(runSucceeded({ occurredAt: stale }))));
+      const before = new Date(T0.getTime() - EVENT_RETENTION_MS);
+
+      expect(await events.pruneBefore(before, 2)).toBe(2);
+      expect(await events.pruneBefore(before, 2)).toBe(2);
+      expect(await events.pruneBefore(before, 2)).toBe(1);
+      expect(await events.pruneBefore(before, 2)).toBe(0);
+    });
+
+    it('the prune job keeps deleting batches until the old events are gone', async () => {
+      const stale = new Date(T0.getTime() - EVENT_RETENTION_MS - DAY);
+      await Promise.all(Array.from({ length: 5 }, async () => await bus.publish(runSucceeded({ occurredAt: stale }))));
+
+      await createPruneEventsHandler(events, { batchSize: 2 }).run(
+        {},
+        {
+          jobId: randomUUID(),
+          kind: EventJobKinds.prune,
+          attempt: 1,
+          workspaceId: null,
+          now,
+          deadline: new Date(T0.getTime() + MINUTE),
+        },
+      );
+
+      expect(await t.db.select().from(domainEvents)).toHaveLength(0);
     });
   });
 });

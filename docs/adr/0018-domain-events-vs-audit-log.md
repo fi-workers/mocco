@@ -50,7 +50,9 @@ pruned. Reusing run events would tie every consumer to the execution domain's in
    stable names. Delivery is at-least-once; a ledger (`mocco_domain_event_deliveries`) keeps a
    second job for the same pair from calling the subscriber again.
 4. **Publishers may be idempotent.** An optional `dedupe_key`, unique per workspace, makes a repeat
-   publish (a redelivered inbound webhook) return the first event and enqueue nothing.
+   publish (a redelivered inbound webhook, a governance transition reached twice) return the first
+   event; its deliveries are enqueued again, which the job dedupe and the ledger make no-ops, so a
+   retry also repairs a fan-out lost between the insert and the enqueue.
 5. **Governance publishes after the state change, best-effort.** `RunService` and `GateService`
    publish `run.succeeded`, `run.failed`, `gate.pending`, `gate.resumed` and `gate.rejected` after
    the run or gate is written. A failed publish is logged and never rolls back or fails the

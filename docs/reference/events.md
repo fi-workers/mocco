@@ -58,13 +58,23 @@ Every governance payload names its run so a notification can render without anot
   pipelineName,      // .mocco.yml `pipeline`
   commitSha,
   linkPath,          // "/workspaces/<workspaceId>/runs/<runId>", joined with the app origin by the renderer
+  triggeredByUserId, // null once the user is deleted
+  triggeredByName,   // the triggerer's display name, or null
   facts: { repo, pipeline },           // the flat, filterable subset
 }
 ```
 
-The gate types add `gateName`, `gateItemIndex` and `facts.gate`. `gate.resumed` adds `actorUserId`
-(the deciding voter) and `resumedBy: { userId, role }[]`; `gate.rejected` adds `actorUserId` and
-`reason` (string or null).
+- `run.failed` adds `failedStep: { name, index } | null` and `logsUrl: string | null` (both null
+  when unknown, e.g. an executor that never reported).
+- The gate types add `gateName`, `gateItemIndex` and `facts.gate`. `gate.pending` adds
+  `requirements: { role, count }[]`, the gate's resume requirements as snapshotted on the run.
+- `gate.resumed` adds `actorUserId` (the deciding voter) and `resumedBy: { userId, role }[]`;
+  `gate.rejected` adds `actorUserId` and `reason` (string or null).
+- Governance payloads carry facts, not a rendered message: they have no `NeutralMessage` (unlike
+  the inbound types of the relay design). Notification templates render them.
+- Each governance event has the dedupe key `<type>:<subject id>` (`run.succeeded:<runId>`,
+  `run.failed:<runId>`, `gate.pending:<gateId>`, `gate.resumed:<gateId>`, `gate.rejected:<gateId>`),
+  so concurrent callbacks or votes that both reach a transition publish one event.
 
 ### Extending the catalog
 
@@ -73,6 +83,12 @@ The catalog is assembled from per-area parts. An area adds an `*EventTypes` obje
 `domainEventPayloadSchemas`. The inbound source types (`sentry.issue.created`, `github.push`, …,
 issue #249, [notification relay design](../superpowers/specs/2026-09-25-notification-relay-design.md)
 §4) join this way.
+
+**Changes must stay backward-compatible for 30 days.** A stored payload is parsed again with the
+current schema when it is delivered, and events live 30 days. So never remove a type, remove or
+rename a field, or make a field stricter while events of the old shape can still be stored. A new
+field is added with a default (`.nullable().default(null)`, `.default([])`), as the fields above
+that arrived after the first release are, so older rows still parse.
 
 ## Publishing
 
@@ -95,8 +111,11 @@ await bus.publish({
 - The payload is parsed with the type's schema first. A mismatch throws `DomainEventPayloadError`
   and an unknown type throws `UnknownDomainEventTypeError`; nothing is written.
 - **`dedupeKey`**: unique per workspace. A second publish with the same key returns the first
-  event with `created: false` and enqueues nothing. Use it when the same fact can arrive twice (an
-  inbound webhook redelivery keyed by its receipt).
+  event with `created: false` and fans it out again: a delivery job that is still live dedupes, one
+  that finished is a ledger no-op, and one that is missing (the first publish crashed between the
+  insert and the enqueue) is created. So retrying a publish is always safe and repairs a lost
+  fan-out. Use a key whenever the same fact can be published twice (an inbound webhook redelivery
+  keyed by its receipt, a governance transition).
 - **After the state change, best-effort.** Governance calls `publishBestEffort(bus, label, build)`:
   building the payload and publishing are both inside a guard that logs and swallows, so a failed
   publish never rolls back or fails the run or gate. A crash between the state change and the
@@ -137,15 +156,27 @@ For each matching subscriber, `publish` enqueues `events.deliver { eventId, subs
 4. parses the stored row through the catalog and calls the subscriber;
 5. records the pair in the ledger.
 
-So a subscriber is called once per event even if its delivery is enqueued twice. A subscriber that
+So a subscriber is normally called once per event, even if its delivery is enqueued twice. A subscriber that
 throws fails the job, which retries with the queue's backoff (or at a `RetryAt` time) and ends
 `dead` after its attempts. The ledger is written after the subscriber returns, so a crash in
 between calls it again: delivery is **at-least-once** and subscribers must be idempotent.
 
+### Ordering
+
+`seq` is the insert order of events (assigned at insert, not at commit, so it is not a gap-free
+cursor). Publishing order is all it records: every delivery is its own job, run by kicks and ticks
+that can retry or overlap, so a subscriber may receive a later event before an earlier one (a
+`gate.resumed` before the `gate.pending` it answers, after a retry). A consumer that cares orders by
+`seq` or `occurredAt` itself, for example by ignoring an event older than the state it already
+holds.
+
 ## Retention
 
 `events.prune` runs daily as a platform schedule (like `jobs.prune`) and deletes events whose
-`occurred_at` is older than 30 days; their ledger rows cascade. The audit log is untouched.
+`occurred_at` is older than 30 days; their ledger rows cascade. It deletes in batches of
+`EVENT_PRUNE_BATCH_SIZE` (1000) per statement and keeps going until a batch comes back short or the
+run's lock deadline has passed; whatever is left goes with the next day's run. The audit log is
+untouched.
 
 ## Testing
 

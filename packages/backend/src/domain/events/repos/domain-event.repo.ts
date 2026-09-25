@@ -1,4 +1,5 @@
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -12,6 +13,9 @@ export type NewDomainEvent = Pick<
   typeof domainEvents.$inferInsert,
   'workspaceId' | 'projectId' | 'type' | 'subjectType' | 'subjectId' | 'payload' | 'dedupeKey' | 'occurredAt'
 >;
+
+/** Both drivers (node-postgres, pglite) return `{ rows }` from a raw query. */
+const pruneCountSchema = z.object({ rows: z.array(z.object({ count: z.coerce.number() })) });
 
 /** The predicate of `mocco_domain_events_workspace_dedupe_key_uq`, repeated as the ON CONFLICT arbiter. */
 const hasDedupeKey = sql.raw('dedupe_key IS NOT NULL');
@@ -65,12 +69,22 @@ export class DomainEventRepo {
     await this.db.insert(domainEventDeliveries).values({ eventId, subscriber, deliveredAt }).onConflictDoNothing();
   }
 
-  /** Delete events that occurred before `before` (their deliveries cascade). Returns the count. */
-  async pruneBefore(before: Date): Promise<number> {
-    const deleted = await this.db
-      .delete(domainEvents)
-      .where(lt(domainEvents.occurredAt, before))
-      .returning({ id: domainEvents.id });
-    return deleted.length;
+  /** Delete at most `limit` events that occurred before `before` (their deliveries
+   * cascade). Returns how many were deleted; fewer than `limit` means none are left. */
+  async pruneBefore(before: Date, limit: number): Promise<number> {
+    const result = await this.db.execute(sql`
+      WITH deleted AS (
+        DELETE FROM ${domainEvents}
+        WHERE ${domainEvents.id} IN (
+          SELECT ${domainEvents.id} FROM ${domainEvents}
+          WHERE ${domainEvents.occurredAt} < ${before}
+          LIMIT ${limit}
+        )
+        RETURNING 1
+      )
+      SELECT count(*)::int AS count FROM deleted
+    `);
+    const [row] = pruneCountSchema.parse(result).rows;
+    return row?.count ?? 0;
   }
 }
