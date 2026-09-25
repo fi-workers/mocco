@@ -130,7 +130,7 @@ Event types and the facts each carries:
 |---|---|
 | `sentry.issue.created` | `project`, `environment`, `level` |
 | `vercel.deployment.created` / `.succeeded` / `.error` / `.canceled` | `project`, `target` (`production`/`preview`), `branch` |
-| `github.push` | `repo`, `branch`, `hasCommits` |
+| `github.push` | `repo`, `refType` (`branch`/`tag`), `branch` (branch pushes only), `hasCommits` |
 | `github.pull_request.opened` / `.reopened` / `.merged` / `.closed` | `repo`, `baseBranch` |
 | `github.issues.opened` / `.reopened` / `.closed` | `repo` |
 | `github.release.published` | `repo` |
