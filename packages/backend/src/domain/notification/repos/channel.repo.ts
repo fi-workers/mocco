@@ -12,7 +12,7 @@ const { notificationChannels } = schema;
 export type ChannelRow = typeof notificationChannels.$inferSelect;
 export type NewChannel = Pick<
   typeof notificationChannels.$inferInsert,
-  'workspaceId' | 'kind' | 'name' | 'config' | 'externalId'
+  'workspaceId' | 'kind' | 'name' | 'config' | 'externalId' | 'guildId'
 >;
 
 /** Data access for mocco_notification_channels (ADR 0012). Every query is workspace-scoped. */

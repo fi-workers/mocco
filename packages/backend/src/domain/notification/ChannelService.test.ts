@@ -10,6 +10,7 @@ import {
   DiscordChannelNotInGuildError,
   DiscordGuildNotFoundError,
   DiscordNotConfiguredError,
+  DiscordReinstallRequiredError,
   DiscordRequestFailedError,
   NotificationChannelExistsError,
   NotificationChannelNotFoundError,
@@ -24,6 +25,7 @@ import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord
 import { RuleRepo } from '@backend/domain/notification/repos/rule.repo';
 import { DiscordJsonErrorCodes } from '@backend/domain/notification/senders/discord-constants';
 import {
+  botInGuild,
   createTestChannelService,
   guildChannelsReply,
   messageCreated,
@@ -32,7 +34,7 @@ import {
 } from '@backend/domain/notification/testing/channel-service';
 import { jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedWorkspace } from '@backend/domain/notification/testing/seed';
-import { notificationDeliveries, notificationRules } from '@backend/infra/db/schema';
+import { discordRateLimits, notificationDeliveries, notificationRules } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 const ALERTS = { id: '700000000000000001', name: 'alerts' };
@@ -54,7 +56,12 @@ describe('ChannelService (pglite, fake Discord)', () => {
   });
 
   const createAlerts = async (...sendReplies: Response[]) => {
-    const { service, requests } = createTestChannelService(t.db, guildChannelsReply(ALERTS, DEPLOYS), ...sendReplies);
+    const { service, requests } = createTestChannelService(
+      t.db,
+      ...botInGuild(),
+      guildChannelsReply(ALERTS, DEPLOYS),
+      ...sendReplies,
+    );
     const created = await service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id });
     return { service, requests, ...created };
   };
@@ -119,9 +126,13 @@ describe('ChannelService (pglite, fake Discord)', () => {
         config: { guildId: guild.guildId, channelId: ALERTS.id, channelName: 'alerts' },
         status: ChannelStatuses.active,
       });
-      expect(requests[1]?.method).toBe('POST');
-      expect(new URL(requests[1]?.url ?? '').pathname).toBe(`/api/v10/channels/${ALERTS.id}/messages`);
-      expect(requests[1]?.body).toContain(CHANNEL_TEST_MESSAGE.title);
+      expect(requests.map(request => new URL(request.url).pathname)).toEqual([
+        '/api/v10/users/@me',
+        `/api/v10/guilds/${guild.guildId}/members/4242`,
+        `/api/v10/guilds/${guild.guildId}/channels`,
+        `/api/v10/channels/${ALERTS.id}/messages`,
+      ]);
+      expect(requests[3]?.body).toContain(CHANNEL_TEST_MESSAGE.title);
     });
 
     it('stores a channel the bot cannot post to as disabled, with the reason', async () => {
@@ -147,17 +158,66 @@ describe('ChannelService (pglite, fake Discord)', () => {
       expect(channel.status).toBe(ChannelStatuses.active);
     });
 
-    it('skips the test message while Discord is rate limiting the bot', async () => {
-      await new DiscordRateLimitRepo(t.db).block('global', new Date(TEST_NOW.getTime() + 60_000));
+    it('skips the test message while the channel bucket is blocked', async () => {
+      await new DiscordRateLimitRepo(t.db).block(`channel:${ALERTS.id}`, new Date(TEST_NOW.getTime() + 60_000));
 
       const { test, requests } = await createAlerts();
 
       expect(test).toMatchObject({ sent: false, channelDisabled: false });
-      expect(requests).toHaveLength(1);
+      expect(requests).toHaveLength(3);
+    });
+
+    it('refuses to call Discord while the bot is globally rate limited', async () => {
+      await new DiscordRateLimitRepo(t.db).block('global', new Date(TEST_NOW.getTime() + 60_000));
+      const { service, requests } = createTestChannelService(t.db);
+
+      await expect(
+        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+      ).rejects.toBeInstanceOf(DiscordRequestFailedError);
+      expect(requests).toHaveLength(0);
+    });
+
+    it('records the guild bucket when listing channels is rate limited, and waits for it', async () => {
+      const { service } = createTestChannelService(
+        t.db,
+        jsonResponse(429, { message: 'slow', retry_after: 5 }, { 'X-RateLimit-Scope': 'user' }),
+      );
+      await expect(service.listGuildChannels(workspaceId, guild.id)).rejects.toThrow(DiscordRequestFailedError);
+
+      const [row] = await t.db.select().from(discordRateLimits);
+      expect(row).toEqual({ bucket: `guild:${guild.guildId}`, blockedUntil: new Date(TEST_NOW.getTime() + 5000) });
+      const next = createTestChannelService(t.db);
+      await expect(next.service.listGuildChannels(workspaceId, guild.id)).rejects.toThrow(DiscordRequestFailedError);
+      expect(next.requests).toHaveLength(0);
+    });
+
+    it('removes a stale install (the bot re-joined after it) with its channels, and asks to reconnect', async () => {
+      await createAlerts(messageCreated());
+      const rejoined = new Date(guild.installedAt.getTime() + 60 * 60 * 1000);
+      const { service } = createTestChannelService(t.db, ...botInGuild(rejoined));
+
+      await expect(
+        service.createChannel(workspaceId, { guildId: guild.id, channelId: DEPLOYS.id }),
+      ).rejects.toBeInstanceOf(DiscordReinstallRequiredError);
+      expect(await service.listGuilds(workspaceId)).toEqual([]);
+      expect(await service.listChannels(workspaceId)).toEqual([]);
+    });
+
+    it('treats a bot that left the guild as a stale install', async () => {
+      const { service } = createTestChannelService(
+        t.db,
+        jsonResponse(200, { id: '4242' }),
+        jsonResponse(404, { message: 'Unknown Member', code: DiscordJsonErrorCodes.UnknownMember }),
+      );
+
+      await expect(
+        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+      ).rejects.toBeInstanceOf(DiscordReinstallRequiredError);
+      expect(await service.listGuilds(workspaceId)).toEqual([]);
     });
 
     it('refuses a channel the bot does not list in that guild (a foreign or made-up id)', async () => {
-      const { service } = createTestChannelService(t.db, guildChannelsReply(DEPLOYS));
+      const { service } = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(DEPLOYS));
 
       await expect(
         service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
@@ -177,20 +237,44 @@ describe('ChannelService (pglite, fake Discord)', () => {
 
     it('refuses the same Discord channel twice in a workspace', async () => {
       await createAlerts(messageCreated());
-      const { service } = createTestChannelService(t.db, guildChannelsReply(ALERTS));
+      const { service } = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(ALERTS));
 
       await expect(
         service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
       ).rejects.toBeInstanceOf(NotificationChannelExistsError);
     });
 
-    it('deletes a channel with its rules, and re-enables a disabled one', async () => {
-      const { service, channel } = await createAlerts(
+    it('re-enables a disabled channel only after the install, listing and test message check out', async () => {
+      const { channel } = await createAlerts(
         jsonResponse(403, { message: 'Missing Access', code: DiscordJsonErrorCodes.MissingAccess }),
       );
 
-      const reenabled = await service.reenableChannel(workspaceId, channel.id);
-      expect(reenabled).toMatchObject({ status: ChannelStatuses.active, disabledReason: null });
+      const stillBroken = createTestChannelService(
+        t.db,
+        ...botInGuild(),
+        guildChannelsReply(ALERTS),
+        jsonResponse(403, { message: 'Missing Permissions', code: DiscordJsonErrorCodes.MissingPermissions }),
+      );
+      const retried = await stillBroken.service.reenableChannel(workspaceId, channel.id);
+      expect(retried.test).toMatchObject({ sent: false, channelDisabled: true });
+      expect(retried.channel).toMatchObject({
+        status: ChannelStatuses.disabled,
+        disabledReason: 'Discord 403 (code 50013): Missing Permissions',
+      });
+
+      const gone = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(DEPLOYS));
+      await expect(gone.service.reenableChannel(workspaceId, channel.id)).rejects.toBeInstanceOf(
+        DiscordChannelNotInGuildError,
+      );
+
+      const fixed = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(ALERTS), messageCreated());
+      const reenabled = await fixed.service.reenableChannel(workspaceId, channel.id);
+      expect(reenabled.test).toEqual({ sent: true, reason: null, channelDisabled: false });
+      expect(reenabled.channel).toMatchObject({ status: ChannelStatuses.active, disabledReason: null });
+    });
+
+    it('deletes a channel with its rules', async () => {
+      const { service, channel } = await createAlerts(messageCreated());
 
       await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco);
       await service.deleteChannel(workspaceId, channel.id);

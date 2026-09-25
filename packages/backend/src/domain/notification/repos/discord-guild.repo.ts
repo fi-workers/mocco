@@ -13,12 +13,14 @@ export type DiscordGuildRow = typeof discordGuilds.$inferSelect;
 export class DiscordGuildRepo {
   constructor(private readonly db: Db) {}
 
-  /** Record an install; installing into the same guild again refreshes its name and installer. */
+  /** Record an install; installing into the same guild again refreshes its name, installer
+   * and `installed_at`. */
   async upsert(values: {
     workspaceId: string;
     guildId: string;
     guildName: string;
-    installedByUserId: string;
+    installedByUserId: string | null;
+    installedAt: Date;
   }): Promise<DiscordGuildRow> {
     return expectOne(
       await this.db
@@ -26,7 +28,11 @@ export class DiscordGuildRepo {
         .values(values)
         .onConflictDoUpdate({
           target: [discordGuilds.workspaceId, discordGuilds.guildId],
-          set: { guildName: values.guildName, installedByUserId: values.installedByUserId },
+          set: {
+            guildName: values.guildName,
+            installedByUserId: values.installedByUserId,
+            installedAt: values.installedAt,
+          },
         })
         .returning(),
     );
@@ -38,6 +44,15 @@ export class DiscordGuildRepo {
       .from(discordGuilds)
       .where(eq(discordGuilds.workspaceId, workspaceId))
       .orderBy(asc(discordGuilds.createdAt), asc(discordGuilds.id));
+  }
+
+  /** Forget an install (its channels cascade). Returns false when absent. */
+  async delete(workspaceId: string, id: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(discordGuilds)
+      .where(and(eq(discordGuilds.workspaceId, workspaceId), eq(discordGuilds.id, id)))
+      .returning({ id: discordGuilds.id });
+    return deleted.length > 0;
   }
 
   async findById(workspaceId: string, id: string): Promise<DiscordGuildRow | undefined> {

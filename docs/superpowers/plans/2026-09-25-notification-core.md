@@ -93,8 +93,14 @@ Decisions:
   a workspace post into any server the bot is in.
 - **A failed test message still stores the channel** (disabled when the bot cannot reach it), so the
   reason sits next to the channel and re-enable is one action after the fix.
-- **Install is member-level, channel writes admin-level**, as the task specifies: installing the
-  bot only records a guild; nothing is sent until an admin creates a channel.
+- **Install, callback, channel listing and every write are owner/admin** (review fix; spec §6
+  now says so), through one `WorkspaceService.assertAdmin(headers, workspaceId)` over the org
+  plugin's `getActiveMemberRole`, shared with the inbound router (#258).
+- **Stale installs are detected by `joined_at`** (review fix): the bot's membership is read before
+  binding or re-enabling; a bot that is gone or re-joined after `installed_at` deletes the install
+  (channels cascade through the new `guild_id` FK) and asks for a reconnect. Discord documents no
+  `GET /guilds/{id}/members/@me`, so the bot's id comes from `GET /users/@me` (cached per client).
+- Migrations `0015`/`0016` were regenerated in place (both unmerged).
 
 ## Verification
 

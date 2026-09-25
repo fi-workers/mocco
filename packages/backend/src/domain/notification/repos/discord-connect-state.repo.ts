@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, lt, or } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -12,6 +12,15 @@ export class DiscordConnectStateRepo {
 
   async insert(values: { state: string; userId: string; workspaceId: string; expiresAt: Date }): Promise<void> {
     await this.db.insert(discordConnectStates).values(values);
+  }
+
+  /** Delete states that expired before `now` or were consumed (daily prune). Returns the count. */
+  async prune(now: Date): Promise<number> {
+    const deleted = await this.db
+      .delete(discordConnectStates)
+      .where(or(lt(discordConnectStates.expiresAt, now), isNotNull(discordConnectStates.consumedAt)))
+      .returning({ state: discordConnectStates.state });
+    return deleted.length;
   }
 
   /** Atomically consume a state for the user: set `consumed_at` where it is unconsumed,

@@ -19,6 +19,7 @@ import { createNotificationHandlers } from '@backend/domain/notification/jobs';
 import { deliverNotification } from '@backend/domain/notification/NotificationService';
 import { ChannelRepo, type ChannelRow } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
+import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
 import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { discordChannelBucket } from '@backend/domain/notification/senders/discord-constants';
@@ -68,6 +69,7 @@ describe('capacity waits through the job runner (pglite)', () => {
           rateLimits,
           discord: new DiscordApi({ fetch: discordFetch, botToken: 'bot', now }),
           random: Math.random,
+          connectStates: new DiscordConnectStateRepo(t.db),
         }),
       ),
       now,

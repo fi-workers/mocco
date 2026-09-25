@@ -115,9 +115,12 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 **Project-scoped domains** (every product after deploy governance, [ADR 0013](../adr/0013-mocco-is-a-multi-product-platform.md)) don't hand-roll this: their routers compose `protectedProjectProcedure` / `productProcedure(product)` from `transport/trpc/project-procedures.ts`, which run `assertMember` and prove the `projectId` belongs to the workspace before any resolver. See [project model](./project.md).
 
 A write that needs more than membership (workspace-level settings such as notification channels)
-also calls `WorkspaceService.assertAdmin(headers, workspaceId, userId)` in a second middleware: owner
-or admin passes, a plain member gets `WorkspaceAdminRequiredError` (a `ForbiddenError` →
-`FORBIDDEN`). The notification router's `adminNotificationProcedure` is the example.
+calls `WorkspaceService.assertAdmin(headers, workspaceId)` instead of `assertMember`: it reads the
+caller's roles (`callerRoles`, the org plugin's `getActiveMemberRole`, comma-joined sets split and
+trimmed) and implies membership, so a non-member gets `WorkspaceNotFoundError` (`NOT_FOUND`) and a
+plain member `WorkspaceAdminRequiredError` (a `ForbiddenError` → `FORBIDDEN`). Role names are
+`WorkspaceMemberRoles` in `@mocco/common/workspace`. The notification router's
+`adminNotificationProcedure` is the example.
 
 This can't be statically lint-enforced, so it is covered by **cross-tenant tests**: a non-member passing the victim's `workspaceId` must be rejected on every procedure (read, write, and install).
 

@@ -7,6 +7,7 @@ import {
   DiscordChannelNotInGuildError,
   DiscordGuildNotFoundError,
   DiscordNotConfiguredError,
+  DiscordReinstallRequiredError,
   DiscordRequestFailedError,
   NotificationChannelExistsError,
   NotificationChannelNotFoundError,
@@ -15,7 +16,12 @@ import {
   UnknownRuleEventTypeError,
 } from '@backend/domain/notification/errors';
 import { DiscordResultKinds } from '@backend/domain/notification/senders/discord';
-import { DISCORD_GLOBAL_BUCKET, discordChannelBucket } from '@backend/domain/notification/senders/discord-constants';
+import {
+  DISCORD_GLOBAL_BUCKET,
+  DiscordJsonErrorCodes,
+  discordChannelBucket,
+  discordGuildBucket,
+} from '@backend/domain/notification/senders/discord-constants';
 import { MOCCO_FOOTER } from '@backend/domain/notification/templates';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
@@ -24,7 +30,12 @@ import type { DeliveryRepo } from '@backend/domain/notification/repos/delivery.r
 import type { DiscordGuildRepo, DiscordGuildRow } from '@backend/domain/notification/repos/discord-guild.repo';
 import type { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
 import type { RuleRepo, RuleRow } from '@backend/domain/notification/repos/rule.repo';
-import type { DiscordApi, DiscordSendResult, DiscordTextChannel } from '@backend/domain/notification/senders/discord';
+import type {
+  DiscordApi,
+  DiscordFailure,
+  DiscordSendResult,
+  DiscordTextChannel,
+} from '@backend/domain/notification/senders/discord';
 import type {
   ChannelTestResult,
   DeliveryStatus,
@@ -34,7 +45,7 @@ import type {
 } from '@mocco/common/notification';
 
 /** The Discord calls channel management makes with the Mocco bot. */
-export type DiscordChannelApi = Pick<DiscordApi, 'listTextChannels' | 'sendMessage'>;
+export type DiscordChannelApi = Pick<DiscordApi, 'listTextChannels' | 'sendMessage' | 'getBotMember'>;
 
 export interface ChannelServiceDeps {
   guilds: DiscordGuildRepo;
@@ -59,6 +70,20 @@ export const CHANNEL_TEST_MESSAGE: NeutralMessage = {
 const RATE_LIMITED_REASON = 'Discord is rate limiting the bot; try again in a moment';
 
 const DEFAULT_DELIVERY_LIST = 50;
+
+/**
+ * Slack between our clock (`installed_at`) and Discord's (`joined_at`). The bot joins
+ * just before our callback records the install, so a join later than this after the
+ * install means the bot was re-added since.
+ */
+export const INSTALL_CLOCK_SKEW_MS = 2 * 60 * 1000;
+
+/** Answers of Discord that mean the bot is not in the guild (any more). */
+const BOT_ABSENT_CODES: ReadonlySet<number> = new Set([
+  DiscordJsonErrorCodes.UnknownMember,
+  DiscordJsonErrorCodes.UnknownGuild,
+  DiscordJsonErrorCodes.MissingAccess,
+]);
 
 /**
  * Notification channels, their rules and their deliveries, per workspace (relay design
@@ -93,14 +118,64 @@ export class ChannelService {
     return channel;
   }
 
+  /** Guild routes pace on `guild:<id>` (and the global bucket); a 429 blocks it. */
+  private async assertGuildRouteOpen(guild: DiscordGuildRow): Promise<void> {
+    const blocked = await this.deps.rateLimits.blockedUntil(
+      [discordGuildBucket(guild.guildId), DISCORD_GLOBAL_BUCKET],
+      this.deps.now(),
+    );
+    if (blocked !== undefined) {
+      throw new DiscordRequestFailedError(RATE_LIMITED_REASON);
+    }
+  }
+
+  private async failedGuildCall(guild: DiscordGuildRow, result: DiscordFailure): Promise<never> {
+    if (result.kind === DiscordResultKinds.rate_limited) {
+      await this.deps.rateLimits.block(result.bucketKey ?? discordGuildBucket(guild.guildId), result.retryAt);
+      throw new DiscordRequestFailedError(RATE_LIMITED_REASON);
+    }
+    throw new DiscordRequestFailedError(result.reason);
+  }
+
   private async textChannels(guild: DiscordGuildRow): Promise<DiscordTextChannel[]> {
+    await this.assertGuildRouteOpen(guild);
     const result = await this.requireDiscord().listTextChannels(guild.guildId);
     if (result.kind === DiscordResultKinds.listed) {
       return result.channels;
     }
-    throw new DiscordRequestFailedError(
-      result.kind === DiscordResultKinds.rate_limited ? RATE_LIMITED_REASON : result.reason,
-    );
+    return await this.failedGuildCall(guild, result);
+  }
+
+  /**
+   * Prove the install is still this workspace's: the bot is in the guild and joined it
+   * no later than this workspace installed it. Otherwise the row is stale (the bot left,
+   * or was re-added since, possibly by another workspace): it is deleted, with its
+   * channels, and the user must connect Discord again.
+   */
+  private async assertCurrentInstall(guild: DiscordGuildRow): Promise<void> {
+    await this.assertGuildRouteOpen(guild);
+    const result = await this.requireDiscord().getBotMember(guild.guildId);
+    if (result.kind === DiscordResultKinds.member) {
+      const joinedAt = result.joinedAt?.getTime();
+      if (joinedAt === undefined || joinedAt <= guild.installedAt.getTime() + INSTALL_CLOCK_SKEW_MS) {
+        return;
+      }
+    } else if (result.kind !== DiscordResultKinds.permanent || !BOT_ABSENT_CODES.has(result.code ?? 0)) {
+      await this.failedGuildCall(guild, result);
+    }
+    await this.deps.guilds.delete(guild.workspaceId, guild.id);
+    throw new DiscordReinstallRequiredError(guild.guildName);
+  }
+
+  /** The guild channel `channelId` as the bot lists it now, after proving the install is current. */
+  private async currentGuildChannel(guild: DiscordGuildRow, channelId: string): Promise<DiscordTextChannel> {
+    await this.assertCurrentInstall(guild);
+    const textChannels = await this.textChannels(guild);
+    const discordChannel = textChannels.find(candidate => candidate.id === channelId);
+    if (discordChannel === undefined) {
+      throw new DiscordChannelNotInGuildError(channelId);
+    }
+    return discordChannel;
   }
 
   /** Send the test message, recording what Discord tells us about the channel. */
@@ -174,11 +249,7 @@ export class ChannelService {
     input: { guildId: string; channelId: string; name?: string },
   ): Promise<{ channel: ChannelRow; test: ChannelTestResult }> {
     const guild = await this.requireGuild(workspaceId, input.guildId);
-    const textChannels = await this.textChannels(guild);
-    const discordChannel = textChannels.find(candidate => candidate.id === input.channelId);
-    if (discordChannel === undefined) {
-      throw new DiscordChannelNotInGuildError(input.channelId);
-    }
+    const discordChannel = await this.currentGuildChannel(guild, input.channelId);
     let channel: ChannelRow;
     try {
       channel = await this.deps.channels.insert({
@@ -187,6 +258,7 @@ export class ChannelService {
         name: input.name ?? `#${discordChannel.name}`,
         config: { guildId: guild.guildId, channelId: discordChannel.id, channelName: discordChannel.name },
         externalId: discordChannel.id,
+        guildId: guild.id,
       });
     } catch (error) {
       if (error instanceof UniqueConstraintError) {
@@ -204,13 +276,27 @@ export class ChannelService {
     }
   }
 
-  /** Deliver to a disabled channel again (after the customer fixed the bot's access). */
-  async reenableChannel(workspaceId: string, channelId: string): Promise<ChannelRow> {
+  /**
+   * Deliver to a disabled channel again, after the customer fixed the bot's access. The
+   * same checks as binding run again (the install is current, the bot still lists the
+   * channel), then the test message: a channel the bot still cannot reach ends disabled
+   * again, with the new reason.
+   */
+  async reenableChannel(
+    workspaceId: string,
+    channelId: string,
+  ): Promise<{ channel: ChannelRow; test: ChannelTestResult }> {
+    const existing = await this.requireChannel(workspaceId, channelId);
+    if (existing.guildId === null) {
+      throw new NotificationChannelNotFoundError(channelId);
+    }
+    const guild = await this.requireGuild(workspaceId, existing.guildId);
+    await this.currentGuildChannel(guild, existing.externalId);
     const channel = await this.deps.channels.enable(workspaceId, channelId);
     if (channel === undefined) {
       throw new NotificationChannelNotFoundError(channelId);
     }
-    return channel;
+    return await this.sendTest(channel);
   }
 
   async listRules(workspaceId: string, channelId: string): Promise<RuleRow[]> {

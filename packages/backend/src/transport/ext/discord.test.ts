@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
@@ -13,7 +14,7 @@ import {
   installedGuild,
   type FakeDiscordOAuth,
 } from '@backend/domain/notification/testing/fake-discord-oauth';
-import { discordConnectStates, discordGuilds } from '@backend/infra/db/schema';
+import { discordConnectStates, discordGuilds, members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createDiscordInstallRoutes } from '@backend/transport/ext/discord';
 
@@ -94,6 +95,39 @@ describe('ext Discord install routes (pglite, fake OAuth)', () => {
 
     const { headers } = await ownerOfWorkspace('a@example.com');
     expect(await statusOf(app.request('/discord/install?workspaceId=nope', { headers }))).toBe(400);
+  });
+
+  /** Add `email` to the workspace as a plain member (the org plugin's default role). */
+  const plainMember = async (workspaceId: string, email: string) => {
+    const headers = await signUp(auth, email);
+    const session = await auth.getSession(headers);
+    await t.db.insert(members).values({ organizationId: workspaceId, userId: session?.user.id ?? '', role: 'member' });
+    return headers;
+  };
+
+  it('403s a plain member on install, and issues no state', async () => {
+    const app = routes(createFakeDiscordOAuth());
+    const { workspaceId } = await ownerOfWorkspace('owner@example.com');
+    const member = await plainMember(workspaceId, 'member@example.com');
+
+    const response = await app.request(`/discord/install?workspaceId=${workspaceId}`, { headers: member });
+
+    expect(response.status).toBe(403);
+    expect(await t.db.select().from(discordConnectStates)).toHaveLength(0);
+  });
+
+  it('refuses the callback when the installer is no longer an owner or admin, without exchanging', async () => {
+    const oauth = createFakeDiscordOAuth(installedGuild('9001'));
+    const app = routes(oauth);
+    const { headers, workspaceId } = await ownerOfWorkspace('owner@example.com');
+    const state = await startInstall(app, headers, workspaceId);
+    await t.db.update(members).set({ role: 'member' }).where(eq(members.organizationId, workspaceId));
+
+    const response = await app.request(`/discord/callback?code=c&state=${state}`, { headers });
+
+    expect(location(response)).toBe('/workspaces?connect_error=1');
+    expect(oauth.exchanged).toEqual([]);
+    expect(await t.db.select().from(discordGuilds)).toHaveLength(0);
   });
 
   it("404s a workspace the user isn't a member of, and issues no state", async () => {

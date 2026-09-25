@@ -48,16 +48,12 @@ const check = async (run: () => Promise<unknown>): Promise<void> => {
   }
 };
 
-/** Members of `workspaceId` (a non-member gets NOT_FOUND before any resolver runs). */
-const protectedNotificationProcedure = protectedProcedure.use(async ({ ctx, getRawInput, next }) => {
+/** Requires the notification service and maps this domain's errors from the resolver. */
+const notificationProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   const { notifications } = ctx;
   if (notifications === undefined) {
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Notifications are not available' });
   }
-  const { workspaceId } = workspaceScopedInput.parse(await getRawInput());
-  await check(async () => {
-    await ctx.workspace.assertMember(ctx.headers, workspaceId);
-  });
   const result = await next({ ctx: { ...ctx, notifications } });
   if (!result.ok) {
     rethrowNotificationError(result.error.cause);
@@ -65,11 +61,21 @@ const protectedNotificationProcedure = protectedProcedure.use(async ({ ctx, getR
   return result;
 });
 
-/** Owners and admins of `workspaceId` (a plain member gets FORBIDDEN). */
-const adminNotificationProcedure = protectedNotificationProcedure.use(async ({ ctx, getRawInput, next }) => {
+/** Members of `workspaceId` (a non-member gets NOT_FOUND before any resolver runs). */
+const protectedNotificationProcedure = notificationProcedure.use(async ({ ctx, getRawInput, next }) => {
   const { workspaceId } = workspaceScopedInput.parse(await getRawInput());
   await check(async () => {
-    await ctx.workspace.assertAdmin(ctx.headers, workspaceId, ctx.session.user.id);
+    await ctx.workspace.assertMember(ctx.headers, workspaceId);
+  });
+  return await next();
+});
+
+/** Owners and admins of `workspaceId`: a plain member gets FORBIDDEN, a non-member
+ * NOT_FOUND (`assertAdmin` implies membership). */
+const adminNotificationProcedure = notificationProcedure.use(async ({ ctx, getRawInput, next }) => {
+  const { workspaceId } = workspaceScopedInput.parse(await getRawInput());
+  await check(async () => {
+    await ctx.workspace.assertAdmin(ctx.headers, workspaceId);
   });
   return await next();
 });
@@ -82,7 +88,8 @@ export const notificationRouter = router({
     .output(z.object({ guilds: z.array(discordGuildSchema) }))
     .query(async ({ ctx, input }) => ({ guilds: await ctx.notifications.listGuilds(input.workspaceId) })),
 
-  guildChannels: protectedNotificationProcedure
+  // Admin-only: it spends Discord API calls on the shared bot.
+  guildChannels: adminNotificationProcedure
     .input(workspaceScopedInput.extend({ guildId: z.uuid() }))
     .output(z.object({ channels: z.array(discordTextChannelSchema) }))
     .query(async ({ ctx, input }) => ({
@@ -118,10 +125,8 @@ export const notificationRouter = router({
 
   reenableChannel: adminNotificationProcedure
     .input(channelInput)
-    .output(z.object({ channel: notificationChannelSchema }))
-    .mutation(async ({ ctx, input }) => ({
-      channel: await ctx.notifications.reenableChannel(input.workspaceId, input.channelId),
-    })),
+    .output(z.object({ channel: notificationChannelSchema, test: channelTestResultSchema }))
+    .mutation(async ({ ctx, input }) => await ctx.notifications.reenableChannel(input.workspaceId, input.channelId)),
 
   rules: protectedNotificationProcedure
     .input(channelInput)

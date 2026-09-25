@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { NotFoundError } from '@backend/domain/errors';
+import { ForbiddenError, NotFoundError } from '@backend/domain/errors';
 import { DiscordConnectStateInvalidError, DiscordInstallFailedError } from '@backend/domain/notification/errors';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
@@ -15,7 +15,7 @@ export const DISCORD_INSTALL_PATH = '/discord/install';
 
 export interface DiscordInstallDeps {
   install: DiscordInstallService;
-  workspace: Pick<WorkspaceService, 'assertMember'>;
+  workspace: Pick<WorkspaceService, 'assertAdmin'>;
 }
 
 const WORKSPACES = '/workspaces';
@@ -36,8 +36,8 @@ export function createDiscordInstallRoutes({
 }): Hono {
   const routes = new Hono();
 
-  // Discord bot install, step 1 (relay design §6). A signed-in member of `workspaceId`
-  // gets a single-use state bound to them and the workspace, then goes to Discord.
+  // Discord bot install, step 1 (relay design §6). A signed-in owner or admin of
+  // `workspaceId` gets a single-use state bound to them and the workspace, then goes to Discord.
   routes.get(DISCORD_INSTALL_PATH, async c => {
     if (!discord) {
       return c.text('Discord is not configured', 503);
@@ -51,10 +51,13 @@ export function createDiscordInstallRoutes({
       return c.text('invalid workspace', 400);
     }
     try {
-      await discord.workspace.assertMember(c.req.raw.headers, workspaceId.data);
+      await discord.workspace.assertAdmin(c.req.raw.headers, workspaceId.data);
     } catch (error) {
       if (error instanceof NotFoundError) {
         return c.text('workspace not found', 404);
+      }
+      if (error instanceof ForbiddenError) {
+        return c.text('only an owner or admin can connect Discord', 403);
       }
       throw error;
     }
@@ -79,7 +82,17 @@ export function createDiscordInstallRoutes({
       return c.redirect(`${WORKSPACES}?${CONNECT_ERROR}`);
     }
     try {
-      const { workspaceId } = await discord.install.completeInstall(state, code, session.user.id);
+      const { workspaceId } = await discord.install.consumeState(state, session.user.id);
+      // Still an owner or admin? (A role can change during the Discord round trip.)
+      try {
+        await discord.workspace.assertAdmin(c.req.raw.headers, workspaceId);
+      } catch (error) {
+        if (error instanceof NotFoundError || error instanceof ForbiddenError) {
+          return c.redirect(`${WORKSPACES}?${CONNECT_ERROR}`);
+        }
+        throw error;
+      }
+      await discord.install.bindGuild(workspaceId, code, session.user.id);
       return c.redirect(notificationChannelsPath(workspaceId));
     } catch (error) {
       if (error instanceof DiscordConnectStateInvalidError) {

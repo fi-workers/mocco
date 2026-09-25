@@ -1,5 +1,5 @@
 {
-  "id": "3321aa7f-cd78-4a06-8c2b-a1df442e04c7",
+  "id": "47a5423a-6475-4f4c-9c01-334f227f2c5a",
   "prevId": "d39092a9-cd9f-4288-9c37-344e02c18172",
   "version": "7",
   "dialect": "postgresql",
@@ -702,6 +702,19 @@
         }
       },
       "foreignKeys": {
+        "mocco_discord_connect_states_user_id_mocco_users_id_fk": {
+          "name": "mocco_discord_connect_states_user_id_mocco_users_id_fk",
+          "tableFrom": "mocco_discord_connect_states",
+          "tableTo": "mocco_users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "mocco_discord_connect_states_workspace_id_mocco_workspaces_id_fk": {
           "name": "mocco_discord_connect_states_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_discord_connect_states",
@@ -756,6 +769,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "installed_at": {
+          "name": "installed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         },
         "created_at": {
           "name": "created_at",
@@ -817,7 +837,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "mocco_discord_guilds_id_workspace_uq": {
+          "name": "mocco_discord_guilds_id_workspace_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "workspace_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1859,6 +1888,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "secret_sealed": {
           "name": "secret_sealed",
           "type": "text",
@@ -1920,6 +1955,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "mocco_notification_channels_guild_idx": {
+          "name": "mocco_notification_channels_guild_idx",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1932,6 +1982,21 @@
           ],
           "columnsTo": [
             "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mocco_notification_channels_guild_workspace_fk": {
+          "name": "mocco_notification_channels_guild_workspace_fk",
+          "tableFrom": "mocco_notification_channels",
+          "tableTo": "mocco_discord_guilds",
+          "columnsFrom": [
+            "guild_id",
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id",
+            "workspace_id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -1957,6 +2022,10 @@
         "mocco_notification_channels_status_check": {
           "name": "mocco_notification_channels_status_check",
           "value": "\"mocco_notification_channels\".\"status\" IN ('active','disabled')"
+        },
+        "mocco_notification_channels_guild_check": {
+          "name": "mocco_notification_channels_guild_check",
+          "value": "\"mocco_notification_channels\".\"kind\" NOT IN ('discord') OR \"mocco_notification_channels\".\"guild_id\" IS NOT NULL"
         }
       },
       "isRLSEnabled": false

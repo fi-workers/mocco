@@ -23,6 +23,7 @@ import { createDiscordApiFromEnv } from '@backend/domain/notification/discord-co
 import { createNotificationHandlers, notificationSchedules } from '@backend/domain/notification/jobs';
 import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
+import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
@@ -70,6 +71,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       rateLimits: new DiscordRateLimitRepo(db),
       discord: deps.discord,
       random: deps.random,
+      connectStates: new DiscordConnectStateRepo(db),
     }),
   ];
   self.runner = new JobRunner({

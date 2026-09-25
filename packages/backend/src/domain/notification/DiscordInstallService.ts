@@ -21,13 +21,14 @@ export interface DiscordInstallServiceDeps {
 /**
  * The Mocco bot install (relay design §6): a single-use state bound to the user and
  * workspace, Discord's OAuth2 authorize redirect, and the callback that consumes the
- * state, exchanges the code and records the guild the token response names.
+ * state, exchanges the code and records the guild the token response names. The
+ * caller authorizes (owner or admin) before `startInstall` and between `consumeState`
+ * and `bindGuild`.
  */
 export class DiscordInstallService {
   constructor(private readonly deps: DiscordInstallServiceDeps) {}
 
-  /** Issue a state for `userId` in `workspaceId` (the caller proved membership) and
-   * return Discord's authorize URL. */
+  /** Issue a state for `userId` in `workspaceId` and return Discord's authorize URL. */
   async startInstall(userId: string, workspaceId: string): Promise<{ authorizeUrl: string }> {
     // Buffer is the base64 codec available without V8's --js-base-64 flag (see secret-box.ts).
     // eslint-disable-next-line unicorn/prefer-uint8array-base64
@@ -38,21 +39,27 @@ export class DiscordInstallService {
   }
 
   /**
-   * Finish an install: consume `state` for `userId` (atomically — a second callback with
-   * the same state fails), exchange `code`, and upsert the guild from the exchange
-   * response. The callback's `guild_id` query parameter is never trusted. Explicitly
-   * projected: the ext route has no `.output()` to strip the row.
+   * Consume `state` for `userId`, atomically (a second callback with the same state
+   * fails). Returns the workspace it was issued for.
    */
-  async completeInstall(
-    state: string,
-    code: string,
-    userId: string,
-  ): Promise<{ workspaceId: string; guild: { id: string; guildId: string; guildName: string } }> {
+  async consumeState(state: string, userId: string): Promise<{ workspaceId: string }> {
     const consumed = await this.deps.states.consume(state, userId, this.deps.now());
     if (consumed === undefined) {
       throw new DiscordConnectStateInvalidError();
     }
-    const { workspaceId } = consumed;
+    return { workspaceId: consumed.workspaceId };
+  }
+
+  /**
+   * Exchange `code` and upsert the guild from the exchange response (the callback's
+   * `guild_id` query parameter is never trusted), refreshing `installed_at`. Explicitly
+   * projected: the ext route has no `.output()` to strip the row.
+   */
+  async bindGuild(
+    workspaceId: string,
+    code: string,
+    userId: string,
+  ): Promise<{ id: string; guildId: string; guildName: string }> {
     const result = await this.deps.oauth.exchangeCode(code);
     if (result.kind === DiscordOAuthResultKinds.failed) {
       throw new DiscordInstallFailedError(workspaceId, result.reason);
@@ -62,7 +69,8 @@ export class DiscordInstallService {
       guildId: result.guildId,
       guildName: result.guildName,
       installedByUserId: userId,
+      installedAt: this.deps.now(),
     });
-    return { workspaceId, guild: { id: guild.id, guildId: guild.guildId, guildName: guild.guildName } };
+    return { id: guild.id, guildId: guild.guildId, guildName: guild.guildName };
   }
 }

@@ -56,8 +56,8 @@ and a channel belongs to a workspace, not a project.
 | `mocco_notification_channels` | A destination: `kind` (`discord`), a label, `config` `{ guildId, channelId, channelName }`, `external_id` (the Discord channel id; unique per workspace and kind), `status` `active`/`disabled` with `disabled_reason`, and `secret_sealed` (reserved for a customer bot token; null means the Mocco bot). |
 | `mocco_notification_rules` | Which events a channel gets: `event_type`, optional `source_id`, `filter`. Pinned to its channel's workspace by a composite FK; deleted with the channel. The same rule twice on one channel is one row (unique on channel, type, source, filter). |
 | `mocco_notification_deliveries` | One event sent (or not) to one channel: `status` (`queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts` (sends tried), `response_code`, `error`, `external_message_id`, `next_attempt_at`, `sending_at` (the claim), `sent_at`, the matching `rule_id` (indexed where not null, for the SET NULL on rule delete), and the rendered `message`. Unique on `(event_id, channel_id)`. |
-| `mocco_discord_guilds` | A Discord server the bot was installed into for a workspace: Discord's `guild_id` (from the OAuth token response), `guild_name`, `installed_by_user_id`. Unique per workspace and guild. |
-| `mocco_discord_connect_states` | The install handshake: a single-use `state` bound to user and workspace, 10-minute expiry, `consumed_at` (same shape as `mocco_github_connect_states`). |
+| `mocco_discord_guilds` | A Discord server the bot was installed into for a workspace: Discord's `guild_id` (from the OAuth token response), `guild_name`, `installed_by_user_id`, `installed_at` (refreshed on every install). Unique per workspace and guild. Channels reference it by `guild_id` (composite FK with the workspace, cascade). |
+| `mocco_discord_connect_states` | The install handshake: a single-use `state` bound to user (FK, cascade) and workspace, 10-minute expiry, `consumed_at` (same shape as `mocco_github_connect_states`). Expired and consumed states are pruned daily by `notification.prune`. |
 | `mocco_discord_rate_limits` | Shared Discord pacing: `bucket` (`channel:<discord channel id>` or `global`) → `blocked_until`. Platform-scoped, since every workspace posts through the same bot. |
 
 Retention: a delivery is deleted with its domain event (`event_id … ON DELETE CASCADE`), so
@@ -68,13 +68,16 @@ leaves `rule_id` null.
 ## Connecting Discord
 
 1. `GET /api/ext/discord/install?workspaceId=<id>` (Hono, `transport/ext/discord.ts`). A signed-out
-   user is sent to sign in; a non-member gets `404`; a member gets a state
-   (`DiscordInstallService.startInstall`) and a redirect to Discord's authorize URL (`scope=bot
-   identify`, View Channel + Send Messages + Embed Links + Read Message History).
-2. `GET /api/ext/discord/callback?code&state` (`completeInstall`): the state is consumed atomically
-   for the signed-in user (unknown, consumed, expired or another user's → `/workspaces?connect_error=1`),
-   the code is exchanged through the `DiscordOAuth` port, and the guild **from the token response**
-   is upserted (the `guild_id` query parameter is never read). Success lands on
+   user is sent to sign in; a non-member gets `404`, a plain member `403`; an owner or admin
+   (`assertAdmin`) gets a state (`DiscordInstallService.startInstall`) and a redirect to Discord's
+   authorize URL (`scope=bot identify`, View Channel + Send Messages + Embed Links + Read Message
+   History).
+2. `GET /api/ext/discord/callback?code&state`: `consumeState` consumes the state atomically for the
+   signed-in user (unknown, consumed, expired or another user's → `/workspaces?connect_error=1`); the
+   caller must still be an owner or admin of that workspace (else the same redirect, nothing
+   exchanged); then `bindGuild` exchanges the code through the `DiscordOAuth` port and upserts the
+   guild **from the token response** (the `guild_id` query parameter is never read), refreshing
+   `installed_at`. Success lands on
    `/workspaces/<id>/notifications?tab=channels`; a failed exchange on the same page with
    `&connect_error=1`. A cancelled install (no `code`) → `/workspaces?connect_error=1`.
 3. Both routes answer `503` unless `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and
@@ -84,14 +87,24 @@ leaves `rule_id` null.
 ### Channels (`ChannelService`)
 
 - `listGuildChannels` asks Discord for the guild's text and announcement channels with the bot token.
+  Guild routes pace on a `guild:<discord guild id>` bucket (and `global`): a blocked bucket answers
+  "rate limited" without calling Discord, and a 429 records the bucket.
+- **Stale installs.** Before binding or re-enabling, the service reads the bot's membership of the
+  guild (`GET /users/@me` once, then `GET /guilds/{id}/members/{botId}` — Discord documents no
+  `members/@me` GET). If the bot is not in the guild (Unknown Member, Unknown Guild, Missing Access)
+  or joined it more than 2 minutes after this workspace's `installed_at` (it was removed and re-added
+  since, possibly through another workspace), the install row is deleted, its channels cascade, and
+  the call fails with "connect Discord again" (`BAD_REQUEST`).
 - `createChannel` binds a channel **only if the bot lists it in a guild installed for this
   workspace**. The bot is shared by every tenant, so a bare channel id from the client would let
   one workspace post into another's server. The channel is stored, then a test message is posted and
   its result returned (`{ sent, reason, channelDisabled }`): a permission error is shown right away,
   and a channel the bot cannot reach is stored `disabled` with the reason. A blocked bucket skips the
   test; a sender-level rejection pauses the sender as in the delivery path.
-- `reenableChannel` sets a disabled channel `active` again (after the customer fixed access);
-  `deleteChannel` removes it and its rules, keeping its deliveries.
+- `reenableChannel` re-runs the same checks (current install, the bot still lists the channel), sets
+  the channel `active` and posts the test message, returning `{ channel, test }`; a channel still
+  unreachable ends `disabled` again with the new reason. `deleteChannel` removes a channel and its
+  rules, keeping its deliveries.
 - `addRule` accepts an exact type Mocco publishes (catalog or inbound) or any `prefix.*`; a duplicate
   is `CONFLICT`. `applyDefaultRules(channelId, preset, sourceId?)` inserts a preset and skips rules
   the channel already has.
@@ -109,20 +122,22 @@ leaves `rule_id` null.
 
 ### tRPC `notification` router
 
-Reads require membership of `workspaceId` (a non-member gets `NOT_FOUND`); writes also require an
-owner or admin (`WorkspaceService.assertAdmin`, which splits the vendor's comma-joined role set; a
-plain member gets `FORBIDDEN`). Every id in the input is looked up inside that workspace, so another
+Reads require membership of `workspaceId` (a non-member gets `NOT_FOUND`); writes and
+`guildChannels` (it spends the shared bot's Discord calls) require an owner or admin
+(`WorkspaceService.assertAdmin`, which reads the caller's roles through the org plugin's
+`getActiveMemberRole` and splits a comma-joined role set; it implies membership, so a non-member
+still gets `NOT_FOUND` and a plain member `FORBIDDEN`). Every id in the input is looked up inside that workspace, so another
 workspace's guild, channel or rule is `NOT_FOUND`. Outputs never carry `secret_sealed`,
 `external_id`, workspace ids or the installing user.
 
 | Procedure | Kind | Input | Output |
 |---|---|---|---|
 | `guilds` | query, member | `workspaceId` | `{ guilds: { id, guildId, guildName, createdAt }[] }` |
-| `guildChannels` | query, member | `workspaceId, guildId` | `{ channels: { id, name, type }[] }` |
+| `guildChannels` | query, admin | `workspaceId, guildId` | `{ channels: { id, name, type }[] }` |
 | `channels` | query, member | `workspaceId` | `{ channels: NotificationChannelDto[] }` |
 | `createChannel` | mutation, admin | `workspaceId, guildId, channelId, name?` | `{ channel, test: { sent, reason, channelDisabled } }` |
 | `deleteChannel` | mutation, admin | `workspaceId, channelId` | none |
-| `reenableChannel` | mutation, admin | `workspaceId, channelId` | `{ channel }` |
+| `reenableChannel` | mutation, admin | `workspaceId, channelId` | `{ channel, test: { sent, reason, channelDisabled } }` |
 | `rules` | query, member | `workspaceId, channelId` | `{ rules: NotificationRuleDto[] }` |
 | `addRule` | mutation, admin | `workspaceId, channelId, eventType, sourceId?, filter?` | `{ rule }` |
 | `removeRule` | mutation, admin | `workspaceId, ruleId` | none |
@@ -130,7 +145,7 @@ workspace's guild, channel or rule is `NOT_FOUND`. Outputs never carry `secret_s
 | `deliveries` | query, member | `workspaceId, channelId?, status?, limit? (≤ 100, default 50)` | `{ deliveries: NotificationDeliveryDto[] }`, newest first |
 
 Errors: not found → `NOT_FOUND`; duplicate channel or rule → `CONFLICT`; unknown event type,
-Discord refusing a request, or Discord not configured → `BAD_REQUEST`.
+Discord refusing a request, Discord not configured, or a stale install → `BAD_REQUEST`.
 
 ## Rules and filters
 
@@ -247,7 +262,7 @@ the job runner free of domain callbacks.
 ### Prune
 
 `notification.prune` runs daily and deletes `mocco_discord_rate_limits` rows whose
-`blocked_until` has passed.
+`blocked_until` has passed, and `mocco_discord_connect_states` rows that expired or were consumed.
 
 `timestamp` columns here, as everywhere in the schema, are `timestamp without time zone` written
 by the app in UTC (the repo convention, [DB conventions](./db-conventions.md)), not `timestamptz`.

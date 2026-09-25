@@ -35,6 +35,18 @@ export class DiscordGuildNotFoundError extends NotFoundError {
   }
 }
 
+/**
+ * The bot is no longer in the guild as this workspace installed it (it left, or was
+ * re-added later, possibly through another workspace). The stale install was removed;
+ * connect Discord again.
+ */
+export class DiscordReinstallRequiredError extends BadRequestError {
+  constructor(guildName: string, options?: ErrorOptions) {
+    super(`The Mocco bot is no longer installed in ${guildName} for this workspace; connect Discord again`, options);
+    this.name = 'DiscordReinstallRequiredError';
+  }
+}
+
 /** The Discord channel is not a text channel of that server (or the bot can't see it). */
 export class DiscordChannelNotInGuildError extends NotFoundError {
   constructor(channelId: string, options?: ErrorOptions) {

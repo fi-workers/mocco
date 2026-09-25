@@ -466,6 +466,38 @@ describe('DiscordApi.deleteMessage', () => {
   });
 });
 
+describe('DiscordApi.getBotMember', () => {
+  it('reads the bot id once, then its guild membership', async () => {
+    const { discord, requests } = api(
+      jsonResponse(200, { id: '4242' }),
+      jsonResponse(200, { joined_at: '2026-09-20T10:00:00.000000+00:00' }),
+      jsonResponse(200, { joined_at: null }),
+    );
+
+    expect(await discord.getBotMember('900')).toEqual({
+      kind: DiscordResultKinds.member,
+      joinedAt: new Date('2026-09-20T10:00:00.000Z'),
+    });
+    expect(await discord.getBotMember('901')).toEqual({ kind: DiscordResultKinds.member, joinedAt: null });
+    expect(requests.map(request => new URL(request.url).pathname)).toEqual([
+      '/api/v10/users/@me',
+      '/api/v10/guilds/900/members/4242',
+      '/api/v10/guilds/901/members/4242',
+    ]);
+  });
+
+  it('reports a bot that is not in the guild as a permanent failure with its code', async () => {
+    const { discord } = api(
+      jsonResponse(200, { id: '4242' }),
+      jsonResponse(404, { message: 'Unknown Member', code: DiscordJsonErrorCodes.UnknownMember }),
+    );
+    expect(await discord.getBotMember('900')).toMatchObject({
+      kind: DiscordResultKinds.permanent,
+      code: DiscordJsonErrorCodes.UnknownMember,
+    });
+  });
+});
+
 describe('DiscordApi.listTextChannels', () => {
   const GUILD = '222222222222222222';
 

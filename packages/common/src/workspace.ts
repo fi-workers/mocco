@@ -1,13 +1,5 @@
 import { z } from 'zod';
 
-/** A member's role in a workspace (the vendor's organization roles; `mocco_members_role_check`). */
-export const WorkspaceRoles = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
-} as const;
-export type WorkspaceRole = (typeof WorkspaceRoles)[keyof typeof WorkspaceRoles];
-
 export const workspaceCreateInputSchema = z.object({
   name: z.string().min(1).max(80),
 });
@@ -37,6 +29,14 @@ export const workspaceSchema = z.object({
   createdAt: z.date(),
 });
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
+
+/** A member's role in a workspace (the vendor's organization roles; `mocco_members_role_check`). */
+export const WorkspaceMemberRoles = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+export type WorkspaceMemberRole = (typeof WorkspaceMemberRoles)[keyof typeof WorkspaceMemberRoles];
 
 export const workspaceMemberSchema = z.object({
   id: z.string(),

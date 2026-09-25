@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
 import { RulePresets } from '@mocco/common/notification';
-import { WorkspaceRoles } from '@mocco/common/workspace';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -27,6 +27,7 @@ import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import {
+  botInGuild,
   createTestChannelService,
   guildChannelsReply,
   messageCreated,
@@ -138,7 +139,7 @@ describe('notification router on pglite', () => {
 
   /** An owner's workspace with an installed guild and one channel. */
   const ownerWithChannel = async (email: string) => {
-    const owner = await signedInCaller(email, guildChannelsReply(ALERTS), messageCreated());
+    const owner = await signedInCaller(email, ...botInGuild(), guildChannelsReply(ALERTS), messageCreated());
     const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
     const guild = await seedGuild(t.db, ws.id, '800000000000000001', owner.userId);
     const { channel, test } = await owner.api.notification.createChannel({
@@ -248,10 +249,10 @@ describe('notification router on pglite', () => {
 
   it('a plain member can read but gets FORBIDDEN on every write', async () => {
     const { workspaceId, guild, channel, ruleId } = await ownerWithChannel('owner@example.com');
-    const member = await signedInCaller('member@example.com', guildChannelsReply(ALERTS));
+    const member = await signedInCaller('member@example.com');
     await t.db
       .insert(members)
-      .values({ organizationId: workspaceId, userId: member.userId, role: WorkspaceRoles.member });
+      .values({ organizationId: workspaceId, userId: member.userId, role: WorkspaceMemberRoles.member });
 
     const codes = await codesOf(
       everyProcedure(member.api, { workspaceId, guildId: guild.id, channelId: channel.id, ruleId }),
@@ -259,7 +260,7 @@ describe('notification router on pglite', () => {
 
     expect(codes).toEqual({
       guilds: 'OK',
-      guildChannels: 'OK',
+      guildChannels: 'FORBIDDEN',
       channels: 'OK',
       createChannel: 'FORBIDDEN',
       deleteChannel: 'FORBIDDEN',
@@ -289,10 +290,10 @@ describe('notification router on pglite', () => {
 
   it('maps domain errors: duplicate channel CONFLICT, unknown event type BAD_REQUEST, bad input BAD_REQUEST', async () => {
     const { owner, workspaceId, guild, channel } = await ownerWithChannel('owner@example.com');
-    const again = await signedInCaller('owner2@example.com', guildChannelsReply(ALERTS));
+    const again = await signedInCaller('owner2@example.com', ...botInGuild(), guildChannelsReply(ALERTS));
     await t.db
       .insert(members)
-      .values({ organizationId: workspaceId, userId: again.userId, role: WorkspaceRoles.owner });
+      .values({ organizationId: workspaceId, userId: again.userId, role: WorkspaceMemberRoles.owner });
 
     await expect(
       again.api.notification.createChannel({ workspaceId, guildId: guild.id, channelId: ALERTS.id }),

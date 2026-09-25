@@ -63,7 +63,17 @@ export async function seedGuild(
     guildId,
     guildName: 'Acme HQ',
     installedByUserId: installer,
+    installedAt: TEST_NOW,
   });
+}
+
+/**
+ * Discord's answers to `DiscordApi.getBotMember` on a fresh client: the bot's user
+ * (`GET /users/@me`), then its guild membership, joined `joinedAt` (by default an hour
+ * before the seed install, so the install is current).
+ */
+export function botInGuild(joinedAt = new Date(TEST_NOW.getTime() - 60 * 60 * 1000)): Response[] {
+  return [jsonResponse(200, { id: '4242' }), jsonResponse(200, { joined_at: joinedAt.toISOString() })];
 }
 
 /** Discord's answer to `GET /guilds/{id}/channels`: two text channels and a voice channel. */
