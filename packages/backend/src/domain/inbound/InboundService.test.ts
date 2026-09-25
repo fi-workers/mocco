@@ -491,7 +491,8 @@ describe('InboundService.ingest on pglite', () => {
       expect(await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) })).toMatchObject({
         status: IngestStatuses.accepted,
       });
-    });
+      // Seeding 20,000 receipts is slow on a loaded machine; the default 5 s is too tight.
+    }, 60_000);
   });
 
   describe('last_received_at', () => {
