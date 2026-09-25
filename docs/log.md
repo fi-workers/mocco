@@ -51,3 +51,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0013-mocco-is-a-multi-product-platform.md`, `adr/README.md`, `reference/project.md`,
   `reference/backend-conventions.md`, `index.md`
 - Source: branch `feat/platform-projects` (issue #108)
+
+## 2026-09-25 — OTA release control decisions
+
+- Recorded the OTA scope decisions: five phases (gate existing OTA tools, version policy and native force update,
+  Expo Updates hosting, a CodePush-compatible device layer, crash-driven auto pause) and one direction rule with
+  post-hoc review. Added CodePush technical and market research. The existing OTA design is now scoped to phase 3.
+- Docs touched: `specs/2026-09-25-ota-release-control-design.md`, `specs/2026-09-24-ota-design.md`,
+  `research/codepush-technical.md`, `research/codepush-market.md`, `reference/roadmap.md`, `index.md`
+- Source: branch `docs/ota-release-control`

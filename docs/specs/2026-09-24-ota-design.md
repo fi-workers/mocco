@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 confidence: medium
 owner: andrea
 tags: [spec, design, ota]
@@ -13,11 +13,14 @@ related:
   - ../research/ota-competitors.md
   - ../reference/roadmap.md
   - ./2026-09-24-platform-foundations-design.md
+  - ./2026-09-25-ota-release-control-design.md
 ---
 
 # OTA release management — implementation design
 
 Issue: fi-workers/mocco#99 (epic #104). Research: `../research/ota-competitors.md`.
+
+> **Scope update (2026-09-25).** This document is the design for **phase 3, Expo Updates hosting**. The phase order, the direction rules with post-hoc review, the protocol-neutral domain changes and the other phases are in the [release control design](./2026-09-25-ota-release-control-design.md), which wins where the two disagree.
 
 ## 1. Goals / non-goals
 

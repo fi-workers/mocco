@@ -4,7 +4,7 @@ description: Mocco's product lines, the order they ship in, the shared foundatio
 type: reference
 status: active
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 confidence: medium
 owner: andrea
 tags: [reference, roadmap, product, platform]
@@ -26,7 +26,7 @@ Mocco knows what reached production, when, and who approved it. None of the comp
 
 | Product | Issue | The join only Mocco can make |
 |---|---|---|
-| OTA release management | [#99](https://github.com/fi-workers/mocco/issues/99) | A production OTA push goes through the same gate, approvals and audit chain as a deploy |
+| OTA release management | [#99](https://github.com/fi-workers/mocco/issues/99) | A production OTA push, a rollout increase and a raised minimum app version go through the same gate and audit chain as a deploy; rollbacks apply at once and get a post-hoc review |
 | Feature flags | [#101](https://github.com/fi-workers/mocco/issues/101) | A production flag change is a gated, audited changeset; N-of-M approvals across roles |
 | Status page | [#103](https://github.com/fi-workers/mocco/issues/103) | Incidents list the runs promoted before them; a failing post-deploy check opens an incident that names the run |
 | App-review analysis | [#94](https://github.com/fi-workers/mocco/issues/94) | Rating and topic shifts attributed to the release (and its approvers) that caused them |
@@ -56,13 +56,14 @@ The wedge in the [feature map](./feature-map.md): gates, credential broker, audi
 
 ### Wave 1 — release suite: OTA (#99) and feature flags (#101)
 
-- **Why first:** both are production changes that today bypass all governance, so they extend the existing product directly and sell to the same buyer. The market is also open right now. CodePush shut down on 2025-03-31 and Microsoft's open-sourced server was archived; Ionic Appflow stops taking new apps on 2026-10-01. Flag vendors have consolidated (Split → Harness, Eppo → Datadog, Statsig → OpenAI → Amplitude, DevCycle → Dynatrace), Hypertune shut down on 2026-08-10, and Firebase Remote Config became paid on 2026-09-01. Everywhere, approvals and durable audit are top-tier-only features.
+- **Why first:** both are production changes that today bypass all governance, so they extend the existing product directly and sell to the same buyer. The market is also open right now. CodePush shut down on 2025-03-31 and Microsoft's open-sourced server was archived; Ionic Appflow stops taking new apps on 2026-10-01. Flag vendors have consolidated (Split → Harness, Eppo → Datadog, Statsig → OpenAI → Amplitude, DevCycle → Dynatrace), Hypertune shut down on 2026-08-10, and Firebase Remote Config became paid on 2026-09-01. Several OTA vendors now sell audit and roles on enterprise tiers, but none offers an approval gate before an OTA push, customer-verifiable audit, or CI publishing without a long-lived token ([CodePush market research](../research/codepush-market.md)).
 - **Key decisions:**
-  - OTA speaks the Expo Updates protocol v1, so apps use the stock `expo-updates` client. Signing keys stay in CI; Mocco verifies and serves the signed bytes.
+  - OTA ships in five phases ([release control design](../specs/2026-09-25-ota-release-control-design.md)): gate the team's existing OTA tool (EAS Update, hosted CodePush, hot-updater) by releasing its publishing token only to a resumed run; version policy and native force update; Expo Updates hosting with the stock `expo-updates` client (signing keys stay in CI); a CodePush-compatible device layer for migration; crash-driven auto pause.
+  - One direction rule across all of them: changes that add risk are gated, changes that remove risk apply at once, are audited, and get a post-hoc review.
   - Flag SDKs are OpenFeature providers over a flagd-format ruleset evaluated locally; web and React Native use OFREP remote evaluation so targeting rules never reach the client.
   - Both reuse `evaluateGate` through a shared *approvals outside runs* service extracted from `GateService`.
 - **Foundations introduced:** project/app entity and product enablement, multi-product app shell, SecretBox, job queue, domain events with `deploy.released` and the release registry, API keys and `/v1`, SDK packaging, object storage, approvals outside runs.
-- **Exit:** a production OTA promotion and a production flag change are both blocked until an authorized role approves, and both appear in the audit chain.
+- **Exit:** a production OTA publish (through the team's own tool or Mocco hosting), a raised minimum app version and a production flag change are all blocked until an authorized role approves, and all appear in the audit chain.
 
 ### Wave 2 — status page (#103)
 
@@ -152,7 +153,7 @@ Follow the PostHog pattern the research found works: each product meters its own
 | Product | Research | Design |
 |---|---|---|
 | Platform | [All-in-one platforms](../research/all-in-one-platforms-competitors.md) | [Platform foundations](../specs/2026-09-24-platform-foundations-design.md) |
-| OTA | [Research](../research/ota-competitors.md) | [Design](../specs/2026-09-24-ota-design.md) |
+| OTA | [Research](../research/ota-competitors.md), [CodePush technical](../research/codepush-technical.md), [CodePush market](../research/codepush-market.md) | [Release control](../specs/2026-09-25-ota-release-control-design.md), [Expo hosting](../specs/2026-09-24-ota-design.md) |
 | Feature flags | [Research](../research/feature-flags-competitors.md) | [Design](../specs/2026-09-24-feature-flags-design.md) |
 | Status page | [Research](../research/status-page-competitors.md) | [Design](../specs/2026-09-24-status-page-design.md) |
 | App reviews | [Research](../research/app-reviews-competitors.md) | [Design](../specs/2026-09-24-app-reviews-design.md) |
