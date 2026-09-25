@@ -1,0 +1,18 @@
+{
+  "id": "whk_project_1",
+  "type": "project.created",
+  "createdAt": 1758700000000,
+  "region": null,
+  "payload": {
+    "team": {
+      "id": "team_abc123"
+    },
+    "user": {
+      "id": "user_abc123"
+    },
+    "project": {
+      "id": "prj_new",
+      "name": "acme-api"
+    }
+  }
+}
