@@ -1,0 +1,38 @@
+{
+  "id": "whk_succeeded_1",
+  "type": "deployment.succeeded",
+  "createdAt": 1758700000000,
+  "region": "iad1",
+  "payload": {
+    "team": {
+      "id": "team_abc123"
+    },
+    "user": {
+      "id": "user_abc123"
+    },
+    "deployment": {
+      "id": "dpl_89qyp1cskzkLrVicDaZoDbjyHuDJ",
+      "name": "acme-web",
+      "url": "acme-web-4f7g2k1ab-acme.vercel.app",
+      "meta": {
+        "githubCommitRef": "main",
+        "githubCommitSha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+        "githubCommitMessage": "fix(checkout): guard missing cart id\n\nLonger body",
+        "githubCommitAuthorLogin": "octocat",
+        "githubOrg": "acme",
+        "githubRepo": "web"
+      }
+    },
+    "links": {
+      "deployment": "https://vercel.com/acme/acme-web/89qyp1cskzkLrVicDaZoDbjyHuDJ",
+      "project": "https://vercel.com/acme/acme-web"
+    },
+    "name": "acme-web",
+    "plan": "pro",
+    "project": {
+      "id": "prj_12HKQaOmR5t5Uy6vdcQsNIiZgHGB"
+    },
+    "regions": ["iad1"],
+    "target": "production"
+  }
+}

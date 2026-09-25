@@ -1,0 +1,155 @@
+import { NeutralMessageLimits } from '@mocco/common/notification';
+import { describe, expect, it } from 'vitest';
+
+import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/vercel';
+import {
+  expectEvent,
+  expectIgnored,
+  hmacHex,
+  patchFixture,
+  readFixture,
+} from '@backend/domain/inbound/testing/fixtures';
+
+const secret = 'vercel-webhook-secret';
+const noHeaders = new Headers();
+
+const signed = (signature: string) => new Headers({ 'x-vercel-signature': signature });
+
+describe('vercel verify', () => {
+  const body = readFixture('vercel/deployment-error.json');
+
+  it('accepts an HMAC-SHA1 hex signature of the raw body', () => {
+    expect(verify(body, signed(hmacHex('sha1', secret, body)), secret)).toBe(true);
+  });
+
+  it('accepts an uppercase hex signature', () => {
+    expect(verify(body, signed(hmacHex('sha1', secret, body).toUpperCase()), secret)).toBe(true);
+  });
+
+  it('rejects a tampered body', () => {
+    expect(verify(`${body}\n`, signed(hmacHex('sha1', secret, body)), secret)).toBe(false);
+  });
+
+  it('rejects a signature made with another secret', () => {
+    expect(verify(body, signed(hmacHex('sha1', 'wrong', body)), secret)).toBe(false);
+  });
+
+  it('rejects a missing signature header', () => {
+    expect(verify(body, noHeaders, secret)).toBe(false);
+  });
+
+  it('rejects a prefixed or SHA-256 signature', () => {
+    expect(verify(body, signed(`sha1=${hmacHex('sha1', secret, body)}`), secret)).toBe(false);
+    expect(verify(body, signed(hmacHex('sha256', secret, body)), secret)).toBe(false);
+  });
+});
+
+describe('vercel deliveryId', () => {
+  it('reads the payload id', () => {
+    expect(deliveryId(readFixture('vercel/deployment-created.json'), noHeaders)).toBe('whk_created_1');
+  });
+
+  it('is undefined for malformed JSON or a payload without an id', () => {
+    expect(deliveryId('{nope', noHeaders)).toBeUndefined();
+    expect(deliveryId('{"type":"deployment.created"}', noHeaders)).toBeUndefined();
+    expect(deliveryId('{"id":""}', noHeaders)).toBeUndefined();
+  });
+});
+
+describe('vercel parse', () => {
+  const facts = { project: 'acme-web', target: 'production', branch: 'main' };
+  const fields = [
+    { name: 'Environment', value: 'production', inline: true },
+    { name: 'Branch', value: '`main`', inline: true },
+  ];
+  const common = {
+    url: 'https://acme-web-4f7g2k1ab-acme.vercel.app',
+    description: '> fix(checkout): guard missing cart id  Longer body',
+    fields,
+    footer: 'Vercel · acme-web',
+  };
+
+  it('maps deployment.created', () => {
+    const event = expectEvent(parse(readFixture('vercel/deployment-created.json'), noHeaders));
+    expect(event.type).toBe('vercel.deployment.created');
+    expect(event.facts).toStrictEqual(facts);
+    expect(event.message).toStrictEqual({ title: 'Started · acme-web', severity: 'info', ...common });
+  });
+
+  it('maps a production deployment.succeeded', () => {
+    const event = expectEvent(parse(readFixture('vercel/deployment-succeeded-production.json'), noHeaders));
+    expect(event.type).toBe('vercel.deployment.succeeded');
+    expect(event.facts).toStrictEqual(facts);
+    expect(event.message).toStrictEqual({ title: 'Ready · acme-web', severity: 'success', ...common });
+  });
+
+  it('maps a preview deployment.succeeded too (filtering is left to rules)', () => {
+    const event = expectEvent(parse(readFixture('vercel/deployment-succeeded-preview.json'), noHeaders));
+    expect(event.type).toBe('vercel.deployment.succeeded');
+    expect(event.facts).toStrictEqual({ project: 'acme-web', target: 'preview', branch: 'feat/new-cart' });
+    expect(event.message.fields).toStrictEqual([
+      { name: 'Environment', value: 'preview', inline: true },
+      { name: 'Branch', value: '`feat/new-cart`', inline: true },
+    ]);
+  });
+
+  it('maps deployment.error', () => {
+    const event = expectEvent(parse(readFixture('vercel/deployment-error.json'), noHeaders));
+    expect(event.type).toBe('vercel.deployment.error');
+    expect(event.facts).toStrictEqual(facts);
+    expect(event.message).toStrictEqual({ title: 'Failed · acme-web', severity: 'error', ...common });
+  });
+
+  it('maps deployment.canceled', () => {
+    const event = expectEvent(parse(readFixture('vercel/deployment-canceled.json'), noHeaders));
+    expect(event.type).toBe('vercel.deployment.canceled');
+    expect(event.facts).toStrictEqual(facts);
+    expect(event.message).toStrictEqual({ title: 'Canceled · acme-web', severity: 'info', ...common });
+  });
+
+  it('parses a minimal relay-style payload, omitting the unknown branch', () => {
+    const body = JSON.stringify({
+      id: 'whk_1',
+      type: 'deployment.succeeded',
+      payload: { name: 'app', target: 'production', deployment: { url: 'app.vercel.app' } },
+    });
+    const event = expectEvent(parse(body, noHeaders));
+    expect(event.facts).toStrictEqual({ project: 'app', target: 'production' });
+    expect(event.message).toStrictEqual({
+      title: 'Ready · app',
+      url: 'https://app.vercel.app',
+      severity: 'success',
+      fields: [{ name: 'Environment', value: 'production', inline: true }],
+      footer: 'Vercel · app',
+    });
+  });
+
+  it('falls back to the dashboard link and truncates a long commit message', () => {
+    const body = patchFixture('vercel/deployment-error.json', {
+      'payload.deployment.url': undefined,
+      'payload.deployment.meta': { githubCommitMessage: 'm'.repeat(1000) },
+    });
+    const event = expectEvent(parse(body, noHeaders));
+    expect(event.message.url).toBe('https://vercel.com/acme/acme-web/89qyp1cskzkLrVicDaZoDbjyHuDJ');
+    expect(event.message.description).toBe(`> ${'m'.repeat(299)}…`);
+  });
+
+  it('truncates an oversized project name in the title', () => {
+    const body = patchFixture('vercel/deployment-error.json', { 'payload.name': 'p'.repeat(400) });
+    expect(expectEvent(parse(body, noHeaders)).message.title).toHaveLength(NeutralMessageLimits.title);
+  });
+
+  it('ignores other event types, naming them', () => {
+    expect(expectIgnored(parse(readFixture('vercel/project-created.json'), noHeaders))).toBe(
+      'vercel event "project.created" is not mapped',
+    );
+  });
+
+  it('ignores malformed JSON and payloads without a type', () => {
+    expect(expectIgnored(parse('{nope', noHeaders))).toBe('malformed JSON body');
+    expect(expectIgnored(parse('{"id":"x"}', noHeaders))).toBe('vercel payload does not match the expected shape');
+    expect(expectIgnored(parse('{"id":"x","type":"deployment.error","payload":"x"}', noHeaders))).toBe(
+      'vercel deployment payload does not match the expected shape',
+    );
+  });
+});
