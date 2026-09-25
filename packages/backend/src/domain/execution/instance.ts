@@ -6,6 +6,7 @@ import { ExecutorIds } from '@mocco/common/execution';
 import { waitUntil } from '@vercel/functions';
 
 import { getAudit } from '@backend/domain/audit/instance';
+import { getEventBus } from '@backend/domain/events/instance';
 import { callbackUrlFrom, genericExecutorUrlFrom, resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { GenericExecutor } from '@backend/domain/execution/executors/generic/provider';
 import { GitHubExecutor } from '@backend/domain/execution/executors/github/provider';
@@ -82,6 +83,7 @@ export function getExecution(): Execution {
         callbackUrl,
         waitUntil,
         audit: getAudit().audit,
+        bus: getEventBus(),
       }),
       callbackUrl,
     };

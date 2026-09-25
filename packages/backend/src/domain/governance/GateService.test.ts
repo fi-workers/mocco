@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
+import { asc } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createTestEventBus, FailingEventPublisher } from '@backend/domain/events/testing/event-bus';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -26,7 +28,7 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { expectOne } from '@backend/infra/db/rows';
-import { providerConnections, repos, users, workspaces } from '@backend/infra/db/schema';
+import { domainEvents, providerConnections, repos, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { GateItem, MoccoConfig } from '@mocco/common/mocco-config';
@@ -51,6 +53,7 @@ describe('GateService (pglite)', () => {
     executor = new FakeExecutor();
     audit = new AuditService({ audit: new AuditRepo(t.db) });
     runService = new RunService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
@@ -66,6 +69,7 @@ describe('GateService (pglite)', () => {
       },
     });
     gateService = new GateService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       runGates: new RunGateRepo(t.db),
       resumes: new ResumeRepo(t.db),
@@ -78,6 +82,8 @@ describe('GateService (pglite)', () => {
   afterEach(async () => {
     await t.close();
   });
+
+  const published = async () => await t.db.select().from(domainEvents).orderBy(asc(domainEvents.seq));
 
   async function seedWorkspace(): Promise<string> {
     return expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
@@ -432,6 +438,7 @@ describe('GateService (pglite)', () => {
         audit: { appendChained: vi.fn().mockRejectedValue(boom) } as never,
       });
       const failingGate = new GateService({
+        bus: createTestEventBus(t.db),
         runs: new RunRepo(t.db),
         runGates: new RunGateRepo(t.db),
         resumes: new ResumeRepo(t.db),
@@ -453,6 +460,89 @@ describe('GateService (pglite)', () => {
       // The governed action completed despite the audit append failing.
       expect(gate.state).toBe('resumed');
       expect(run.state).toBe('running');
+      spy.mockRestore();
+    });
+  });
+
+  describe('domain events', () => {
+    it('publishes gate.pending at the pause, then gate.resumed with the principals', async () => {
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'resume');
+
+      const events = await published();
+      expect(events.map(event => event.type)).toEqual(['gate.pending', 'gate.resumed']);
+      const subject = {
+        workspaceId,
+        runId,
+        repoFullName: 'fi-workers/api',
+        pipelineName: 'deploy',
+        linkPath: `/workspaces/${workspaceId}/runs/${runId}`,
+        gateName: 'approve',
+        gateItemIndex: 0,
+        facts: { repo: 'fi-workers/api', pipeline: 'deploy', gate: 'approve' },
+      };
+      expect(events[0]).toMatchObject({ subjectType: 'run_gate', subjectId: gate.id, payload: subject });
+      expect(events[1]).toMatchObject({
+        workspaceId,
+        subjectType: 'run_gate',
+        subjectId: gate.id,
+        payload: { ...subject, actorUserId: alice, resumedBy: [{ userId: alice, role: 'deployer' }] },
+      });
+    });
+
+    it('publishes gate.rejected with the actor and reason, and no run event', async () => {
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 2 }] },
+        await seedUser(),
+      );
+
+      await gateService.resume(workspaceId, runId, 0, alice, 'reject', 'not safe');
+
+      const events = await published();
+      expect(events.map(event => event.type)).toEqual(['gate.pending', 'gate.rejected']);
+      expect(events[1]?.payload).toMatchObject({ runId, gateName: 'approve', actorUserId: alice, reason: 'not safe' });
+    });
+
+    it('a failing bus never fails the resume — the gate resolves and the run continues', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const bus = new FailingEventPublisher();
+      const gatesWithBrokenBus = new GateService({
+        bus,
+        runs: new RunRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
+        memberships,
+        events: new RunEventRepo(t.db),
+        resumeRun: async (run, gateItemIndex) => await runService.resumeFromGate(run, gateItemIndex),
+        audit,
+      });
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { gate, run } = await gatesWithBrokenBus.resume(workspaceId, runId, 0, alice, 'resume');
+
+      expect(gate.state).toBe('resumed');
+      expect(run.state).toBe('running');
+      expect(bus.attempts).toBe(1);
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('gate.resumed'), expect.any(Error));
       spy.mockRestore();
     });
   });

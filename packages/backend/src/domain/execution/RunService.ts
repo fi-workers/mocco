@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
+import { DomainEventTypes } from '@mocco/common/events';
 import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
+import { publishBestEffort } from '@backend/domain/events/ports';
 import { hashToken, isTokenValid } from '@backend/domain/execution/callback-token';
 import {
   ConfigNotRunnableError,
@@ -11,10 +13,12 @@ import {
   RunNotFoundError,
   UnknownExecutorError,
 } from '@backend/domain/execution/errors';
+import { EventSubjectTypes, loadRunEventSubject } from '@backend/domain/execution/run-event-subject';
 import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { Executor, RunStepDispatch } from '@backend/domain/execution/ports';
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
@@ -140,6 +144,10 @@ export interface RunServiceDeps {
    * fail-open (AuditService.record swallows + logs), so an audit failure never breaks
    * the trigger — the run is already durably created and started. */
   audit: AuditService;
+  /** The domain event bus (ADR 0018). `run.succeeded` / `run.failed` / `gate.pending`
+   * are published AFTER the state change, best-effort (a failure is logged, the run
+   * stands) — notifications are convenience, not correctness. */
+  bus: EventPublisher;
 }
 
 /**
@@ -259,6 +267,13 @@ export class RunService {
   ): Promise<void> {
     await this.deps.runs.update(run.workspaceId, run.id, { state, finishedAt: new Date() });
     await this.deps.events.append({ workspaceId: run.workspaceId, runId: run.id, type, payload: {} });
+    const eventType = state === RunStates.succeeded ? DomainEventTypes.runSucceeded : DomainEventTypes.runFailed;
+    await publishBestEffort(this.deps.bus, eventType, async () => ({
+      type: eventType,
+      workspaceId: run.workspaceId,
+      subject: { type: EventSubjectTypes.run, id: run.id },
+      payload: await loadRunEventSubject(this.deps.runs, run.workspaceId, run.id),
+    }));
   }
 
   private async appendStepEvent(
@@ -290,6 +305,20 @@ export class RunService {
         currentIndex: index,
       });
       await this.appendGateEvent(run, RunEventTypes.gatePending, index, gate.name);
+      await publishBestEffort(this.deps.bus, DomainEventTypes.gatePending, async () => {
+        const subject = await loadRunEventSubject(this.deps.runs, run.workspaceId, run.id);
+        return {
+          type: DomainEventTypes.gatePending,
+          workspaceId: run.workspaceId,
+          subject: { type: EventSubjectTypes.runGate, id: gate.id },
+          payload: {
+            ...subject,
+            gateName: gate.name,
+            gateItemIndex: index,
+            facts: { ...subject.facts, gate: gate.name },
+          },
+        };
+      });
       return;
     }
     const step = await this.deps.steps.findByRunAndIndex(run.id, index);

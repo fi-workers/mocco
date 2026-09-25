@@ -25,6 +25,20 @@ export class RunRepo {
     return getOrThrow(rows, `Run ${runId} was not found`);
   }
 
+  /** A run with the commit, repo and pinned config snapshot it ran — what a domain event
+   * about the run names (repo, pipeline, commit). Workspace-scoped; throws
+   * EntityNotFoundError for a foreign or unknown id. */
+  async getWithContextInWorkspace(workspaceId: string, runId: string) {
+    const rows = await this.db
+      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos, config: schema.commitConfigs })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .innerJoin(schema.commitConfigs, eq(schema.runs.commitConfigId, schema.commitConfigs.id))
+      .where(and(eq(schema.runs.id, runId), eq(schema.runs.workspaceId, workspaceId)));
+    return getOrThrow(rows, `Run ${runId} was not found`);
+  }
+
   /** A run by its own id, workspace-agnostic — the callback funnel has no workspace
    * context; the per-run token (verified against `callbackTokenHash`) is the auth.
    * Returns undefined for an unknown id (the service maps that to a rejected callback). */

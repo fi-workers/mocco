@@ -862,3 +862,66 @@ export const jobSchedules = pgTable(
     check('mocco_job_schedules_interval_check', sql`${t.intervalSeconds} IS NULL OR ${t.intervalSeconds} > 0`),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────
+// Domain events (platform foundations §15, ADR 0018). A fact one domain publishes for
+// others to react to; `EventBus.publish` inserts the row and enqueues one
+// `events.deliver` job per subscriber. Pruned after 30 days — the audit log, not this
+// table, is the compliance record. See docs/reference/events.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A published domain event. */
+export const domainEvents = pgTable(
+  'mocco_domain_events',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Publish order across the table (a cursor for reconcilers and debugging).
+    seq: bigserial({ mode: 'bigint' }).notNull().unique('mocco_domain_events_seq_uq'),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id'),
+    // A catalog type from @mocco/common/events (`gate.pending`, …).
+    type: text().notNull(),
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    payload: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Set by publishers that may publish the same fact twice (e.g. a redelivered inbound
+    // webhook): a second publish with the key returns the first event.
+    dedupeKey: text('dedupe_key'),
+    occurredAt: timestamp('occurred_at').notNull(),
+    createdAt,
+  },
+  t => [
+    index('mocco_domain_events_workspace_occurred_at_idx').on(t.workspaceId, t.occurredAt),
+    index('mocco_domain_events_type_occurred_at_idx').on(t.type, t.occurredAt),
+    // The prune path (retention counts from occurred_at).
+    index('mocco_domain_events_occurred_at_idx').on(t.occurredAt),
+    uniqueIndex('mocco_domain_events_workspace_dedupe_key_uq')
+      .on(t.workspaceId, t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
+    // A project event is pinned to its workspace (skipped by Postgres while project_id is null).
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_domain_events_project_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One subscriber has handled one event. The `events.deliver` handler checks it first,
+ * so a delivery job that runs again (a second enqueue, a retry after the subscriber
+ * returned) doesn't call the subscriber twice. Deleted with its event. */
+export const domainEventDeliveries = pgTable(
+  'mocco_domain_event_deliveries',
+  {
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => domainEvents.id, { onDelete: 'cascade' }),
+    subscriber: text().notNull(),
+    deliveredAt: timestamp('delivered_at').notNull(),
+  },
+  t => [primaryKey({ columns: [t.eventId, t.subscriber], name: 'mocco_domain_event_deliveries_pk' })],
+);

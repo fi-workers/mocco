@@ -129,6 +129,10 @@ composition is split so that registering handlers never creates `instance.ts` im
 - `runtime/jobs.ts` (`getJobRunner()`) is the one place that imports every domain's factory. It
   sits above the domains, like `transport/`, and only transport and `getJobQueue`'s lazy `kick`
   (a dynamic `import()`) reach it. Domain code must not import `@backend/runtime/*` statically.
+- Domain events follow the same split: publishers inject `getEventBus()`
+  (`domain/events/instance.ts`); the subscriber list is the pure `createEventBus` in
+  `domain/events/subscriptions.ts`, which both that root and `runtime/jobs.ts` call. See
+  [domain events](./events.md).
 - Enqueue inside a transaction only with `executor: tx`, and kick after the commit. Production's
   pool has one connection, so a second-connection insert inside a transaction deadlocks.
 

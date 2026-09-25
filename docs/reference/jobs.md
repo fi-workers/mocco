@@ -230,6 +230,13 @@ Two roots, so that no domain's `instance.ts` imports another's through the job r
 - **`runtime/jobs.ts` → `getJobRunner()` / `createJobRunner(db, deps)`** sits above the domains,
   like transport. It builds the `JobHandlerRegistry` from each domain's pure handler factory. The
   tick route uses it.
+- **Handlers that need another domain's service get it built here, not imported from its
+  `instance.ts`.** The event handlers are the example: `runtime/jobs.ts` builds its own
+  `EventBus` with the pure `createEventBus({ db, queue, now })` (`domain/events/subscriptions.ts`)
+  over a queue whose kicks run on the same runner, and passes it to `createEventHandlers`.
+  Importing `getEventBus()` instead would close the cycle
+  `events/instance → jobs/instance → (kick) runtime/jobs → events/instance`, which
+  `import-x/no-cycle` rejects. See [domain events](./events.md#subscribing).
 
 ## Testing
 
