@@ -30,6 +30,18 @@ export const workspaceSchema = z.object({
 });
 export type WorkspaceDto = z.infer<typeof workspaceSchema>;
 
+/**
+ * A member's role in a workspace. `owner` and `admin` manage workspace settings
+ * (inbound sources, notification channels); `member` reads them. The stored value
+ * may list several roles, comma-separated.
+ */
+export const WorkspaceMemberRoles = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+export type WorkspaceMemberRole = (typeof WorkspaceMemberRoles)[keyof typeof WorkspaceMemberRoles];
+
 export const workspaceMemberSchema = z.object({
   id: z.string(),
   userId: z.string(),

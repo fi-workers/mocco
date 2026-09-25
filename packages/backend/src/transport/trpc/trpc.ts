@@ -8,6 +8,7 @@ import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -40,6 +41,9 @@ export interface Context {
   projects: ProjectService;
   /** Always present — which product lines the workspace has enabled. */
   products: ProductEnablementService;
+  /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
+   * the inbound router asserts it. */
+  inbound?: InboundDomain;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

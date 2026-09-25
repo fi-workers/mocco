@@ -13,6 +13,7 @@ import { getCredential } from '@backend/domain/credential/instance';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getInbound } from '@backend/domain/inbound/instance';
 import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
 import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/github/constants';
 import { GithubApiError } from '@backend/domain/integration/github/errors';
@@ -21,12 +22,14 @@ import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
+import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import type { HttpPost } from '@backend/domain/execution/ports';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { InboundService } from '@backend/domain/inbound/InboundService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { GitHubProvider } from '@backend/domain/integration/github/provider';
@@ -61,6 +64,9 @@ export interface ExtDeps {
   /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
    * JOBS_TICK_SECRET is set, and the route 503s. */
   jobTick?: JobTickDeps;
+  /** Inbound webhooks (`/inbound/:ingestKey`); undefined when SECRETS_ENCRYPTION_KEYS is
+   * not set (sealed secrets can't be opened), and the route 503s. */
+  inbound?: InboundService;
 }
 
 const WORKSPACES = '/workspaces';
@@ -253,6 +259,9 @@ export function createExtApp(deps: ExtDeps): Hono {
     return c.text('accepted', 202);
   });
 
+  // Inbound webhooks from Sentry, Vercel and GitHub (notification relay design §5).
+  app.route('/', createInboundRoutes(deps.inbound));
+
   // Job tick (ADR 0014): Vercel Cron (GET), a self-host cron or curl drives JobRunner.tick.
   app.route('/', createJobTickRoutes(deps.jobTick));
 
@@ -295,6 +304,7 @@ export async function extHandler(request: Request): Promise<Response> {
             maxJobs: DEFAULT_TICK_MAX_JOBS,
           }
         : undefined,
+    inbound: getInbound()?.inbound,
   });
   return await app.fetch(request);
 }

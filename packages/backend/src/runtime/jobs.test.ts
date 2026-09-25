@@ -2,6 +2,7 @@ import { JobStatuses } from '@mocco/common/jobs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { EventJobKinds } from '@backend/domain/events/EventBus';
+import { InboundJobKinds } from '@backend/domain/inbound/jobs';
 import { JobKinds } from '@backend/domain/jobs/prune';
 import { jobs, jobSchedules } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -30,9 +31,11 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
 
-    expect(report).toMatchObject({ ran: 2, errors: [], outcomes: { succeeded: 2 } });
+    expect(report).toMatchObject({ ran: 4, errors: [], outcomes: { succeeded: 4 } });
     const schedules = await t.db.select().from(jobSchedules);
-    expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(new Set([JobKinds.prune, EventJobKinds.prune]));
+    expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
+      new Set([JobKinds.prune, EventJobKinds.prune, InboundJobKinds.republishStale, InboundJobKinds.prune]),
+    );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);
     const ran = await t.db.select().from(jobs);
     expect(ran.every(job => job.status === JobStatuses.succeeded)).toBe(true);

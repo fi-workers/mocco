@@ -43,3 +43,100 @@ export const inboundEventTypeSchema = z.enum(
  */
 export const factsSchema = z.record(z.string(), z.union([z.string(), z.boolean()]));
 export type Facts = z.infer<typeof factsSchema>;
+
+/** Whether a source accepts deliveries. A paused source answers 404, like an unknown key. */
+export const InboundSourceStatuses = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+export type InboundSourceStatus = (typeof InboundSourceStatuses)[keyof typeof InboundSourceStatuses];
+export const inboundSourceStatusSchema = z.enum(
+  Object.values(InboundSourceStatuses) as [InboundSourceStatus, ...InboundSourceStatus[]],
+);
+
+/**
+ * What became of one received delivery. `pending` is the short window between
+ * recording it and publishing its event (a crash there is republished by
+ * `inbound.republish-stale`). `over_quota` is stored as-is, so its key matches it.
+ */
+export const InboundOutcomes = {
+  published: 'published',
+  ignored: 'ignored',
+  over_quota: 'over_quota',
+  pending: 'pending',
+} as const;
+export type InboundOutcome = (typeof InboundOutcomes)[keyof typeof InboundOutcomes];
+export const inboundOutcomeSchema = z.enum(Object.values(InboundOutcomes) as [InboundOutcome, ...InboundOutcome[]]);
+
+/** A customer label for a source ("Acme web"). */
+export const inboundSourceNameSchema = z.string().trim().min(1).max(100);
+
+/**
+ * A signing secret the customer pastes from the vendor (Sentry's Client Secret,
+ * Vercel's webhook secret). Whitespace around a copy-paste is dropped.
+ */
+export const inboundSecretSchema = z.string().trim().min(1).max(1024);
+
+/**
+ * Creating a source. Sentry and Vercel need the `secret` the vendor shows; for
+ * GitHub, Mocco generates the secret and returns it once, so none is passed.
+ */
+export const inboundSourceCreateInputSchema = z.object({
+  kind: inboundKindSchema,
+  name: inboundSourceNameSchema,
+  secret: inboundSecretSchema.optional(),
+});
+export type InboundSourceCreateInput = z.infer<typeof inboundSourceCreateInputSchema>;
+
+/**
+ * A source on the wire. The sealed secret never crosses it: `hasSecret` says one
+ * is stored. `ingestUrl` is the URL the customer pastes into the vendor.
+ */
+export const inboundSourceSchema = z.object({
+  id: z.uuid(),
+  kind: inboundKindSchema,
+  name: z.string(),
+  status: inboundSourceStatusSchema,
+  hasSecret: z.boolean(),
+  ingestUrl: z.string(),
+  lastReceivedAt: z.date().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type InboundSourceDto = z.infer<typeof inboundSourceSchema>;
+
+/**
+ * One received delivery on the wire (the activity trace). `seq` is a bigserial, so
+ * it stays a digit string end to end, like the audit log's.
+ */
+export const inboundReceiptSchema = z.object({
+  seq: z.string(),
+  id: z.uuid(),
+  sourceId: z.uuid(),
+  externalId: z.string(),
+  sourceEvent: z.string().nullable(),
+  outcome: inboundOutcomeSchema,
+  reason: z.string().nullable(),
+  eventType: z.string().nullable(),
+  domainEventId: z.uuid().nullable(),
+  receivedAt: z.date(),
+});
+export type InboundReceiptDto = z.infer<typeof inboundReceiptSchema>;
+
+/** Most receipts one page returns. */
+export const INBOUND_RECEIPTS_PAGE_MAX = 100;
+
+/** A page of receipts, newest first. `beforeSeq` is the previous page's `nextCursor`. */
+export const inboundReceiptsQuerySchema = z.object({
+  sourceId: z.uuid().optional(),
+  outcome: inboundOutcomeSchema.optional(),
+  beforeSeq: z.string().regex(/^\d+$/u).optional(),
+  limit: z.int().min(1).max(INBOUND_RECEIPTS_PAGE_MAX).default(50),
+});
+export type InboundReceiptsQuery = z.output<typeof inboundReceiptsQuerySchema>;
+
+export const inboundReceiptsPageSchema = z.object({
+  receipts: z.array(inboundReceiptSchema),
+  /** The `beforeSeq` of the next page, or null on the last page. */
+  nextCursor: z.string().nullable(),
+});

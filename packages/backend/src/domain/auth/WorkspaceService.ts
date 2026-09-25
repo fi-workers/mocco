@@ -4,11 +4,16 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
-import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
+
+import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { isAPIError } from '@backend/domain/auth/provider';
 
 import type { Provider } from '@backend/domain/auth/provider';
 import type { WorkspaceCreateInput } from '@mocco/common/workspace';
+
+/** Roles that may change workspace settings. */
+const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
 
 export class WorkspaceService {
   constructor(private readonly provider: Provider) {}
@@ -91,6 +96,22 @@ export class WorkspaceService {
    */
   async assertMember(headers: Headers, workspaceId: string): Promise<void> {
     await this.listMembers(headers, workspaceId);
+  }
+
+  /**
+   * Assert `userId` (the caller) is an owner or admin of the workspace. A non-member
+   * gets WorkspaceNotFoundError, like `assertMember`; a plain member gets
+   * WorkspaceAdminRequiredError (a ForbiddenError). A member row may carry several
+   * comma-separated roles.
+   */
+  async assertAdmin(headers: Headers, workspaceId: string, userId: string): Promise<void> {
+    const members = await this.listMembers(headers, workspaceId);
+    const roles = members.find(member => member.userId === userId)?.role.split(',') ?? [];
+    // sonarjs/null-dereference is a false positive: split() yields strings only.
+    // eslint-disable-next-line sonarjs/null-dereference
+    if (roles.every(role => !ADMIN_ROLES.has(role.trim()))) {
+      throw new WorkspaceAdminRequiredError(workspaceId);
+    }
   }
 
   /**

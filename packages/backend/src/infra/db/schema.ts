@@ -1,5 +1,6 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
+import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
@@ -23,6 +24,7 @@ import {
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
+import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
 import type { AppPlatform, Product } from '@mocco/common/project';
@@ -926,4 +928,99 @@ export const domainEventDeliveries = pgTable(
     deliveredAt: timestamp('delivered_at').notNull(),
   },
   t => [primaryKey({ columns: [t.eventId, t.subscriber], name: 'mocco_domain_event_deliveries_pk' })],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Inbound webhook sources (notification relay design §5, ADR 0019). A source is one
+// vendor account a workspace connected: its unguessable ingest key is the URL path
+// segment, and its signing secret is sealed (SecretBox, AAD
+// 'mocco_inbound_sources:<id>'). Every delivery leaves a receipt, deduped by the
+// vendor's delivery id: the "why didn't it arrive?" trace, and the republish source
+// after a crash between recording and publishing. Receipts are pruned after 30 days.
+// See docs/reference/inbound.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A connected webhook source (Sentry, Vercel or GitHub) of a workspace. */
+export const inboundSources = pgTable(
+  'mocco_inbound_sources',
+  {
+    // SourceService generates the id (randomUUID) so the AAD is known when sealing.
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<InboundKind>().notNull(),
+    name: text().notNull(),
+    // 32 random bytes, base64url. An identifier, not a credential: every request must
+    // also carry a valid signature.
+    ingestKey: text('ingest_key').notNull(),
+    secretSealed: text('secret_sealed').notNull(),
+    status: text().$type<InboundSourceStatus>().notNull().default(InboundSourceStatuses.active),
+    lastReceivedAt: timestamp('last_received_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_inbound_sources_ingest_key_uq').on(t.ingestKey),
+    index('mocco_inbound_sources_workspace_idx').on(t.workspaceId),
+    // Target of the receipts' composite FK, which pins a receipt to its source's workspace.
+    unique('mocco_inbound_sources_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_inbound_sources_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(InboundKinds))})`),
+    check(
+      'mocco_inbound_sources_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(InboundSourceStatuses))})`,
+    ),
+  ],
+);
+
+/** One delivery a source received, and what became of it. */
+export const inboundReceipts = pgTable(
+  'mocco_inbound_receipts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Insert order: the trace's cursor (newest first).
+    seq: bigserial({ mode: 'bigint' }).notNull().unique('mocco_inbound_receipts_seq_uq'),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    sourceId: uuid('source_id').notNull(),
+    // The vendor's delivery id (Request-ID, payload id, X-GitHub-Delivery): the dedupe key.
+    externalId: text('external_id').notNull(),
+    // The vendor's name for the delivery (`issue.created`, `push`), when it has one.
+    sourceEvent: text('source_event'),
+    outcome: text().$type<InboundOutcome>().notNull(),
+    // Why it produced no event (ignored) or was dropped (over_quota).
+    reason: text(),
+    eventType: text('event_type'),
+    domainEventId: uuid('domain_event_id').references(() => domainEvents.id, { onDelete: 'set null' }),
+    // The event payload ({ sourceId, facts, message }), kept so a stuck pending
+    // receipt can be republished.
+    normalized: jsonb(),
+    receivedAt: timestamp('received_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_inbound_receipts_source_external_id_uq').on(t.sourceId, t.externalId),
+    // The trace: a workspace's receipts, newest first.
+    index('mocco_inbound_receipts_workspace_seq_idx').on(t.workspaceId, t.seq.desc()),
+    // The trace filtered by source.
+    index('mocco_inbound_receipts_source_seq_idx').on(t.sourceId, t.seq.desc()),
+    // The daily quota: a workspace's published receipts in the last 24 hours.
+    index('mocco_inbound_receipts_workspace_published_idx')
+      .on(t.workspaceId, t.receivedAt)
+      .where(sql`${t.outcome} = 'published'`),
+    // inbound.republish-stale: pending receipts older than a minute.
+    index('mocco_inbound_receipts_pending_idx')
+      .on(t.receivedAt)
+      .where(sql`${t.outcome} = 'pending'`),
+    // inbound.prune (retention counts from received_at).
+    index('mocco_inbound_receipts_received_at_idx').on(t.receivedAt),
+    // The SET NULL lookup when a domain event is pruned.
+    index('mocco_inbound_receipts_domain_event_idx').on(t.domainEventId),
+    foreignKey({
+      columns: [t.sourceId, t.workspaceId],
+      foreignColumns: [inboundSources.id, inboundSources.workspaceId],
+      name: 'mocco_inbound_receipts_source_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_inbound_receipts_outcome_check', sql`${t.outcome} IN (${sqlInList(Object.values(InboundOutcomes))})`),
+  ],
 );

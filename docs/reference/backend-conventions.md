@@ -93,6 +93,11 @@ The GitHub App webhook (`POST /api/ext/github/webhook`, [ADR 0011](../adr/0011-e
 4. **Resolve tenancy via `installation_id → connection → repo by (connection_id, external_repo_id)` — never by `external_repo_id` alone.** A push carries only a global GitHub installation id and a provider repo id, neither workspace-scoped; two workspaces can legitimately watch the same external repo. The connection is looked up first (`findByExternalAccount(provider, installationId)`), then the repo is looked up scoped to that connection's id. Anything that doesn't resolve at any step (unconnected installation, unregistered repo, unclaimed install) is **parked** — logged and dropped, never thrown — since webhooks are fire-and-forget.
 5. **Error hygiene to GitHub**: the ext app's `onError` handler (symmetric with the tRPC `errorFormatter`) returns a fixed generic `500` body on any unexpected throw — never a vendor/SQL/token detail. Expected failures (invalid signature, missing delivery id, unconfigured secret) return their own specific status with a generic message; nothing internal leaks either path.
 
+The customer-configured inbound webhooks (`POST /api/ext/inbound/:ingestKey`, [inbound
+sources](./inbound.md)) differ on purpose: they read the body as **bytes** (`arrayBuffer()`), so a
+BOM or invalid UTF-8 is verified exactly as sent, and they record, quota-check and publish on the
+request path, because `202` there means "recorded" and the receipt, not a log line, is the trace.
+
 ## Config snapshot (`.mocco.yml` per commit)
 
 After `CommitSyncService` records a push's commits, the same deferred `waitUntil` pass snapshots each new commit's `.mocco.yml` — the fetch/parse/store never happens on the webhook request path, same rationale as the sync itself.
@@ -110,6 +115,10 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 
 - The **repo filters** by `workspaceId` (defence in depth); the **router proves** the caller belongs to it (the actual gate).
 - Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
+- Writes that change workspace settings (inbound sources, later notification channels) also need
+  an owner or admin: `WorkspaceService.assertAdmin(headers, workspaceId, userId)` throws
+  `WorkspaceAdminRequiredError` (→ `FORBIDDEN`) for a plain member, after the same `NOT_FOUND` for a
+  non-member. Compose it as a second middleware (see `adminInboundProcedure` in the inbound router).
 - Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
 
 **Project-scoped domains** (every product after deploy governance, [ADR 0013](../adr/0013-mocco-is-a-multi-product-platform.md)) don't hand-roll this: their routers compose `protectedProjectProcedure` / `productProcedure(product)` from `transport/trpc/project-procedures.ts`, which run `assertMember` and prove the `projectId` belongs to the workspace before any resolver. See [project model](./project.md).
