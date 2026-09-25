@@ -272,6 +272,28 @@ describe('inbound router on pglite', () => {
   });
 
   describe('receipts', () => {
+    it.each(['9223372036854775808', '99999999999999999999', '-1', '1.5'])(
+      'rejects the cursor %j as BAD_REQUEST',
+      async beforeSeq => {
+        const { api } = await signedInCaller(`cursor-${randomUUID()}@example.com`);
+        const { workspace: ws } = await api.workspace.create({ name: 'W' });
+
+        await expect(api.inbound.receipts.list({ workspaceId: ws.id, beforeSeq })).rejects.toMatchObject({
+          code: 'BAD_REQUEST',
+        });
+      },
+    );
+
+    it('accepts the largest bigint cursor', async () => {
+      const { api } = await signedInCaller('max-cursor@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+
+      expect(await api.inbound.receipts.list({ workspaceId: ws.id, beforeSeq: '9223372036854775807' })).toEqual({
+        receipts: [],
+        nextCursor: null,
+      });
+    });
+
     it('lists receipts newest first, filters by source and outcome, and pages by seq', async () => {
       const { api } = await signedInCaller('receipts@example.com');
       const { workspace: ws } = await api.workspace.create({ name: 'W' });

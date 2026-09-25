@@ -1,6 +1,7 @@
 import { InboundKinds, InboundOutcomes } from '@mocco/common/inbound';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { INBOUND_MAX_BODY_BYTES, IngestOutcomes, IngestStatuses } from '@backend/domain/inbound/constants';
 import { encode, readFixture } from '@backend/domain/inbound/testing/fixtures';
 import {
   createInboundHarness,
@@ -12,7 +13,24 @@ import { domainEvents, inboundReceipts } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 
-import type { InboundService } from '@backend/domain/inbound/InboundService';
+import type { InboundService, IngestResult } from '@backend/domain/inbound/InboundService';
+
+const WELL_FORMED_KEY = 'A'.repeat(43);
+const SECRET_KEY = `s3cr3t${'k'.repeat(37)}`;
+
+const ACCEPTED: IngestResult = { status: IngestStatuses.accepted, outcome: IngestOutcomes.published };
+
+/** An ingest stand-in that counts calls and answers `result`. */
+function recordingInbound(result: IngestResult = ACCEPTED) {
+  const spy = {
+    calls: 0,
+    ingest: async (): Promise<IngestResult> => {
+      spy.calls += 1;
+      return await Promise.resolve(result);
+    },
+  };
+  return spy;
+}
 
 async function post(
   inbound: Pick<InboundService, 'ingest'> | undefined,
@@ -47,7 +65,7 @@ describe('inbound ingest route (pglite)', () => {
   };
 
   it('503s when inbound is not configured', async () => {
-    const res = await post(undefined, 'any', signedDelivery(InboundKinds.github, 's'));
+    const res = await post(undefined, WELL_FORMED_KEY, signedDelivery(InboundKinds.github, 's'));
     expect(res.status).toBe(503);
   });
 
@@ -94,13 +112,47 @@ describe('inbound ingest route (pglite)', () => {
     expect(await t.db.select().from(inboundReceipts)).toHaveLength(0);
   });
 
-  it('404s an unknown ingest key with a fixed body', async () => {
+  it('404s a well-formed but unknown ingest key with a fixed body', async () => {
     const { inbound } = await setup();
 
-    const res = await post(inbound, 'unknown-key', signedDelivery(InboundKinds.github, 's'));
+    const res = await post(inbound, WELL_FORMED_KEY, signedDelivery(InboundKinds.github, 's'));
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe('not found');
+  });
+
+  it.each(['short', `${'a'.repeat(43)}b`, `${'a'.repeat(42)}.`, `${'a'.repeat(42)}%2F`])(
+    '404s the malformed key %j without calling the service',
+    async key => {
+      const spy = recordingInbound();
+
+      const res = await post(spy, key, signedDelivery(InboundKinds.github, 's'));
+
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('not found');
+      expect(spy.calls).toBe(0);
+    },
+  );
+
+  it('413s a body over 1 MB without calling the service', async () => {
+    const spy = recordingInbound();
+    const body = new Uint8Array(INBOUND_MAX_BODY_BYTES + 1);
+
+    const res = await post(spy, WELL_FORMED_KEY, { body, headers: new Headers() });
+
+    expect(res.status).toBe(413);
+    expect(spy.calls).toBe(0);
+  });
+
+  it('passes a body of exactly 1 MB through, and maps 429 to a fixed body', async () => {
+    const spy = recordingInbound({ status: IngestStatuses.tooManyRequests });
+    const body = new Uint8Array(INBOUND_MAX_BODY_BYTES);
+
+    const res = await post(spy, WELL_FORMED_KEY, { body, headers: new Headers() });
+
+    expect(res.status).toBe(429);
+    expect(await res.text()).toBe('too many deliveries');
+    expect(spy.calls).toBe(1);
   });
 
   it('400s a delivery without an id', async () => {
@@ -122,14 +174,14 @@ describe('inbound ingest route (pglite)', () => {
       logged.push(...args);
     });
     const failing: Pick<InboundService, 'ingest'> = {
-      ingest: async () => await Promise.reject(new TypeError('select … where ingest_key = $1 params: s3cr3t-key')),
+      ingest: async () => await Promise.reject(new TypeError(`select … where ingest_key = $1 params: ${SECRET_KEY}`)),
     };
 
-    const res = await post(failing, 's3cr3t-key', signedDelivery(InboundKinds.github, 's'));
+    const res = await post(failing, SECRET_KEY, signedDelivery(InboundKinds.github, 's'));
 
     expect(res.status).toBe(500);
     expect(await res.text()).toBe('Internal server error');
-    expect(JSON.stringify(logged)).not.toContain('s3cr3t');
+    expect(JSON.stringify(logged)).not.toContain(SECRET_KEY);
     expect(logged).toContain('TypeError');
   });
 });

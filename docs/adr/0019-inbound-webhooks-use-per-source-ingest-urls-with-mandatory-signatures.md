@@ -52,12 +52,21 @@ Two ways to receive the webhooks were on the table:
    to Discord does not. An over-quota or unmapped delivery is still `202`, and its receipt says
    why. A crash after recording leaves a `pending` receipt with its payload, which a scheduled job
    republishes; the event's dedupe key is the receipt id, so a republish never publishes twice.
-5. **No marketplace installs in v1.** They can be added later as another way to create a source.
+5. **Two limits per workspace.** A soft daily quota (5,000 published events in 24 hours; later
+   deliveries are recorded as `over_quota` and still answered `202`) and a hard ceiling (four times
+   that in receipts of any outcome), past which a delivery is refused with `429` and nothing is
+   written. The quota keeps notification volume sane; the ceiling keeps a flood from growing the
+   receipts table without bound. Cheap rejects come before both: a malformed ingest key is `404`
+   before any DB access, and a body over 1 MB is `413`.
+6. **No marketplace installs in v1.** They can be added later as another way to create a source.
 
 ## Consequences
 
 - Customers do a few manual steps per vendor (paste a URL, copy a secret). The customer guides
   cover them with screenshots.
+- The quota is soft (a count, not a lock), so concurrent deliveries can overshoot it slightly.
+  Deliveries refused at the hard ceiling leave no receipt, so the trace cannot explain them; the
+  ceiling is set well above the quota so that only a flood reaches it.
 - A leaked ingest key alone lets nobody inject events; a leaked secret does, and rotation replaces
   it while keeping the URL.
 - Receipts are the trace for "why didn't it arrive?", kept 30 days like domain events.

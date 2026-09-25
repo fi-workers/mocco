@@ -15,6 +15,16 @@ import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 /** Roles that may change workspace settings. */
 const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
 
+/**
+ * Does a stored member role grant owner or admin? The vendor stores several roles
+ * comma-separated (`member,admin`); surrounding whitespace is ignored.
+ */
+export function hasAdminRole(role: string): boolean {
+  // sonarjs/null-dereference is a false positive: `role` and split()'s parts are strings.
+  // eslint-disable-next-line sonarjs/null-dereference
+  return role.split(',').some(part => ADMIN_ROLES.has(part.trim()));
+}
+
 export class WorkspaceService {
   constructor(private readonly provider: Provider) {}
 
@@ -99,17 +109,23 @@ export class WorkspaceService {
   }
 
   /**
-   * Assert `userId` (the caller) is an owner or admin of the workspace. A non-member
-   * gets WorkspaceNotFoundError, like `assertMember`; a plain member gets
-   * WorkspaceAdminRequiredError (a ForbiddenError). A member row may carry several
-   * comma-separated roles.
+   * Assert the caller (the session in `headers`) is an owner or admin of the workspace.
+   * One vendor lookup of the caller's own role, which also proves membership: a
+   * non-member gets WorkspaceNotFoundError (NOT_FOUND, like `assertMember`), a plain
+   * member WorkspaceAdminRequiredError (FORBIDDEN). So an admin-only procedure calls
+   * this alone.
    */
-  async assertAdmin(headers: Headers, workspaceId: string, userId: string): Promise<void> {
-    const members = await this.listMembers(headers, workspaceId);
-    const roles = members.find(member => member.userId === userId)?.role.split(',') ?? [];
-    // sonarjs/null-dereference is a false positive: split() yields strings only.
-    // eslint-disable-next-line sonarjs/null-dereference
-    if (roles.every(role => !ADMIN_ROLES.has(role.trim()))) {
+  async assertAdmin(headers: Headers, workspaceId: string): Promise<void> {
+    let role: string;
+    try {
+      ({ role } = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers }));
+    } catch (error) {
+      if (isAPIError(error)) {
+        throw new WorkspaceNotFoundError(workspaceId, { cause: error });
+      }
+      throw error;
+    }
+    if (!hasAdminRole(role)) {
       throw new WorkspaceAdminRequiredError(workspaceId);
     }
   }

@@ -126,11 +126,28 @@ export type InboundReceiptDto = z.infer<typeof inboundReceiptSchema>;
 /** Most receipts one page returns. */
 export const INBOUND_RECEIPTS_PAGE_MAX = 100;
 
+/** The largest Postgres bigint, the ceiling of a `seq` cursor. */
+const MAX_BIGINT = 9_223_372_036_854_775_807n;
+
+/**
+ * A `seq` cursor: 1 to 19 digits, within the Postgres bigint range. Anything else
+ * fails the parse (BAD_REQUEST at the router), so it never reaches `BigInt()` or SQL.
+ */
+const SEQ_CURSOR = /^\d{1,19}$/u;
+
+// One refinement, not `.regex().refine()`: zod runs every check even after one fails,
+// and BigInt() throws on a string the regex rejected.
+export const inboundSeqCursorSchema = z
+  .string()
+  .refine(value => SEQ_CURSOR.test(value) && BigInt(value) <= MAX_BIGINT, {
+    message: 'cursor must be 1 to 19 digits within the bigint range',
+  });
+
 /** A page of receipts, newest first. `beforeSeq` is the previous page's `nextCursor`. */
 export const inboundReceiptsQuerySchema = z.object({
   sourceId: z.uuid().optional(),
   outcome: inboundOutcomeSchema.optional(),
-  beforeSeq: z.string().regex(/^\d+$/u).optional(),
+  beforeSeq: inboundSeqCursorSchema.optional(),
   limit: z.int().min(1).max(INBOUND_RECEIPTS_PAGE_MAX).default(50),
 });
 export type InboundReceiptsQuery = z.output<typeof inboundReceiptsQuerySchema>;

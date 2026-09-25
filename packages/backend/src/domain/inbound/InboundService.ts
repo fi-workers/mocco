@@ -1,11 +1,15 @@
 import { inboundEventPayloadSchema } from '@mocco/common/events';
 import { inboundEventTypeSchema, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 
+import { DomainEventPayloadError, UnknownDomainEventTypeError } from '@backend/domain/events/errors';
 import {
   INBOUND_BATCH_SIZE,
   INBOUND_DAILY_LIMIT,
   INBOUND_EVENT_SUBJECT,
   INBOUND_EXTERNAL_ID_MAX,
+  INBOUND_HARD_LIMIT,
+  INBOUND_LAST_RECEIVED_THROTTLE_MS,
+  INBOUND_MAX_PUBLISH_ATTEMPTS,
   INBOUND_QUOTA_WINDOW_MS,
   INBOUND_RECEIPT_RETENTION_MS,
   INBOUND_STALE_PENDING_MS,
@@ -53,7 +57,13 @@ export interface IngestRequest {
 /** What the ingest route answers. Only an accepted delivery carries an outcome. */
 export type IngestResult =
   | { status: typeof IngestStatuses.accepted; outcome: IngestOutcome }
-  | { status: typeof IngestStatuses.badRequest | typeof IngestStatuses.unauthorized | typeof IngestStatuses.notFound };
+  | {
+      status:
+        | typeof IngestStatuses.badRequest
+        | typeof IngestStatuses.unauthorized
+        | typeof IngestStatuses.notFound
+        | typeof IngestStatuses.tooManyRequests;
+    };
 
 export interface ReceiptsPage {
   receipts: InboundReceiptDto[];
@@ -64,6 +74,24 @@ type ParsedEvent = Extract<ParsedInbound, { kind: typeof ParsedInboundKinds.even
 
 const overQuotaReason = `workspace is over the daily limit of ${INBOUND_DAILY_LIMIT} events`;
 const unparseableReason = 'stored event no longer matches the event catalog';
+const givenUpReason = `publishing failed ${INBOUND_MAX_PUBLISH_ATTEMPTS} times`;
+
+/**
+ * What a log line may say about an error: its class and a driver error code, never the
+ * message or the error itself (a query error's message and params carry the ingest
+ * key, the payload or a sealed secret).
+ */
+export function errorSummary(error: unknown): { error: string; code?: string } {
+  const name = error instanceof Error ? error.name : 'unknown error';
+  const { cause } = error instanceof Error ? error : { cause: undefined };
+  const code: unknown = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+  return typeof code === 'string' ? { error: name, code } : { error: name };
+}
+
+/** A publish that can never succeed, however often it is retried. */
+function isDeterministic(error: unknown): boolean {
+  return error instanceof DomainEventPayloadError || error instanceof UnknownDomainEventTypeError;
+}
 
 /** The vendor's delivery id as stored, or undefined when it is missing or unusable. */
 function cleanExternalId(value: string | undefined): string | undefined {
@@ -90,7 +118,69 @@ function normalized(source: InboundSourceRow, event: ParsedEvent): InboundEventP
  * into a bare 500.
  */
 export class InboundService {
+  /** When the hard ceiling was last logged per workspace, so a flood logs once per window. */
+  private readonly ceilingLoggedAt = new Map<string, number>();
+
   constructor(private readonly deps: InboundServiceDeps) {}
+
+  /** Log that a workspace hit the hard ceiling, at most once per quota window. */
+  private logCeiling(workspaceId: string, at: Date): void {
+    const last = this.ceilingLoggedAt.get(workspaceId);
+    if (last !== undefined && at.getTime() - last < INBOUND_QUOTA_WINDOW_MS) {
+      return;
+    }
+    this.ceilingLoggedAt.set(workspaceId, at.getTime());
+    console.warn('[inbound] workspace is over the hard receipt limit; deliveries are refused', {
+      workspaceId,
+      limit: INBOUND_HARD_LIMIT,
+    });
+  }
+
+  /** Open a source's secret. A failure (a key no longer configured, a tampered value) is
+   * logged with the source id only and rethrown: the route answers 500. */
+  private openSecret(source: InboundSourceRow): string {
+    try {
+      return this.deps.box.open(source.secretSealed, inboundSecretAad(source.id));
+    } catch (error) {
+      console.error('[inbound] opening the source secret failed', { sourceId: source.id, ...errorSummary(error) });
+      throw error;
+    }
+  }
+
+  /** Throttled and best-effort: a failure here never fails a recorded delivery. */
+  private async touchLastReceived(sourceId: string, at: Date): Promise<void> {
+    try {
+      await this.deps.sources.touchLastReceived(sourceId, at, INBOUND_LAST_RECEIVED_THROTTLE_MS);
+    } catch (error) {
+      console.error('[inbound] updating last_received_at failed', { sourceId, ...errorSummary(error) });
+    }
+  }
+
+  /**
+   * After a failed publish: count it, and give up on the receipt (ignored, with the
+   * reason) when the failure is deterministic or has happened too often, so it cannot
+   * hold the republish scan forever. Best-effort itself.
+   */
+  private async recordPublishFailure(receipt: InboundReceiptRow, error: unknown): Promise<void> {
+    console.error('[inbound] publishing a receipt failed', {
+      receiptId: receipt.id,
+      sourceId: receipt.sourceId,
+      ...errorSummary(error),
+    });
+    try {
+      const attempts = await this.deps.receipts.recordPublishFailure(receipt.id);
+      if (isDeterministic(error)) {
+        await this.deps.receipts.markDropped(receipt.id, InboundOutcomes.ignored, unparseableReason);
+      } else if (attempts >= INBOUND_MAX_PUBLISH_ATTEMPTS) {
+        await this.deps.receipts.markDropped(receipt.id, InboundOutcomes.ignored, givenUpReason);
+      }
+    } catch (error_) {
+      console.error('[inbound] recording a publish failure failed', {
+        receiptId: receipt.id,
+        ...errorSummary(error_),
+      });
+    }
+  }
 
   /**
    * Publish a pending receipt's event and mark the receipt published. The event's
@@ -122,7 +212,7 @@ export class InboundService {
       return { status: IngestStatuses.notFound };
     }
     const adapter = sourceAdapters[source.kind];
-    const secret = this.deps.box.open(source.secretSealed, inboundSecretAad(source.id));
+    const secret = this.openSecret(source);
     if (!adapter.verify(request.body, request.headers, secret)) {
       return { status: IngestStatuses.unauthorized };
     }
@@ -137,6 +227,12 @@ export class InboundService {
         : adapter.parse(text, request.headers);
     const event = parsed.kind === ParsedInboundKinds.event ? parsed : undefined;
     const receivedAt = this.deps.now();
+    const windowStart = new Date(receivedAt.getTime() - INBOUND_QUOTA_WINDOW_MS);
+    // The hard ceiling, before anything is written: a flood stops growing the table.
+    if ((await this.deps.receipts.countSince(source.workspaceId, windowStart)) >= INBOUND_HARD_LIMIT) {
+      this.logCeiling(source.workspaceId, receivedAt);
+      return { status: IngestStatuses.tooManyRequests };
+    }
     const receipt = await this.deps.receipts.insertIfNew({
       workspaceId: source.workspaceId,
       sourceId: source.id,
@@ -149,17 +245,15 @@ export class InboundService {
       eventType: event?.type ?? null,
       normalized: event === undefined ? null : normalized(source, event),
     });
-    await this.deps.sources.touchLastReceived(source.id, receivedAt);
+    await this.touchLastReceived(source.id, receivedAt);
     if (receipt === undefined) {
       return { status: IngestStatuses.accepted, outcome: IngestOutcomes.duplicate };
     }
     if (receipt.outcome === InboundOutcomes.ignored) {
       return { status: IngestStatuses.accepted, outcome: IngestOutcomes.ignored };
     }
-    const published = await this.deps.receipts.countPublishedSince(
-      source.workspaceId,
-      new Date(receivedAt.getTime() - INBOUND_QUOTA_WINDOW_MS),
-    );
+    // Soft: two concurrent deliveries can both pass the count and overshoot by a few.
+    const published = await this.deps.receipts.countPublishedSince(source.workspaceId, windowStart);
     if (published >= INBOUND_DAILY_LIMIT) {
       await this.deps.receipts.markDropped(receipt.id, InboundOutcomes.over_quota, overQuotaReason);
       return { status: IngestStatuses.accepted, outcome: IngestOutcomes.over_quota };
@@ -169,7 +263,7 @@ export class InboundService {
     } catch (error) {
       // Recorded and still pending: `inbound.republish-stale` publishes it. The
       // delivery is accepted, since 202 means "recorded".
-      console.error(`[inbound] publishing receipt ${receipt.id} failed; it stays pending`, error);
+      await this.recordPublishFailure(receipt, error);
       return { status: IngestStatuses.accepted, outcome: IngestOutcomes.pending };
     }
     return { status: IngestStatuses.accepted, outcome: IngestOutcomes.published };
@@ -178,9 +272,11 @@ export class InboundService {
   /**
    * Publish receipts left pending for longer than `INBOUND_STALE_PENDING_MS` (a crash
    * or a failed publish after recording). The quota is not checked again: a pending
-   * receipt already passed it, or was recorded before the check. One failing receipt
-   * is logged and skipped, so it never blocks the rest. Returns how many were published
-   * or settled.
+   * receipt already passed it, or was recorded before the check. A failing receipt is
+   * counted and skipped; the scan takes the fewest failures first, and a receipt that
+   * failed `INBOUND_MAX_PUBLISH_ATTEMPTS` times (or can never publish) is marked
+   * ignored, so a stuck batch never starves newer receipts. Returns how many were
+   * published or settled.
    */
   async republishStale(options: { deadline?: Date } = {}): Promise<number> {
     const before = new Date(this.deps.now().getTime() - INBOUND_STALE_PENDING_MS);
@@ -194,7 +290,7 @@ export class InboundService {
         await this.publish(receipt);
         return done + 1;
       } catch (error) {
-        console.error(`[inbound] republishing receipt ${receipt.id} failed`, error);
+        await this.recordPublishFailure(receipt, error);
         return done;
       }
     }, Promise.resolve(0));

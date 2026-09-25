@@ -10,9 +10,10 @@ CREATE TABLE "mocco_inbound_receipts" (
 	"event_type" text,
 	"domain_event_id" uuid,
 	"normalized" jsonb,
+	"publish_attempts" integer DEFAULT 0 NOT NULL,
 	"received_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "mocco_inbound_receipts_seq_uq" UNIQUE("seq"),
-	CONSTRAINT "mocco_inbound_receipts_outcome_check" CHECK ("mocco_inbound_receipts"."outcome" IN ('published','ignored','over_quota','pending'))
+	CONSTRAINT "mocco_inbound_receipts_outcome_check" CHECK ("mocco_inbound_receipts"."outcome" IN ('published','ignored','over_quota','pending')),
+	CONSTRAINT "mocco_inbound_receipts_publish_attempts_check" CHECK ("mocco_inbound_receipts"."publish_attempts" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "mocco_inbound_sources" (
@@ -38,8 +39,8 @@ ALTER TABLE "mocco_inbound_sources" ADD CONSTRAINT "mocco_inbound_sources_worksp
 CREATE UNIQUE INDEX "mocco_inbound_receipts_source_external_id_uq" ON "mocco_inbound_receipts" USING btree ("source_id","external_id");--> statement-breakpoint
 CREATE INDEX "mocco_inbound_receipts_workspace_seq_idx" ON "mocco_inbound_receipts" USING btree ("workspace_id","seq" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "mocco_inbound_receipts_source_seq_idx" ON "mocco_inbound_receipts" USING btree ("source_id","seq" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "mocco_inbound_receipts_workspace_published_idx" ON "mocco_inbound_receipts" USING btree ("workspace_id","received_at") WHERE "mocco_inbound_receipts"."outcome" = 'published';--> statement-breakpoint
-CREATE INDEX "mocco_inbound_receipts_pending_idx" ON "mocco_inbound_receipts" USING btree ("received_at") WHERE "mocco_inbound_receipts"."outcome" = 'pending';--> statement-breakpoint
+CREATE INDEX "mocco_inbound_receipts_workspace_received_at_idx" ON "mocco_inbound_receipts" USING btree ("workspace_id","received_at");--> statement-breakpoint
+CREATE INDEX "mocco_inbound_receipts_pending_idx" ON "mocco_inbound_receipts" USING btree ("publish_attempts","received_at") WHERE "mocco_inbound_receipts"."outcome" = 'pending';--> statement-breakpoint
 CREATE INDEX "mocco_inbound_receipts_received_at_idx" ON "mocco_inbound_receipts" USING btree ("received_at");--> statement-breakpoint
 CREATE INDEX "mocco_inbound_receipts_domain_event_idx" ON "mocco_inbound_receipts" USING btree ("domain_event_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "mocco_inbound_sources_ingest_key_uq" ON "mocco_inbound_sources" USING btree ("ingest_key");--> statement-breakpoint

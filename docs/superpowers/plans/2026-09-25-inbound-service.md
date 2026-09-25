@@ -71,7 +71,21 @@ if a secret is opened, so it builds without `SECRETS_ENCRYPTION_KEYS`.
   `receipts.list`; membership for reads, owner/admin (`WorkspaceService.assertAdmin`) for writes.
 - Tests: route via `fetch`, router via `createCaller` (cross-tenant NOT_FOUND, member FORBIDDEN).
 
-## 8. Docs
+## 8. Review follow-ups
+
+- Route: malformed ingest key → 404 before the body or the DB; 1 MB body limit → 413.
+- Hard ceiling (`INBOUND_HARD_LIMIT`, 4× the daily limit, any outcome) → 429 with no writes,
+  logged once per workspace per window.
+- Logs carry ids, the error class and a driver code only; a secret that fails to open logs the
+  source id.
+- `beforeSeq` bounded to the bigint range (BAD_REQUEST otherwise).
+- `publish_attempts` on receipts: the republish scan takes the fewest first and gives up after 5,
+  or at once for a payload the catalog rejects.
+- `last_received_at` throttled to once a minute and non-fatal.
+- `assertAdmin` is one `getActiveMemberRole` lookup that implies membership.
+- No unique constraint on `seq` (nothing needs it).
+
+## 9. Docs
 
 `docs/reference/inbound.md`, ADR 0019 and the ADR index, the events reference.
 

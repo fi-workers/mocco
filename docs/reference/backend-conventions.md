@@ -116,9 +116,11 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 - The **repo filters** by `workspaceId` (defence in depth); the **router proves** the caller belongs to it (the actual gate).
 - Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
 - Writes that change workspace settings (inbound sources, later notification channels) also need
-  an owner or admin: `WorkspaceService.assertAdmin(headers, workspaceId, userId)` throws
-  `WorkspaceAdminRequiredError` (→ `FORBIDDEN`) for a plain member, after the same `NOT_FOUND` for a
-  non-member. Compose it as a second middleware (see `adminInboundProcedure` in the inbound router).
+  an owner or admin: `WorkspaceService.assertAdmin(headers, workspaceId)` looks up the caller's
+  own role once and throws `WorkspaceNotFoundError` (→ `NOT_FOUND`) for a non-member and
+  `WorkspaceAdminRequiredError` (→ `FORBIDDEN`) for a plain member. It implies membership, so an
+  admin-only procedure calls it instead of `assertMember` (see `adminInboundProcedure` in the
+  inbound router).
 - Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
 
 **Project-scoped domains** (every product after deploy governance, [ADR 0013](../adr/0013-mocco-is-a-multi-product-platform.md)) don't hand-roll this: their routers compose `protectedProjectProcedure` / `productProcedure(product)` from `transport/trpc/project-procedures.ts`, which run `assertMember` and prove the `projectId` belongs to the workspace before any resolver. See [project model](./project.md).

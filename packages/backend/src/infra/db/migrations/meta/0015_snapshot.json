@@ -1,5 +1,5 @@
 {
-  "id": "6014773f-a3ed-4f62-b715-1237c05ea3a1",
+  "id": "491aec3f-b819-4b23-b575-6283831fdd49",
   "prevId": "843be43d-f3dd-48eb-9f4d-dbc6728c7e05",
   "version": "7",
   "dialect": "postgresql",
@@ -1057,6 +1057,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "publish_attempts": {
+          "name": "publish_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "received_at": {
           "name": "received_at",
           "type": "timestamp",
@@ -1129,8 +1136,8 @@
           "method": "btree",
           "with": {}
         },
-        "mocco_inbound_receipts_workspace_published_idx": {
-          "name": "mocco_inbound_receipts_workspace_published_idx",
+        "mocco_inbound_receipts_workspace_received_at_idx": {
+          "name": "mocco_inbound_receipts_workspace_received_at_idx",
           "columns": [
             {
               "expression": "workspace_id",
@@ -1146,7 +1153,6 @@
             }
           ],
           "isUnique": false,
-          "where": "\"mocco_inbound_receipts\".\"outcome\" = 'published'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1154,6 +1160,12 @@
         "mocco_inbound_receipts_pending_idx": {
           "name": "mocco_inbound_receipts_pending_idx",
           "columns": [
+            {
+              "expression": "publish_attempts",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "received_at",
               "isExpression": false,
@@ -1242,20 +1254,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "mocco_inbound_receipts_seq_uq": {
-          "name": "mocco_inbound_receipts_seq_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "seq"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "mocco_inbound_receipts_outcome_check": {
           "name": "mocco_inbound_receipts_outcome_check",
           "value": "\"mocco_inbound_receipts\".\"outcome\" IN ('published','ignored','over_quota','pending')"
+        },
+        "mocco_inbound_receipts_publish_attempts_check": {
+          "name": "mocco_inbound_receipts_publish_attempts_check",
+          "value": "\"mocco_inbound_receipts\".\"publish_attempts\" >= 0"
         }
       },
       "isRLSEnabled": false

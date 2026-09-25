@@ -54,6 +54,15 @@ export class InboundReceiptRepo {
     return row;
   }
 
+  /** Receipts of any outcome of the workspace received at or after `since` (the hard ceiling). */
+  async countSince(workspaceId: string, since: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(inboundReceipts)
+      .where(and(eq(inboundReceipts.workspaceId, workspaceId), gte(inboundReceipts.receivedAt, since)));
+    return row?.value ?? 0;
+  }
+
   /** Published receipts of the workspace received at or after `since` (the quota). */
   async countPublishedSince(workspaceId: string, since: Date): Promise<number> {
     const [row] = await this.db
@@ -95,14 +104,26 @@ export class InboundReceiptRepo {
     return rows.length > 0;
   }
 
-  /** Pending receipts received before `before`, oldest first. */
+  /** Pending receipts received before `before`: fewest failed publishes first, then
+   * oldest, so receipts that keep failing never starve newer ones. */
   async listPendingBefore(before: Date, limit: number): Promise<InboundReceiptRow[]> {
     return await this.db
       .select()
       .from(inboundReceipts)
       .where(and(isPending, lt(inboundReceipts.receivedAt, before)))
-      .orderBy(asc(inboundReceipts.receivedAt))
+      .orderBy(asc(inboundReceipts.publishAttempts), asc(inboundReceipts.receivedAt))
       .limit(limit);
+  }
+
+  /** Count one failed publish of a pending receipt; returns the new count (0 when the
+   * receipt is no longer pending). */
+  async recordPublishFailure(receiptId: string): Promise<number> {
+    const [row] = await this.db
+      .update(inboundReceipts)
+      .set({ publishAttempts: sql`${inboundReceipts.publishAttempts} + 1` })
+      .where(and(eq(inboundReceipts.id, receiptId), isPending))
+      .returning({ publishAttempts: inboundReceipts.publishAttempts });
+    return row?.publishAttempts ?? 0;
   }
 
   /** A page of the workspace's receipts, newest first. */

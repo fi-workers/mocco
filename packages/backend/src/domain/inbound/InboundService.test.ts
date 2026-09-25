@@ -1,11 +1,21 @@
 import { randomUUID } from 'node:crypto';
 
-import { InboundKinds, InboundOutcomes, type InboundKind } from '@mocco/common/inbound';
+import { InboundKinds, InboundOutcomes, type InboundKind, type InboundOutcome } from '@mocco/common/inbound';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FailingEventPublisher } from '@backend/domain/events/testing/event-bus';
-import { INBOUND_DAILY_LIMIT, IngestOutcomes, IngestStatuses } from '@backend/domain/inbound/constants';
+import { DomainEventPayloadError } from '@backend/domain/events/errors';
+import { createTestEventBus, FailingEventPublisher } from '@backend/domain/events/testing/event-bus';
+import {
+  INBOUND_DAILY_LIMIT,
+  INBOUND_HARD_LIMIT,
+  INBOUND_MAX_PUBLISH_ATTEMPTS,
+  IngestOutcomes,
+  IngestStatuses,
+} from '@backend/domain/inbound/constants';
+import { InboundService } from '@backend/domain/inbound/InboundService';
+import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
+import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
 import { IgnoredReasons } from '@backend/domain/inbound/sources/shared';
 import { encode, readFixture } from '@backend/domain/inbound/testing/fixtures';
 import {
@@ -23,17 +33,31 @@ import type { Db } from '@backend/infra/db/types';
 const KINDS: InboundKind[] = [InboundKinds.sentry, InboundKinds.vercel, InboundKinds.github];
 const T0 = new Date('2026-09-25T12:00:00.000Z');
 
-/** `count` published receipts of a source, all received at `receivedAt`. */
-async function fillPublished(db: Db, source: { id: string; workspaceId: string }, count: number, receivedAt: Date) {
-  await db.insert(inboundReceipts).values(
-    Array.from({ length: count }, (_, index) => ({
-      workspaceId: source.workspaceId,
-      sourceId: source.id,
-      externalId: `old-${index}`,
-      outcome: InboundOutcomes.published,
-      receivedAt,
-    })),
-  );
+const FILL_CHUNK = 5000;
+
+/** `count` receipts of a source with `outcome`, all received at `receivedAt`, inserted in
+ * chunks (one statement has a bind-parameter limit). */
+async function fillReceipts(
+  db: Db,
+  source: { id: string; workspaceId: string },
+  count: number,
+  receivedAt: Date,
+  outcome: InboundOutcome = InboundOutcomes.published,
+) {
+  const chunks = Array.from({ length: Math.ceil(count / FILL_CHUNK) }, (_, chunk) => chunk);
+  await chunks.reduce(async (previous, chunk) => {
+    await previous;
+    const size = Math.min(FILL_CHUNK, count - chunk * FILL_CHUNK);
+    await db.insert(inboundReceipts).values(
+      Array.from({ length: size }, (_, index) => ({
+        workspaceId: source.workspaceId,
+        sourceId: source.id,
+        externalId: `old-${chunk}-${index}`,
+        outcome,
+        receivedAt,
+      })),
+    );
+  }, Promise.resolve());
 }
 
 describe('InboundService.ingest on pglite', () => {
@@ -224,7 +248,7 @@ describe('InboundService.ingest on pglite', () => {
   describe('quota', () => {
     it(`records a delivery past ${INBOUND_DAILY_LIMIT} published in 24h as over_quota`, async () => {
       const { inbound, ingestKey, secret, source, workspaceId } = await setup(InboundKinds.sentry);
-      await fillPublished(
+      await fillReceipts(
         t.db,
         { id: source.id, workspaceId },
         INBOUND_DAILY_LIMIT,
@@ -248,7 +272,7 @@ describe('InboundService.ingest on pglite', () => {
 
     it('publishes again once the published receipts are older than 24 hours', async () => {
       const { inbound, ingestKey, secret, source, workspaceId } = await setup(InboundKinds.sentry);
-      await fillPublished(
+      await fillReceipts(
         t.db,
         { id: source.id, workspaceId },
         INBOUND_DAILY_LIMIT,
@@ -262,7 +286,7 @@ describe('InboundService.ingest on pglite', () => {
 
     it('counts per workspace: another workspace over quota does not limit this one', async () => {
       const busy = await setup(InboundKinds.sentry);
-      await fillPublished(t.db, { id: busy.source.id, workspaceId: busy.workspaceId }, INBOUND_DAILY_LIMIT, T0);
+      await fillReceipts(t.db, { id: busy.source.id, workspaceId: busy.workspaceId }, INBOUND_DAILY_LIMIT, T0);
       const quiet = await setup(InboundKinds.sentry);
 
       const result = await quiet.inbound.ingest({
@@ -360,6 +384,66 @@ describe('InboundService.ingest on pglite', () => {
       expect(receipt).toMatchObject({ outcome: InboundOutcomes.published, domainEventId: events[0]?.id });
     });
 
+    it(`gives up on a receipt after ${INBOUND_MAX_PUBLISH_ATTEMPTS} failed publishes`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failing = new FailingEventPublisher();
+      const { inbound, ingestKey, secret } = await setup(InboundKinds.sentry, { bus: failing });
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+
+      clock = new Date(T0.getTime() + 120 * 1000);
+      // The ingest was attempt 1; each republish adds one.
+      await Array.from({ length: INBOUND_MAX_PUBLISH_ATTEMPTS - 1 }).reduce<Promise<void>>(async previous => {
+        await previous;
+        await inbound.republishStale();
+      }, Promise.resolve());
+
+      expect(failing.attempts).toBe(INBOUND_MAX_PUBLISH_ATTEMPTS);
+      const [receipt] = await t.db.select().from(inboundReceipts);
+      expect(receipt).toMatchObject({
+        outcome: InboundOutcomes.ignored,
+        reason: `publishing failed ${INBOUND_MAX_PUBLISH_ATTEMPTS} times`,
+        publishAttempts: INBOUND_MAX_PUBLISH_ATTEMPTS,
+      });
+      expect(await inbound.republishStale()).toBe(0);
+      expect(failing.attempts).toBe(INBOUND_MAX_PUBLISH_ATTEMPTS);
+    });
+
+    it('marks a receipt ignored at once when the bus rejects its payload as invalid', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const rejecting: EventPublisher = {
+        publish: async () => await Promise.reject(new DomainEventPayloadError('sentry.issue.created')),
+      };
+      const { inbound, ingestKey, secret } = await setup(InboundKinds.sentry, { bus: rejecting });
+
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+
+      const [receipt] = await t.db.select().from(inboundReceipts);
+      expect(receipt).toMatchObject({ outcome: InboundOutcomes.ignored, publishAttempts: 1 });
+    });
+
+    it('scans the fewest failed publishes first, so failing receipts never starve newer ones', async () => {
+      const { source, workspaceId } = await setup(InboundKinds.sentry);
+      const pending = (externalId: string, publishAttempts: number, receivedAt: Date) => ({
+        workspaceId,
+        sourceId: source.id,
+        externalId,
+        outcome: InboundOutcomes.pending,
+        publishAttempts,
+        receivedAt,
+      });
+      await t.db
+        .insert(inboundReceipts)
+        .values([
+          pending('old-failing', 3, new Date(T0.getTime() - 60 * 60 * 1000)),
+          pending('new', 0, new Date(T0.getTime() - 5 * 60 * 1000)),
+          pending('older-new', 0, new Date(T0.getTime() - 10 * 60 * 1000)),
+        ]);
+
+      const scanned = await new InboundReceiptRepo(t.db).listPendingBefore(T0, 2);
+
+      expect(scanned.map(receipt => receipt.externalId)).toEqual(['older-new', 'new']);
+    });
+
     it('marks a stored payload that no longer parses as ignored instead of retrying forever', async () => {
       const { inbound, source, workspaceId } = await setup(InboundKinds.sentry);
       await t.db.insert(inboundReceipts).values({
@@ -380,6 +464,116 @@ describe('InboundService.ingest on pglite', () => {
         outcome: InboundOutcomes.ignored,
         reason: 'stored event no longer matches the event catalog',
       });
+    });
+  });
+
+  describe('hard ceiling', () => {
+    it(`refuses with 429 and writes nothing once the workspace has ${INBOUND_HARD_LIMIT} receipts in 24h`, async () => {
+      const warnings: unknown[] = [];
+      vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(args);
+      });
+      const { inbound, ingestKey, secret, source, workspaceId } = await setup(InboundKinds.sentry);
+      await fillReceipts(t.db, { id: source.id, workspaceId }, INBOUND_HARD_LIMIT, T0, InboundOutcomes.ignored);
+      const before = await counts();
+
+      const first = await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+      const second = await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+
+      expect(first).toEqual({ status: IngestStatuses.tooManyRequests });
+      expect(second).toEqual({ status: IngestStatuses.tooManyRequests });
+      expect(await counts()).toEqual(before);
+      // Logged once per workspace per window, not once per refused delivery.
+      expect(warnings).toHaveLength(1);
+
+      // A day later the window has moved on.
+      clock = new Date(T0.getTime() + 25 * 60 * 60 * 1000);
+      expect(await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) })).toMatchObject({
+        status: IngestStatuses.accepted,
+      });
+    });
+  });
+
+  describe('last_received_at', () => {
+    it('is written at most once a minute per source', async () => {
+      const { inbound, ingestKey, secret, source } = await setup(InboundKinds.sentry);
+      const lastReceived = async () => {
+        const [row] = await t.db.select().from(inboundSources).where(eq(inboundSources.id, source.id));
+        return row?.lastReceivedAt;
+      };
+
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+      expect(await lastReceived()).toEqual(T0);
+      clock = new Date(T0.getTime() + 30 * 1000);
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+      expect(await lastReceived()).toEqual(T0);
+      clock = new Date(T0.getTime() + 61 * 1000);
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+      expect(await lastReceived()).toEqual(clock);
+    });
+
+    it('never fails a recorded delivery when the update fails', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { ingestKey, secret, box } = await setup(InboundKinds.sentry);
+      class BrokenTouchRepo extends InboundSourceRepo {
+        // eslint-disable-next-line class-methods-use-this -- always fails, whatever the db; proves the failure is non-fatal
+        override async touchLastReceived(): Promise<void> {
+          return await Promise.reject(new Error('db is down'));
+        }
+      }
+      const inbound = new InboundService({
+        sources: new BrokenTouchRepo(t.db),
+        receipts: new InboundReceiptRepo(t.db),
+        box,
+        bus: createTestEventBus(t.db, now),
+        now,
+      });
+
+      expect(await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) })).toEqual({
+        status: IngestStatuses.accepted,
+        outcome: IngestOutcomes.published,
+      });
+    });
+  });
+
+  describe('log hygiene', () => {
+    it('logs only the source id and error class when the secret does not open', async () => {
+      const logged: unknown[] = [];
+      vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logged.push(args);
+      });
+      const { inbound, ingestKey, secret, source } = await setup(InboundKinds.sentry);
+      // Another row's sealed value: its AAD does not match this row, so it fails to open.
+      const other = await setup(InboundKinds.sentry);
+      const [otherRow] = await t.db.select().from(inboundSources).where(eq(inboundSources.id, other.source.id));
+      await t.db
+        .update(inboundSources)
+        .set({ secretSealed: otherRow?.secretSealed ?? '' })
+        .where(eq(inboundSources.id, source.id));
+
+      await expect(inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) })).rejects.toThrow();
+
+      expect(logged).toEqual([
+        ['[inbound] opening the source secret failed', { sourceId: source.id, error: 'SecretBoxError' }],
+      ]);
+    });
+
+    it('logs a failed publish as receipt id, source id and error class, never the message', async () => {
+      const logged: unknown[] = [];
+      vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logged.push(args);
+      });
+      const leaky: EventPublisher = {
+        publish: async () => await Promise.reject(new Error('insert … params: [sealed, key, payload]')),
+      };
+      const { inbound, ingestKey, secret, source } = await setup(InboundKinds.sentry, { bus: leaky });
+
+      await inbound.ingest({ ingestKey, ...signedDelivery(InboundKinds.sentry, secret) });
+
+      const [receipt] = await t.db.select().from(inboundReceipts);
+      expect(logged).toEqual([
+        ['[inbound] publishing a receipt failed', { receiptId: receipt?.id, sourceId: source.id, error: 'Error' }],
+      ]);
     });
   });
 

@@ -979,7 +979,7 @@ export const inboundReceipts = pgTable(
   {
     id: uuid().primaryKey().defaultRandom(),
     // Insert order: the trace's cursor (newest first).
-    seq: bigserial({ mode: 'bigint' }).notNull().unique('mocco_inbound_receipts_seq_uq'),
+    seq: bigserial({ mode: 'bigint' }).notNull(),
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -996,6 +996,9 @@ export const inboundReceipts = pgTable(
     // The event payload ({ sourceId, facts, message }), kept so a stuck pending
     // receipt can be republished.
     normalized: jsonb(),
+    // Failed publishes of a pending receipt. The republish scan takes the fewest first,
+    // and gives up (ignored) after INBOUND_MAX_PUBLISH_ATTEMPTS.
+    publishAttempts: integer('publish_attempts').notNull().default(0),
     receivedAt: timestamp('received_at').notNull().defaultNow(),
   },
   t => [
@@ -1004,13 +1007,11 @@ export const inboundReceipts = pgTable(
     index('mocco_inbound_receipts_workspace_seq_idx').on(t.workspaceId, t.seq.desc()),
     // The trace filtered by source.
     index('mocco_inbound_receipts_source_seq_idx').on(t.sourceId, t.seq.desc()),
-    // The daily quota: a workspace's published receipts in the last 24 hours.
-    index('mocco_inbound_receipts_workspace_published_idx')
-      .on(t.workspaceId, t.receivedAt)
-      .where(sql`${t.outcome} = 'published'`),
-    // inbound.republish-stale: pending receipts older than a minute.
+    // The daily quota and the hard ceiling: a workspace's receipts in the last 24 hours.
+    index('mocco_inbound_receipts_workspace_received_at_idx').on(t.workspaceId, t.receivedAt),
+    // inbound.republish-stale: pending receipts, fewest failed publishes first, then oldest.
     index('mocco_inbound_receipts_pending_idx')
-      .on(t.receivedAt)
+      .on(t.publishAttempts, t.receivedAt)
       .where(sql`${t.outcome} = 'pending'`),
     // inbound.prune (retention counts from received_at).
     index('mocco_inbound_receipts_received_at_idx').on(t.receivedAt),
@@ -1022,5 +1023,6 @@ export const inboundReceipts = pgTable(
       name: 'mocco_inbound_receipts_source_workspace_fk',
     }).onDelete('cascade'),
     check('mocco_inbound_receipts_outcome_check', sql`${t.outcome} IN (${sqlInList(Object.values(InboundOutcomes))})`),
+    check('mocco_inbound_receipts_publish_attempts_check', sql`${t.publishAttempts} >= 0`),
   ],
 );

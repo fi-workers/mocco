@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -67,12 +67,21 @@ export class InboundSourceRepo {
     return rows.length > 0;
   }
 
-  /** Record that the source received a verified delivery. `updated_at` is left alone:
-   * it tracks configuration changes, not traffic. */
-  async touchLastReceived(sourceId: string, at: Date): Promise<void> {
+  /**
+   * Record that the source received a verified delivery, at most once per `throttleMs`
+   * (a busy source would otherwise rewrite its row on every delivery). `updated_at` is
+   * left alone: it tracks configuration changes, not traffic.
+   */
+  async touchLastReceived(sourceId: string, at: Date, throttleMs: number): Promise<void> {
+    const threshold = new Date(at.getTime() - throttleMs);
     await this.db
       .update(inboundSources)
       .set({ lastReceivedAt: at, updatedAt: sql`${inboundSources.updatedAt}` })
-      .where(eq(inboundSources.id, sourceId));
+      .where(
+        and(
+          eq(inboundSources.id, sourceId),
+          or(isNull(inboundSources.lastReceivedAt), lt(inboundSources.lastReceivedAt, threshold)),
+        ),
+      );
   }
 }

@@ -4,7 +4,15 @@ import { InboundOutcomes } from '@mocco/common/inbound';
  * recorded as `over_quota` (notification relay design §5). */
 export const INBOUND_DAILY_LIMIT = 5000;
 
-/** The window `INBOUND_DAILY_LIMIT` counts over. */
+/**
+ * Receipts of any outcome one workspace may have in any 24 hours. Past it, deliveries
+ * are refused with 429 and nothing is written, so a flood (or a vendor stuck in a
+ * retry loop) cannot grow the receipts table without bound. Well above the daily
+ * limit, so ignored and over-quota receipts still show in the trace for a while.
+ */
+export const INBOUND_HARD_LIMIT = 4 * INBOUND_DAILY_LIMIT;
+
+/** The window `INBOUND_DAILY_LIMIT` and `INBOUND_HARD_LIMIT` count over. */
 export const INBOUND_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** A receipt still `pending` after this long is republished by `inbound.republish-stale`. */
@@ -12,6 +20,18 @@ export const INBOUND_STALE_PENDING_MS = 60 * 1000;
 
 /** Receipts are kept this long (by `received_at`), then `inbound.prune` deletes them. */
 export const INBOUND_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Failed publishes after which a pending receipt is given up on (marked ignored). */
+export const INBOUND_MAX_PUBLISH_ATTEMPTS = 5;
+
+/** `last_received_at` is written at most this often per source. */
+export const INBOUND_LAST_RECEIVED_THROTTLE_MS = 60 * 1000;
+
+/** Largest request body the ingest route reads; a larger one is refused with 413. */
+export const INBOUND_MAX_BODY_BYTES = 1024 * 1024;
+
+/** An ingest key: 32 random bytes in base64url (43 characters, no padding). */
+export const INGEST_KEY_PATTERN = /^[\w-]{43}$/u;
 
 /** Rows one prune or republish batch touches. */
 export const INBOUND_BATCH_SIZE = 1000;
@@ -50,4 +70,5 @@ export const IngestStatuses = {
   badRequest: 400,
   unauthorized: 401,
   notFound: 404,
+  tooManyRequests: 429,
 } as const;
