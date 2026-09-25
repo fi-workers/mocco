@@ -132,6 +132,25 @@ composition is split so that registering handlers never creates `instance.ts` im
 - Enqueue inside a transaction only with `executor: tx`, and kick after the commit. Production's
   pool has one connection, so a second-connection insert inside a transaction deadlocks.
 
+## Secrets at rest (SecretBox)
+
+Third-party secrets a customer gives Mocco (webhook signing secrets, bot tokens, store keys) are
+sealed with `SecretBox` (`infra/crypto/secret-box.ts`, AES-256-GCM) before they reach the DB.
+
+- Columns holding sealed values are named `*_sealed`. They never appear in a zod `.output()`;
+  services project `hasSecret: boolean` instead, and a secret Mocco generates is returned once, at
+  creation or rotation.
+- The AAD is `'<table>:<row id>'`, so a sealed value copied into another row fails to open. The
+  service generates the row's id with `randomUUID()` (from `node:crypto`), seals with it, and passes
+  both on insert. This is the one exception to DB-generated uuids; the column keeps its
+  `defaultRandom()` default, and `*_sealed` columns stay `NOT NULL`.
+- Keys come from `SECRETS_ENCRYPTION_KEYS` (`keyId:base64key,…`). The first key seals, all keys
+  open. To rotate: prepend a new key, reseal (`needsReseal` finds old values; the `secrets.reseal`
+  job lands with the job queue), then drop the old key.
+- Services receive the box by constructor injection (`getSecretBox()` in the composition root);
+  tests build one with a random key. A deploy without the env var boots; only sealing fails, with
+  a `SecretBoxError` naming the variable.
+
 ## Types & schemas
 
 - **Derive types from values** (has-a, not is-a): prefer `z.infer` / `ReturnType<typeof factory>` over hand-maintained parallel interfaces. Write explicit annotations only where they pin a boundary (e.g. a neutral return type that stops vendor inference from leaking).

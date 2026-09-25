@@ -56,6 +56,14 @@ Values per environment:
 - **preview**: derived from `VERCEL_URL` — a separate branch in `resolveAuthOrigins`, `SERVICE_DOMAIN` isn't consulted there
 - **tailnet**: `SERVICE_DOMAIN=<node>.<tailnet>.ts.net` — written into the gitignored `env/.env` by the generator below
 
+## `SECRETS_ENCRYPTION_KEYS` — SecretBox keys
+
+Keys for sealing third-party secrets at rest (see backend-conventions → Secrets at rest):
+`keyId:base64key[,older…]`. The first key seals, every listed key opens. Optional until a feature
+stores secrets; that feature then fails with an error naming the variable. Generate one with
+`echo "k1:$(openssl rand -base64 32)"` and put it in the gitignored `env/.env` (and in the Vercel
+project env for deploys).
+
 ## Tailnet access (method A: phone on the tailnet)
 
 Tailscale is a developer-machine concern, confined to **one generator script** — `infra/local/scripts/gen-tailscale-env.ts`. Nothing else (the loader, `env.ts`, `resolveAuthOrigins`) knows Tailscale exists; they only ever see `SERVICE_DOMAIN`, an ordinary env var. Swapping in a real domain, ngrok, or plain localhost later is just a different `SERVICE_DOMAIN` value — no code changes anywhere.
