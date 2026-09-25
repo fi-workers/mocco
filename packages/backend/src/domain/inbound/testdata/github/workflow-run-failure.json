@@ -1,0 +1,42 @@
+{
+  "action": "completed",
+  "workflow_run": {
+    "id": 30433642,
+    "name": "CI",
+    "head_branch": "main",
+    "head_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+    "run_number": 562,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflow_id": 159038,
+    "html_url": "https://github.com/acme/web/actions/runs/30433642",
+    "run_attempt": 1
+  },
+  "workflow": {
+    "id": 159038,
+    "name": "CI",
+    "path": ".github/workflows/ci.yml"
+  },
+  "repository": {
+    "id": 1296269,
+    "node_id": "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+    "name": "web",
+    "full_name": "acme/web",
+    "private": true,
+    "html_url": "https://github.com/acme/web",
+    "default_branch": "main",
+    "owner": {
+      "login": "acme",
+      "id": 1,
+      "type": "Organization"
+    }
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 583231,
+    "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
+    "html_url": "https://github.com/octocat",
+    "type": "User"
+  }
+}
