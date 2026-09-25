@@ -10,8 +10,11 @@ import {
   IgnoredReasons,
   isValidHmacHex,
   mapped,
+  nonEmpty,
+  ownValue,
   parseJson,
   type ParsedInbound,
+  sanitize,
   singleLine,
   truncate,
   withHttps,
@@ -28,6 +31,7 @@ const SIGNATURE_HEADER = 'x-vercel-signature';
 // Vercel sends target "production", a custom environment name, or null for a
 // preview deployment.
 const PREVIEW_TARGET = 'preview';
+const UNKNOWN_PROJECT = 'project';
 const COMMIT_MESSAGE_MAX = 300;
 
 interface DeploymentMapping {
@@ -88,7 +92,7 @@ const deploymentSchema = z.object({
 
 /** `x-vercel-signature` is the bare hex HMAC-SHA1 of the raw body. */
 // eslint-disable-next-line unicorn/consistent-boolean-name -- the adapter contract names it verify
-export function verify(rawBody: string, headers: Headers, secret: string): boolean {
+export function verify(rawBody: Uint8Array, headers: Headers, secret: string): boolean {
   const signature = headerValue(headers, SIGNATURE_HEADER);
   return signature !== undefined && isValidHmacHex(HmacAlgorithms.sha1, secret, rawBody, signature);
 }
@@ -96,7 +100,7 @@ export function verify(rawBody: string, headers: Headers, secret: string): boole
 /** Vercel's delivery id is the payload's top-level `id`. */
 export function deliveryId(rawBody: string, _headers: Headers): string | undefined {
   const envelope = z.object({ id: z.string().trim().min(1) }).safeParse(parseJson(rawBody));
-  return envelope.success ? envelope.data.id : undefined;
+  return envelope.success ? nonEmpty(sanitize(envelope.data.id)) : undefined;
 }
 
 export function parse(rawBody: string, _headers: Headers): ParsedInbound {
@@ -108,7 +112,7 @@ export function parse(rawBody: string, _headers: Headers): ParsedInbound {
   if (!envelope.success) {
     return ignored('vercel payload does not match the expected shape');
   }
-  const mapping = deploymentMappings[envelope.data.type];
+  const mapping = ownValue(deploymentMappings, envelope.data.type);
   if (mapping === undefined) {
     return ignored(`vercel event "${envelope.data.type}" is not mapped`);
   }
@@ -119,12 +123,13 @@ export function parse(rawBody: string, _headers: Headers): ParsedInbound {
 
   const { payload } = body.data;
   const { deployment } = payload;
-  const project = payload.name ?? deployment?.name ?? payload.project?.id ?? 'project';
-  const target = payload.target ?? deployment?.target ?? PREVIEW_TARGET;
+  const project =
+    nonEmpty(payload.name) ?? nonEmpty(deployment?.name) ?? nonEmpty(payload.project?.id) ?? UNKNOWN_PROJECT;
+  const target = nonEmpty(payload.target) ?? nonEmpty(deployment?.target) ?? PREVIEW_TARGET;
   const meta = deployment?.meta ?? payload.meta;
-  const branch = meta?.githubCommitRef;
-  const commitMessage = meta?.githubCommitMessage;
-  const rawUrl = deployment?.url ?? payload.url;
+  const branch = nonEmpty(meta?.githubCommitRef);
+  const commitMessage = nonEmpty(meta?.githubCommitMessage);
+  const rawUrl = nonEmpty(deployment?.url) ?? nonEmpty(payload.url);
 
   const message = buildMessage({
     title: `${mapping.label} · ${project}`,

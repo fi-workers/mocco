@@ -10,8 +10,11 @@ import {
   IgnoredReasons,
   isValidHmacHex,
   mapped,
+  nonEmpty,
+  ownValue,
   parseJson,
   type ParsedInbound,
+  sanitize,
   truncate,
 } from '@backend/domain/inbound/sources/shared';
 
@@ -46,7 +49,7 @@ const issueSchema = z.object({
       environment: z.string().nullish(),
       web_url: z.string().nullish(),
       permalink: z.string().nullish(),
-      project: z.object({ slug: z.string(), name: z.string().optional() }).optional(),
+      project: z.object({ slug: z.string().optional(), name: z.string().optional() }).optional(),
     }),
   }),
 });
@@ -61,7 +64,7 @@ const levelSeverities: Record<string, Severity> = {
 
 /** `Sentry-Hook-Signature` is the bare hex HMAC-SHA256 of the raw body. */
 // eslint-disable-next-line unicorn/consistent-boolean-name -- the adapter contract names it verify
-export function verify(rawBody: string, headers: Headers, secret: string): boolean {
+export function verify(rawBody: Uint8Array, headers: Headers, secret: string): boolean {
   const signature = headerValue(headers, SIGNATURE_HEADER);
   return signature !== undefined && isValidHmacHex(HmacAlgorithms.sha256, secret, rawBody, signature);
 }
@@ -92,13 +95,13 @@ export function parse(rawBody: string, headers: Headers): ParsedInbound {
   }
 
   const { issue } = body.data.data;
-  const level = (issue.level ?? DEFAULT_LEVEL).toLowerCase();
-  const environment = issue.environment ?? UNKNOWN_ENVIRONMENT;
-  const project = issue.project?.slug;
+  const level = sanitize(nonEmpty(issue.level) ?? DEFAULT_LEVEL).toLowerCase();
+  const environment = nonEmpty(issue.environment) ?? UNKNOWN_ENVIRONMENT;
+  const project = nonEmpty(issue.project?.slug) ?? nonEmpty(issue.project?.name);
   const message = buildMessage({
     title: issue.title,
-    url: issue.web_url ?? issue.permalink ?? undefined,
-    severity: levelSeverities[level] ?? Severities.error,
+    url: nonEmpty(issue.web_url) ?? nonEmpty(issue.permalink),
+    severity: ownValue(levelSeverities, level) ?? Severities.error,
     fields: [
       { name: 'Issue', value: issue.shortId ?? '', inline: true },
       { name: 'Level', value: level, inline: true },

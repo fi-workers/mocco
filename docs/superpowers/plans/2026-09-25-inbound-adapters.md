@@ -31,15 +31,32 @@ route, `InboundService`, receipts and publishing come in later PRs and call thes
 Each of `sentry.ts`, `vercel.ts`, `github.ts` exports:
 
 ```ts
-verify(rawBody: string, headers: Headers, secret: string): boolean
-deliveryId(rawBody: string, headers: Headers): string | undefined
-parse(rawBody: string, headers: Headers): ParsedInbound
+verify(rawBody: Uint8Array, headers: Headers, secret: string): boolean
+deliveryId(body: string, headers: Headers): string | undefined
+parse(body: string, headers: Headers): ParsedInbound
 ```
 
-`shared.ts` holds `ParsedInbound` (`{ kind: 'event', type, facts, message }` or
-`{ kind: 'ignored', reason }`), the constant-time `isValidHmacHex` (node:crypto `createHmac` +
-`timingSafeEqual`, length-checked), safe JSON parsing, and `buildMessage`, which truncates every part
-so the result always satisfies `neutralMessageSchema`.
+The signature is checked over the exact received bytes, as the relay did, so a BOM or any byte the
+sender signed is covered. `parse` and `deliveryId` take text produced by
+`decodeBody(bytes: Uint8Array): string | undefined` (strict UTF-8, a leading BOM stripped). When it
+returns undefined the caller records `IgnoredReasons.invalidUtf8` ("body is not valid UTF-8").
+The ingest flow is therefore: `verify(bytes)`, then `decodeBody(bytes)`, then `deliveryId` and
+`parse` on the text.
+
+`shared.ts` holds:
+
+- `ParsedInbound` (`{ kind: 'event', type, facts, message }` or `{ kind: 'ignored', reason }`).
+- `isValidHmacHex` over bytes: node:crypto `createHmac` + `timingSafeEqual`, accepting only exactly
+  the digest's length in hex (case-insensitive).
+- `sanitize`: every string in a message, a fact or a reason has NUL removed and lone surrogates
+  replaced, so the Postgres text/jsonb writes never fail on a JSON `\u` escape. Reasons are also
+  capped at 200 characters.
+- `ownValue`: table lookups keyed by payload values (event names, types, levels) read own properties
+  only, so `__proto__`, `toString` and similar names are ignored instead of resolving to
+  Object.prototype.
+- `buildMessage`: truncates every part and drops trailing fields until the message fits Discord's
+  6000-character total, so the result always satisfies `neutralMessageSchema` (which enforces the
+  per-part limits, a 256-character actor name, and the total).
 
 | Source | Signature | Delivery id | Mapped |
 |---|---|---|---|
@@ -49,7 +66,11 @@ so the result always satisfies `neutralMessageSchema`.
 
 The relay's filters become mapping: a Vercel preview success maps to
 `vercel.deployment.succeeded` with `target = preview`, and a push without commits maps with
-`hasCommits = false`. Notification rules decide later what a channel receives. Messages carry the
+`hasCommits = false`. A push to a branch carries `refType = branch` and `branch`; a tag push carries
+`refType = tag` and no `branch`. Workflow runs concluding `failure`, `timed_out` or
+`startup_failure` map to `github.workflow_run.failed`. Empty strings fall back like the relay's `||`
+(environment `unknown`, target `preview`, project and workflow names). Notification rules decide
+later what a channel receives. Messages carry the
 relay's text and links; colors and emoji move to the Discord sender, keyed by `severity`.
 
 ## Steps
@@ -57,11 +78,15 @@ relay's text and links; colors and emoji move to the Discord sender, keyed by `s
 1. Common schemas and constants, plus the export subpaths.
 2. Fixtures under `domain/inbound/testdata/`, taken from the relay tests and the vendors' documented
    payload shapes.
-3. Failing tests per adapter: signature cases, delivery id, each mapped type, ignored reasons,
-   malformed JSON, truncation, `neutralMessageSchema.parse` on every message.
+3. Failing tests per adapter: signature cases (byte-level, BOM, invalid UTF-8, exact hex length),
+   delivery id, each mapped type, ignored reasons, prototype-member names, NUL and lone surrogates,
+   empty-string fallbacks, malformed JSON, truncation and the total limit, and
+   `neutralMessageSchema.parse` on every message.
 4. `shared.ts`, then the three adapters, until the tests pass; `yarn verify` green.
 
 ## Open points
+
+- The `refType` fact is not in the design spec's facts table yet; the spec should gain it.
 
 - Sentry's documented issue payload has no environment; `facts.environment` is read when present and
   is `unknown` otherwise.

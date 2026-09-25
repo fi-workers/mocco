@@ -45,18 +45,33 @@ export function patchFixture(name: string, patches: Record<string, unknown>): st
   return JSON.stringify(patched);
 }
 
-export function hmacHex(algorithm: 'sha1' | 'sha256', secret: string, rawBody: string): string {
+export function hmacHex(algorithm: 'sha1' | 'sha256', secret: string, rawBody: string | Uint8Array): string {
   return createHmac(algorithm, secret).update(rawBody).digest('hex');
+}
+
+/** The UTF-8 bytes of `text`, as a webhook body arrives on the wire. */
+export function encode(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+// JSON.stringify escapes NUL as \u0000 and a lone surrogate as \udXXX; either
+// in a stored reason, fact or message would make the Postgres text/jsonb write fail.
+const POSTGRES_HOSTILE = /\\u0000|\\ud[89a-f][\da-f]{2}/iu;
+
+/** Asserts no NUL and no lone surrogate anywhere in `value`. */
+export function expectPostgresSafe(value: unknown): void {
+  expect(JSON.stringify(value)).not.toMatch(POSTGRES_HOSTILE);
 }
 
 type ParsedEvent = Extract<ParsedInbound, { kind: 'event' }>;
 
-/** Narrows to an event, and checks its message against the shared schema. */
+/** Narrows to an event, and checks its message against the shared schema and for Postgres-hostile text. */
 export function expectEvent(parsed: ParsedInbound): ParsedEvent {
   if (parsed.kind !== 'event') {
     throw new Error(`expected an event, got ignored: ${parsed.reason}`);
   }
   expect(neutralMessageSchema.parse(parsed.message)).toStrictEqual(parsed.message);
+  expectPostgresSafe(parsed);
   return parsed;
 }
 
@@ -64,5 +79,6 @@ export function expectIgnored(parsed: ParsedInbound): string {
   if (parsed.kind !== 'ignored') {
     throw new Error(`expected ignored, got event ${parsed.type}`);
   }
+  expectPostgresSafe(parsed.reason);
   return parsed.reason;
 }

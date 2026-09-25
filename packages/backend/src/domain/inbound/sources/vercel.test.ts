@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/vercel';
 import {
+  encode,
   expectEvent,
   expectIgnored,
   hmacHex,
@@ -14,9 +15,10 @@ const secret = 'vercel-webhook-secret';
 const noHeaders = new Headers();
 
 const signed = (signature: string) => new Headers({ 'x-vercel-signature': signature });
+const PROTOTYPE_KEYS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
 
 describe('vercel verify', () => {
-  const body = readFixture('vercel/deployment-error.json');
+  const body = encode(readFixture('vercel/deployment-error.json'));
 
   it('accepts an HMAC-SHA1 hex signature of the raw body', () => {
     expect(verify(body, signed(hmacHex('sha1', secret, body)), secret)).toBe(true);
@@ -27,7 +29,8 @@ describe('vercel verify', () => {
   });
 
   it('rejects a tampered body', () => {
-    expect(verify(`${body}\n`, signed(hmacHex('sha1', secret, body)), secret)).toBe(false);
+    const tampered = encode(`${readFixture('vercel/deployment-error.json')}\n`);
+    expect(verify(tampered, signed(hmacHex('sha1', secret, body)), secret)).toBe(false);
   });
 
   it('rejects a signature made with another secret', () => {
@@ -36,6 +39,10 @@ describe('vercel verify', () => {
 
   it('rejects a missing signature header', () => {
     expect(verify(body, noHeaders, secret)).toBe(false);
+  });
+
+  it('rejects a signature with an extra trailing character', () => {
+    expect(verify(body, signed(`${hmacHex('sha1', secret, body)}0`), secret)).toBe(false);
   });
 
   it('rejects a prefixed or SHA-256 signature', () => {
@@ -53,6 +60,10 @@ describe('vercel deliveryId', () => {
     expect(deliveryId('{nope', noHeaders)).toBeUndefined();
     expect(deliveryId('{"type":"deployment.created"}', noHeaders)).toBeUndefined();
     expect(deliveryId('{"id":""}', noHeaders)).toBeUndefined();
+  });
+
+  it('strips NUL and lone surrogates from the id', () => {
+    expect(deliveryId(String.raw`{"id":"whk\u0000_1\ud800"}`, noHeaders)).toBe('whk_1�');
   });
 });
 
@@ -143,6 +154,36 @@ describe('vercel parse', () => {
     expect(expectIgnored(parse(readFixture('vercel/project-created.json'), noHeaders))).toBe(
       'vercel event "project.created" is not mapped',
     );
+  });
+
+  it('falls back on an empty target, project name and branch', () => {
+    const body = patchFixture('vercel/deployment-error.json', {
+      'payload.target': '',
+      'payload.name': '',
+      'payload.deployment.meta.githubCommitRef': '',
+    });
+    const event = expectEvent(parse(body, noHeaders));
+    expect(event.facts).toStrictEqual({ project: 'acme-web', target: 'preview' });
+    expect(event.message.title).toBe('Failed · acme-web');
+
+    const nameless = patchFixture('vercel/deployment-error.json', {
+      'payload.name': '',
+      'payload.deployment.name': '',
+    });
+    expect(expectEvent(parse(nameless, noHeaders)).facts.project).toBe('prj_12HKQaOmR5t5Uy6vdcQsNIiZgHGB');
+  });
+
+  it.each(PROTOTYPE_KEYS)('never resolves the prototype member %s as an event type', key => {
+    const body = patchFixture('vercel/deployment-error.json', { type: key });
+    expect(expectIgnored(parse(body, noHeaders))).toBe(`vercel event "${key}" is not mapped`);
+  });
+
+  it('strips NUL and lone surrogates from JSON escapes', () => {
+    const body = String.raw`{"id":"x","type":"deployment.error","payload":{"name":"app\u0000\ud800","target":"production","deployment":{"meta":{"githubCommitRef":"main\u0000"}}}}`;
+    const event = expectEvent(parse(body, noHeaders));
+    expect(event.facts).toStrictEqual({ project: 'app�', target: 'production', branch: 'main' });
+    const unmapped = String.raw`{"id":"x","type":"deploy\u0000\udfff"}`;
+    expect(expectIgnored(parse(unmapped, noHeaders))).toBe('vercel event "deploy�" is not mapped');
   });
 
   it('ignores malformed JSON and payloads without a type', () => {

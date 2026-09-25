@@ -2,7 +2,9 @@ import { NeutralMessageLimits } from '@mocco/common/notification';
 import { describe, expect, it } from 'vitest';
 
 import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/github';
+import { decodeBody } from '@backend/domain/inbound/sources/shared';
 import {
+  encode,
   expectEvent,
   expectIgnored,
   hmacHex,
@@ -13,6 +15,7 @@ import {
 const secret = 'github-webhook-secret';
 const on = (event: string) => new Headers({ 'X-GitHub-Event': event });
 const signed = (signature: string) => new Headers({ 'X-Hub-Signature-256': signature });
+const PROTOTYPE_KEYS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
 
 const actor = {
   name: 'octocat',
@@ -32,14 +35,15 @@ const prMessage = (label: string) => ({
 });
 
 describe('github verify', () => {
-  const body = readFixture('github/push.json');
+  const text = readFixture('github/push.json');
+  const body = encode(text);
 
   it('accepts sha256= plus an HMAC-SHA256 hex signature of the raw body', () => {
     expect(verify(body, signed(`sha256=${hmacHex('sha256', secret, body)}`), secret)).toBe(true);
   });
 
   it('rejects a tampered body', () => {
-    expect(verify(`${body}\n`, signed(`sha256=${hmacHex('sha256', secret, body)}`), secret)).toBe(false);
+    expect(verify(encode(`${text}\n`), signed(`sha256=${hmacHex('sha256', secret, body)}`), secret)).toBe(false);
   });
 
   it('rejects a signature made with another secret', () => {
@@ -48,6 +52,25 @@ describe('github verify', () => {
 
   it('rejects a missing signature header', () => {
     expect(verify(body, new Headers(), secret)).toBe(false);
+  });
+
+  it('rejects a signature with an extra trailing character', () => {
+    expect(verify(body, signed(`sha256=${hmacHex('sha256', secret, body)}a`), secret)).toBe(false);
+  });
+
+  it('verifies a BOM-prefixed body over its exact bytes, and still parses it', () => {
+    const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...body]);
+    expect(verify(withBom, signed(`sha256=${hmacHex('sha256', secret, withBom)}`), secret)).toBe(true);
+    expect(verify(withBom, signed(`sha256=${hmacHex('sha256', secret, body)}`), secret)).toBe(false);
+    const decoded = decodeBody(withBom);
+    expect(decoded).toBe(text);
+    expect(expectEvent(parse(decoded ?? '', on('push'))).type).toBe('github.push');
+  });
+
+  it('verifies a signed body that is not valid UTF-8, which then does not decode', () => {
+    const invalid = new Uint8Array([...body.slice(0, 10), 0xff, ...body.slice(10)]);
+    expect(verify(invalid, signed(`sha256=${hmacHex('sha256', secret, invalid)}`), secret)).toBe(true);
+    expect(decodeBody(invalid)).toBeUndefined();
   });
 
   it('requires the sha256= prefix', () => {
@@ -72,7 +95,7 @@ describe('github parse: push', () => {
   it('maps a push with commits', () => {
     const event = expectEvent(parse(readFixture('github/push.json'), on('push')));
     expect(event.type).toBe('github.push');
-    expect(event.facts).toStrictEqual({ repo: 'acme/web', branch: 'main', hasCommits: true });
+    expect(event.facts).toStrictEqual({ repo: 'acme/web', refType: 'branch', branch: 'main', hasCommits: true });
     expect(event.message).toStrictEqual({
       title: '2 commits · acme/web:main',
       url: 'https://github.com/acme/web/compare/6113728f27ae...b2c3d4e5f6a7',
@@ -88,9 +111,17 @@ describe('github parse: push', () => {
   it('still maps a push without commits, with hasCommits false', () => {
     const event = expectEvent(parse(readFixture('github/push-branch-deleted.json'), on('push')));
     expect(event.type).toBe('github.push');
-    expect(event.facts).toStrictEqual({ repo: 'acme/web', branch: 'feat/old', hasCommits: false });
+    expect(event.facts).toStrictEqual({ repo: 'acme/web', refType: 'branch', branch: 'feat/old', hasCommits: false });
     expect(event.message.title).toBe('No new commits · acme/web:feat/old');
     expect(event.message.description).toBeUndefined();
+  });
+
+  it('maps a tag push without a branch fact', () => {
+    const body = patchFixture('github/push.json', { ref: 'refs/tags/v1.4.0', commits: [] });
+    const event = expectEvent(parse(body, on('push')));
+    expect(event.type).toBe('github.push');
+    expect(event.facts).toStrictEqual({ repo: 'acme/web', refType: 'tag', hasCommits: false });
+    expect(event.message.title).toBe('No new commits · acme/web:v1.4.0');
   });
 
   it('lists at most five commits and says how many more there are', () => {
@@ -221,6 +252,23 @@ describe('github parse: workflow_run', () => {
     expect(event.message.fields).toStrictEqual([]);
   });
 
+  it.each(['timed_out', 'startup_failure'])('maps a %s run as failed', conclusion => {
+    const body = patchFixture('github/workflow-run-failure.json', { 'workflow_run.conclusion': conclusion });
+    const event = expectEvent(parse(body, on('workflow_run')));
+    expect(event.type).toBe('github.workflow_run.failed');
+    expect(event.message.severity).toBe('error');
+  });
+
+  it('falls back on an empty workflow name and omits an empty branch', () => {
+    const body = patchFixture('github/workflow-run-failure.json', {
+      'workflow_run.name': '',
+      'workflow_run.head_branch': '',
+    });
+    const event = expectEvent(parse(body, on('workflow_run')));
+    expect(event.facts).toStrictEqual({ repo: 'acme/web', workflow: 'workflow' });
+    expect(event.message.title).toBe('CI failed: workflow · acme/web');
+  });
+
   it('ignores other conclusions and actions', () => {
     expect(expectIgnored(parse(readFixture('github/workflow-run-cancelled.json'), on('workflow_run')))).toBe(
       'github workflow_run conclusion "cancelled" is not mapped',
@@ -234,6 +282,19 @@ describe('github parse: workflow_run', () => {
 describe('github parse: everything else', () => {
   it('ignores ping', () => {
     expect(expectIgnored(parse(readFixture('github/ping.json'), on('ping')))).toBe('ping');
+  });
+
+  it.each(PROTOTYPE_KEYS)('never resolves the prototype member %s as an event name', key => {
+    expect(expectIgnored(parse(readFixture('github/push.json'), on(key)))).toBe(`github event "${key}" is not mapped`);
+  });
+
+  it('strips NUL and lone surrogates from JSON escapes', () => {
+    const body = String.raw`{"action":"opened","repository":{"full_name":"acme/web\u0000"},"pull_request":{"number":1,"title":"Fix\ud800","html_url":"https://github.com/acme/web/pull/1","base":{"ref":"main\udc00"}}}`;
+    const event = expectEvent(parse(body, on('pull_request')));
+    expect(event.facts).toStrictEqual({ repo: 'acme/web', baseBranch: 'main�' });
+    expect(event.message.title).toBe('PR opened: Fix� · acme/web');
+    const action = String.raw`{"action":"x\u0000\ud800","repository":{"full_name":"a/b"},"issue":{"number":1,"title":"t","html_url":"https://github.com/a/b/issues/1"}}`;
+    expect(expectIgnored(parse(action, on('issues')))).toBe('github issues action "x�" is not mapped');
   });
 
   it('ignores unmapped events, naming them', () => {

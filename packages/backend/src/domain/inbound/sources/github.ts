@@ -11,6 +11,8 @@ import {
   IgnoredReasons,
   isValidHmacHex,
   mapped,
+  nonEmpty,
+  ownValue,
   parseJson,
   type MessageDraft,
   type ParsedInbound,
@@ -47,9 +49,24 @@ const Actions = {
   completed: 'completed',
 } as const;
 
-const Conclusions = { failure: 'failure', success: 'success' } as const;
+const Conclusions = {
+  failure: 'failure',
+  timed_out: 'timed_out',
+  startup_failure: 'startup_failure',
+  success: 'success',
+} as const;
+const FAILED_CONCLUSIONS: ReadonlySet<string | null | undefined> = new Set([
+  Conclusions.failure,
+  Conclusions.timed_out,
+  Conclusions.startup_failure,
+]);
+
+/** What a pushed ref is, as the `refType` fact. */
+export const GithubRefTypes = { branch: 'branch', tag: 'tag' } as const;
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
+const TAG_REF_PREFIX = 'refs/tags/';
+const UNKNOWN_WORKFLOW = 'workflow';
 const PUSH_COMMITS_SHOWN = 5;
 const COMMIT_SUBJECT_MAX = 72;
 const SHORT_SHA_LENGTH = 7;
@@ -102,7 +119,7 @@ const workflowRunSchema = baseSchema.extend({
 
 /** `X-Hub-Signature-256` is `sha256=` followed by the hex HMAC-SHA256 of the raw body. */
 // eslint-disable-next-line unicorn/consistent-boolean-name -- the adapter contract names it verify
-export function verify(rawBody: string, headers: Headers, secret: string): boolean {
+export function verify(rawBody: Uint8Array, headers: Headers, secret: string): boolean {
   const signature = headerValue(headers, SIGNATURE_HEADER);
   const hex = signature === undefined ? undefined : stripPrefix(signature, SIGNATURE_PREFIX);
   return hex !== undefined && isValidHmacHex(HmacAlgorithms.sha256, secret, rawBody, hex);
@@ -141,7 +158,8 @@ function parsePush(json: unknown): ParsedInbound {
   }
   const { ref, compare, commits } = body.data;
   const { repo, draft } = chrome(body.data);
-  const branch = stripPrefix(ref, BRANCH_REF_PREFIX) ?? ref;
+  const branch = stripPrefix(ref, BRANCH_REF_PREFIX);
+  const refName = branch ?? stripPrefix(ref, TAG_REF_PREFIX) ?? ref;
   const count = commits.length;
   const lines = commits
     .slice(0, PUSH_COMMITS_SHOWN)
@@ -158,13 +176,18 @@ function parsePush(json: unknown): ParsedInbound {
   }
   const message = buildMessage({
     ...draft,
-    title: `${summary} · ${repo}:${branch}`,
+    title: `${summary} · ${repo}:${refName}`,
     url: compare,
     description: lines.join('\n'),
     severity: Severities.info,
     fields: [],
   });
-  return mapped(InboundEventTypes['github.push'], { repo, branch, hasCommits: count > 0 }, message);
+  const hasCommits = count > 0;
+  const facts: Facts =
+    branch === undefined
+      ? { repo, refType: GithubRefTypes.tag, hasCommits }
+      : { repo, refType: GithubRefTypes.branch, branch, hasCommits };
+  return mapped(InboundEventTypes['github.push'], facts, message);
 }
 
 function parsePullRequest(json: unknown): ParsedInbound {
@@ -268,7 +291,7 @@ function parseWorkflowRun(json: unknown): ParsedInbound {
     return actionNotMapped(GithubEvents.workflow_run, action);
   }
   let outcome;
-  if (run.conclusion === Conclusions.failure) {
+  if (FAILED_CONCLUSIONS.has(run.conclusion)) {
     outcome = { type: InboundEventTypes['github.workflow_run.failed'], label: 'failed', severity: Severities.error };
   } else if (run.conclusion === Conclusions.success) {
     outcome = {
@@ -280,8 +303,8 @@ function parseWorkflowRun(json: unknown): ParsedInbound {
     return ignored(`github workflow_run conclusion "${run.conclusion ?? 'none'}" is not mapped`);
   }
   const { repo, draft } = chrome(body.data);
-  const workflow = run.name ?? 'workflow';
-  const branch = run.head_branch ?? undefined;
+  const workflow = nonEmpty(run.name) ?? UNKNOWN_WORKFLOW;
+  const branch = nonEmpty(run.head_branch);
   const message = buildMessage({
     ...draft,
     title: `CI ${outcome.label}: ${workflow} · ${repo}`,
@@ -310,7 +333,7 @@ export function parse(rawBody: string, headers: Headers): ParsedInbound {
   if (event === GithubEvents.ping) {
     return ignored(GithubEvents.ping);
   }
-  const parser = eventParsers[event];
+  const parser = ownValue(eventParsers, event);
   if (parser === undefined) {
     return ignored(`github event "${event}" is not mapped`);
   }

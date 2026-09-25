@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/sentry';
 import {
+  encode,
   expectEvent,
   expectIgnored,
   hmacHex,
@@ -16,16 +17,17 @@ const created = 'sentry/issue-created.json';
 
 const signed = (signature: string) => new Headers({ 'Sentry-Hook-Signature': signature });
 const withLevel = (level: string) => patchFixture(created, { 'data.issue.level': level });
+const PROTOTYPE_KEYS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
 
 describe('sentry verify', () => {
-  const body = readFixture(created);
+  const body = encode(readFixture(created));
 
   it('accepts an HMAC-SHA256 hex signature of the raw body', () => {
     expect(verify(body, signed(hmacHex('sha256', secret, body)), secret)).toBe(true);
   });
 
   it('rejects a tampered body', () => {
-    expect(verify(`${body} `, signed(hmacHex('sha256', secret, body)), secret)).toBe(false);
+    expect(verify(encode(`${readFixture(created)} `), signed(hmacHex('sha256', secret, body)), secret)).toBe(false);
   });
 
   it('rejects a signature made with another secret', () => {
@@ -34,6 +36,10 @@ describe('sentry verify', () => {
 
   it('rejects a missing signature header', () => {
     expect(verify(body, new Headers(), secret)).toBe(false);
+  });
+
+  it('rejects a signature with an extra trailing character', () => {
+    expect(verify(body, signed(`${hmacHex('sha256', secret, body)}a`), secret)).toBe(false);
   });
 
   it('rejects a prefixed or SHA-1 signature', () => {
@@ -120,6 +126,39 @@ describe('sentry parse', () => {
     const headers = new Headers({ 'sentry-hook-resource': 'event_alert' });
     expect(expectIgnored(parse(readFixture(created), headers))).toBe('sentry resource "event_alert" is not mapped');
     expect(expectIgnored(parse(readFixture(created), new Headers()))).toBe('missing Sentry-Hook-Resource header');
+  });
+
+  it('falls back on empty environment, level and project', () => {
+    const body = patchFixture(created, {
+      'data.issue.environment': '',
+      'data.issue.level': '',
+      'data.issue.project': { slug: '', name: '' },
+    });
+    const event = expectEvent(parse(body, issueHeaders));
+    expect(event.facts).toStrictEqual({ environment: 'unknown', level: 'error' });
+    expect(event.message.footer).toBe('Sentry');
+  });
+
+  it.each(PROTOTYPE_KEYS)('never resolves the prototype member %s as an action, level or resource', key => {
+    expect(expectIgnored(parse(patchFixture(created, { action: key }), issueHeaders))).toBe(
+      `sentry action "${key}" is not mapped`,
+    );
+    const event = expectEvent(parse(withLevel(key), issueHeaders));
+    expect(event.message.severity).toBe('error');
+    // The level fact is the lowercased level, whatever its value.
+    expect(event.facts.level).toMatch(new RegExp(`^${key}$`, 'iu'));
+    expect(event.facts.level).toMatch(/^[^A-Z]+$/u);
+    const headers = new Headers({ 'sentry-hook-resource': key });
+    expect(expectIgnored(parse(readFixture(created), headers))).toBe(`sentry resource "${key}" is not mapped`);
+  });
+
+  it('strips NUL and lone surrogates from JSON escapes', () => {
+    const body = String.raw`{"action":"created","data":{"issue":{"title":"Boom\u0000\ud800","level":"error\u0000","project":{"slug":"web\udc00"}}}}`;
+    const event = expectEvent(parse(body, issueHeaders));
+    expect(event.message.title).toBe('Boom�');
+    expect(event.facts).toStrictEqual({ project: 'web�', environment: 'unknown', level: 'error' });
+    const action = String.raw`{"action":"x\u0000\ud800","data":{}}`;
+    expect(expectIgnored(parse(action, issueHeaders))).toBe('sentry action "x�" is not mapped');
   });
 
   it('ignores malformed JSON and payloads without an issue', () => {
