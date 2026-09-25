@@ -1,4 +1,4 @@
-import { inArray, max, sql } from 'drizzle-orm';
+import { inArray, lt, max, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -19,6 +19,15 @@ export class DiscordRateLimitRepo {
       .where(inArray(discordRateLimits.bucket, [...buckets]));
     const until = row?.until ?? null;
     return until !== null && until.getTime() > now.getTime() ? until : undefined;
+  }
+
+  /** Delete buckets whose block ended before `before` (daily prune). Returns the count. */
+  async pruneExpired(before: Date): Promise<number> {
+    const deleted = await this.db
+      .delete(discordRateLimits)
+      .where(lt(discordRateLimits.blockedUntil, before))
+      .returning({ bucket: discordRateLimits.bucket });
+    return deleted.length;
   }
 
   /** Block `bucket` until `until`. An existing, later block wins (concurrent runners). */

@@ -103,12 +103,14 @@ export type ChannelStatus = (typeof ChannelStatuses)[keyof typeof ChannelStatuse
 export const channelStatusSchema = z.enum(Object.values(ChannelStatuses) as [ChannelStatus, ...ChannelStatus[]]);
 
 /**
- * A delivery's lifecycle: `queued` until the sender's answer settles it as `sent`
- * or `failed`; `suppressed` when there is nothing left to send to (the channel was
+ * A delivery's lifecycle: `queued` until a run claims it (`sending`, while the
+ * sender is called), then `sent` or `failed` from the answer, or back to `queued`
+ * to wait; `suppressed` when there is nothing left to send to (the channel was
  * deleted before the delivery ran).
  */
 export const DeliveryStatuses = {
   queued: 'queued',
+  sending: 'sending',
   sent: 'sent',
   failed: 'failed',
   suppressed: 'suppressed',

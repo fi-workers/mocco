@@ -50,7 +50,7 @@ and a channel belongs to a workspace, not a project.
 |---|---|
 | `mocco_notification_channels` | A destination: `kind` (`discord`), a label, `config` `{ guildId, channelId, channelName }`, `external_id` (the Discord channel id; unique per workspace and kind), `status` `active`/`disabled` with `disabled_reason`, and `secret_sealed` (reserved for a customer bot token; null means the Mocco bot). |
 | `mocco_notification_rules` | Which events a channel gets: `event_type`, optional `source_id`, `filter`. Pinned to its channel's workspace by a composite FK; deleted with the channel. The same rule twice on one channel is one row (unique on channel, type, source, filter). |
-| `mocco_notification_deliveries` | One event sent (or not) to one channel: `status`, `attempts`, `response_code`, `error`, `external_message_id`, `next_attempt_at`, `sent_at`, the matching `rule_id`, and the rendered `message`. Unique on `(event_id, channel_id)`. |
+| `mocco_notification_deliveries` | One event sent (or not) to one channel: `status` (`queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts` (sends tried), `response_code`, `error`, `external_message_id`, `next_attempt_at`, `sending_at` (the claim), `sent_at`, the matching `rule_id` (indexed where not null, for the SET NULL on rule delete), and the rendered `message`. Unique on `(event_id, channel_id)`. |
 | `mocco_discord_rate_limits` | Shared Discord pacing: `bucket` (`channel:<discord channel id>` or `global`) → `blocked_until`. Platform-scoped, since every workspace posts through the same bot. |
 
 Retention: a delivery is deleted with its domain event (`event_id … ON DELETE CASCADE`), so
@@ -107,48 +107,76 @@ before the ledger write), and the unique pair makes that a no-op.
 
 ## Delivery lifecycle
 
-`queued` → `sent` | `failed` | `suppressed`. Settled rows are never updated again (every write is
-guarded by `status = 'queued'`), so a second or overlapping run of the job is a no-op once the
-first settled it. `DeliveryService.deliver(deliveryId, { attempt, now })`:
+`queued` → `sending` (claimed by a run, while Discord is called) → `sent` | `failed`, or back to
+`queued` to wait; `suppressed` when the channel was deleted. Settled rows (sent, failed,
+suppressed) are never updated again: every write is conditional on the status it expects.
+`DeliveryService.deliver(deliveryId, { isFinalAttempt, now })`:
 
-1. no row (pruned with its event) or not `queued` → return;
+1. no row (pruned with its event) or settled → return. A fresh `sending` claim (another run is
+   calling Discord) → free `RetryAt` for when that claim would turn stale (2 min);
 2. channel deleted → `suppressed` (`channel deleted`);
 3. channel disabled → `failed` (`channel disabled: <reason>`);
-4. no Discord bot token on this deployment → stay queued, `RetryAt(+1h)` (`discord not configured`,
-   logged). A deployment cannot create Discord channels without the env, so this only happens when
-   the token was removed; waiting gives an operator time to restore it;
-5. a blocked `channel:<id>` or `global` bucket → `RetryAt(blocked_until)`;
-6. per-workspace fairness: 120 or more sends in the last 60 s → `RetryAt` when the oldest of them
-   leaves the window (at least 1 s);
-7. `attempts + 1`, then `DiscordApi.sendMessage` and the result mapping below.
+4. the channel's Discord id is not a snowflake → `failed` (never sent to; see the sender pause below);
+5. no Discord bot token on this deployment → free wait `+1h` (`discord not configured`, logged).
+   A deployment cannot create Discord channels without the env, so this only happens when the
+   token was removed;
+6. a blocked `channel:<id>` or `global` bucket → free wait until `blocked_until`;
+7. per-workspace fairness: 120 or more sends in the last 60 s → free wait until the oldest of them
+   leaves the window, plus `random() × 60 s` of jitter so the waiting deliveries spread over the
+   next window;
+8. claim: one conditional `UPDATE … SET status = 'sending', sending_at = now, attempts + 1 WHERE
+   status = 'queued' (or a sending claim older than 2 min) RETURNING`. Losing the claim to another
+   run means that run sends;
+9. `DiscordApi.sendMessage` with `nonce` = the delivery id as 22 base64url characters and
+   `enforce_nonce: true`, then the result mapping below.
 
-Every wait stores `error` and `next_attempt_at`. On the job's last attempt (`attempt >= 8`) a wait
-or a transient failure marks the delivery `failed` with the reason instead, so a delivery never
-stays `queued` behind a dead job.
+**Free waits** are `RetryAt(at, reason, { consumesAttempt: false })`: the runner always refunds
+them and does not count them towards the five-in-a-row cap
+([jobs](./jobs.md#retryat-retry-at-a-specific-time)), so waiting for capacity never makes a job
+`dead`. They are bounded by age instead: a delivery still waiting 24 h after it was queued
+(`DeliveryPolicy.maxQueuedMs`) is `failed` with `expired waiting for capacity (<reason>)`.
+
+Every wait stores `error` and `next_attempt_at`. The job's final attempt is the runner's
+`ctx.isFinalAttempt`; only a transient failure uses it (below).
 
 ### Discord failure policy
 
 | Result | Delivery | Also |
 |---|---|---|
 | `sent` | `sent`, `external_message_id`, `sent_at` | an exhausted bucket (`X-RateLimit-Remaining: 0`) is blocked until its reset |
-| `rate_limited` | queued, `response_code` 429, `RetryAt(retry_at)` | the bucket (`channel:<id>`, or `global` for a global limit or a Cloudflare ban) is blocked until then |
+| `rate_limited` | queued, `response_code` 429, consuming `RetryAt(retry_at)` | the bucket (`channel:<id>`, or `global` for a global limit or a Cloudflare ban) is blocked until then. A 429 counts as an invalid request at Discord, so it stays a consuming RetryAt (five in a row are refunded) |
 | `permanent` + `disableChannel` (403/404 with 10003, 10004, 50001, 50013) | `failed` with Discord's reason | the channel is `disabled` with that reason; later deliveries to it fail at step 3 |
-| `permanent` + `disableSender` (401, uncoded 403/404, Cloudflare 40333) | queued, `RetryAt(+1h)` | the `global` bucket is blocked for 1 h and the pause is logged as an error. The problem is Mocco's configuration, not the tenant's, so no channel is disabled |
+| `permanent` + `disableSender` (401, uncoded 403/404, Cloudflare 40333) | queued, free wait `+1h` | the `global` bucket is blocked for 1 h and the pause is logged as an error. The problem is Mocco's configuration, not the tenant's, so no channel is disabled. This relies on channel ids being validated snowflakes (step 4 and channel binding): a malformed id would give an uncoded 404 and pause everyone |
 | other `permanent` (e.g. 50035) | `failed` | none |
-| `transient` (5xx, timeout, network) | queued with the reason; thrown so the job backs off (about 2 h over 8 attempts) | `failed` on the last attempt |
-
-RetryAt does not spend a job attempt for up to five waits in a row ([jobs](./jobs.md#retryat-retry-at-a-specific-time));
-after that each wait counts, so a delivery that keeps waiting ends `failed` rather than looping.
+| `transient` (5xx, timeout, network) | queued with the reason; thrown so the job backs off (about 2 h over 8 attempts) | `failed` when `ctx.isFinalAttempt` |
 
 Reasons come from the Discord client already redacted (never the bot token).
 
-### Known limits
+### No double posts
 
-- A run that crashes after Discord accepted the message but before `sent` is written sends it again
-  on retry (at-least-once; Discord has no idempotency key for messages).
-- Two overlapping runs of one job (a reclaimed lock) can both send before either settles.
-- Waits caused by a long burst to one channel spend job attempts after five in a row, so a very
-  large burst can fail its tail deliveries; the per-channel bucket keeps them from hammering Discord.
+- Two overlapping runs of one job (a reclaimed lock) race for the claim in step 8; only one gets
+  the row, the other waits.
+- A run that dies after Discord accepted the post leaves a `sending` claim. After 2 min another run
+  may resend it; the nonce makes Discord return the message it already created instead of posting
+  again. Discord only remembers nonces for a few minutes, so a resend much later than that could
+  still post twice (at-least-once, in practice once).
+
+### Reconcile
+
+`notification.reconcile` runs every 5 minutes as a platform schedule. It fails (`the delivery job
+ended before the delivery settled`) up to 500 `queued` or `sending` deliveries that have no live
+`notification.deliver` job (queued or running, matched by the job's dedupe key = the delivery id):
+their job died of consuming failures (429s, transient errors) or was pruned. A schedule was chosen
+over a runner `onDead` hook because it also catches jobs lost for any other reason, and it keeps
+the job runner free of domain callbacks.
+
+### Prune
+
+`notification.prune` runs daily and deletes `mocco_discord_rate_limits` rows whose
+`blocked_until` has passed.
+
+`timestamp` columns here, as everywhere in the schema, are `timestamp without time zone` written
+by the app in UTC (the repo convention, [DB conventions](./db-conventions.md)), not `timestamptz`.
 
 ## Env
 
@@ -162,7 +190,10 @@ All are optional; a deployment without them boots.
 ## Testing
 
 `DeliveryService.test.ts` runs the real `DiscordApi` over `createFakeDiscordFetch` (scripted
-replies) on pglite and covers every result mapping, the buckets, fairness and idempotency.
+replies) on pglite and covers every result mapping, the buckets, fairness and jitter, the age
+bound, claims, the nonce, reconcile and prune. `delivery-capacity.test.ts` runs the review repros
+through the real job runner: a channel bucket blocked 30 s at a time for 20 rounds, and 1500
+deliveries at 120/min (all sent, one attempt each, never over 120 in a window).
 `NotificationService.test.ts` publishes through the real bus (`createEventBus`) and covers fan-out,
 filters, redelivery and tenant isolation. `runtime/jobs.test.ts` runs a gate event through the tick
 to a sent Discord message. Seed helpers are in `domain/notification/testing/seed.ts`.

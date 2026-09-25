@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
+import { JobStatuses } from '@mocco/common/jobs';
 import { ChannelStatuses, DeliveryStatuses, Severities } from '@mocco/common/notification';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
+import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
 import { RetryAt } from '@backend/domain/jobs/retry-at';
-import { DeliveryReasons } from '@backend/domain/notification/constants';
-import { DeliveryService } from '@backend/domain/notification/DeliveryService';
+import { DeliveryReasons, NotificationJobKinds } from '@backend/domain/notification/constants';
+import { DeliveryService, deliveryNonce } from '@backend/domain/notification/DeliveryService';
 import { TransientDeliveryError } from '@backend/domain/notification/errors';
 import { ChannelRepo, type ChannelRow } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo, type DeliveryRow } from '@backend/domain/notification/repos/delivery.repo';
@@ -21,7 +23,7 @@ import {
   type RecordedRequest,
 } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedWorkspace } from '@backend/domain/notification/testing/seed';
-import { discordRateLimits, notificationChannels, notificationDeliveries } from '@backend/infra/db/schema';
+import { discordRateLimits, jobs, notificationChannels, notificationDeliveries } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { NeutralMessage } from '@mocco/common/notification';
@@ -38,10 +40,10 @@ const message: NeutralMessage = {
   footer: 'Mocco',
 };
 
-/** The run asked the job to retry at exactly `at`. */
-async function expectRetryAt(run: Promise<unknown>, at: Date): Promise<void> {
+/** The run asked the job to retry at exactly `at` — by default as a free capacity wait. */
+async function expectRetryAt(run: Promise<unknown>, at: Date, isFreeWait = true): Promise<void> {
   await expect(run).rejects.toBeInstanceOf(RetryAt);
-  await expect(run).rejects.toMatchObject({ at });
+  await expect(run).rejects.toMatchObject({ at, isFreeWait });
 }
 
 const sentTo = (requests: RecordedRequest[]) => requests.map(request => new URL(request.url).pathname);
@@ -68,11 +70,15 @@ describe('DeliveryService (pglite, fake Discord)', () => {
   });
 
   /** A service whose Discord answers with `script`, in order; any extra call throws. */
-  const service = (...script: FakeReply[]) => {
+  const serviceWith = (random: () => number, ...script: FakeReply[]) => {
     const fake = createFakeDiscordFetch(...script);
     const discord = new DiscordApi({ fetch: fake.fetch, botToken: 'bot-token-secret', now: () => NOW, timeoutMs: 20 });
-    return { delivery: new DeliveryService({ deliveries, channels, rateLimits, discord }), requests: fake.requests };
+    return {
+      delivery: new DeliveryService({ deliveries, channels, rateLimits, discord, random }),
+      requests: fake.requests,
+    };
   };
+  const service = (...script: FakeReply[]) => serviceWith(() => 0, ...script);
 
   const seedDelivery = async (target: ChannelRow = channel): Promise<DeliveryRow> => {
     const { event } = await new DomainEventRepo(t.db).insert({
@@ -92,7 +98,12 @@ describe('DeliveryService (pglite, fake Discord)', () => {
     if (created === undefined) {
       throw new Error('delivery not created');
     }
-    return created.delivery;
+    // Queued "now" on the test clock (the column defaults to the wall clock).
+    await t.db
+      .update(notificationDeliveries)
+      .set({ createdAt: NOW })
+      .where(eq(notificationDeliveries.id, created.delivery.id));
+    return { ...created.delivery, createdAt: NOW };
   };
 
   const reload = async (id: string) => {
@@ -119,8 +130,8 @@ describe('DeliveryService (pglite, fake Discord)', () => {
     }, Promise.resolve());
   };
 
-  const first = { attempt: 1, now: NOW };
-  const last = { attempt: 8, now: NOW };
+  const first = { isFinalAttempt: false, now: NOW };
+  const last = { isFinalAttempt: true, now: NOW };
 
   describe('result mapping', () => {
     it('sent: stores the message id and the exhausted bucket', async () => {
@@ -149,7 +160,7 @@ describe('DeliveryService (pglite, fake Discord)', () => {
       );
       const row = await seedDelivery();
 
-      await expectRetryAt(delivery.deliver(row.id, first), later(3 * SECOND));
+      await expectRetryAt(delivery.deliver(row.id, first), later(3 * SECOND), false);
 
       expect(await reload(row.id)).toMatchObject({
         status: DeliveryStatuses.queued,
@@ -167,7 +178,7 @@ describe('DeliveryService (pglite, fake Discord)', () => {
       );
       const row = await seedDelivery();
 
-      await expectRetryAt(delivery.deliver(row.id, first), later(5 * SECOND));
+      await expectRetryAt(delivery.deliver(row.id, first), later(5 * SECOND), false);
 
       expect(await bucket('global')).toEqual(later(5 * SECOND));
     });
@@ -287,15 +298,30 @@ describe('DeliveryService (pglite, fake Discord)', () => {
       expect(await reload(row.id)).toMatchObject({ status: DeliveryStatuses.sent });
     });
 
-    it('fails a delivery still waiting on the last attempt instead of leaving it queued', async () => {
+    it('a capacity wait never fails the delivery on the final attempt, and a 429 there stays queued', async () => {
       await rateLimits.block('global', later(HOUR));
       const row = await seedDelivery();
 
-      await service().delivery.deliver(row.id, last);
+      await expectRetryAt(service().delivery.deliver(row.id, last), later(HOUR));
+      expect(await reload(row.id)).toMatchObject({ status: DeliveryStatuses.queued });
+
+      await t.db.delete(discordRateLimits);
+      const limited = service(
+        jsonResponse(429, { message: 'slow down', retry_after: 2 }, { 'X-RateLimit-Scope': 'user' }),
+      );
+      await expectRetryAt(limited.delivery.deliver(row.id, last), later(2 * SECOND), false);
+      expect(await reload(row.id)).toMatchObject({ status: DeliveryStatuses.queued, responseCode: 429 });
+    });
+
+    it('fails a delivery still waiting for capacity 24 hours after it was queued', async () => {
+      await rateLimits.block('global', later(48 * HOUR));
+      const row = await seedDelivery();
+
+      await service().delivery.deliver(row.id, { isFinalAttempt: false, now: later(24 * HOUR) });
 
       expect(await reload(row.id)).toMatchObject({
         status: DeliveryStatuses.failed,
-        error: DeliveryReasons.rateLimited,
+        error: DeliveryReasons.expired(DeliveryReasons.rateLimited),
       });
     });
   });
@@ -308,6 +334,14 @@ describe('DeliveryService (pglite, fake Discord)', () => {
       await expectRetryAt(service().delivery.deliver(row.id, first), later(10 * SECOND));
 
       expect(await reload(row.id)).toMatchObject({ error: DeliveryReasons.workspaceLimit });
+    });
+
+    it('spreads the wake-ups over the next window (jitter)', async () => {
+      await seedSent(120, index => later(-50 * SECOND + index * 100));
+      const row = await seedDelivery();
+
+      // The oldest send ages out at +10 s; random() = 0.5 adds half a window.
+      await expectRetryAt(serviceWith(() => 0.5).delivery.deliver(row.id, first), later(40 * SECOND));
     });
 
     it('sends at 119, and ignores sends older than a minute and other workspaces', async () => {
@@ -369,23 +403,143 @@ describe('DeliveryService (pglite, fake Discord)', () => {
       await expect(service().delivery.deliver(randomUUID(), first)).resolves.toBeUndefined();
     });
 
-    it('without a Discord bot token: waits an hour, then fails on the last attempt', async () => {
-      const unconfigured = new DeliveryService({ deliveries, channels, rateLimits, discord: undefined });
+    it('without a Discord bot token: waits an hour at a time for free, and expires after 24 hours', async () => {
+      const unconfigured = new DeliveryService({
+        deliveries,
+        channels,
+        rateLimits,
+        discord: undefined,
+        random: () => 0,
+      });
       const row = await seedDelivery();
 
-      await expectRetryAt(unconfigured.deliver(row.id, first), later(HOUR));
+      await expectRetryAt(unconfigured.deliver(row.id, last), later(HOUR));
       expect(await reload(row.id)).toMatchObject({
         status: DeliveryStatuses.queued,
         error: DeliveryReasons.notConfigured,
         nextAttemptAt: later(HOUR),
       });
 
-      await unconfigured.deliver(row.id, last);
+      await unconfigured.deliver(row.id, { isFinalAttempt: false, now: later(25 * HOUR) });
       expect(await reload(row.id)).toMatchObject({
         status: DeliveryStatuses.failed,
-        error: DeliveryReasons.notConfigured,
+        error: DeliveryReasons.expired(DeliveryReasons.notConfigured),
         nextAttemptAt: null,
       });
+    });
+
+    it('fails a channel whose Discord id is not a snowflake without calling Discord', async () => {
+      await t.db
+        .update(notificationChannels)
+        .set({ externalId: '../guilds/1' })
+        .where(eq(notificationChannels.id, channel.id));
+      const row = await seedDelivery();
+
+      await service().delivery.deliver(row.id, first);
+
+      expect(await reload(row.id)).toMatchObject({
+        status: DeliveryStatuses.failed,
+        error: DeliveryReasons.invalidChannelId,
+      });
+    });
+  });
+
+  describe('claiming and the nonce (no double post)', () => {
+    it('posts with the delivery id as an enforced 22-character nonce', async () => {
+      const { delivery, requests } = service(jsonResponse(200, { id: '1' }));
+      const row = await seedDelivery();
+
+      await delivery.deliver(row.id, first);
+
+      const body = JSON.parse(requests[0]?.body ?? '{}') as { nonce?: string; enforce_nonce?: boolean };
+      expect(body.nonce).toBe(deliveryNonce(row.id));
+      expect(body.nonce).toHaveLength(22);
+      expect(body.enforce_nonce).toBe(true);
+      expect(deliveryNonce('00010203-0405-0607-0809-0a0b0c0d0e0f')).toBe('AAECAwQFBgcICQoLDA0ODw');
+    });
+
+    it('does not call Discord while another run holds a fresh claim, and comes back when it turns stale', async () => {
+      const row = await seedDelivery();
+      await deliveries.claimForSending(row.id, later(-30 * SECOND), later(-HOUR));
+
+      await expectRetryAt(service().delivery.deliver(row.id, first), later(90 * SECOND));
+
+      expect(await reload(row.id)).toMatchObject({ status: DeliveryStatuses.sending, attempts: 1 });
+    });
+
+    it('resends a stale claim left by a run that died, with the same nonce', async () => {
+      const row = await seedDelivery();
+      await deliveries.claimForSending(row.id, later(-3 * 60 * SECOND), later(-HOUR));
+      const { delivery, requests } = service(jsonResponse(200, { id: '77' }));
+
+      await delivery.deliver(row.id, first);
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.body).toContain(deliveryNonce(row.id));
+      expect(await reload(row.id)).toMatchObject({
+        status: DeliveryStatuses.sent,
+        externalMessageId: '77',
+        attempts: 2,
+        sendingAt: null,
+      });
+    });
+
+    it('of two runs racing for one delivery, only one claims it', async () => {
+      const row = await seedDelivery();
+      const claims = await Promise.all([
+        deliveries.claimForSending(row.id, NOW, later(-HOUR)),
+        deliveries.claimForSending(row.id, NOW, later(-HOUR)),
+      ]);
+      expect(claims.filter(claim => claim !== undefined)).toHaveLength(1);
+    });
+  });
+
+  describe('reconcile and prune', () => {
+    it('fails unsettled deliveries whose job is no longer live, and leaves the rest alone', async () => {
+      const jobRepo = new JobRepo(t.db);
+      const insertJob = async (deliveryId: string) =>
+        await jobRepo.insert({
+          kind: NotificationJobKinds.deliver,
+          payload: { deliveryId },
+          runAt: NOW,
+          workspaceId,
+          maxAttempts: 8,
+          dedupeKey: deliveryId,
+        });
+      const orphan = await seedDelivery();
+      const sending = await seedDelivery();
+      await deliveries.claimForSending(sending.id, NOW, later(-HOUR));
+      const withLiveJob = await seedDelivery();
+      await insertJob(withLiveJob.id);
+      const withDeadJob = await seedDelivery();
+      const { job } = await insertJob(withDeadJob.id);
+      await t.db.update(jobs).set({ status: JobStatuses.dead }).where(eq(jobs.id, job.id));
+      const sent = await seedDelivery();
+      await t.db
+        .update(notificationDeliveries)
+        .set({ status: DeliveryStatuses.sent })
+        .where(eq(notificationDeliveries.id, sent.id));
+
+      expect(await service().delivery.reconcile()).toBe(3);
+
+      expect(await reload(orphan.id)).toMatchObject({
+        status: DeliveryStatuses.failed,
+        error: DeliveryReasons.orphaned,
+      });
+      expect(await reload(sending.id)).toMatchObject({ status: DeliveryStatuses.failed });
+      expect(await reload(withDeadJob.id)).toMatchObject({ status: DeliveryStatuses.failed });
+      expect(await reload(withLiveJob.id)).toMatchObject({ status: DeliveryStatuses.queued });
+      expect(await reload(sent.id)).toMatchObject({ status: DeliveryStatuses.sent });
+    });
+
+    it('prunes rate limit buckets whose block has ended', async () => {
+      await rateLimits.block('global', later(-SECOND));
+      await rateLimits.block(`channel:${channel.externalId}`, later(SECOND));
+
+      expect(await service().delivery.pruneRateLimits(NOW)).toBe(1);
+
+      expect(await bucket('global')).toBeUndefined();
+      expect(await bucket(`channel:${channel.externalId}`)).toEqual(later(SECOND));
     });
   });
 });

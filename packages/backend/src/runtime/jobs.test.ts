@@ -44,9 +44,11 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
 
-    expect(report).toMatchObject({ ran: 2, errors: [], outcomes: { succeeded: 2 } });
+    expect(report).toMatchObject({ ran: 4, errors: [], outcomes: { succeeded: 4 } });
     const schedules = await t.db.select().from(jobSchedules);
-    expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(new Set([JobKinds.prune, EventJobKinds.prune]));
+    expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
+      new Set([JobKinds.prune, EventJobKinds.prune, NotificationJobKinds.reconcile, NotificationJobKinds.prune]),
+    );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);
     const ran = await t.db.select().from(jobs);
     expect(ran.every(job => job.status === JobStatuses.succeeded)).toBe(true);
