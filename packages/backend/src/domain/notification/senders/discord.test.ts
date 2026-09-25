@@ -148,6 +148,17 @@ describe('DiscordApi.sendMessage', () => {
     expect(body.embeds).toEqual([renderEmbed(message, NOW)]);
   });
 
+  it('sends an enforced nonce when given one, and none otherwise', async () => {
+    const withNonce = api(created());
+    await withNonce.discord.sendMessage(CHANNEL, message, { nonce: 'AAECAwQFBgcICQoLDA0ODw' });
+    expect(sentBody(withNonce.requests)).toMatchObject({ nonce: 'AAECAwQFBgcICQoLDA0ODw', enforce_nonce: true });
+
+    const without = api(created());
+    await without.discord.sendMessage(CHANNEL, message);
+    expect(sentBody(without.requests)).not.toHaveProperty('nonce');
+    expect(sentBody(without.requests)).not.toHaveProperty('enforce_nonce');
+  });
+
   it('returns the message id and the channel bucket', async () => {
     const { discord } = api(created({ 'X-RateLimit-Remaining': '4', 'X-RateLimit-Reset-After': '1.5' }));
     expect(await discord.sendMessage(CHANNEL, message)).toEqual({

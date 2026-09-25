@@ -1,5 +1,6 @@
+import { JobStatuses } from '@mocco/common/jobs';
 import { DeliveryStatuses } from '@mocco/common/notification';
-import { and, count, desc, eq, gte, min, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, min, notExists, or, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -7,7 +8,10 @@ import type { Db } from '@backend/infra/db/types';
 import type { DeliveryStatus } from '@mocco/common/notification';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 
-const { notificationDeliveries } = schema;
+const { notificationDeliveries, jobs } = schema;
+
+/** A delivery a run may still act on (not settled). */
+const UNSETTLED: readonly DeliveryStatus[] = [DeliveryStatuses.queued, DeliveryStatuses.sending];
 
 export type DeliveryRow = typeof notificationDeliveries.$inferSelect;
 export type NewDelivery = Pick<
@@ -17,7 +21,7 @@ export type NewDelivery = Pick<
 /** The columns a delivery job settles or annotates. */
 export type DeliveryUpdate = Pick<
   PgUpdateSetSource<typeof notificationDeliveries>,
-  'status' | 'responseCode' | 'error' | 'externalMessageId' | 'nextAttemptAt' | 'sentAt'
+  'status' | 'responseCode' | 'error' | 'externalMessageId' | 'nextAttemptAt' | 'sentAt' | 'sendingAt'
 >;
 
 /** Data access for mocco_notification_deliveries (ADR 0012). Reads by id are
@@ -73,25 +77,84 @@ export class DeliveryRepo {
   }
 
   /**
-   * Update a delivery that is still `queued`. A settled delivery (sent, failed,
-   * suppressed) is never overwritten, so a second run of its job cannot undo the first.
-   * Returns false when nothing was updated.
+   * Update a delivery only while its status is `from`. A settled delivery (sent,
+   * failed, suppressed) is never passed as `from`, so a second run of its job cannot
+   * undo the first. Returns false when nothing was updated.
    */
-  async updateQueued(id: string, values: DeliveryUpdate): Promise<boolean> {
+  async updateFrom(id: string, from: DeliveryStatus, values: DeliveryUpdate): Promise<boolean> {
     const updated = await this.db
       .update(notificationDeliveries)
       .set(values)
-      .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, DeliveryStatuses.queued)))
+      .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, from)))
       .returning({ id: notificationDeliveries.id });
     return updated.length > 0;
   }
 
-  /** Count a send attempt on a queued delivery (just before calling the sender). */
-  async recordAttempt(id: string): Promise<void> {
-    await this.db
+  /**
+   * Claim a delivery for sending: `queued` (or a `sending` claim older than
+   * `staleBefore`, left by a run that died) → `sending`, counting the attempt. One
+   * conditional UPDATE, so of two overlapping runs only one gets the row. Returns the
+   * claimed row, or undefined when another run holds it or it is settled.
+   */
+  async claimForSending(id: string, now: Date, staleBefore: Date): Promise<DeliveryRow | undefined> {
+    const [row] = await this.db
       .update(notificationDeliveries)
-      .set({ attempts: sql`${notificationDeliveries.attempts} + 1` })
-      .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, DeliveryStatuses.queued)));
+      .set({
+        status: DeliveryStatuses.sending,
+        sendingAt: now,
+        attempts: sql`${notificationDeliveries.attempts} + 1`,
+      })
+      .where(
+        and(
+          eq(notificationDeliveries.id, id),
+          or(
+            eq(notificationDeliveries.status, DeliveryStatuses.queued),
+            and(
+              eq(notificationDeliveries.status, DeliveryStatuses.sending),
+              lt(notificationDeliveries.sendingAt, staleBefore),
+            ),
+          ),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
+  /**
+   * Unsettled deliveries (queued or sending) whose `jobKind` job is no longer live
+   * (queued or running) — its job died, so nothing will ever settle them. The job's
+   * dedupe key is the delivery id. Platform-scoped: the reconcile covers every workspace.
+   */
+  async findOrphaned(jobKind: string, limit: number): Promise<DeliveryRow[]> {
+    const liveJob = this.db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.kind, jobKind),
+          eq(jobs.dedupeKey, sql`${notificationDeliveries.id}::text`),
+          inArray(jobs.status, [JobStatuses.queued, JobStatuses.running]),
+        ),
+      );
+    return await this.db
+      .select()
+      .from(notificationDeliveries)
+      .where(and(inArray(notificationDeliveries.status, [...UNSETTLED]), notExists(liveJob)))
+      .orderBy(notificationDeliveries.createdAt)
+      .limit(limit);
+  }
+
+  /** Fail unsettled deliveries by id with `error`. Returns how many were failed. */
+  async failUnsettled(ids: readonly string[], error: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const failed = await this.db
+      .update(notificationDeliveries)
+      .set({ status: DeliveryStatuses.failed, error, nextAttemptAt: null })
+      .where(and(inArray(notificationDeliveries.id, [...ids]), inArray(notificationDeliveries.status, [...UNSETTLED])))
+      .returning({ id: notificationDeliveries.id });
+    return failed.length;
   }
 
   /** How many deliveries of the workspace were sent at or after `since`, and the

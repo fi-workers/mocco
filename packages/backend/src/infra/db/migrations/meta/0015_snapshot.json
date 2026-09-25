@@ -1,5 +1,5 @@
 {
-  "id": "d4ed5c27-51fb-499a-b3ff-efc2a49276c8",
+  "id": "d39092a9-cd9f-4288-9c37-344e02c18172",
   "prevId": "843be43d-f3dd-48eb-9f4d-dbc6728c7e05",
   "version": "7",
   "dialect": "postgresql",
@@ -118,12 +118,8 @@
           "name": "mocco_accounts_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_accounts",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -236,12 +232,8 @@
           "name": "mocco_audit_log_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_audit_log",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -249,12 +241,8 @@
           "name": "mocco_audit_log_actor_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_audit_log",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -264,9 +252,7 @@
         "mocco_audit_log_id_unique": {
           "name": "mocco_audit_log_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "policies": {},
@@ -352,12 +338,8 @@
           "name": "mocco_commit_configs_commit_id_mocco_commits_id_fk",
           "tableFrom": "mocco_commit_configs",
           "tableTo": "mocco_commits",
-          "columnsFrom": [
-            "commit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["commit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -484,12 +466,8 @@
           "name": "mocco_commits_repo_id_mocco_repos_id_fk",
           "tableFrom": "mocco_commits",
           "tableTo": "mocco_repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -613,12 +591,8 @@
           "name": "mocco_credential_grants_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_credential_grants",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -626,12 +600,8 @@
           "name": "mocco_credential_grants_repo_id_mocco_repos_id_fk",
           "tableFrom": "mocco_credential_grants",
           "tableTo": "mocco_repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -696,12 +666,8 @@
           "name": "mocco_domain_event_deliveries_event_id_mocco_domain_events_id_fk",
           "tableFrom": "mocco_domain_event_deliveries",
           "tableTo": "mocco_domain_events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -709,10 +675,7 @@
       "compositePrimaryKeys": {
         "mocco_domain_event_deliveries_pk": {
           "name": "mocco_domain_event_deliveries_pk",
-          "columns": [
-            "event_id",
-            "subscriber"
-          ]
+          "columns": ["event_id", "subscriber"]
         }
       },
       "uniqueConstraints": {},
@@ -880,12 +843,8 @@
           "name": "mocco_domain_events_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_domain_events",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -893,14 +852,8 @@
           "name": "mocco_domain_events_project_workspace_fk",
           "tableFrom": "mocco_domain_events",
           "tableTo": "mocco_projects",
-          "columnsFrom": [
-            "project_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["project_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -910,9 +863,7 @@
         "mocco_domain_events_seq_uq": {
           "name": "mocco_domain_events_seq_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "seq"
-          ]
+          "columns": ["seq"]
         }
       },
       "policies": {},
@@ -995,12 +946,8 @@
           "name": "mocco_github_connect_states_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_github_connect_states",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1104,12 +1051,8 @@
           "name": "mocco_invitations_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_invitations",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1117,12 +1060,8 @@
           "name": "mocco_invitations_inviter_id_mocco_users_id_fk",
           "tableFrom": "mocco_invitations",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "inviter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["inviter_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1269,12 +1208,8 @@
           "name": "mocco_job_schedules_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_job_schedules",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1282,14 +1217,8 @@
           "name": "mocco_job_schedules_project_workspace_fk",
           "tableFrom": "mocco_job_schedules",
           "tableTo": "mocco_projects",
-          "columnsFrom": [
-            "project_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["project_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1498,12 +1427,8 @@
           "name": "mocco_jobs_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_jobs",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1604,12 +1529,8 @@
           "name": "mocco_members_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_members",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1617,12 +1538,8 @@
           "name": "mocco_members_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_members",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1747,12 +1664,8 @@
           "name": "mocco_notification_channels_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_notification_channels",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1762,10 +1675,7 @@
         "mocco_notification_channels_id_workspace_uq": {
           "name": "mocco_notification_channels_id_workspace_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "workspace_id"
-          ]
+          "columns": ["id", "workspace_id"]
         }
       },
       "policies": {},
@@ -1856,6 +1766,12 @@
         },
         "next_attempt_at": {
           "name": "next_attempt_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sending_at": {
+          "name": "sending_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
@@ -1960,6 +1876,38 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "mocco_notification_deliveries_rule_idx": {
+          "name": "mocco_notification_deliveries_rule_idx",
+          "columns": [
+            {
+              "expression": "rule_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_notification_deliveries\".\"rule_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_notification_deliveries_unsettled_idx": {
+          "name": "mocco_notification_deliveries_unsettled_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sending')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1967,12 +1915,8 @@
           "name": "mocco_notification_deliveries_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_notification_deliveries",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1980,12 +1924,8 @@
           "name": "mocco_notification_deliveries_channel_id_mocco_notification_channels_id_fk",
           "tableFrom": "mocco_notification_deliveries",
           "tableTo": "mocco_notification_channels",
-          "columnsFrom": [
-            "channel_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["channel_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1993,12 +1933,8 @@
           "name": "mocco_notification_deliveries_event_id_mocco_domain_events_id_fk",
           "tableFrom": "mocco_notification_deliveries",
           "tableTo": "mocco_domain_events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["event_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2006,12 +1942,8 @@
           "name": "mocco_notification_deliveries_rule_id_mocco_notification_rules_id_fk",
           "tableFrom": "mocco_notification_deliveries",
           "tableTo": "mocco_notification_rules",
-          "columnsFrom": [
-            "rule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["rule_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2022,7 +1954,7 @@
       "checkConstraints": {
         "mocco_notification_deliveries_status_check": {
           "name": "mocco_notification_deliveries_status_check",
-          "value": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sent','failed','suppressed')"
+          "value": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sending','sent','failed','suppressed')"
         },
         "mocco_notification_deliveries_attempts_check": {
           "name": "mocco_notification_deliveries_attempts_check",
@@ -2151,14 +2083,8 @@
           "name": "mocco_notification_rules_channel_workspace_fk",
           "tableFrom": "mocco_notification_rules",
           "tableTo": "mocco_notification_channels",
-          "columnsFrom": [
-            "channel_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["channel_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2287,14 +2213,8 @@
           "name": "mocco_project_apps_project_workspace_fk",
           "tableFrom": "mocco_project_apps",
           "tableTo": "mocco_projects",
-          "columnsFrom": [
-            "project_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["project_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2362,14 +2282,8 @@
           "name": "mocco_project_repos_project_workspace_fk",
           "tableFrom": "mocco_project_repos",
           "tableTo": "mocco_projects",
-          "columnsFrom": [
-            "project_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["project_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2377,14 +2291,8 @@
           "name": "mocco_project_repos_repo_workspace_fk",
           "tableFrom": "mocco_project_repos",
           "tableTo": "mocco_repos",
-          "columnsFrom": [
-            "repo_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["repo_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2392,10 +2300,7 @@
       "compositePrimaryKeys": {
         "mocco_project_repos_pk": {
           "name": "mocco_project_repos_pk",
-          "columns": [
-            "project_id",
-            "repo_id"
-          ]
+          "columns": ["project_id", "repo_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2488,12 +2393,8 @@
           "name": "mocco_projects_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_projects",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2503,10 +2404,7 @@
         "mocco_projects_id_workspace_uq": {
           "name": "mocco_projects_id_workspace_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "workspace_id"
-          ]
+          "columns": ["id", "workspace_id"]
         }
       },
       "policies": {},
@@ -2596,12 +2494,8 @@
           "name": "mocco_provider_connections_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_provider_connections",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2611,10 +2505,7 @@
         "mocco_provider_connections_id_workspace_uq": {
           "name": "mocco_provider_connections_id_workspace_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "workspace_id"
-          ]
+          "columns": ["id", "workspace_id"]
         }
       },
       "policies": {},
@@ -2732,12 +2623,8 @@
           "name": "mocco_repos_connection_id_mocco_provider_connections_id_fk",
           "tableFrom": "mocco_repos",
           "tableTo": "mocco_provider_connections",
-          "columnsFrom": [
-            "connection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["connection_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2745,14 +2632,8 @@
           "name": "mocco_repos_connection_workspace_fk",
           "tableFrom": "mocco_repos",
           "tableTo": "mocco_provider_connections",
-          "columnsFrom": [
-            "connection_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
+          "columnsFrom": ["connection_id", "workspace_id"],
+          "columnsTo": ["id", "workspace_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2762,10 +2643,7 @@
         "mocco_repos_id_workspace_uq": {
           "name": "mocco_repos_id_workspace_uq",
           "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "workspace_id"
-          ]
+          "columns": ["id", "workspace_id"]
         }
       },
       "policies": {},
@@ -2881,12 +2759,8 @@
           "name": "mocco_resumes_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_resumes",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2894,12 +2768,8 @@
           "name": "mocco_resumes_run_gate_id_mocco_run_gates_id_fk",
           "tableFrom": "mocco_resumes",
           "tableTo": "mocco_run_gates",
-          "columnsFrom": [
-            "run_gate_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_gate_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2907,12 +2777,8 @@
           "name": "mocco_resumes_run_id_mocco_runs_id_fk",
           "tableFrom": "mocco_resumes",
           "tableTo": "mocco_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2920,12 +2786,8 @@
           "name": "mocco_resumes_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_resumes",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2933,12 +2795,8 @@
           "name": "mocco_resumes_role_id_mocco_roles_id_fk",
           "tableFrom": "mocco_resumes",
           "tableTo": "mocco_roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3034,12 +2892,8 @@
           "name": "mocco_role_memberships_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_role_memberships",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3047,12 +2901,8 @@
           "name": "mocco_role_memberships_role_id_mocco_roles_id_fk",
           "tableFrom": "mocco_role_memberships",
           "tableTo": "mocco_roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["role_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3060,12 +2910,8 @@
           "name": "mocco_role_memberships_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_role_memberships",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3135,12 +2981,8 @@
           "name": "mocco_roles_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_roles",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3222,12 +3064,8 @@
           "name": "mocco_run_events_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_run_events",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3235,12 +3073,8 @@
           "name": "mocco_run_events_run_id_mocco_runs_id_fk",
           "tableFrom": "mocco_run_events",
           "tableTo": "mocco_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3348,12 +3182,8 @@
           "name": "mocco_run_gates_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_run_gates",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3361,12 +3191,8 @@
           "name": "mocco_run_gates_run_id_mocco_runs_id_fk",
           "tableFrom": "mocco_run_gates",
           "tableTo": "mocco_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3491,12 +3317,8 @@
           "name": "mocco_run_steps_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_run_steps",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3504,12 +3326,8 @@
           "name": "mocco_run_steps_run_id_mocco_runs_id_fk",
           "tableFrom": "mocco_run_steps",
           "tableTo": "mocco_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3672,12 +3490,8 @@
           "name": "mocco_runs_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_runs",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3685,12 +3499,8 @@
           "name": "mocco_runs_commit_id_mocco_commits_id_fk",
           "tableFrom": "mocco_runs",
           "tableTo": "mocco_commits",
-          "columnsFrom": [
-            "commit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["commit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3698,12 +3508,8 @@
           "name": "mocco_runs_commit_config_id_mocco_commit_configs_id_fk",
           "tableFrom": "mocco_runs",
           "tableTo": "mocco_commit_configs",
-          "columnsFrom": [
-            "commit_config_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["commit_config_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3711,12 +3517,8 @@
           "name": "mocco_runs_triggered_by_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_runs",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "triggered_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["triggered_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3831,12 +3633,8 @@
           "name": "mocco_sessions_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_sessions",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3844,12 +3642,8 @@
           "name": "mocco_sessions_active_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_sessions",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "active_workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["active_workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3859,9 +3653,7 @@
         "mocco_sessions_token_unique": {
           "name": "mocco_sessions_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -3926,9 +3718,7 @@
         "mocco_users_email_unique": {
           "name": "mocco_users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -4089,12 +3879,8 @@
           "name": "mocco_workspace_products_workspace_id_mocco_workspaces_id_fk",
           "tableFrom": "mocco_workspace_products",
           "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -4102,12 +3888,8 @@
           "name": "mocco_workspace_products_enabled_by_user_id_mocco_users_id_fk",
           "tableFrom": "mocco_workspace_products",
           "tableTo": "mocco_users",
-          "columnsFrom": [
-            "enabled_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["enabled_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -4115,10 +3897,7 @@
       "compositePrimaryKeys": {
         "mocco_workspace_products_pk": {
           "name": "mocco_workspace_products_pk",
-          "columns": [
-            "workspace_id",
-            "product"
-          ]
+          "columns": ["workspace_id", "product"]
         }
       },
       "uniqueConstraints": {},

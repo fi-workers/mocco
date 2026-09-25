@@ -74,7 +74,15 @@ export const DiscordJsonErrorCodes = {
 } as const;
 export type DiscordJsonErrorCode = (typeof DiscordJsonErrorCodes)[keyof typeof DiscordJsonErrorCodes];
 
-/** The JSON codes that mean the bot can no longer reach the channel: stop sending to it. */
+/**
+ * The JSON codes that mean the bot can no longer reach the channel: stop sending to it.
+ *
+ * A 403/404 *without* one of these codes pauses the whole sender instead (a bad route or
+ * a Cloudflare block hits every tenant). That is only safe because every channel id we
+ * send to is a validated snowflake (`isDiscordSnowflake`, checked when a channel is
+ * bound and again before each delivery): a malformed id in the path would yield an
+ * uncoded 404 and pause every workspace's notifications.
+ */
 export const CHANNEL_DISABLING_CODES: ReadonlySet<number> = new Set([
   DiscordJsonErrorCodes.UnknownChannel,
   DiscordJsonErrorCodes.UnknownGuild,
@@ -109,6 +117,12 @@ export const DiscordRateLimitScopes = {
   shared: 'shared',
 } as const;
 export type DiscordRateLimitScope = (typeof DiscordRateLimitScopes)[keyof typeof DiscordRateLimitScopes];
+
+/** Discord ids are snowflakes: unsigned 64-bit integers, sent as decimal strings. */
+const SNOWFLAKE = /^\d{1,20}$/u;
+export function isDiscordSnowflake(id: string): boolean {
+  return SNOWFLAKE.test(id);
+}
 
 /** Bucket keys the relay paces on (spec §6: `channel:<id>` and `global`). */
 export const DISCORD_GLOBAL_BUCKET = 'global';

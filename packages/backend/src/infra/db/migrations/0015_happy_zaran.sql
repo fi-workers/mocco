@@ -33,10 +33,11 @@ CREATE TABLE "mocco_notification_deliveries" (
 	"external_message_id" text,
 	"message" jsonb NOT NULL,
 	"next_attempt_at" timestamp,
+	"sending_at" timestamp,
 	"sent_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "mocco_notification_deliveries_status_check" CHECK ("mocco_notification_deliveries"."status" IN ('queued','sent','failed','suppressed')),
+	CONSTRAINT "mocco_notification_deliveries_status_check" CHECK ("mocco_notification_deliveries"."status" IN ('queued','sending','sent','failed','suppressed')),
 	CONSTRAINT "mocco_notification_deliveries_attempts_check" CHECK ("mocco_notification_deliveries"."attempts" >= 0)
 );
 --> statement-breakpoint
@@ -61,6 +62,8 @@ CREATE UNIQUE INDEX "mocco_notification_deliveries_event_channel_uq" ON "mocco_n
 CREATE INDEX "mocco_notification_deliveries_workspace_created_at_idx" ON "mocco_notification_deliveries" USING btree ("workspace_id","created_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "mocco_notification_deliveries_workspace_sent_at_idx" ON "mocco_notification_deliveries" USING btree ("workspace_id","sent_at") WHERE "mocco_notification_deliveries"."sent_at" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "mocco_notification_deliveries_channel_idx" ON "mocco_notification_deliveries" USING btree ("channel_id");--> statement-breakpoint
+CREATE INDEX "mocco_notification_deliveries_rule_idx" ON "mocco_notification_deliveries" USING btree ("rule_id") WHERE "mocco_notification_deliveries"."rule_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "mocco_notification_deliveries_unsettled_idx" ON "mocco_notification_deliveries" USING btree ("created_at") WHERE "mocco_notification_deliveries"."status" IN ('queued','sending');--> statement-breakpoint
 CREATE INDEX "mocco_notification_rules_channel_idx" ON "mocco_notification_rules" USING btree ("channel_id");--> statement-breakpoint
 CREATE INDEX "mocco_notification_rules_workspace_idx" ON "mocco_notification_rules" USING btree ("workspace_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "mocco_notification_rules_channel_rule_uq" ON "mocco_notification_rules" USING btree ("channel_id","event_type",coalesce("source_id", '00000000-0000-0000-0000-000000000000'::uuid),"filter");

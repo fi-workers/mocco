@@ -50,9 +50,15 @@ channel picker, the `notification` tRPC router and the default rule presets
 - **Deliveries cascade with their event.** Events are pruned at 30 days; keeping deliveries past
   their event would leave an activity trace without its event. The rendered message is stored on
   the delivery, so a queued delivery never needs to re-read the event.
-- **No Discord token → wait, then fail.** The delivery waits an hour at a time (logged) and is
-  failed on the job's last attempt. Channels can only be created with Discord configured, so this
-  is an operator mistake worth time to fix, but a delivery must not stay `queued` behind a dead job.
+- **Capacity waits are free, bounded by age** (review fix): bucket, workspace-limit, sender-pause
+  and not-configured waits throw `RetryAt(..., { consumesAttempt: false })` (new in the job queue),
+  which never spends attempts; a delivery still waiting 24 h after it was queued fails. The final
+  attempt comes from the runner (`ctx.isFinalAttempt`), not from the service.
+- **Claim before sending, nonce on the post** (review fix): `sending` + `sending_at`, one
+  conditional UPDATE; a stale claim (2 min) may be resent, and Discord's `enforce_nonce` returns
+  the first message instead of posting again.
+- **Reconcile schedule over a runner hook** (review fix): every 5 min, unsettled deliveries without
+  a live job fail; it also catches jobs lost for reasons a hook would not see.
 - **Sender-level rejection pauses everyone for an hour** through the `global` bucket, and the
   delivery stays queued: the bot token or egress is Mocco's problem, not the tenant's.
 - **Fairness waits for the window**: over 120 sends in 60 s, the delivery retries when the oldest

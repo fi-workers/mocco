@@ -20,7 +20,7 @@ import { createPruneHandlers, pruneSchedule } from '@backend/domain/jobs/prune';
 import { JobScheduleRepo } from '@backend/domain/jobs/repos/job-schedule.repo';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
 import { createDiscordApiFromEnv } from '@backend/domain/notification/discord-config';
-import { createNotificationHandlers } from '@backend/domain/notification/jobs';
+import { createNotificationHandlers, notificationSchedules } from '@backend/domain/notification/jobs';
 import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
@@ -69,6 +69,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       channels: new ChannelRepo(db),
       rateLimits: new DiscordRateLimitRepo(db),
       discord: deps.discord,
+      random: deps.random,
     }),
   ];
   self.runner = new JobRunner({
@@ -78,7 +79,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     now: deps.now,
     random: deps.random,
     workerId: deps.workerId,
-    systemSchedules: [pruneSchedule, pruneEventsSchedule],
+    systemSchedules: [pruneSchedule, pruneEventsSchedule, ...notificationSchedules],
   });
   return self.runner;
 }

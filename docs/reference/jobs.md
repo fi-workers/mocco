@@ -52,8 +52,10 @@ Export the domain's handlers from a pure factory in `domain/<x>/jobs.ts`
 imports its own `instance.ts` (see [composition](#composition)). Kinds are `<domain>.<verb>`; keep
 them in an `as const` object in the domain. Two handlers for one kind throw at startup.
 
-`ctx` carries `jobId`, `kind`, `attempt` (1 on the first try), `workspaceId`, `now()` and
-`deadline` (when this run's lock expires).
+`ctx` carries `jobId`, `kind`, `attempt` (1 on the first try), `maxAttempts`, `isFinalAttempt`
+(no attempts left after this one: a throw now ends the job `dead`; computed by the runner so
+handlers never re-implement the rule), `workspaceId`, `now()` and `deadline` (when this run's lock
+expires).
 
 ### Handlers must tolerate running twice
 
@@ -140,6 +142,11 @@ The job goes back to `queued` with `run_at` at that time (a time in the past mea
 (`JobPolicy.maxConsecutiveDeferrals`, tracked in `mocco_jobs.deferrals`). Past five, each further
 RetryAt counts as an attempt, so a handler that always asks for "later" still ends `dead` after
 `max_attempts`. Any other outcome, including a reclaim, resets the count.
+
+A **free wait**, `new RetryAt(at, reason, { consumesAttempt: false })`, is for waiting that is not a
+failure (a shared rate limit bucket, a fairness quota, a paused dependency): the runner always
+refunds the attempt and does not count it in `deferrals`, so it never makes the job `dead`. The
+handler must bound such waits itself (the notification delivery fails after 24 h queued).
 
 ## Schedules
 

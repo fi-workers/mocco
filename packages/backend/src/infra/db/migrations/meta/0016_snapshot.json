@@ -1,6 +1,6 @@
 {
-  "id": "62c779b0-c8e0-49bb-8e02-930dfe149e67",
-  "prevId": "d4ed5c27-51fb-499a-b3ff-efc2a49276c8",
+  "id": "3321aa7f-cd78-4a06-8c2b-a1df442e04c7",
+  "prevId": "d39092a9-cd9f-4288-9c37-344e02c18172",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2040,6 +2040,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sending_at": {
+          "name": "sending_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sent_at": {
           "name": "sent_at",
           "type": "timestamp",
@@ -2140,6 +2146,38 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "mocco_notification_deliveries_rule_idx": {
+          "name": "mocco_notification_deliveries_rule_idx",
+          "columns": [
+            {
+              "expression": "rule_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_notification_deliveries\".\"rule_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_notification_deliveries_unsettled_idx": {
+          "name": "mocco_notification_deliveries_unsettled_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sending')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2202,7 +2240,7 @@
       "checkConstraints": {
         "mocco_notification_deliveries_status_check": {
           "name": "mocco_notification_deliveries_status_check",
-          "value": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sent','failed','suppressed')"
+          "value": "\"mocco_notification_deliveries\".\"status\" IN ('queued','sending','sent','failed','suppressed')"
         },
         "mocco_notification_deliveries_attempts_check": {
           "name": "mocco_notification_deliveries_attempts_check",

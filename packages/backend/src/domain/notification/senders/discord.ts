@@ -410,10 +410,24 @@ export class DiscordApi {
     return truncate(redact(reason, [this.deps.botToken]).replaceAll('\u{0}', ''), DISCORD_REASON_MAX);
   }
 
-  /** Post `message` as one embed. Mentions are never parsed: customer text must not ping @everyone. */
-  async sendMessage(channelId: string, message: NeutralMessage): Promise<DiscordSendResult> {
+  /**
+   * Post `message` as one embed. Mentions are never parsed: customer text must not ping
+   * @everyone. With a `nonce` (at most 25 characters) the post is idempotent for a few
+   * minutes: `enforce_nonce` makes Discord return the message already created with that
+   * nonce instead of posting it again (a retry after a lost response).
+   * https://docs.discord.com/developers/resources/message#create-message
+   */
+  async sendMessage(
+    channelId: string,
+    message: NeutralMessage,
+    options: { nonce?: string } = {},
+  ): Promise<DiscordSendResult> {
     const bucketKey = discordChannelBucket(channelId);
-    const body = { embeds: [renderEmbed(message, this.deps.now())], allowed_mentions: { parse: [] } };
+    const body = {
+      embeds: [renderEmbed(message, this.deps.now())],
+      allowed_mentions: { parse: [] },
+      ...(options.nonce !== undefined && { nonce: options.nonce, enforce_nonce: true }),
+    };
     const outcome = await this.request('POST', `/channels/${encodeURIComponent(channelId)}/messages`, body);
     if (outcome.kind !== 'response') {
       return outcome;

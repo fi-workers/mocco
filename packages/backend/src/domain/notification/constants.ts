@@ -7,6 +7,10 @@ const HOUR = 60 * MINUTE;
 /** The notification domain's job kinds. */
 export const NotificationJobKinds = {
   deliver: 'notification.deliver',
+  /** Fails deliveries whose job died before settling them (every 5 minutes). */
+  reconcile: 'notification.reconcile',
+  /** Deletes expired Discord rate limit buckets (daily). */
+  prune: 'notification.prune',
 } as const;
 
 /**
@@ -29,8 +33,21 @@ export const DeliveryPolicy = {
   /** The window the per-workspace limit counts sends in. */
   fairnessWindowMs: MINUTE,
   /** The shortest wait of a delivery over the workspace limit (it otherwise waits for
-   * the oldest send in the window to age out). */
+   * the oldest send in the window to age out, plus up to one window of jitter). */
   fairnessMinRetryMs: SECOND,
+  /**
+   * Capacity waits (rate limit buckets, the workspace limit, a paused or unconfigured
+   * sender) don't spend job attempts, so they are bounded by age instead: a delivery
+   * still waiting this long after it was queued fails.
+   */
+  maxQueuedMs: 24 * HOUR,
+  /** A `sending` claim older than this was left by a run that died; it may be resent
+   * (the Discord nonce makes the resend idempotent within Discord's nonce window). */
+  sendingStaleMs: 2 * MINUTE,
+  /** How often the reconcile looks for deliveries whose job died. */
+  reconcileIntervalSeconds: 5 * 60,
+  /** Most deliveries one reconcile run fails. */
+  reconcileBatch: 500,
   /** How long every send pauses after Discord rejects the bot itself (401, a Cloudflare block). */
   senderPauseMs: HOUR,
   /** How long a delivery waits when this deployment has no Discord bot token. */
@@ -45,4 +62,8 @@ export const DeliveryReasons = {
   rateLimited: 'discord rate limit',
   workspaceLimit: 'workspace send limit (per minute) reached',
   senderPaused: 'discord sender paused (bot token or egress rejected)',
+  alreadySending: 'another run is sending this delivery',
+  invalidChannelId: 'the channel has an invalid Discord channel id',
+  expired: (reason: string) => `expired waiting for capacity (${reason})`,
+  orphaned: 'the delivery job ended before the delivery settled',
 } as const;

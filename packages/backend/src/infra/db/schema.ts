@@ -1051,6 +1051,8 @@ export const notificationDeliveries = pgTable(
     message: jsonb().$type<NeutralMessage>().notNull(),
     // When the delivery job will try again (a rate limit or sender pause); null otherwise.
     nextAttemptAt: timestamp('next_attempt_at'),
+    // When a run claimed the delivery (status `sending`); a stale claim may be resent.
+    sendingAt: timestamp('sending_at'),
     sentAt: timestamp('sent_at'),
     createdAt,
     updatedAt,
@@ -1065,6 +1067,14 @@ export const notificationDeliveries = pgTable(
       .on(t.workspaceId, t.sentAt)
       .where(sql`${t.sentAt} IS NOT NULL`),
     index('mocco_notification_deliveries_channel_idx').on(t.channelId),
+    // The FK's SET NULL on rule delete.
+    index('mocco_notification_deliveries_rule_idx')
+      .on(t.ruleId)
+      .where(sql`${t.ruleId} IS NOT NULL`),
+    // The reconcile's scan of unsettled deliveries.
+    index('mocco_notification_deliveries_unsettled_idx')
+      .on(t.createdAt)
+      .where(sql`${t.status} IN ('queued','sending')`),
     check(
       'mocco_notification_deliveries_status_check',
       sql`${t.status} IN (${sqlInList(Object.values(DeliveryStatuses))})`,
