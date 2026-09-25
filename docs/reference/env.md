@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-07-25
+updated: 2026-09-25
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -55,6 +55,14 @@ Values per environment:
 - **e2e**: `SERVICE_DOMAIN=localhost:3100` (set in `packages/e2e/playwright.config.ts`)
 - **preview**: derived from `VERCEL_URL` — a separate branch in `resolveAuthOrigins`, `SERVICE_DOMAIN` isn't consulted there
 - **tailnet**: `SERVICE_DOMAIN=<node>.<tailnet>.ts.net` — written into the gitignored `env/.env` by the generator below
+
+## `SECRETS_ENCRYPTION_KEYS` — SecretBox keys
+
+Keys for sealing third-party secrets at rest (see backend-conventions → Secrets at rest):
+`keyId:base64key[,older…]`. The first key seals, every listed key opens. Optional until a feature
+stores secrets; that feature then fails with an error naming the variable. Generate one with
+`echo "k1:$(openssl rand -base64 32)"` and put it in the gitignored `env/.env` (and in the Vercel
+project env for deploys).
 
 ## Tailnet access (method A: phone on the tailnet)
 
