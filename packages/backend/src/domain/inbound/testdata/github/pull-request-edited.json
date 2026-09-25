@@ -1,0 +1,50 @@
+{
+  "action": "edited",
+  "number": 42,
+  "pull_request": {
+    "url": "https://api.github.com/repos/acme/web/pulls/42",
+    "id": 1,
+    "html_url": "https://github.com/acme/web/pull/42",
+    "number": 42,
+    "state": "open",
+    "title": "Guard missing cart id",
+    "user": {
+      "login": "octocat",
+      "id": 583231
+    },
+    "body": "Fixes the checkout crash.",
+    "merged": false,
+    "draft": false,
+    "head": {
+      "label": "acme:fix/cart",
+      "ref": "fix/cart",
+      "sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+    },
+    "base": {
+      "label": "acme:main",
+      "ref": "main",
+      "sha": "6113728f27ae82c7b1a177c8d03f9e96e0adf246"
+    }
+  },
+  "repository": {
+    "id": 1296269,
+    "node_id": "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+    "name": "web",
+    "full_name": "acme/web",
+    "private": true,
+    "html_url": "https://github.com/acme/web",
+    "default_branch": "main",
+    "owner": {
+      "login": "acme",
+      "id": 1,
+      "type": "Organization"
+    }
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 583231,
+    "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
+    "html_url": "https://github.com/octocat",
+    "type": "User"
+  }
+}
