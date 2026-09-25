@@ -22,12 +22,15 @@ const echoJob = defineJob('test.echo', z.object({ n: z.number() }));
 const failJob = defineJob('test.fail', z.object({}));
 const slowJob = defineJob('test.slow', z.object({}));
 const laterJob = defineJob('test.later', z.object({ untilMs: z.number() }));
+const waitJob = defineJob('test.wait', z.object({ untilMs: z.number() }));
+const contextJob = defineJob('test.context', z.object({}));
 
 describe('JobRunner (pglite)', () => {
   let t: TestDb;
   let clock: { now: Date };
   let repo: JobRepo;
   let ran: { n: number; attempt: number }[];
+  let contexts: { attempt: number; maxAttempts: number; isFinalAttempt: boolean }[];
   let deadlines: Date[];
   let runner: JobRunner;
   let queue: PostgresJobQueue;
@@ -42,6 +45,7 @@ describe('JobRunner (pglite)', () => {
     t = await createTestDb();
     clock = { now: T0 };
     ran = [];
+    contexts = [];
     deadlines = [];
     kicked = [];
     repo = new JobRepo(t.db);
@@ -58,6 +62,13 @@ describe('JobRunner (pglite)', () => {
       }),
       handleJob(laterJob, async payload => {
         throw new RetryAt(new Date(payload.untilMs), 'rate limited');
+      }),
+      handleJob(waitJob, async payload => {
+        throw new RetryAt(new Date(payload.untilMs), 'waiting for capacity', { consumesAttempt: false });
+      }),
+      handleJob(contextJob, async (_payload, ctx) => {
+        contexts.push({ attempt: ctx.attempt, maxAttempts: ctx.maxAttempts, isFinalAttempt: ctx.isFinalAttempt });
+        throw new Error('fail to see the next attempt');
       }),
       createPruneHandler(repo),
     ];
@@ -241,6 +252,37 @@ describe('JobRunner (pglite)', () => {
       expect(row).toMatchObject({ attempts: 2, status: JobStatuses.dead });
       expect(row.lastError).toMatch(/RetryAt/);
     });
+  });
+
+  describe('free waits (RetryAt with consumesAttempt: false)', () => {
+    it('never spends an attempt nor counts a deferral, however many times it waits', async () => {
+      const { job } = await queue.enqueue(waitJob, { untilMs: T0.getTime() }, { maxAttempts: 2 });
+
+      await Array.from({ length: 20 }).reduce<Promise<unknown>>(async previous => {
+        await previous;
+        return await tick();
+      }, Promise.resolve());
+
+      expect(await read(job.id)).toMatchObject({
+        status: JobStatuses.queued,
+        attempts: 0,
+        deferrals: 0,
+        lastError: 'waiting for capacity',
+      });
+    });
+  });
+
+  it('tells the handler its attempt budget and when it is on the final attempt', async () => {
+    await queue.enqueue(contextJob, {}, { maxAttempts: 2 });
+
+    await tick();
+    advanceClock(10 * MINUTE);
+    await tick();
+
+    expect(contexts).toEqual([
+      { attempt: 1, maxAttempts: 2, isFinalAttempt: false },
+      { attempt: 2, maxAttempts: 2, isFinalAttempt: true },
+    ]);
   });
 
   it('reclaims a job whose runner crashed and runs it again', async () => {

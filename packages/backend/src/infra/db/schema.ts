@@ -1,6 +1,7 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
 import { JobStatuses } from '@mocco/common/jobs';
+import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
@@ -25,6 +26,14 @@ import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
+import type {
+  ChannelKind,
+  ChannelStatus,
+  DeliveryStatus,
+  DiscordChannelConfig,
+  NeutralMessage,
+  RuleFilter,
+} from '@mocco/common/notification';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -927,3 +936,158 @@ export const domainEventDeliveries = pgTable(
   },
   t => [primaryKey({ columns: [t.eventId, t.subscriber], name: 'mocco_domain_event_deliveries_pk' })],
 );
+
+// ─────────────────────────────────────────────────────────────
+// Notifications (platform foundations §12 F9, notification relay design §6–§8).
+// A channel is a destination (a Discord channel today); rules pick which events
+// reach it; a delivery is one event sent (or not) to one channel, driven by the
+// `notification.deliver` job. See docs/reference/notifications.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A destination in a workspace, e.g. one Discord channel the Mocco bot posts to. */
+export const notificationChannels = pgTable(
+  'mocco_notification_channels',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<ChannelKind>().notNull(),
+    // Customer label shown in the UI.
+    name: text().notNull(),
+    // Non-secret settings: `{ guildId, channelId, channelName }` for Discord.
+    config: jsonb().$type<DiscordChannelConfig>().notNull(),
+    // The destination's id at the vendor (the Discord channel id), repeated from
+    // `config` as a column so uniqueness is a plain index.
+    externalId: text('external_id').notNull(),
+    // A customer-supplied bot token later ("bring your own bot"); null = the Mocco bot.
+    secretSealed: text('secret_sealed'),
+    status: text().$type<ChannelStatus>().notNull().default(ChannelStatuses.active),
+    // Why the channel was disabled (e.g. Discord 403 Missing Access); null while active.
+    disabledReason: text('disabled_reason'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    // One channel per vendor destination per workspace; its prefix serves workspace listing.
+    uniqueIndex('mocco_notification_channels_workspace_kind_external_uq').on(t.workspaceId, t.kind, t.externalId),
+    // A UNIQUE CONSTRAINT so rules' composite FK can reference (id, workspace_id).
+    unique('mocco_notification_channels_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_notification_channels_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ChannelKinds))})`),
+    check(
+      'mocco_notification_channels_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(ChannelStatuses))})`,
+    ),
+  ],
+);
+
+/** Which events a channel receives: an exact type or `prefix.*`, plus a flat equality filter on the facts. */
+export const notificationRules = pgTable(
+  'mocco_notification_rules',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    // An exact catalog type (`vercel.deployment.error`) or a prefix wildcard (`github.*`).
+    eventType: text('event_type').notNull(),
+    // Only events from this inbound source (payload.sourceId). No FK yet: the inbound
+    // sources table (mocco_inbound_sources) lands with the ingest route slice.
+    sourceId: uuid('source_id'),
+    filter: jsonb()
+      .$type<RuleFilter>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt,
+  },
+  t => [
+    index('mocco_notification_rules_channel_idx').on(t.channelId),
+    // The fan-out reads every rule of the event's workspace.
+    index('mocco_notification_rules_workspace_idx').on(t.workspaceId),
+    // The same rule twice on a channel is one rule, so applying a preset again is a no-op.
+    uniqueIndex('mocco_notification_rules_channel_rule_uq').on(
+      t.channelId,
+      t.eventType,
+      sql`coalesce(${t.sourceId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      t.filter,
+    ),
+    // Pins the rule to its channel's workspace, and deletes it with the channel.
+    foreignKey({
+      columns: [t.channelId, t.workspaceId],
+      foreignColumns: [notificationChannels.id, notificationChannels.workspaceId],
+      name: 'mocco_notification_rules_channel_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * One event sent (or not) to one channel. Created by the fan-out with the rendered
+ * message and settled by `notification.deliver`. Deleted with its event when events
+ * are pruned (30 days), so the activity trace and its deliveries age out together.
+ */
+export const notificationDeliveries = pgTable(
+  'mocco_notification_deliveries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // SET NULL: a deleted channel keeps its delivery history; a queued delivery then ends `suppressed`.
+    channelId: uuid('channel_id').references(() => notificationChannels.id, { onDelete: 'set null' }),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => domainEvents.id, { onDelete: 'cascade' }),
+    // The first rule that matched; SET NULL when the rule is removed later.
+    ruleId: uuid('rule_id').references(() => notificationRules.id, { onDelete: 'set null' }),
+    status: text().$type<DeliveryStatus>().notNull().default(DeliveryStatuses.queued),
+    // Send attempts made (calls to the sender), not job claims.
+    attempts: integer().notNull().default(0),
+    // The last HTTP status the sender reported, when it reported one.
+    responseCode: integer('response_code'),
+    // The last failure or retry reason (already redacted by the sender).
+    error: text(),
+    // The vendor's message id once sent (Discord message id).
+    externalMessageId: text('external_message_id'),
+    // What is (or was) sent, rendered once at fan-out.
+    message: jsonb().$type<NeutralMessage>().notNull(),
+    // When the delivery job will try again (a rate limit or sender pause); null otherwise.
+    nextAttemptAt: timestamp('next_attempt_at'),
+    // When a run claimed the delivery (status `sending`); a stale claim may be resent.
+    sendingAt: timestamp('sending_at'),
+    sentAt: timestamp('sent_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    // One delivery per event per channel: a redelivered event fans out to nothing new.
+    uniqueIndex('mocco_notification_deliveries_event_channel_uq').on(t.eventId, t.channelId),
+    // Recent deliveries of a workspace (activity).
+    index('mocco_notification_deliveries_workspace_created_at_idx').on(t.workspaceId, t.createdAt.desc()),
+    // Per-workspace fairness: sends in the last minute.
+    index('mocco_notification_deliveries_workspace_sent_at_idx')
+      .on(t.workspaceId, t.sentAt)
+      .where(sql`${t.sentAt} IS NOT NULL`),
+    index('mocco_notification_deliveries_channel_idx').on(t.channelId),
+    // The FK's SET NULL on rule delete.
+    index('mocco_notification_deliveries_rule_idx')
+      .on(t.ruleId)
+      .where(sql`${t.ruleId} IS NOT NULL`),
+    // The reconcile's scan of unsettled deliveries.
+    index('mocco_notification_deliveries_unsettled_idx')
+      .on(t.createdAt)
+      .where(sql`${t.status} IN ('queued','sending')`),
+    check(
+      'mocco_notification_deliveries_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(DeliveryStatuses))})`,
+    ),
+    check('mocco_notification_deliveries_attempts_check', sql`${t.attempts} >= 0`),
+  ],
+);
+
+/**
+ * Discord pacing shared by every runner: a bucket (`channel:<discord channel id>` or
+ * `global`) is blocked until `blocked_until`. Platform-scoped (the bot is shared).
+ */
+export const discordRateLimits = pgTable('mocco_discord_rate_limits', {
+  bucket: text().primaryKey(),
+  blockedUntil: timestamp('blocked_until').notNull(),
+});

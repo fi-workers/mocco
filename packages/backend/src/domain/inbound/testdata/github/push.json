@@ -1,0 +1,100 @@
+{
+  "ref": "refs/heads/main",
+  "before": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+  "after": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+  "created": false,
+  "deleted": false,
+  "forced": false,
+  "base_ref": null,
+  "compare": "https://github.com/acme/web/compare/6113728f27ae...b2c3d4e5f6a7",
+  "commits": [
+    {
+      "id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      "tree_id": "f9d2a07e9488b91af2641b26b9407fe22a451433",
+      "distinct": true,
+      "message": "fix(checkout): guard missing cart id\n\nThe cart can be missing after a session expires.",
+      "timestamp": "2026-09-24T10:00:00+09:00",
+      "url": "https://github.com/acme/web/commit/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      "author": {
+        "name": "Mona Octocat",
+        "email": "octocat@github.com",
+        "username": "octocat"
+      },
+      "committer": {
+        "name": "Mona Octocat",
+        "email": "octocat@github.com",
+        "username": "octocat"
+      },
+      "added": [],
+      "removed": [],
+      "modified": ["app/components/Checkout.tsx"]
+    },
+    {
+      "id": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+      "tree_id": "f9d2a07e9488b91af2641b26b9407fe22a451433",
+      "distinct": true,
+      "message": "test(checkout): cover the expired session",
+      "timestamp": "2026-09-24T10:00:00+09:00",
+      "url": "https://github.com/acme/web/commit/b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+      "author": {
+        "name": "Mona Octocat",
+        "email": "octocat@github.com",
+        "username": "octocat"
+      },
+      "committer": {
+        "name": "Mona Octocat",
+        "email": "octocat@github.com",
+        "username": "octocat"
+      },
+      "added": [],
+      "removed": [],
+      "modified": ["app/components/Checkout.tsx"]
+    }
+  ],
+  "head_commit": {
+    "id": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+    "tree_id": "f9d2a07e9488b91af2641b26b9407fe22a451433",
+    "distinct": true,
+    "message": "test(checkout): cover the expired session",
+    "timestamp": "2026-09-24T10:00:00+09:00",
+    "url": "https://github.com/acme/web/commit/b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
+    "author": {
+      "name": "Mona Octocat",
+      "email": "octocat@github.com",
+      "username": "octocat"
+    },
+    "committer": {
+      "name": "Mona Octocat",
+      "email": "octocat@github.com",
+      "username": "octocat"
+    },
+    "added": [],
+    "removed": [],
+    "modified": ["app/components/Checkout.tsx"]
+  },
+  "repository": {
+    "id": 1296269,
+    "node_id": "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+    "name": "web",
+    "full_name": "acme/web",
+    "private": true,
+    "html_url": "https://github.com/acme/web",
+    "default_branch": "main",
+    "owner": {
+      "login": "acme",
+      "id": 1,
+      "type": "Organization"
+    }
+  },
+  "pusher": {
+    "name": "octocat",
+    "email": "octocat@github.com"
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 583231,
+    "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
+    "html_url": "https://github.com/octocat",
+    "type": "User"
+  }
+}

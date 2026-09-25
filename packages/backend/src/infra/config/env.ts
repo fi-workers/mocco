@@ -62,6 +62,14 @@ const schema = z.object({
    * seals, all open). Generate a key with: openssl rand -base64 32. Optional — only
    * features that store secrets require it, and they fail loudly when it's absent. */
   SECRETS_ENCRYPTION_KEYS: z.string().min(1).optional(),
+  // Discord (notification relay design §6). All optional, like the GitHub vars: the
+  // bot token alone lets deliveries send; the install flow also needs the client pair.
+  // Without them the Discord surfaces answer "not configured".
+  /** The Discord application's OAuth2 client id (the bot install). */
+  DISCORD_CLIENT_ID: z.string().min(1).optional(),
+  DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
+  /** The Mocco bot's token; every Discord REST call sends it. */
+  DISCORD_BOT_TOKEN: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;
