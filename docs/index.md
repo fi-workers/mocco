@@ -72,6 +72,7 @@ related:
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
 - [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
+- [Notifications](./reference/notifications.md) — channels, rules and filters, the delivery lifecycle, the Discord failure policy
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access

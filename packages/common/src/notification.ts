@@ -86,3 +86,47 @@ export const neutralMessageSchema = neutralMessageShape.superRefine((message, co
   }
 });
 export type NeutralMessage = z.infer<typeof neutralMessageSchema>;
+
+/** Where a notification channel delivers. Discord first (relay design §2 #8); Slack later. */
+export const ChannelKinds = {
+  discord: 'discord',
+} as const;
+export type ChannelKind = (typeof ChannelKinds)[keyof typeof ChannelKinds];
+export const channelKindSchema = z.enum(Object.values(ChannelKinds) as [ChannelKind, ...ChannelKind[]]);
+
+/** A disabled channel receives nothing until it is re-enabled (e.g. the bot lost access). */
+export const ChannelStatuses = {
+  active: 'active',
+  disabled: 'disabled',
+} as const;
+export type ChannelStatus = (typeof ChannelStatuses)[keyof typeof ChannelStatuses];
+export const channelStatusSchema = z.enum(Object.values(ChannelStatuses) as [ChannelStatus, ...ChannelStatus[]]);
+
+/**
+ * A delivery's lifecycle: `queued` until the sender's answer settles it as `sent`
+ * or `failed`; `suppressed` when there is nothing left to send to (the channel was
+ * deleted before the delivery ran).
+ */
+export const DeliveryStatuses = {
+  queued: 'queued',
+  sent: 'sent',
+  failed: 'failed',
+  suppressed: 'suppressed',
+} as const;
+export type DeliveryStatus = (typeof DeliveryStatuses)[keyof typeof DeliveryStatuses];
+export const deliveryStatusSchema = z.enum(Object.values(DeliveryStatuses) as [DeliveryStatus, ...DeliveryStatus[]]);
+
+/** The non-secret settings of a Discord channel (`mocco_notification_channels.config`). */
+export const discordChannelConfigSchema = z.object({
+  guildId: z.string().min(1),
+  channelId: z.string().min(1),
+  channelName: z.string(),
+});
+export type DiscordChannelConfig = z.infer<typeof discordChannelConfigSchema>;
+
+/**
+ * A rule's filter: every key must equal the event's fact of the same name
+ * (relay design §7). Flat equality only; no expression language in v1.
+ */
+export const ruleFilterSchema = z.record(z.string(), z.union([z.string(), z.boolean()]));
+export type RuleFilter = z.infer<typeof ruleFilterSchema>;
