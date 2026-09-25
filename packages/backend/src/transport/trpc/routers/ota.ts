@@ -3,6 +3,8 @@
 // to be enabled and the project to belong to the workspace (`productProcedure`), which
 // also maps the project domain's error family; OTA errors extend the same bases.
 import {
+  otaExternalCredentialCreateInputSchema,
+  otaExternalCredentialSchema,
   VersionPolicyOutcomes,
   versionPolicyChangeInputSchema,
   versionPolicyChangeSchema,
@@ -14,7 +16,8 @@ import { z } from 'zod';
 import { productProcedure } from '@backend/transport/trpc/project-procedures';
 import { router } from '@backend/transport/trpc/trpc';
 
-const appInput = z.object({ workspaceId: z.uuid(), projectId: z.uuid(), appId: z.uuid() });
+const projectInput = z.object({ workspaceId: z.uuid(), projectId: z.uuid() });
+const appInput = projectInput.extend({ appId: z.uuid() });
 const otaProcedure = productProcedure(Products.ota);
 
 export const otaRouter = router({
@@ -47,5 +50,41 @@ export const otaRouter = router({
       .query(async ({ ctx, input }) => ({
         changes: await ctx.versionPolicies.listChanges(input.workspaceId, input.projectId, input.appId),
       })),
+  }),
+  externalCredential: router({
+    list: otaProcedure
+      .input(projectInput)
+      .output(z.object({ credentials: z.array(otaExternalCredentialSchema) }))
+      .query(async ({ ctx, input }) => ({
+        credentials: await ctx.externalCredentials.list(input.workspaceId, input.projectId),
+      })),
+
+    create: otaProcedure
+      .input(projectInput.extend(otaExternalCredentialCreateInputSchema.shape))
+      .output(z.object({ credential: otaExternalCredentialSchema }))
+      .mutation(async ({ ctx, input }) => {
+        const { workspaceId, projectId, ...values } = input;
+        return {
+          credential: await ctx.externalCredentials.create(workspaceId, projectId, ctx.session.user.id, values),
+        };
+      }),
+
+    rotate: otaProcedure
+      .input(projectInput.extend({ credentialId: z.uuid(), secret: z.string().min(1).max(8192) }))
+      .output(z.object({ credential: otaExternalCredentialSchema }))
+      .mutation(async ({ ctx, input }) => ({
+        credential: await ctx.externalCredentials.rotate(
+          input.workspaceId,
+          input.projectId,
+          ctx.session.user.id,
+          input.credentialId,
+          input.secret,
+        ),
+      })),
+
+    delete: otaProcedure.input(projectInput.extend({ credentialId: z.uuid() })).mutation(async ({ ctx, input }) => {
+      await ctx.externalCredentials.delete(input.workspaceId, input.projectId, ctx.session.user.id, input.credentialId);
+      return { ok: true } as const;
+    }),
   }),
 });

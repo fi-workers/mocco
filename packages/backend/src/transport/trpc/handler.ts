@@ -19,6 +19,7 @@ import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -39,6 +40,7 @@ export interface TrpcDeps extends Services {
   projects: ProjectService;
   products: ProductEnablementService;
   versionPolicies: VersionPolicyService;
+  externalCredentials: ExternalCredentialService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -70,6 +72,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         projects: deps.projects,
         products: deps.products,
         versionPolicies: deps.versionPolicies,
+        externalCredentials: deps.externalCredentials,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -93,5 +96,6 @@ export async function trpcHandler(request: Request): Promise<Response> {
     projects: getProjectDomain().projects,
     products: getProjectDomain().products,
     versionPolicies: getOtaDomain().versionPolicies,
+    externalCredentials: getOtaDomain().externalCredentials,
   })(request);
 }

@@ -8,6 +8,8 @@
 /** The authorized issue request the broker hands the provider — already validated
  * against the workspace allowlist (provider/role permitted, ttl within the ceiling). */
 export interface CredentialIssueRequest {
+  /** The run's workspace — a provider that stores per-workspace secrets scopes its lookup by it. */
+  workspaceId: string;
   provider: string;
   role: string;
   ttlSeconds: number;

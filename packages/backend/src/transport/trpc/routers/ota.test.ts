@@ -185,4 +185,23 @@ describe('ota router on pglite', () => {
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
+  it('stores an external OTA credential and never returns the secret', async () => {
+    const { api, scope } = await setup('extcred@example.com');
+    const projectScope = { workspaceId: scope.workspaceId, projectId: scope.projectId };
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.ota });
+
+    const { credential } = await api.ota.externalCredential.create({
+      ...projectScope,
+      tool: 'eas',
+      name: 'acme-production',
+      secret: 'expo-robot-token',
+    });
+    expect(credential).toMatchObject({ provider: 'ota-eas', name: 'acme-production' });
+    expect(JSON.stringify(credential)).not.toContain('expo-robot-token');
+    const { credentials } = await api.ota.externalCredential.list(projectScope);
+    expect(JSON.stringify(credentials)).not.toContain('expo-robot-token');
+    await expect(
+      api.ota.externalCredential.create({ ...projectScope, tool: 'eas', name: 'acme-production', secret: 'x' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
 });
