@@ -51,6 +51,10 @@ const schema = z.object({
   GITHUB_APP_CLIENT_SECRET: z.string().min(1).optional(),
   /** Verifies GitHub webhook payload signatures. Optional, same as the other GITHUB_APP_* vars. */
   GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
+  /** SecretBox keys for third-party secrets at rest: `keyId:base64key,…` (first key
+   * seals, all open). Generate a key with: openssl rand -base64 32. Optional — only
+   * features that store secrets require it, and they fail loudly when it's absent. */
+  SECRETS_ENCRYPTION_KEYS: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;
