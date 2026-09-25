@@ -19,6 +19,23 @@ import type { DeliveryStatus } from '@mocco/common/notification';
 /** The part of the Discord client a delivery needs. */
 export type DiscordMessenger = Pick<DiscordApi, 'sendMessage'>;
 
+/** A delivery Discord accepted, as handed to `DeliveryServiceDeps.onSent`. */
+export interface SentDelivery {
+  delivery: DeliveryRow;
+  channel: ChannelRow;
+  /** Discord's id of the posted message. */
+  messageId: string;
+  now: Date;
+}
+
+/**
+ * Called once a delivery is settled `sent` (the stage0 canary deletes its message and
+ * pings the external heartbeat, docs/reference/ops-stage0.md). A port so the
+ * notification domain never imports its listener; the job runtime binds it. It runs
+ * after the delivery is settled: a throw is logged and never fails or retries it.
+ */
+export type DeliverySentListener = (sent: SentDelivery) => Promise<void>;
+
 export interface DeliveryServiceDeps {
   deliveries: DeliveryRepo;
   channels: ChannelRepo;
@@ -27,6 +44,7 @@ export interface DeliveryServiceDeps {
   discord: DiscordMessenger | undefined;
   /** [0, 1), for the jitter of workspace-limit wake-ups. */
   random: () => number;
+  onSent?: DeliverySentListener;
 }
 
 /** Which run of the delivery job this is (from the job context). */
@@ -76,8 +94,13 @@ function waitForOtherRun(sendingAt: Date | null, now: Date): never {
 export class DeliveryService {
   constructor(private readonly deps: DeliveryServiceDeps) {}
 
-  private async settle(delivery: DeliveryRow, from: DeliveryStatus, values: DeliveryUpdate): Promise<void> {
-    await this.deps.deliveries.updateFrom(delivery.id, from, { nextAttemptAt: null, sendingAt: null, ...values });
+  /** Settle (or annotate) the delivery while it is still `from`; false when it no longer was. */
+  private async settle(delivery: DeliveryRow, from: DeliveryStatus, values: DeliveryUpdate): Promise<boolean> {
+    return await this.deps.deliveries.updateFrom(delivery.id, from, {
+      nextAttemptAt: null,
+      sendingAt: null,
+      ...values,
+    });
   }
 
   /**
@@ -126,8 +149,8 @@ export class DeliveryService {
     return { at, reason: DeliveryReasons.workspaceLimit, isFree: true };
   }
 
-  private async sent(delivery: DeliveryRow, result: DiscordSent, now: Date): Promise<void> {
-    await this.settle(delivery, DeliveryStatuses.sending, {
+  private async sent(delivery: DeliveryRow, channel: ChannelRow, result: DiscordSent, now: Date): Promise<void> {
+    const isSettled = await this.settle(delivery, DeliveryStatuses.sending, {
       status: DeliveryStatuses.sent,
       externalMessageId: result.messageId,
       sentAt: now,
@@ -136,6 +159,25 @@ export class DeliveryService {
     // The bucket is exhausted: the next send to this channel waits for its reset.
     if (result.bucket?.blockedUntil !== undefined) {
       await this.deps.rateLimits.block(result.bucket.key, result.bucket.blockedUntil);
+    }
+    if (isSettled) {
+      await this.notifySent({ delivery, channel, messageId: result.messageId, now });
+    }
+  }
+
+  /** Hand a sent delivery to the listener; its failure never touches the delivery. */
+  private async notifySent(sent: SentDelivery): Promise<void> {
+    const { onSent } = this.deps;
+    if (onSent === undefined) {
+      return;
+    }
+    try {
+      await onSent(sent);
+    } catch (error) {
+      console.error('[notification] the sent-delivery listener failed', {
+        deliveryId: sent.delivery.id,
+        error: error instanceof Error ? error.name : 'unknown error',
+      });
     }
   }
 
@@ -265,7 +307,7 @@ export class DeliveryService {
       nonce: deliveryNonce(claimed.id),
     });
     if (result.kind === DiscordResultKinds.sent) {
-      await this.sent(claimed, result, now);
+      await this.sent(claimed, channel, result, now);
       return;
     }
     await this.failed(claimed, channel, result, attempt);

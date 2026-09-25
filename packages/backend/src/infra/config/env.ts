@@ -70,6 +70,14 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   /** The Mocco bot's token; every Discord REST call sends it. */
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  // Stage0 (notification relay design §11, ADR 0020; docs/reference/ops-stage0.md). Both
+  // optional; the canary runs only when both are set. The canary is POSTed to this
+  // deployment's own SERVICE_DOMAIN, never anywhere else.
+  /** The id of the inbound source (kind github) the stage0 canary is sent to. */
+  OPS_CANARY_SOURCE_ID: z.uuid().optional(),
+  /** The external dead-man switch pinged (GET) when a canary reaches Discord, e.g. a
+   * healthchecks.io ping URL. */
+  OPS_HEARTBEAT_URL: z.url({ protocol: /^https?$/u }).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

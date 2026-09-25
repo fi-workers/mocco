@@ -56,7 +56,7 @@ and a channel belongs to a workspace, not a project.
 |---|---|
 | `mocco_notification_channels` | A destination: `kind` (`discord`), a label, `config` `{ guildId, channelId, channelName }`, `external_id` (the Discord channel id; unique per workspace and kind), `status` `active`/`disabled` with `disabled_reason`, and `secret_sealed` (reserved for a customer bot token; null means the Mocco bot). |
 | `mocco_notification_rules` | Which events a channel gets: `event_type`, optional `source_id`, `filter`. Pinned to its channel's workspace by a composite FK; deleted with the channel. The same rule twice on one channel is one row (unique on channel, type, source, filter). |
-| `mocco_notification_deliveries` | One event sent (or not) to one channel: `status` (`queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts` (sends tried), `response_code`, `error`, `external_message_id`, `next_attempt_at`, `sending_at` (the claim), `sent_at`, the matching `rule_id` (indexed where not null, for the SET NULL on rule delete), and the rendered `message`. Unique on `(event_id, channel_id)`. |
+| `mocco_notification_deliveries` | One event sent (or not) to one channel: `status` (`queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts` (sends tried), `response_code`, `error`, `external_message_id`, `next_attempt_at`, `sending_at` (the claim), `sent_at`, `canary` (a [stage0](./ops-stage0.md) canary, set at fan-out; `canary` on the DTO too, so the trace can hide or label it), the matching `rule_id` (indexed where not null, for the SET NULL on rule delete), and the rendered `message`. Unique on `(event_id, channel_id)`. |
 | `mocco_discord_guilds` | A Discord server the bot was installed into for a workspace: Discord's `guild_id` (from the OAuth token response), `guild_name`, `installed_by_user_id`, `installed_at` (refreshed on every install). Unique per workspace and guild. Channels reference it by `guild_id` (composite FK with the workspace, cascade). |
 | `mocco_discord_connect_states` | The install handshake: a single-use `state` bound to user (FK, cascade) and workspace, 10-minute expiry, `consumed_at` (same shape as `mocco_github_connect_states`). Expired and consumed states are pruned daily by `notification.prune`. |
 | `mocco_discord_rate_limits` | Shared Discord pacing: `bucket` (`channel:<discord channel id>` or `global`) → `blocked_until`. Platform-scoped, since every workspace posts through the same bot. |
@@ -175,7 +175,8 @@ For each event, `NotificationService.handle`:
 1. loads the workspace's **active** channels and its rules (the event's workspace only; a channel
    of another workspace is never a candidate);
 2. picks, per channel, the first rule that matches (no match → no delivery);
-3. renders the message once (`templates.ts`);
+3. renders the message once (`templates.ts`), and marks the deliveries `canary` when the injected
+   `isCanary` matcher (stage0's, bound by the composition roots) says the event is the canary;
 4. per target, in one transaction: inserts the delivery with `ON CONFLICT (event_id, channel_id)
    DO NOTHING` and, when inserted, enqueues `notification.deliver { deliveryId }` with
    `executor: tx`, `dedupeKey = deliveryId`, the workspace and `maxAttempts = 8`;
@@ -233,7 +234,7 @@ Every wait stores `error` and `next_attempt_at`. The job's final attempt is the 
 
 | Result | Delivery | Also |
 |---|---|---|
-| `sent` | `sent`, `external_message_id`, `sent_at` | an exhausted bucket (`X-RateLimit-Remaining: 0`) is blocked until its reset |
+| `sent` | `sent`, `external_message_id`, `sent_at` | an exhausted bucket (`X-RateLimit-Remaining: 0`) is blocked until its reset; then the `onSent` listener runs (below) |
 | `rate_limited` | queued, `response_code` 429, consuming `RetryAt(retry_at)` | the bucket (`channel:<id>`, or `global` for a global limit or a Cloudflare ban) is blocked until then. A 429 counts as an invalid request at Discord, so it stays a consuming RetryAt (five in a row are refunded) |
 | `permanent` + `disableChannel` (403/404 with 10003, 10004, 50001, 50013) | `failed` with Discord's reason | the channel is `disabled` with that reason; later deliveries to it fail at step 3 |
 | `permanent` + `disableSender` (401, uncoded 403/404, Cloudflare 40333) | queued, free wait `+1h` | the `global` bucket is blocked for 1 h and the pause is logged as an error. The problem is Mocco's configuration, not the tenant's, so no channel is disabled. This relies on channel ids being validated snowflakes (step 4 and channel binding): a malformed id would give an uncoded 404 and pause everyone |
@@ -241,6 +242,14 @@ Every wait stores `error` and `next_attempt_at`. The job's final attempt is the 
 | `transient` (5xx, timeout, network) | queued with the reason; thrown so the job backs off (about 2 h over 8 attempts) | `failed` when `ctx.isFinalAttempt` |
 
 Reasons come from the Discord client already redacted (never the bot token).
+
+### After a send
+
+`DeliveryServiceDeps.onSent` (`DeliverySentListener`) is called once a run has settled the
+delivery `sent` (not when the settle found the row already changed). `runtime/jobs.ts` binds it to
+`Stage0Service.onDelivered` while stage0 is configured: for a `canary` delivery it deletes the
+Discord message and pings the external heartbeat ([stage0](./ops-stage0.md)). A throw is logged and
+never touches the settled delivery or retries its job.
 
 ### No double posts
 

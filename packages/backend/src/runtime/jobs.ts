@@ -29,11 +29,17 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
+import { stage0CanaryMatcher } from '@backend/domain/ops/canary';
+import { stage0ConfigFromEnv } from '@backend/domain/ops/config';
+import { createOpsHandlers, opsSchedules } from '@backend/domain/ops/jobs';
+import { OpsCanaryRepo } from '@backend/domain/ops/repos/ops-canary.repo';
+import { Stage0Service, type Stage0Discord, type Stage0Runtime } from '@backend/domain/ops/Stage0Service';
 import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
+import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
 
 /** Upper bound on jobs one tick runs; the time budget usually stops it first. */
@@ -47,8 +53,15 @@ export interface JobRunnerRuntimeDeps {
   waitUntil: (promise: Promise<unknown>) => void;
   /** The app's origin, for links in notification messages. */
   appOrigin: string;
-  /** The Discord client deliveries send with; undefined without DISCORD_BOT_TOKEN. */
-  discord: DiscordMessenger | undefined;
+  /** The Discord client deliveries send with (and the canary deletes with); undefined
+   * without DISCORD_BOT_TOKEN. */
+  discord: (DiscordMessenger & Stage0Discord) | undefined;
+  /** Opens sealed secrets (the canary source's). Production resolves the SecretBox
+   * lazily, so a deploy without SECRETS_ENCRYPTION_KEYS still builds the runner. */
+  box: Pick<SecretBox, 'open'>;
+  /** The stage0 canary and heartbeat (docs/reference/ops-stage0.md); undefined when
+   * OPS_CANARY_SOURCE_ID / OPS_HEARTBEAT_URL are not both set. */
+  stage0?: Stage0Runtime;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -63,15 +76,29 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     runOne: async id => await self.runner?.runOne(id),
     waitUntil: deps.waitUntil,
   });
-  const bus = createEventBus({ db, queue, now: deps.now, appOrigin: deps.appOrigin });
-  // The inbound jobs (republish, prune) never open a secret; the box is resolved only
-  // if one is opened, so a deploy without SECRETS_ENCRYPTION_KEYS still builds the runner.
+  const { stage0: stage0Runtime } = deps;
+  const bus = createEventBus({
+    db,
+    queue,
+    now: deps.now,
+    appOrigin: deps.appOrigin,
+    isCanary: stage0Runtime === undefined ? undefined : stage0CanaryMatcher(stage0Runtime.config.canarySourceId),
+  });
+  const { box } = deps;
+  const sources = new InboundSourceRepo(db);
   const inbound = new InboundService({
-    sources: new InboundSourceRepo(db),
+    sources,
     receipts: new InboundReceiptRepo(db),
-    box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) },
+    box,
     bus,
     now: deps.now,
+  });
+  const stage0 = new Stage0Service({
+    stage0: stage0Runtime,
+    sources,
+    box,
+    canaries: new OpsCanaryRepo(db),
+    discord: deps.discord,
   });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
   const handlers: JobHandler[] = [
@@ -85,7 +112,10 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       discord: deps.discord,
       random: deps.random,
       connectStates: new DiscordConnectStateRepo(db),
+      // A sent canary deletes its message and pings the heartbeat (stage0).
+      onSent: stage0Runtime === undefined ? undefined : async sent => await stage0.onDelivered(sent),
     }),
+    ...createOpsHandlers({ stage0 }),
   ];
   self.runner = new JobRunner({
     jobs,
@@ -94,7 +124,13 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     now: deps.now,
     random: deps.random,
     workerId: deps.workerId,
-    systemSchedules: [pruneSchedule, pruneEventsSchedule, ...notificationSchedules, ...inboundSchedules],
+    systemSchedules: [
+      pruneSchedule,
+      pruneEventsSchedule,
+      ...notificationSchedules,
+      ...inboundSchedules,
+      ...opsSchedules(stage0Runtime !== undefined),
+    ],
   });
   return self.runner;
 }
@@ -106,6 +142,7 @@ export function getJobRunner(): JobRunner {
   if (!state.runner) {
     const env = getEnv();
     const now = () => new Date();
+    const stage0Config = stage0ConfigFromEnv(env);
     state.runner = createJobRunner(getDb(), {
       now,
       random: Math.random,
@@ -113,6 +150,11 @@ export function getJobRunner(): JobRunner {
       waitUntil,
       appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
       discord: createDiscordApiFromEnv(env, { fetch, now }),
+      // The inbound jobs (republish, prune) never open a secret; the box is resolved only
+      // if one is opened (the stage0 canary), so a deploy without SECRETS_ENCRYPTION_KEYS
+      // still builds the runner.
+      box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) },
+      stage0: stage0Config === undefined ? undefined : { config: stage0Config, fetch },
     });
   }
   return state.runner;

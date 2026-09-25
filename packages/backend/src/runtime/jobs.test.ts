@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventJobKinds } from '@backend/domain/events/EventBus';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { InboundJobKinds } from '@backend/domain/inbound/jobs';
+import { createTestSecretBox } from '@backend/domain/inbound/testing/harness';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobKinds } from '@backend/domain/jobs/prune';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
@@ -41,6 +42,7 @@ describe('job runtime composition (pglite)', () => {
       waitUntil: () => {},
       appOrigin: 'https://mocco.test',
       discord: undefined,
+      box: createTestSecretBox(),
     });
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
@@ -77,6 +79,7 @@ describe('job runtime composition (pglite)', () => {
       },
       appOrigin: 'https://mocco.test',
       discord: new DiscordApi({ fetch: fake.fetch, botToken: 'bot', now: () => T0 }),
+      box: createTestSecretBox(),
     });
     // A publisher's bus (its kicks are dropped: the tick below runs the event job).
     const publisher = createEventBus({

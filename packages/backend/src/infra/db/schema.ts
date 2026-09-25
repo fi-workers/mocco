@@ -1096,6 +1096,9 @@ export const notificationDeliveries = pgTable(
     // When a run claimed the delivery (status `sending`); a stale claim may be resent.
     sendingAt: timestamp('sending_at'),
     sentAt: timestamp('sent_at'),
+    // A stage0 canary (docs/reference/ops-stage0.md): set at fan-out, so the activity
+    // trace can hide or label it and the sender knows to delete the message it posts.
+    canary: boolean().notNull().default(false),
     createdAt,
     updatedAt,
   },
@@ -1247,5 +1250,42 @@ export const inboundReceipts = pgTable(
     }).onDelete('cascade'),
     check('mocco_inbound_receipts_outcome_check', sql`${t.outcome} IN (${sqlInList(Object.values(InboundOutcomes))})`),
     check('mocco_inbound_receipts_publish_attempts_check', sql`${t.publishAttempts} >= 0`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Ops: the stage0 canary (notification relay design §11, ADR 0020). Each run of the
+// `ops.stage0-canary` schedule sends one signed synthetic webhook to the canary source
+// over HTTP and records it here; the canary's Discord delivery marks it delivered and
+// the external heartbeat ping is recorded with it. Platform-scoped (no workspace), and
+// pruned after 7 days by the canary job. See docs/reference/ops-stage0.md.
+// ─────────────────────────────────────────────────────────────
+
+/** One stage0 canary: what the ingest route answered, and whether it reached Discord. */
+export const opsCanaries = pgTable(
+  'mocco_ops_canaries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // `stage0-<ISO minute>`: the delivery id the canary is sent with (X-GitHub-Delivery).
+    canaryId: text('canary_id').notNull(),
+    // The canary source (no FK: the record outlives a deleted source).
+    sourceId: uuid('source_id').notNull(),
+    sentAt: timestamp('sent_at').notNull(),
+    // The ingest route's HTTP status; null when no request was made or it never answered.
+    ingestStatus: integer('ingest_status'),
+    // Why the canary failed before or at ingest (configuration, network, a non-202).
+    error: text(),
+    // When its Discord delivery was sent.
+    deliveredAt: timestamp('delivered_at'),
+    // When the heartbeat was pinged, and what it answered (null: no answer).
+    heartbeatAt: timestamp('heartbeat_at'),
+    heartbeatStatus: integer('heartbeat_status'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_ops_canaries_canary_id_uq').on(t.canaryId),
+    // The prune.
+    index('mocco_ops_canaries_sent_at_idx').on(t.sentAt),
   ],
 );

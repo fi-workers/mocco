@@ -16,7 +16,7 @@ const UNSETTLED: readonly DeliveryStatus[] = [DeliveryStatuses.queued, DeliveryS
 export type DeliveryRow = typeof notificationDeliveries.$inferSelect;
 export type NewDelivery = Pick<
   typeof notificationDeliveries.$inferInsert,
-  'workspaceId' | 'channelId' | 'eventId' | 'ruleId' | 'message'
+  'workspaceId' | 'channelId' | 'eventId' | 'ruleId' | 'message' | 'canary'
 >;
 /** The columns a delivery job settles or annotates. */
 export type DeliveryUpdate = Pick<

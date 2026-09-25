@@ -51,3 +51,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0013-mocco-is-a-multi-product-platform.md`, `adr/README.md`, `reference/project.md`,
   `reference/backend-conventions.md`, `index.md`
 - Source: branch `feat/platform-projects` (issue #108)
+
+## 2026-09-25 — Stage0 canary and external heartbeat (ADR 0020)
+
+- Added ADR 0020 (draft): Mocco's own alerts go through Mocco, guarded by a stage0 canary that
+  crosses the public ingest path every 5 minutes and pings an external dead-man switch only when
+  its Discord delivery is sent. Added the stage0 reference (setup, `mocco_ops_canaries`, the failure
+  table), the plan, the env vars, and the canary marking and sent-listener in the notifications
+  reference.
+- Docs touched: `adr/0020-moccos-own-alerts-go-through-mocco-guarded-by-an-external-heartbeat.md`,
+  `adr/README.md`, `reference/ops-stage0.md`, `reference/env.md`, `reference/notifications.md`,
+  `reference/jobs.md`, `superpowers/plans/2026-09-25-stage0-canary.md`, `index.md`
+- Source: branch `feat/stage0-canary` (issue #245)

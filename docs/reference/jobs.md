@@ -160,7 +160,10 @@ handler must bound such waits itself (the notification delivery fails after 24 h
   dedupe key makes a replayed slot a no-op.
 - Tenant schedules are created with `JobScheduleRepo.create({ kind, payload, intervalSeconds,
   nextRunAt, workspaceId, projectId })`. Platform schedules (no workspace, one per kind) are listed
-  in the runner's `systemSchedules` and ensured at the start of every tick. Changing a platform
+  in the runner's `systemSchedules` and ensured at the start of every tick. A platform schedule
+  can depend on env (`ops.stage0-canary` is listed only while stage0 is configured,
+  [stage0](./ops-stage0.md)); its handler stays registered, so a row left by an earlier deploy
+  runs as a no-op instead of an unknown kind. Changing a platform
   schedule's interval in code updates the row on the next tick; `next_run_at` is kept.
 - High-frequency per-entity work (status checks every 60 s for thousands of monitors) should keep
   its own due column and register one dispatch schedule, not a schedule row per entity.

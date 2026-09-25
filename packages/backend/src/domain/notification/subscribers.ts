@@ -7,7 +7,7 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { RuleRepo } from '@backend/domain/notification/repos/rule.repo';
 
-import type { EventBus } from '@backend/domain/events/EventBus';
+import type { DeliveredEvent, EventBus } from '@backend/domain/events/EventBus';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
 
@@ -16,6 +16,8 @@ export interface NotificationSubscriberDeps {
   queue: JobQueue;
   /** The app's origin, for links in governance messages. */
   appOrigin: string;
+  /** Marks stage0 canary deliveries; absent when stage0 is off. */
+  isCanary?: (event: DeliveredEvent) => boolean;
 }
 
 /** The fan-out service over `db`, as the subscribers use it. */
@@ -26,6 +28,7 @@ export function createNotificationService(deps: NotificationSubscriberDeps): Not
     deliveries: new DeliveryRepo(deps.db),
     queue: deps.queue,
     appOrigin: deps.appOrigin,
+    isCanary: deps.isCanary,
   });
 }
 

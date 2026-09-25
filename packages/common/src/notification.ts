@@ -205,6 +205,8 @@ export const notificationDeliverySchema = z.object({
   message: neutralMessageShape,
   nextAttemptAt: z.date().nullable(),
   sentAt: z.date().nullable(),
+  /** A stage0 canary (Mocco's own watchdog): the trace hides or labels it. */
+  canary: z.boolean(),
   createdAt: z.date(),
 });
 export type NotificationDeliveryDto = z.infer<typeof notificationDeliverySchema>;

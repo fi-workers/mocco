@@ -48,6 +48,13 @@ export class InboundSourceRepo {
     return row;
   }
 
+  /** A source by id alone, or undefined. Platform-scoped like `findByIngestKey`: only
+   * the stage0 canary uses it, for the source an operator names in OPS_CANARY_SOURCE_ID. */
+  async findById(sourceId: string): Promise<InboundSourceRow | undefined> {
+    const [row] = await this.db.select().from(inboundSources).where(eq(inboundSources.id, sourceId));
+    return row;
+  }
+
   /** Update a source of the workspace; throws EntityNotFoundError for a foreign or unknown id. */
   async update(workspaceId: string, sourceId: string, patch: InboundSourcePatch): Promise<InboundSourceRow> {
     const rows = await this.db

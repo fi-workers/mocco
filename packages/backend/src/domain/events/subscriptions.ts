@@ -10,6 +10,7 @@ import { EventBus } from '@backend/domain/events/EventBus';
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { registerNotificationSubscribers } from '@backend/domain/notification/subscribers';
 
+import type { DeliveredEvent } from '@backend/domain/events/EventBus';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
 
@@ -19,12 +20,19 @@ export interface EventBusCompositionDeps {
   now: () => Date;
   /** The app's origin (`resolveBaseOrigin`), for links in notification messages. */
   appOrigin: string;
+  /** Whether an event is a stage0 canary (`stage0CanaryMatcher`); absent when stage0 is off. */
+  isCanary?: (event: DeliveredEvent) => boolean;
 }
 
 /** A bus with every subscriber registered. */
 export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   const bus = new EventBus({ events: new DomainEventRepo(deps.db), queue: deps.queue, now: deps.now });
   // Register each subscriber here under a stable name.
-  registerNotificationSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin });
+  registerNotificationSubscribers(bus, {
+    db: deps.db,
+    queue: deps.queue,
+    appOrigin: deps.appOrigin,
+    isCanary: deps.isCanary,
+  });
   return bus;
 }

@@ -32,6 +32,7 @@ related:
 | [0014](./0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md) | Background jobs on a Postgres job table driven by a tick | draft | 2026-09-25 |
 | [0018](./0018-domain-events-vs-audit-log.md) | Domain events are separate from the audit log | draft | 2026-09-25 |
 | [0019](./0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md) | Inbound webhooks use per-source ingest URLs with mandatory signatures | draft | 2026-09-25 |
+| [0020](./0020-moccos-own-alerts-go-through-mocco-guarded-by-an-external-heartbeat.md) | Mocco's own alerts go through Mocco, guarded by an external stage0 heartbeat | draft | 2026-09-25 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 

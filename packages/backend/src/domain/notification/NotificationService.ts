@@ -22,6 +22,9 @@ export interface NotificationServiceDeps {
   queue: JobQueue;
   /** The app's origin, for the links in governance messages. */
   appOrigin: string;
+  /** Whether an event is a stage0 canary (docs/reference/ops-stage0.md); its deliveries
+   * are marked `canary`. Absent when stage0 is off. */
+  isCanary?: (event: DeliveredEvent) => boolean;
 }
 
 /** The part of an event payload rules read: every catalog payload carries flat `facts`;
@@ -55,6 +58,7 @@ export class NotificationService {
         eventId: event.id,
         ruleId: target.rule.id,
         message,
+        canary: this.deps.isCanary?.(event) ?? false,
       },
       async (delivery, executor) =>
         await this.deps.queue.enqueue(

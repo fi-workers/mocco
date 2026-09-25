@@ -86,6 +86,13 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 `DISCORD_CLIENT_SECRET` (the bot install OAuth pair) configure notifications. All are optional;
 without the token, deliveries wait instead of sending. See [Notifications](./notifications.md#env).
 
+## Stage0 vars
+
+`OPS_CANARY_SOURCE_ID` (the uuid of the inbound source, kind `github`, the canary is sent to) and
+`OPS_HEARTBEAT_URL` (an external dead-man switch's ping URL, http or https) turn on the stage0
+canary. Both are optional, and stage0 is off unless both are set. The canary is only ever sent to
+`SERVICE_DOMAIN`, so that must be set too. See [Stage0](./ops-stage0.md).
+
 ## Scripts
 
 - `yarn dev` (→ `run-frontend`), `yarn db:generate`, `yarn db:migrate` all run through `with-env`, so `next dev`/`drizzle-kit` see the merged `env/.env.local` → `env/.env`.
