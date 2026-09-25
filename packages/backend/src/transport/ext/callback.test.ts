@@ -19,6 +19,8 @@ import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { expectOne } from '@backend/infra/db/rows';
 import { providerConnections, repos, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -93,6 +95,7 @@ describe('ext execution routes (pglite)', () => {
     return {
       auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
       runs,
+      versionChecks: new VersionCheckService({ policies: new AppVersionPolicyRepo(t.db) }),
       broker: new CredentialBroker({
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),

@@ -77,3 +77,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/ota-version-policy.md`, `reference/approvals.md`,
   `specs/2026-09-25-ota-release-control-design.md`, `index.md`
 - Source: branch `feat/ota-version-policy`
+
+## 2026-09-25 — OTA public version check
+
+- Documented the public version-check endpoint (response, locale fallback, fail-open for unknown apps, default
+  store links, caching and ETag). Moved per-version adoption telemetry out of the endpoint slice in the release
+  control design: CDN caching makes server-side counts wrong, so it needs an uncached client report.
+- Docs touched: `reference/ota-version-policy.md`, `specs/2026-09-25-ota-release-control-design.md`
+- Source: branch `feat/ota-version-check`

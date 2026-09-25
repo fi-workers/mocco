@@ -178,7 +178,7 @@ It ships with a default modal: `hard` cannot be dismissed, and `soft` respects t
 
 ### Console
 
-The app page gets a **Version policy** panel: the current policy, a change form that labels each edit as tighten or relax before submitting, pending approvals, and history. Adoption preview ("raising the minimum to 3.0 blocks 7% of active users") needs version telemetry. It comes from the version-check requests themselves (counted per version per day, no device id stored), rolled up by the job queue.
+The app page gets a **Version policy** panel: the current policy, a change form that labels each edit as tighten or relax before submitting, pending approvals, and history. Adoption preview ("raising the minimum to 3.0 blocks 7% of active users") needs version telemetry. Counting version-check requests on the server does not work: the response is CDN-cached for 60 seconds, so cached answers never reach the origin and the counts would be wrong. The telemetry therefore needs a separate, uncached client report (a daily beacon from the React Native package, no device id stored), designed with the client package.
 
 ## 5. Phase 3 — Expo Updates hosting
 
@@ -223,7 +223,7 @@ In dependency order. Issue numbers are attached under #99.
 
 1. `feat(platform)`: approvals outside runs with post-hoc review (#114).
 2. `feat(ota)`: version policy domain, direction-aware changes and history.
-3. `feat(ota)`: public version-check endpoint with caching and per-version counts.
+3. `feat(ota)`: public version-check endpoint with caching (per-version adoption telemetry moves to the client package, §4 Console).
 4. `feat(ota)`: version policy console panel.
 5. `feat(sdk)`: `@mocco/react-native-version` with the default modal and Play In-App Updates adapter (after #115).
 6. `feat(credential)`: provider registry in the broker.

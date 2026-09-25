@@ -7,6 +7,7 @@ import { getAudit } from '@backend/domain/audit/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
 import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { getDb } from '@backend/infra/db/client';
@@ -18,6 +19,7 @@ import type { Db } from '@backend/infra/db/types';
 
 export interface OtaDomain {
   versionPolicies: VersionPolicyService;
+  versionChecks: VersionCheckService;
 }
 
 /** Build the OTA services over a db and register their approval handlers on `approvals`.
@@ -26,15 +28,16 @@ export function createOtaDomain(
   db: Db,
   deps: { projects: ProjectService; approvals: ApprovalService; audit: AuditService },
 ): OtaDomain {
+  const policies = new AppVersionPolicyRepo(db);
   const versionPolicies = new VersionPolicyService({
-    policies: new AppVersionPolicyRepo(db),
+    policies,
     changes: new AppVersionPolicyChangeRepo(db),
     ...deps,
   });
   deps.approvals.registerHandler(OtaApprovalSubjects.versionPolicy, async request => {
     await versionPolicies.applyApproved(request);
   });
-  return { versionPolicies };
+  return { versionPolicies, versionChecks: new VersionCheckService({ policies }) };
 }
 
 const state: { ota?: OtaDomain } = {};

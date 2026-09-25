@@ -17,12 +17,21 @@ export class AppVersionPolicyRepo {
     return row;
   }
 
-  /** The app's policy by id alone — for the public version check, where the app id is
-   * the only (non-secret) key and nothing workspace-scoped is revealed. */
-  async findByAppId(appId: string) {
+  /** The app's policy with the app's store identifiers, by app id alone — for the
+   * public version check, where the app id is the only (non-secret) key and nothing
+   * workspace-scoped is returned. */
+  async findForCheck(appId: string) {
     const [row] = await this.db
-      .select()
+      .select({
+        policy: schema.appVersionPolicies,
+        app: {
+          platform: schema.projectApps.platform,
+          bundleId: schema.projectApps.bundleId,
+          storeAppId: schema.projectApps.storeAppId,
+        },
+      })
       .from(schema.appVersionPolicies)
+      .innerJoin(schema.projectApps, eq(schema.appVersionPolicies.appId, schema.projectApps.id))
       .where(eq(schema.appVersionPolicies.appId, appId));
     return row;
   }

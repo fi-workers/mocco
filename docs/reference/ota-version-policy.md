@@ -17,11 +17,13 @@ code_refs:
   - packages/backend/src/domain/ota/VersionPolicyService.ts
   - packages/backend/src/domain/ota/instance.ts
   - packages/backend/src/transport/trpc/routers/ota.ts
+  - packages/backend/src/domain/ota/VersionCheckService.ts
+  - packages/backend/src/transport/ext/app.ts
 ---
 
 # OTA version policy and native force update
 
-> Phase 2 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md). An app on an old binary is told to update from the store: **hard** (it cannot continue), **soft** (a dismissible prompt), or **ok**. The public version-check endpoint and the React Native package are the next slices; this page covers the policy and how it changes.
+> Phase 2 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md). An app on an old binary is told to update from the store: **hard** (it cannot continue), **soft** (a dismissible prompt), or **ok**. The React Native package is the next slice; this page covers the policy, how it changes, and the public check apps call.
 
 ## Scope
 
@@ -60,3 +62,14 @@ A policy belongs to one project app whose platform is `ios` or `android` (a stor
 ## tRPC surface
 
 `ota.versionPolicy.get | change | history`, each taking `workspaceId`, `projectId`, `appId`. `change` takes the full new `rules`, an optional `reason`, and `storeLiveAttested`, and returns `{ outcome, policy, requestId }` where `requestId` is the pre-approval (`pending_approval`) or the post-hoc review (a relaxing change).
+
+## Public version check
+
+`GET /api/ext/v1/apps/{appId}/version-check?version=2.3.1&locale=ko-KR` on the Hono ext surface.
+
+- **Unauthenticated by design.** The policy is shown to every user of the app, so it is not secret. The app id (a uuid) is the only key, and the response contains nothing workspace-scoped.
+- **Response:** `{ status, minSupportedVersion, recommendedVersion, message, storeUrl, promptIntervalHours, revision }` (`versionCheckResponseSchema`). `message` is null when the status is `ok`. It is picked by the exact locale, then its language (`ko-KR` → `ko`), then `en`.
+- **Fail-open for users:** an unknown app, or one without a policy, answers `ok` with `revision: 0`, so a misconfiguration never locks users out.
+- **Store link:** the policy's `storeUrl`, or else a default built from the app. iOS uses `https://apps.apple.com/app/id<storeAppId>`; Android uses `https://play.google.com/store/apps/details?id=<storeAppId or bundleId>`.
+- **Caching:** `Cache-Control: public, max-age=60, s-maxage=60, stale-while-revalidate=300`, a strong `ETag` over the body (a matching `If-None-Match` gets 304), and `Access-Control-Allow-Origin: *`. A policy change reaches devices within about a minute.
+- **Validation:** a malformed version, locale or app id is 400.

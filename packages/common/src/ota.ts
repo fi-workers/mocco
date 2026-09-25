@@ -210,3 +210,28 @@ export const VersionPolicyOutcomes = {
   pendingApproval: 'pending_approval',
 } as const;
 export type VersionPolicyOutcome = (typeof VersionPolicyOutcomes)[keyof typeof VersionPolicyOutcomes];
+
+/** The public version-check response. `revision` 0 means the app has no policy (or is
+ * unknown): the answer is always `ok` then, so a misconfigured app never locks users out. */
+export const versionCheckResponseSchema = z.object({
+  status: versionStatusSchema,
+  minSupportedVersion: z.string().nullable(),
+  recommendedVersion: z.string().nullable(),
+  message: versionMessageSchema.nullable(),
+  storeUrl: z.string().nullable(),
+  promptIntervalHours: z.number().int(),
+  revision: z.number().int(),
+});
+export type VersionCheckResponse = z.infer<typeof versionCheckResponseSchema>;
+
+/** Pick the prompt copy for a BCP 47 locale: exact tag, then its language, then `en`. */
+export function pickVersionMessage(
+  messages: Record<string, VersionMessage>,
+  locale: string | undefined,
+): VersionMessage | null {
+  const language = locale?.split('-', 1)[0];
+  const key = [locale, language, 'en'].find(
+    (candidate): candidate is string => candidate !== undefined && Object.hasOwn(messages, candidate),
+  );
+  return key === undefined ? null : (messages[key] ?? null);
+}
