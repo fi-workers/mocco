@@ -11,6 +11,7 @@
     "./governance": "./src/governance.ts",
     "./inbound": "./src/inbound.ts",
     "./integration": "./src/integration.ts",
+    "./jobs": "./src/jobs.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./notification": "./src/notification.ts",
     "./project": "./src/project.ts",
