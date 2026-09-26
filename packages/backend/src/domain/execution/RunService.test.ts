@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
+import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createTestEventBus, FailingEventPublisher } from '@backend/domain/events/testing/event-bus';
 import { ConfigNotRunnableError, RunCallbackRejectedError, RunNotFoundError } from '@backend/domain/execution/errors';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
@@ -18,7 +20,7 @@ import { CommitNotFoundError } from '@backend/domain/integration/errors';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import { expectOne } from '@backend/infra/db/rows';
-import { providerConnections, repos, users, workspaces } from '@backend/infra/db/schema';
+import { domainEvents, providerConnections, repos, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { MoccoConfig } from '@mocco/common/mocco-config';
@@ -49,6 +51,7 @@ describe('RunService (pglite)', () => {
     executor = new FakeExecutor();
     pending = [];
     service = new RunService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
@@ -75,6 +78,8 @@ describe('RunService (pglite)', () => {
   afterEach(async () => {
     await t.close();
   });
+
+  const published = async () => await t.db.select().from(domainEvents).orderBy(asc(domainEvents.seq));
 
   /** Drain every collected deferred promise, including ones scheduled while draining. */
   async function drain(): Promise<void> {
@@ -424,6 +429,7 @@ describe('RunService (pglite)', () => {
         audit: { appendChained: vi.fn().mockRejectedValue(boom) } as never,
       });
       const failing = new RunService({
+        bus: createTestEventBus(t.db),
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),
         events: new RunEventRepo(t.db),
@@ -448,6 +454,110 @@ describe('RunService (pglite)', () => {
     });
   });
 
+  describe('domain events', () => {
+    it('publishes run.succeeded with the run facts once the run finishes', async () => {
+      const { workspaceId, runId, token } = await startRun();
+      expect(await published()).toEqual([]);
+
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'succeeded' });
+      await service.applyCallback(token, { runId, stepIndex: 1, status: 'succeeded' });
+
+      const events = await published();
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        workspaceId,
+        type: 'run.succeeded',
+        subjectType: 'run',
+        subjectId: runId,
+        projectId: null,
+        dedupeKey: `run.succeeded:${runId}`,
+        payload: {
+          workspaceId,
+          runId,
+          repoFullName: 'fi-workers/api',
+          pipelineName: 'deploy',
+          commitSha: expect.stringMatching(/^sha-/),
+          linkPath: `/workspaces/${workspaceId}/runs/${runId}`,
+          facts: { repo: 'fi-workers/api', pipeline: 'deploy' },
+        },
+      });
+    });
+
+    it('publishes run.failed with the failed step, its logs url and the triggerer', async () => {
+      const { workspaceId, runId, token } = await startRun();
+      const { run } = await service.get(workspaceId, runId);
+      await t.db
+        .update(users)
+        .set({ name: 'Alice' })
+        .where(eq(users.id, run.triggeredByUserId ?? ''));
+
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'running', logsUrl: 'https://logs.test/0' });
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' });
+
+      const events = await published();
+      expect(events.map(event => event.type)).toEqual(['run.failed']);
+      expect(events[0]).toMatchObject({
+        dedupeKey: `run.failed:${runId}`,
+        payload: {
+          failedStep: { name: 'build', index: 0 },
+          logsUrl: 'https://logs.test/0',
+          triggeredByUserId: run.triggeredByUserId,
+          triggeredByName: 'Alice',
+        },
+      });
+    });
+
+    it('publishes one run.failed when two failure callbacks race', async () => {
+      const { runId, token } = await startRun();
+      const results = await Promise.allSettled([
+        service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' }),
+        service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' }),
+      ]);
+      expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled']);
+      expect(await published()).toHaveLength(1);
+    });
+
+    it('publishes nothing for a redelivered final callback', async () => {
+      const { runId, token } = await startRun();
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' });
+      await service.applyCallback(token, { runId, stepIndex: 0, status: 'failed' });
+      expect(await published()).toHaveLength(1);
+    });
+
+    it('a failing bus never fails the run — it still finishes and the error is logged', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const bus = new FailingEventPublisher();
+      const withBrokenBus = new RunService({
+        bus,
+        runs: new RunRepo(t.db),
+        steps: new RunStepRepo(t.db),
+        events: new RunEventRepo(t.db),
+        runGates: new RunGateRepo(t.db),
+        resumes: new ResumeRepo(t.db),
+        commits,
+        configs,
+        executors: new Map([[ExecutorIds.generic, executor]]),
+        callbackUrl: CALLBACK_URL,
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
+        waitUntil: p => {
+          pending.push(p);
+        },
+      });
+      const { workspaceId, commitId } = await seedCommitInWorkspace();
+      await seedConfig(commitId);
+      const run = await withBrokenBus.trigger(workspaceId, commitId, await seedUser());
+      const token = tokenForLatestDispatch();
+
+      await withBrokenBus.applyCallback(token, { runId: run.id, stepIndex: 0, status: 'failed' });
+
+      const detail = await withBrokenBus.get(workspaceId, run.id);
+      expect(detail.run.state).toBe('failed');
+      expect(bus.attempts).toBe(1);
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('run.failed'), expect.any(Error));
+      spy.mockRestore();
+    });
+  });
+
   describe('executor registry', () => {
     it('routes a github-actions step to the registered github executor, not the generic one', async () => {
       // A registry with BOTH adapters registered (mirrors the composition root once
@@ -455,6 +565,7 @@ describe('RunService (pglite)', () => {
       // github adapter, leaving the generic one untouched.
       const githubExecutor = new FakeExecutor();
       const routed = new RunService({
+        bus: createTestEventBus(t.db),
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),
         events: new RunEventRepo(t.db),
@@ -597,6 +708,21 @@ describe('RunService (pglite)', () => {
         'step.succeeded',
         'gate.pending',
       ]);
+      // …and the matching domain event, naming the gate.
+      const [pendingEvent] = await t.db.select().from(domainEvents);
+      expect(pendingEvent).toMatchObject({
+        type: 'gate.pending',
+        subjectType: 'run_gate',
+        subjectId: detail.gates[0]?.id,
+        dedupeKey: `gate.pending:${detail.gates[0]?.id}`,
+        payload: {
+          runId,
+          gateName: 'approve',
+          gateItemIndex: 1,
+          facts: { gate: 'approve' },
+          requirements: [{ role: 'deployer', count: 2 }],
+        },
+      });
     });
 
     it('resumeFromGate advances past the gate and dispatches the next step', async () => {

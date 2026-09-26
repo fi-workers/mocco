@@ -12,6 +12,14 @@ export interface JobContext {
   kind: string;
   /** 1 on the first attempt (attempts are counted at claim). */
   attempt: number;
+  /** The job's `max_attempts`. */
+  maxAttempts: number;
+  /**
+   * No attempts are left after this one: if the handler throws (anything but a
+   * refunded RetryAt), the job ends `dead`. Computed by the runner, so handlers never
+   * re-implement the rule. A consuming RetryAt may still be refunded on this attempt.
+   */
+  isFinalAttempt: boolean;
   workspaceId: string | null;
   now: () => Date;
   /** When this run's lock expires (`locked_until`). After it, the job may be reclaimed and
