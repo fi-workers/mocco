@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
+import ProjectSwitcher from '@frontend/components/project-switcher';
 import UserMenu from '@frontend/components/user-menu';
 import WorkspaceSwitcher from '@frontend/components/workspace-switcher';
 import { useSession } from '@frontend/lib/auth-client';
@@ -14,7 +15,8 @@ import type { ReactNode } from 'react';
 
 // The authenticated app layout (client-rendered): guards the session, fetches
 // the shell data with React Query, and frames the page in a Vercel-style top bar
-// (logo + workspace switcher on the left, the signed-in user on the right).
+// (logo + workspace switcher + project switcher on the left, the signed-in user on
+// the right).
 export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { data: session, isPending } = useSession();
@@ -40,6 +42,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const user = { name: session.user.name, email: session.user.email };
   const workspaces = (listQuery.data?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name }));
   const activeId = activeQuery.data?.workspace?.id ?? null;
+  // Inside a workspace the top bar also carries the project switcher; the ids come
+  // from the path, not from component state.
+  const routeWorkspaceId = typeof router.query.id === 'string' ? router.query.id : null;
+  const routeProjectId = typeof router.query.projectId === 'string' ? router.query.projectId : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -52,6 +58,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
             /
           </span>
           <WorkspaceSwitcher workspaces={workspaces} activeId={activeId} />
+          {routeWorkspaceId ? (
+            <>
+              <span aria-hidden="true" className="text-lg text-border">
+                /
+              </span>
+              <ProjectSwitcher workspaceId={routeWorkspaceId} projectId={routeProjectId} />
+            </>
+          ) : null}
         </div>
         <UserMenu user={user} />
       </header>

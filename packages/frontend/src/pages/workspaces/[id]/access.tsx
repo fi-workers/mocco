@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import WorkspaceAccess from '@frontend/components/workspace-access';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // Workspace access (roles & memberships), client-rendered inside the workspace frame.
 export default function WorkspaceAccessPage() {
@@ -12,7 +13,7 @@ export default function WorkspaceAccessPage() {
   return (
     <AppShell>
       {id ? (
-        <WorkspaceLayout workspaceId={id} active="access">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.access}>
           <WorkspaceAccess workspaceId={id} />
         </WorkspaceLayout>
       ) : null}

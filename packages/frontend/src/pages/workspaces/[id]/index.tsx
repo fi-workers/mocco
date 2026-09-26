@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
 import WorkspaceOverview from '@frontend/components/workspace-overview';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // A workspace's Overview (its repos), client-rendered inside the workspace frame.
 export default function WorkspaceOverviewPage() {
@@ -12,7 +13,7 @@ export default function WorkspaceOverviewPage() {
   return (
     <AppShell>
       {id ? (
-        <WorkspaceLayout workspaceId={id} active="overview">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.overview}>
           <WorkspaceOverview workspaceId={id} />
         </WorkspaceLayout>
       ) : null}
