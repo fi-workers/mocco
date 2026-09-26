@@ -1,6 +1,6 @@
 import { JobStatuses } from '@mocco/common/jobs';
 import { DeliveryStatuses } from '@mocco/common/notification';
-import { and, count, eq, gte, inArray, lt, min, notExists, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, min, notExists, or, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -50,6 +50,25 @@ export class DeliveryRepo {
       }
       return { delivery, created: await onCreated(delivery, tx) };
     });
+  }
+
+  /** A workspace's most recent deliveries, optionally of one channel and/or status. */
+  async findRecent(
+    workspaceId: string,
+    options: { channelId?: string; status?: DeliveryStatus; limit: number },
+  ): Promise<DeliveryRow[]> {
+    return await this.db
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.workspaceId, workspaceId),
+          options.channelId === undefined ? undefined : eq(notificationDeliveries.channelId, options.channelId),
+          options.status === undefined ? undefined : eq(notificationDeliveries.status, options.status),
+        ),
+      )
+      .orderBy(desc(notificationDeliveries.createdAt), desc(notificationDeliveries.id))
+      .limit(options.limit);
   }
 
   async findById(id: string): Promise<DeliveryRow | undefined> {

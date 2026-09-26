@@ -65,6 +65,7 @@ export const DISCORD_GUILD_INSTALL = 0;
 export const DiscordJsonErrorCodes = {
   UnknownChannel: 10_003,
   UnknownGuild: 10_004,
+  UnknownMember: 10_007,
   UnknownMessage: 10_008,
   /** Cloudflare is blocking the request (often a bad User-Agent): nothing will get through. */
   CloudflareBlocked: 40_333,
@@ -128,6 +129,10 @@ export function isDiscordSnowflake(id: string): boolean {
 export const DISCORD_GLOBAL_BUCKET = 'global';
 export function discordChannelBucket(channelId: string): string {
   return `channel:${channelId}`;
+}
+/** Guild-level routes (channel listing, the bot's membership) pace on their own bucket. */
+export function discordGuildBucket(guildId: string): string {
+  return `guild:${guildId}`;
 }
 
 /** Embed presentation per severity: the color bar and the title prefix. */

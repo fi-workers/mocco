@@ -6,6 +6,7 @@ import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { getNotification } from '@backend/domain/notification/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
@@ -17,6 +18,7 @@ import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Context } from '@backend/transport/trpc/trpc';
@@ -34,6 +36,7 @@ export interface TrpcDeps extends Services {
   audit: AuditService;
   projects: ProjectService;
   products: ProductEnablementService;
+  notifications?: ChannelService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -63,6 +66,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         audit: deps.audit,
         projects: deps.projects,
         products: deps.products,
+        notifications: deps.notifications,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -84,5 +88,6 @@ export async function trpcHandler(request: Request): Promise<Response> {
     audit: getAudit().audit,
     projects: getProjectDomain().projects,
     products: getProjectDomain().products,
+    notifications: getNotification().channels,
   })(request);
 }

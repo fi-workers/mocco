@@ -944,6 +944,32 @@ export const domainEventDeliveries = pgTable(
 // `notification.deliver` job. See docs/reference/notifications.md.
 // ─────────────────────────────────────────────────────────────
 
+/** A Discord server the Mocco bot was installed into for a workspace (relay design §6). */
+export const discordGuilds = pgTable(
+  'mocco_discord_guilds',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Discord's guild id, taken from the OAuth token response (never the callback query).
+    guildId: text('guild_id').notNull(),
+    guildName: text('guild_name').notNull(),
+    // SET NULL: the install outlives the user who made it.
+    installedByUserId: uuid('installed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When this workspace last installed the bot into the guild (refreshed on every
+    // install). A bot that joined the guild after it was re-added elsewhere: the row is stale.
+    installedAt: timestamp('installed_at').notNull().defaultNow(),
+    createdAt,
+  },
+  t => [
+    // Its prefix serves workspace listing.
+    uniqueIndex('mocco_discord_guilds_workspace_guild_uq').on(t.workspaceId, t.guildId),
+    // A UNIQUE CONSTRAINT so channels' composite FK can reference (id, workspace_id).
+    unique('mocco_discord_guilds_id_workspace_uq').on(t.id, t.workspaceId),
+  ],
+);
+
 /** A destination in a workspace, e.g. one Discord channel the Mocco bot posts to. */
 export const notificationChannels = pgTable(
   'mocco_notification_channels',
@@ -960,6 +986,9 @@ export const notificationChannels = pgTable(
     // The destination's id at the vendor (the Discord channel id), repeated from
     // `config` as a column so uniqueness is a plain index.
     externalId: text('external_id').notNull(),
+    // The Discord install the channel belongs to (mocco_discord_guilds.id); required for
+    // Discord channels. Deleting a stale install deletes its channels.
+    guildId: uuid('guild_id'),
     // A customer-supplied bot token later ("bring your own bot"); null = the Mocco bot.
     secretSealed: text('secret_sealed'),
     status: text().$type<ChannelStatus>().notNull().default(ChannelStatuses.active),
@@ -978,6 +1007,17 @@ export const notificationChannels = pgTable(
       'mocco_notification_channels_status_check',
       sql`${t.status} IN (${sqlInList(Object.values(ChannelStatuses))})`,
     ),
+    check(
+      'mocco_notification_channels_guild_check',
+      sql`${t.kind} NOT IN (${sqlInList([ChannelKinds.discord])}) OR ${t.guildId} IS NOT NULL`,
+    ),
+    index('mocco_notification_channels_guild_idx').on(t.guildId),
+    // Pins the channel to an install of its own workspace.
+    foreignKey({
+      columns: [t.guildId, t.workspaceId],
+      foreignColumns: [discordGuilds.id, discordGuilds.workspaceId],
+      name: 'mocco_notification_channels_guild_workspace_fk',
+    }).onDelete('cascade'),
   ],
 );
 
@@ -1091,3 +1131,22 @@ export const discordRateLimits = pgTable('mocco_discord_rate_limits', {
   bucket: text().primaryKey(),
   blockedUntil: timestamp('blocked_until').notNull(),
 });
+
+/** Discord bot install handshake state — single-use, TTL'd, bound to the user and workspace
+ * (same shape as mocco_github_connect_states). */
+export const discordConnectStates = pgTable(
+  'mocco_discord_connect_states',
+  {
+    state: text().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdAt,
+    expiresAt: timestamp('expires_at').notNull(),
+    consumedAt: timestamp('consumed_at'),
+  },
+  t => [index('mocco_discord_connect_states_workspace_idx').on(t.workspaceId)],
+);

@@ -3,6 +3,7 @@
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
+import { notificationRouter } from '@backend/transport/trpc/routers/notification';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
 import { productRouter } from '@backend/transport/trpc/routers/product';
 import { projectRouter } from '@backend/transport/trpc/routers/project';
@@ -23,6 +24,7 @@ export const appRouter = router({
   audit: auditRouter,
   project: projectRouter,
   product: productRouter,
+  notification: notificationRouter,
 });
 
 export type AppRouter = typeof appRouter;
