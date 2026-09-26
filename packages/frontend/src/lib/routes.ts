@@ -13,6 +13,10 @@ export const Routes = {
   workspaceAudit: (id: string) => `/workspaces/${id}/audit`,
   workspaceSettings: (id: string) => `/workspaces/${id}/settings`,
   workspaceNotifications: (id: string) => `/workspaces/${id}/notifications`,
+  workspaceProjects: (id: string) => `/workspaces/${id}/projects`,
+  workspaceProducts: (id: string) => `/workspaces/${id}/products`,
+  /** A project's home: its apps and linked repos. Project-scoped products live below it. */
+  project: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}`,
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',

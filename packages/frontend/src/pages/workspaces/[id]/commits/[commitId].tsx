@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import { CommitDetail } from '@frontend/components/commit-detail';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // A single commit's detail — its .mocco.yml snapshot as an ordered pipeline (or
 // the reason it isn't one yet). A drilldown from the candidate queue on Overview,
@@ -15,7 +16,7 @@ export default function WorkspaceCommitPage() {
   return (
     <AppShell>
       {id && commitId ? (
-        <WorkspaceLayout workspaceId={id} active="overview">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.overview}>
           <CommitDetail workspaceId={id} commitId={commitId} />
         </WorkspaceLayout>
       ) : null}

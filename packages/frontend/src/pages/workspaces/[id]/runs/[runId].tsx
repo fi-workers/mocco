@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import { RunDetail } from '@frontend/components/run-detail';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // A single run's detail — its state and materialized steps. Reached from the Run
 // button on a commit-detail page, so it lives under the "overview" nav tab (there
@@ -15,7 +16,7 @@ export default function WorkspaceRunPage() {
   return (
     <AppShell>
       {id && runId ? (
-        <WorkspaceLayout workspaceId={id} active="overview">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.overview}>
           <RunDetail workspaceId={id} runId={runId} />
         </WorkspaceLayout>
       ) : null}
