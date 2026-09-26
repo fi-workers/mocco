@@ -51,6 +51,17 @@ const schema = z.object({
   GITHUB_APP_CLIENT_SECRET: z.string().min(1).optional(),
   /** Verifies GitHub webhook payload signatures. Optional, same as the other GITHUB_APP_* vars. */
   GITHUB_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // Job tick (ADR 0014). CRON_SECRET is platform-dictated: Vercel Cron sends it as
+  // `Authorization: Bearer <CRON_SECRET>` when the project has it set. JOBS_TICK_SECRET
+  // is our alias for self-host callers. With neither set the tick route answers 503.
+  CRON_SECRET: z.string().min(1).optional(),
+  JOBS_TICK_SECRET: z.string().min(1).optional(),
+  /** How long one tick keeps claiming jobs; keep it below the function's max duration. */
+  JOBS_TICK_BUDGET_MS: z.coerce.number().int().positive().default(50_000),
+  /** SecretBox keys for third-party secrets at rest: `keyId:base64key,…` (first key
+   * seals, all open). Generate a key with: openssl rand -base64 32. Optional — only
+   * features that store secrets require it, and they fail loudly when it's absent. */
+  SECRETS_ENCRYPTION_KEYS: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-07-25
+updated: 2026-09-25
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -56,6 +56,14 @@ Values per environment:
 - **preview**: derived from `VERCEL_URL` — a separate branch in `resolveAuthOrigins`, `SERVICE_DOMAIN` isn't consulted there
 - **tailnet**: `SERVICE_DOMAIN=<node>.<tailnet>.ts.net` — written into the gitignored `env/.env` by the generator below
 
+## `SECRETS_ENCRYPTION_KEYS` — SecretBox keys
+
+Keys for sealing third-party secrets at rest (see backend-conventions → Secrets at rest):
+`keyId:base64key[,older…]`. The first key seals, every listed key opens. Optional until a feature
+stores secrets; that feature then fails with an error naming the variable. Generate one with
+`echo "k1:$(openssl rand -base64 32)"` and put it in the gitignored `env/.env` (and in the Vercel
+project env for deploys).
+
 ## Tailnet access (method A: phone on the tailnet)
 
 Tailscale is a developer-machine concern, confined to **one generator script** — `infra/local/scripts/gen-tailscale-env.ts`. Nothing else (the loader, `env.ts`, `resolveAuthOrigins`) knows Tailscale exists; they only ever see `SERVICE_DOMAIN`, an ordinary env var. Swapping in a real domain, ngrok, or plain localhost later is just a different `SERVICE_DOMAIN` value — no code changes anywhere.
@@ -67,6 +75,10 @@ The recipe:
 3. `yarn dev` (through `with-env`, which now picks up the tailnet `SERVICE_DOMAIN` from `env/.env`) and open `https://<node>.<tailnet>.ts.net` from a phone joined to the same tailnet.
 
 If `tailscale` isn't installed or isn't up, the generator fails loudly with a clear error and non-zero exit — it's an explicit opt-in dev command, so silent fallback would be worse than failing.
+
+## Job tick vars
+
+`CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. See [Background jobs and schedules](./jobs.md#env).
 
 ## Scripts
 

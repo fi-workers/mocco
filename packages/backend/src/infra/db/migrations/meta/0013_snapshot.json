@@ -1,5 +1,5 @@
 {
-  "id": "793b82b0-80fa-4d20-b443-e5370690ae33",
+  "id": "d42f0dc6-d391-493c-b2b4-258d58631859",
   "prevId": "b8248a43-9dc4-4538-b6dc-2c293df6ee1e",
   "version": "7",
   "dialect": "postgresql",
@@ -132,329 +132,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mocco_approval_requests": {
-      "name": "mocco_approval_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_type": {
-          "name": "subject_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_id": {
-          "name": "subject_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "action": {
-          "name": "action",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "requirements": {
-          "name": "requirements",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requested_by_user_id": {
-          "name": "requested_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resolved_at": {
-          "name": "resolved_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mocco_approval_requests_workspace_state_idx": {
-          "name": "mocco_approval_requests_workspace_state_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mocco_approval_requests_subject_idx": {
-          "name": "mocco_approval_requests_subject_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mocco_approval_requests_workspace_id_mocco_workspaces_id_fk": {
-          "name": "mocco_approval_requests_workspace_id_mocco_workspaces_id_fk",
-          "tableFrom": "mocco_approval_requests",
-          "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_requests_requested_by_user_id_mocco_users_id_fk": {
-          "name": "mocco_approval_requests_requested_by_user_id_mocco_users_id_fk",
-          "tableFrom": "mocco_approval_requests",
-          "tableTo": "mocco_users",
-          "columnsFrom": [
-            "requested_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_approval_requests_kind_check": {
-          "name": "mocco_approval_requests_kind_check",
-          "value": "\"mocco_approval_requests\".\"kind\" IN ('pre_approval','review')"
-        },
-        "mocco_approval_requests_state_check": {
-          "name": "mocco_approval_requests_state_check",
-          "value": "\"mocco_approval_requests\".\"state\" IN ('pending','approved','rejected','expired','superseded')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.mocco_approval_votes": {
-      "name": "mocco_approval_votes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_id": {
-          "name": "request_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role_id": {
-          "name": "role_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decision": {
-          "name": "decision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mocco_approval_votes_request_user_uq": {
-          "name": "mocco_approval_votes_request_user_uq",
-          "columns": [
-            {
-              "expression": "request_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mocco_approval_votes_workspace_id_mocco_workspaces_id_fk": {
-          "name": "mocco_approval_votes_workspace_id_mocco_workspaces_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_request_id_mocco_approval_requests_id_fk": {
-          "name": "mocco_approval_votes_request_id_mocco_approval_requests_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_approval_requests",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_user_id_mocco_users_id_fk": {
-          "name": "mocco_approval_votes_user_id_mocco_users_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_role_id_mocco_roles_id_fk": {
-          "name": "mocco_approval_votes_role_id_mocco_roles_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_approval_votes_decision_check": {
-          "name": "mocco_approval_votes_decision_check",
-          "value": "\"mocco_approval_votes\".\"decision\" IN ('approve','reject')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.mocco_audit_log": {
@@ -1177,6 +854,396 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mocco_job_schedules": {
+      "name": "mocco_job_schedules",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "cron": {
+          "name": "cron",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interval_seconds": {
+          "name": "interval_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_run_at": {
+          "name": "next_run_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "last_enqueued_at": {
+          "name": "last_enqueued_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mocco_job_schedules_workspace_idx": {
+          "name": "mocco_job_schedules_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_job_schedules_next_run_at_idx": {
+          "name": "mocco_job_schedules_next_run_at_idx",
+          "columns": [
+            {
+              "expression": "next_run_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_job_schedules\".\"enabled\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_job_schedules_system_kind_uq": {
+          "name": "mocco_job_schedules_system_kind_uq",
+          "columns": [
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"mocco_job_schedules\".\"workspace_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_job_schedules_workspace_id_mocco_workspaces_id_fk": {
+          "name": "mocco_job_schedules_workspace_id_mocco_workspaces_id_fk",
+          "tableFrom": "mocco_job_schedules",
+          "tableTo": "mocco_workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mocco_job_schedules_project_workspace_fk": {
+          "name": "mocco_job_schedules_project_workspace_fk",
+          "tableFrom": "mocco_job_schedules",
+          "tableTo": "mocco_projects",
+          "columnsFrom": [
+            "project_id",
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id",
+            "workspace_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "mocco_job_schedules_project_check": {
+          "name": "mocco_job_schedules_project_check",
+          "value": "\"mocco_job_schedules\".\"project_id\" IS NULL OR \"mocco_job_schedules\".\"workspace_id\" IS NOT NULL"
+        },
+        "mocco_job_schedules_timing_check": {
+          "name": "mocco_job_schedules_timing_check",
+          "value": "(\"mocco_job_schedules\".\"cron\" IS NULL) <> (\"mocco_job_schedules\".\"interval_seconds\" IS NULL)"
+        },
+        "mocco_job_schedules_interval_check": {
+          "name": "mocco_job_schedules_interval_check",
+          "value": "\"mocco_job_schedules\".\"interval_seconds\" IS NULL OR \"mocco_job_schedules\".\"interval_seconds\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.mocco_jobs": {
+      "name": "mocco_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "run_at": {
+          "name": "run_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "max_attempts": {
+          "name": "max_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 8
+        },
+        "deferrals": {
+          "name": "deferrals",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locked_by": {
+          "name": "locked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "mocco_jobs_status_run_at_idx": {
+          "name": "mocco_jobs_status_run_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_jobs\".\"status\" = 'queued'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_jobs_workspace_idx": {
+          "name": "mocco_jobs_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_jobs_locked_until_idx": {
+          "name": "mocco_jobs_locked_until_idx",
+          "columns": [
+            {
+              "expression": "locked_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"mocco_jobs\".\"status\" = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_jobs_kind_dedupe_key_uq": {
+          "name": "mocco_jobs_kind_dedupe_key_uq",
+          "columns": [
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "dedupe_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"mocco_jobs\".\"dedupe_key\" IS NOT NULL AND \"mocco_jobs\".\"status\" IN ('queued','running')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_jobs_workspace_id_mocco_workspaces_id_fk": {
+          "name": "mocco_jobs_workspace_id_mocco_workspaces_id_fk",
+          "tableFrom": "mocco_jobs",
+          "tableTo": "mocco_workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "mocco_jobs_status_check": {
+          "name": "mocco_jobs_status_check",
+          "value": "\"mocco_jobs\".\"status\" IN ('queued','running','succeeded','failed','dead')"
+        },
+        "mocco_jobs_attempts_check": {
+          "name": "mocco_jobs_attempts_check",
+          "value": "\"mocco_jobs\".\"attempts\" >= 0 AND \"mocco_jobs\".\"max_attempts\" >= 1 AND \"mocco_jobs\".\"deferrals\" >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.mocco_members": {

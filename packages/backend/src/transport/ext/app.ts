@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 // External inbound REST surface (ADR 0011): a Hono app mounted under the Next
-// App Router at /api/ext. The ONLY file importing hono. Handlers parse at the
+// App Router at /api/ext. transport/ext/ is the only hono importer. Handlers parse at the
 // boundary and delegate to domain services; no vendor/SQL detail is ever
 // returned to the caller.
 import { credentialRequestSchema } from '@mocco/common/credential';
@@ -22,8 +22,11 @@ import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/g
 import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { parseWebhook, verify } from '@backend/domain/integration/github/provider';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { JobTiming } from '@backend/domain/jobs/policy';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getEnv } from '@backend/infra/config/env';
+import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
+import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -63,6 +66,9 @@ export interface ExtDeps {
   /** Injection seam: prod passes `@vercel/functions`'s waitUntil; tests pass a
    * synchronous collector so the deferred sync is observable without vi.mock. */
   waitUntil: (promise: Promise<unknown>) => void;
+  /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
+   * JOBS_TICK_SECRET is set, and the route 503s. */
+  jobTick?: JobTickDeps;
 }
 
 const WORKSPACES = '/workspaces';
@@ -293,6 +299,8 @@ export function createExtApp(deps: ExtDeps): Hono {
     }
     return c.body(body, 200, headers);
   });
+  // Job tick (ADR 0014): Vercel Cron (GET), a self-host cron or curl drives JobRunner.tick.
+  app.route('/', createJobTickRoutes(deps.jobTick));
 
   // Defense-in-depth (symmetric with the tRPC maskInternalError): an unexpected
   // throw surfaces as a fixed generic 500 — never a vendor/SQL/token detail.
@@ -308,6 +316,8 @@ export async function extHandler(request: Request): Promise<Response> {
   // unconfigured, those deps are undefined and the GitHub routes self-gate (503).
   const integration = getIntegration();
   const execution = getExecution();
+  const env = getEnv();
+  const tickSecrets = [env.CRON_SECRET, env.JOBS_TICK_SECRET].filter(secret => secret !== undefined);
   const app = createExtApp({
     auth: getServices().auth,
     connection: integration?.connection,
@@ -320,8 +330,18 @@ export async function extHandler(request: Request): Promise<Response> {
     callbackUrl: execution.callbackUrl,
     postJson,
     // Undefined here → the webhook route 503s, mirroring the integration-unconfigured 503.
-    webhookSecret: getEnv().GITHUB_WEBHOOK_SECRET,
+    webhookSecret: env.GITHUB_WEBHOOK_SECRET,
     waitUntil,
+    jobTick:
+      tickSecrets.length > 0
+        ? {
+            runner: getJobRunner(),
+            secrets: tickSecrets,
+            // Clamped so a misconfigured budget can't outlast the function (JobTiming).
+            budgetMs: Math.min(env.JOBS_TICK_BUDGET_MS, JobTiming.maxTickBudgetMs),
+            maxJobs: DEFAULT_TICK_MAX_JOBS,
+          }
+        : undefined,
   });
   return await app.fetch(request);
 }
