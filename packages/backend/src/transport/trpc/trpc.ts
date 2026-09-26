@@ -14,6 +14,7 @@ import type { CommitConfigService } from '@backend/domain/integration/CommitConf
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
+import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -48,6 +49,8 @@ export interface Context {
   products: ProductEnablementService;
   /** Always present — OTA version policy and native force update. */
   versionPolicies: VersionPolicyService;
+  /** Always present — sealed publishing tokens of the team's existing OTA tools. */
+  externalCredentials: ExternalCredentialService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
   inbound?: InboundDomain;

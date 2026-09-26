@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { BrokerDenials, CredentialBroker } from '@backend/domain/credential/CredentialBroker';
+import { CredentialUnavailableError } from '@backend/domain/credential/errors';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { hashToken } from '@backend/domain/execution/callback-token';
@@ -69,8 +70,14 @@ class RecordingProvider implements CredentialProvider {
 
   readonly calls: CredentialIssueRequest[] = [];
 
+  /** When set, the provider has no such credential (CredentialUnavailableError). */
+  unavailable = false;
+
   async issue(request: CredentialIssueRequest): Promise<IssuedCredentials> {
     this.calls.push(request);
+    if (this.unavailable) {
+      throw new CredentialUnavailableError('no such credential');
+    }
     return await this.inner.issue(request);
   }
 }
@@ -226,7 +233,7 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
   }
 
   it('ALLOWS when every check passes: issues with the config triple and returns credentials', async () => {
-    const { runId } = await seed();
+    const { runId, workspaceId } = await seed();
 
     const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
 
@@ -237,7 +244,20 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       expect(result.credentials.value).toBe('stub-credential');
     }
     // Issued with the PINNED config's {provider, role, ttl} — never a request-body value.
-    expect(provider.calls).toEqual([{ provider: 'aws', role: 'deployer', ttlSeconds: 900 }]);
+    expect(provider.calls).toEqual([{ workspaceId, provider: 'aws', role: 'deployer', ttlSeconds: 900 }]);
+  });
+
+  it('DENIES (audited, never a throw) when the provider has no such credential', async () => {
+    const { runId, workspaceId } = await seed();
+    provider.unavailable = true;
+
+    const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+
+    expect(result).toEqual({ ok: false, reason: BrokerDenials.credentialUnavailable });
+    const entries = await new AuditRepo(t.db).all(workspaceId);
+    expect(entries.find(entry => entry.action === AuditActions.credentialDenied)?.payload).toMatchObject({
+      reason: BrokerDenials.credentialUnavailable,
+    });
   });
 
   it('DENIES an unknown run (never issues)', async () => {

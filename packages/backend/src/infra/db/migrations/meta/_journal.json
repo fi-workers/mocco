@@ -134,6 +134,13 @@
       "when": 1790430172548,
       "tag": "0018_legal_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790430559968,
+      "tag": "0019_worthless_scorpion",
+      "breakpoints": true
     }
   ]
 }

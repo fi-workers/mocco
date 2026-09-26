@@ -3,6 +3,7 @@ import { RunStepStatuses } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
+import { CredentialUnavailableError } from '@backend/domain/credential/errors';
 import { evaluateGrant } from '@backend/domain/credential/evaluate-grant';
 import { isTokenValid } from '@backend/domain/execution/callback-token';
 
@@ -29,6 +30,7 @@ export const BrokerDenials = {
   stepNotDispatched: 'step was not dispatched by mocco',
   noCredentialOnStep: 'step requests no credentials',
   gateNotResumed: 'required gate is not resumed',
+  credentialUnavailable: 'the provider has no such credential',
 } as const;
 export type BrokerDenial = (typeof BrokerDenials)[keyof typeof BrokerDenials];
 
@@ -184,11 +186,20 @@ export class CredentialBroker {
     }
 
     // (f) every check passed — issue through the provider port.
-    const credentials = await this.deps.provider.issue({
-      provider: credential.provider,
-      role: credential.role,
-      ttlSeconds: credential.ttl,
-    });
+    let credentials: IssuedCredentials;
+    try {
+      credentials = await this.deps.provider.issue({
+        workspaceId: run.workspaceId,
+        provider: credential.provider,
+        role: credential.role,
+        ttlSeconds: credential.ttl,
+      });
+    } catch (error) {
+      if (error instanceof CredentialUnavailableError) {
+        return await this.denyAudited(run, request.stepIndex, BrokerDenials.credentialUnavailable);
+      }
+      throw error;
+    }
     // Audit AFTER the credential is minted — fail-open. Records the authoritative
     // config triple + gate, NEVER the secret `value` the provider returned.
     await this.deps.audit.record(run.workspaceId, {
