@@ -13,6 +13,10 @@ import { createEventHandlers, pruneEventsSchedule } from '@backend/domain/events
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { InboundService } from '@backend/domain/inbound/InboundService';
+import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
+import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
+import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
 import { JobHandlerRegistry, type JobHandler } from '@backend/domain/jobs/handlers';
 import { JobRunner } from '@backend/domain/jobs/JobRunner';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
@@ -26,6 +30,7 @@ import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
 import { getEnv } from '@backend/infra/config/env';
+import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
@@ -58,13 +63,21 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     runOne: async id => await self.runner?.runOne(id),
     waitUntil: deps.waitUntil,
   });
+  const bus = createEventBus({ db, queue, now: deps.now, appOrigin: deps.appOrigin });
+  // The inbound jobs (republish, prune) never open a secret; the box is resolved only
+  // if one is opened, so a deploy without SECRETS_ENCRYPTION_KEYS still builds the runner.
+  const inbound = new InboundService({
+    sources: new InboundSourceRepo(db),
+    receipts: new InboundReceiptRepo(db),
+    box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) },
+    bus,
+    now: deps.now,
+  });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
-    ...createEventHandlers({
-      bus: createEventBus({ db, queue, now: deps.now, appOrigin: deps.appOrigin }),
-      events: new DomainEventRepo(db),
-    }),
+    ...createEventHandlers({ bus, events: new DomainEventRepo(db) }),
+    ...createInboundHandlers({ inbound }),
     ...createNotificationHandlers({
       deliveries: new DeliveryRepo(db),
       channels: new ChannelRepo(db),
@@ -81,7 +94,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     now: deps.now,
     random: deps.random,
     workerId: deps.workerId,
-    systemSchedules: [pruneSchedule, pruneEventsSchedule, ...notificationSchedules],
+    systemSchedules: [pruneSchedule, pruneEventsSchedule, ...notificationSchedules, ...inboundSchedules],
   });
   return self.runner;
 }

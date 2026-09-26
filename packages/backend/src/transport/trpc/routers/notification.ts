@@ -13,8 +13,8 @@ import {
   notificationRuleSchema,
   ruleEventTypeSchema,
   ruleFilterSchema,
-  rulePresetSchema,
 } from '@mocco/common/notification';
+import { rulePresetSchema } from '@mocco/common/notification-presets';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 

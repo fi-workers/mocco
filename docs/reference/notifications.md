@@ -30,6 +30,7 @@ code_refs:
   - packages/backend/src/domain/notification/repos/delivery.repo.ts
   - packages/backend/src/domain/notification/repos/discord-rate-limit.repo.ts
   - packages/common/src/notification.ts
+  - packages/common/src/notification-presets.ts
 ---
 
 # Notifications
@@ -111,7 +112,7 @@ leaves `rule_id` null.
 
 ### Presets
 
-`rulePresetRules` in `@mocco/common/notification` (relay design §7):
+`rulePresetRules` in `@mocco/common/notification-presets` (relay design §7):
 
 | Preset | Rules |
 |---|---|

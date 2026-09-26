@@ -1,8 +1,5 @@
 import { z } from 'zod';
 
-import { GovernanceEventTypes } from './events';
-import { InboundEventTypes } from './inbound';
-
 /**
  * How loud a notification is. Senders map it to their own presentation (the
  * Discord sender picks the embed color and emoji from it); producers never pick
@@ -147,51 +144,6 @@ export const ruleEventTypeSchema = z
     /^[a-z][a-z_]*(?:\.[a-z][a-z_]*)*(?:\.\*)?$/u,
     'an event type like `gate.pending` or a prefix like `github.*`',
   );
-
-/**
- * Default rule sets (relay design §7), applied to a channel in one action. Each
- * rule is an event type and a filter; the customer can remove or add rules after.
- */
-export const RulePresets = {
-  mocco: 'mocco',
-  sentry: 'sentry',
-  vercel: 'vercel',
-  github: 'github',
-} as const;
-export type RulePreset = (typeof RulePresets)[keyof typeof RulePresets];
-export const rulePresetSchema = z.enum(Object.values(RulePresets) as [RulePreset, ...RulePreset[]]);
-
-export interface PresetRule {
-  eventType: string;
-  filter: RuleFilter;
-}
-
-export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>> = {
-  [RulePresets.mocco]: [
-    { eventType: GovernanceEventTypes.gatePending, filter: {} },
-    { eventType: GovernanceEventTypes.gateResumed, filter: {} },
-    { eventType: GovernanceEventTypes.gateRejected, filter: {} },
-    { eventType: GovernanceEventTypes.runFailed, filter: {} },
-  ],
-  [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
-  [RulePresets.vercel]: [
-    { eventType: InboundEventTypes['vercel.deployment.succeeded'], filter: { target: 'production' } },
-    { eventType: InboundEventTypes['vercel.deployment.error'], filter: {} },
-    { eventType: InboundEventTypes['vercel.deployment.canceled'], filter: {} },
-  ],
-  [RulePresets.github]: [
-    { eventType: InboundEventTypes['github.push'], filter: { hasCommits: true } },
-    { eventType: InboundEventTypes['github.pull_request.opened'], filter: {} },
-    { eventType: InboundEventTypes['github.pull_request.reopened'], filter: {} },
-    { eventType: InboundEventTypes['github.pull_request.merged'], filter: {} },
-    { eventType: InboundEventTypes['github.pull_request.closed'], filter: {} },
-    { eventType: InboundEventTypes['github.issues.opened'], filter: {} },
-    { eventType: InboundEventTypes['github.issues.reopened'], filter: {} },
-    { eventType: InboundEventTypes['github.issues.closed'], filter: {} },
-    { eventType: InboundEventTypes['github.release.published'], filter: {} },
-    { eventType: InboundEventTypes['github.workflow_run.failed'], filter: {} },
-  ],
-};
 
 // Wire shapes of the `notification` tRPC router. `z.object` strips unknown keys at
 // runtime, so a repo row passed through `.output()` loses every column not listed

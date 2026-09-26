@@ -5,6 +5,7 @@ import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
@@ -15,6 +16,7 @@ import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
@@ -36,6 +38,8 @@ export interface TrpcDeps extends Services {
   audit: AuditService;
   projects: ProjectService;
   products: ProductEnablementService;
+  /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
+  inbound?: InboundDomain;
   notifications?: ChannelService;
 }
 
@@ -66,6 +70,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         audit: deps.audit,
         projects: deps.projects,
         products: deps.products,
+        inbound: deps.inbound,
         notifications: deps.notifications,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
@@ -88,6 +93,7 @@ export async function trpcHandler(request: Request): Promise<Response> {
     audit: getAudit().audit,
     projects: getProjectDomain().projects,
     products: getProjectDomain().products,
+    inbound: getInbound(),
     notifications: getNotification().channels,
   })(request);
 }

@@ -1,7 +1,7 @@
 import { NeutralMessageLimits } from '@mocco/common/notification';
 import { describe, expect, it } from 'vitest';
 
-import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/vercel';
+import { deliveryId, parse, sourceEvent, verify } from '@backend/domain/inbound/sources/vercel';
 import {
   encode,
   expectEvent,
@@ -192,5 +192,17 @@ describe('vercel parse', () => {
     expect(expectIgnored(parse('{"id":"x","type":"deployment.error","payload":"x"}', noHeaders))).toBe(
       'vercel deployment payload does not match the expected shape',
     );
+  });
+});
+
+describe('vercel sourceEvent', () => {
+  it('is the payload type', () => {
+    expect(sourceEvent(readFixture('vercel/deployment-created.json'), noHeaders)).toBe('deployment.created');
+    expect(sourceEvent(readFixture('vercel/project-created.json'), noHeaders)).toBe('project.created');
+  });
+
+  it('is undefined for a body without a type', () => {
+    expect(sourceEvent('{}', noHeaders)).toBeUndefined();
+    expect(sourceEvent('not json', noHeaders)).toBeUndefined();
   });
 });
