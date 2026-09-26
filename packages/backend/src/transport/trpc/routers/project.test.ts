@@ -26,10 +26,10 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { productProcedure } from '@backend/transport/trpc/project-procedures';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 import { router } from '@backend/transport/trpc/trpc';
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
@@ -97,7 +97,7 @@ describe('project + product routers on pglite', () => {
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     const ctx = {
-      ...createProjectDomain(t.db),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,

@@ -27,10 +27,10 @@ import { RoleService } from '@backend/domain/governance/RoleService';
 import { createInboundHarness, ingestKeyOf, signedDelivery } from '@backend/domain/inbound/testing/harness';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 import type { InboundDomain } from '@backend/domain/inbound/instance';
 
@@ -84,7 +84,7 @@ describe('inbound router on pglite', () => {
       },
     });
     const api = appRouter.createCaller({
-      ...createProjectDomain(t.db),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,

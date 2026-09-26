@@ -33,11 +33,11 @@ import {
   messageCreated,
   seedGuild,
 } from '@backend/domain/notification/testing/channel-service';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { notificationRouter } from '@backend/transport/trpc/routers/notification';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 import type { FakeReply } from '@backend/domain/notification/testing/fake-discord-fetch';
 
@@ -120,7 +120,7 @@ describe('notification router on pglite', () => {
     });
     const { service, requests } = createTestChannelService(t.db, ...script);
     const ctx = {
-      ...createProjectDomain(t.db),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,

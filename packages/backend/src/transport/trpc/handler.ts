@@ -8,12 +8,14 @@ import { getGovernance } from '@backend/domain/governance/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { getNotification } from '@backend/domain/notification/instance';
+import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { InboundDomain } from '@backend/domain/inbound/instance';
@@ -21,6 +23,7 @@ import type { CommitConfigService } from '@backend/domain/integration/CommitConf
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
+import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Context } from '@backend/transport/trpc/trpc';
@@ -34,10 +37,12 @@ export interface TrpcDeps extends Services {
   runs: RunService;
   roles: RoleService;
   gates: GateService;
+  approvals: ApprovalService;
   grants: GrantService;
   audit: AuditService;
   projects: ProjectService;
   products: ProductEnablementService;
+  versionPolicies: VersionPolicyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound?: InboundDomain;
   notifications?: ChannelService;
@@ -66,10 +71,12 @@ export function createTrpcHandler(deps: TrpcDeps) {
         runs: deps.runs,
         roles: deps.roles,
         gates: deps.gates,
+        approvals: deps.approvals,
         grants: deps.grants,
         audit: deps.audit,
         projects: deps.projects,
         products: deps.products,
+        versionPolicies: deps.versionPolicies,
         inbound: deps.inbound,
         notifications: deps.notifications,
         session: await deps.auth.getSession(request.headers),
@@ -89,10 +96,12 @@ export async function trpcHandler(request: Request): Promise<Response> {
     runs: getExecution().runs,
     roles: getGovernance().roles,
     gates: getGovernance().gates,
+    approvals: getGovernance().approvals,
     grants: getCredential().grants,
     audit: getAudit().audit,
     projects: getProjectDomain().projects,
     products: getProjectDomain().products,
+    versionPolicies: getOtaDomain().versionPolicies,
     inbound: getInbound(),
     notifications: getNotification().channels,
   })(request);

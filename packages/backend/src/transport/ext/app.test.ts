@@ -26,6 +26,8 @@ import { ConnectStateRepo } from '@backend/domain/integration/repos/connect-stat
 import { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
 import { RepoRepo } from '@backend/domain/integration/repos/repo.repo';
 import { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { MoccoConfigParser } from '@backend/domain/pipeline/MoccoConfigParser';
 import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -99,6 +101,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         }),
       }),
       deliveries: new WebhookDeliveryRepo(t.db),
+      versionChecks: new VersionCheckService({ policies: new AppVersionPolicyRepo(t.db) }),
       broker: new CredentialBroker({
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),

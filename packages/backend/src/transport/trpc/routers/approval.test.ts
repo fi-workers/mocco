@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
+import { ApprovalKinds } from '@mocco/common/governance';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -24,23 +25,9 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { expectOne } from '@backend/infra/db/rows';
-import { providerConnections, repos } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
-
-/** A create-grant input for the given workspace + repo. Module-scoped (captures
- * nothing) per unicorn/consistent-function-scoping. */
-const grantInput = (workspaceId: string, repoId: string) => ({
-  workspaceId,
-  repoId,
-  pipeline: 'deploy',
-  gateName: 'prod-approval',
-  provider: 'aws',
-  role: 'deploy-role',
-  maxTtlSeconds: 3600,
-});
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
   const response = await auth.handler(
@@ -53,7 +40,7 @@ const signUpViaHttp = async (auth: AuthService, email: string) => {
   return new Headers({ cookie: response.headers.get('set-cookie') ?? '' });
 };
 
-describe('credentialGrant router on pglite', () => {
+describe('approval router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
   let workspace: WorkspaceService;
@@ -84,7 +71,7 @@ describe('credentialGrant router on pglite', () => {
       callbackUrl: 'http://localhost:3100/api/ext/callback',
       audit: makeAudit(),
       waitUntil: () => {
-        /* grant router tests don't exercise the run loop */
+        /* approval router tests don't exercise the run loop */
       },
     });
 
@@ -104,7 +91,7 @@ describe('credentialGrant router on pglite', () => {
       audit: makeAudit(),
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
-    return appRouter.createCaller({
+    const ctx = {
       ...contextServices(t.db),
       auth,
       workspace,
@@ -115,87 +102,50 @@ describe('credentialGrant router on pglite', () => {
       audit: makeAudit(),
       session,
       headers,
-    });
+    };
+    return { api: appRouter.createCaller(ctx), ctx, userId: session?.user.id ?? '' };
   };
 
-  /** Seed a repo under a workspace (via a provider connection), returning its id. */
-  const seedRepo = async (workspaceId: string): Promise<string> => {
-    const conn = expectOne(
-      await t.db
-        .insert(providerConnections)
-        .values({ workspaceId, provider: 'github', externalAccountId: randomUUID(), accountLogin: 'acme' })
-        .returning(),
-    );
-    return expectOne(
-      await t.db
-        .insert(repos)
-        .values({
-          workspaceId,
-          connectionId: conn.id,
-          externalRepoId: randomUUID(),
-          owner: 'fi-workers',
-          name: 'api',
-          defaultBranch: 'main',
-        })
-        .returning(),
-    ).id;
-  };
-
-  describe('create / list / delete', () => {
-    it('creates a grant and returns it (workspaceId present, no leak)', async () => {
-      const api = await signedInCaller('create@example.com');
-      const { workspace: ws } = await api.workspace.create({ name: 'W' });
-      const repoId = await seedRepo(ws.id);
-
-      const { grant } = await api.credentialGrant.create(grantInput(ws.id, repoId));
-      expect(grant).toMatchObject({ workspaceId: ws.id, repoId, provider: 'aws', role: 'deploy-role' });
-
-      const { grants } = await api.credentialGrant.list({ workspaceId: ws.id });
-      expect(grants).toHaveLength(1);
-      expect(grants[0]?.id).toBe(grant.id);
+  it('lists, gets and votes on a request; approval maps FORBIDDEN for a voter without the role', async () => {
+    const owner = await signedInCaller('owner@example.com');
+    const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
+    const { role } = await owner.api.role.create({ workspaceId: ws.id, name: 'release' });
+    const request = await owner.ctx.approvals.request(ws.id, {
+      kind: ApprovalKinds.review,
+      subjectType: 'test.change',
+      subjectId: 'x',
+      action: { a: 1 },
+      requirements: { resume: [{ role: 'release', count: 1 }], prevent_self: false, reason_required: false },
+      requestedByUserId: null,
     });
 
-    it('deletes a grant', async () => {
-      const api = await signedInCaller('delete@example.com');
-      const { workspace: ws } = await api.workspace.create({ name: 'W' });
-      const repoId = await seedRepo(ws.id);
-      const { grant } = await api.credentialGrant.create(grantInput(ws.id, repoId));
+    const { requests } = await owner.api.approval.list({ workspaceId: ws.id });
+    expect(requests.map(row => row.id)).toEqual([request.id]);
+    await expect(
+      owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
-      await api.credentialGrant.delete({ workspaceId: ws.id, grantId: grant.id });
-      const { grants } = await api.credentialGrant.list({ workspaceId: ws.id });
-      expect(grants).toHaveLength(0);
-    });
-
-    it('deleting an unknown grant is NOT_FOUND', async () => {
-      const api = await signedInCaller('delete-unknown@example.com');
-      const { workspace: ws } = await api.workspace.create({ name: 'W' });
-      await expect(api.credentialGrant.delete({ workspaceId: ws.id, grantId: randomUUID() })).rejects.toMatchObject({
-        code: 'NOT_FOUND',
-      });
-    });
+    await owner.api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId: owner.userId });
+    const voted = await owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' });
+    expect(voted.request.state).toBe('approved');
+    expect(voted.votes).toHaveLength(1);
+    await expect(
+      owner.api.approval.vote({ workspaceId: ws.id, requestId: request.id, decision: 'approve' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  describe('tenant isolation', () => {
-    it('a non-member cannot list grants in another workspace (NOT_FOUND)', async () => {
-      const owner = await signedInCaller('owner-list@example.com');
-      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+  it('a non-member gets NOT_FOUND on every approval procedure', async () => {
+    const owner = await signedInCaller('owner-2@example.com');
+    const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
+    const stranger = await signedInCaller('stranger@example.com');
+    const requestId = randomUUID();
 
-      const stranger = await signedInCaller('stranger-list@example.com');
-      await expect(stranger.credentialGrant.list({ workspaceId: wsA.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(stranger.api.approval.list({ workspaceId: ws.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(stranger.api.approval.get({ workspaceId: ws.id, requestId })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
     });
-
-    it("a grant belonging to another workspace maps to NOT_FOUND (deleting via B's workspaceId)", async () => {
-      const ownerA = await signedInCaller('owner-a@example.com');
-      const { workspace: wsA } = await ownerA.workspace.create({ name: 'A' });
-      const repoId = await seedRepo(wsA.id);
-      const { grant } = await ownerA.credentialGrant.create(grantInput(wsA.id, repoId));
-
-      const memberB = await signedInCaller('member-b@example.com');
-      const { workspace: wsB } = await memberB.workspace.create({ name: 'B' });
-
-      await expect(memberB.credentialGrant.delete({ workspaceId: wsB.id, grantId: grant.id })).rejects.toMatchObject({
-        code: 'NOT_FOUND',
-      });
-    });
+    await expect(
+      stranger.api.approval.vote({ workspaceId: ws.id, requestId, decision: 'approve' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

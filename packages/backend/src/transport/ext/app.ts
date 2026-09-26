@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // External inbound REST surface (ADR 0011): a Hono app mounted under the Next
 // App Router at /api/ext. transport/ext/ is the only hono importer. Handlers parse at the
 // boundary and delegate to domain services; no vendor/SQL detail is ever
@@ -5,8 +7,10 @@
 import { credentialRequestSchema } from '@mocco/common/credential';
 import { dispatchContextSchema, runCallbackSchema } from '@mocco/common/execution';
 import { Providers } from '@mocco/common/integration';
+import { versionSchema } from '@mocco/common/ota';
 import { waitUntil } from '@vercel/functions';
 import { Hono } from 'hono';
+import { z } from 'zod';
 
 import { getServices } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
@@ -21,6 +25,7 @@ import { parseWebhook, verify } from '@backend/domain/integration/github/provide
 import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
 import { getNotification } from '@backend/domain/notification/instance';
+import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
 import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
@@ -36,6 +41,7 @@ import type { CommitSyncService } from '@backend/domain/integration/CommitSyncSe
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { GitHubProvider } from '@backend/domain/integration/github/provider';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import type { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 
 export interface ExtDeps {
   auth: AuthService;
@@ -51,6 +57,8 @@ export interface ExtDeps {
   /** The credential broker — the fail-closed enforcement `/credentials` delegates to.
    * Always present (the credential domain has no external dependency to gate on). */
   broker: CredentialBroker;
+  /** The public version check (OTA version policy). Always present (no external dependency). */
+  versionChecks: VersionCheckService;
   /** This deployment's own callback URL. `/executor/generic` posts callbacks HERE, never
    * to the URL in the request body — that endpoint is public, so trusting a caller-supplied
    * `callbackUrl` would be an SSRF (our server POSTing to an attacker-chosen host). */
@@ -76,6 +84,17 @@ export interface ExtDeps {
 }
 
 const WORKSPACES = '/workspaces';
+
+/** Version checks are public and identical for every user of an app version, so a CDN
+ * may cache them briefly; a policy change reaches devices within about a minute. */
+const VERSION_CHECK_CACHE = 'public, max-age=60, s-maxage=60, stale-while-revalidate=300';
+const uuidSchema = z.uuid();
+const localeSchema = z.string().regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/);
+
+/** A strong ETag over the exact response body, so an unchanged answer is a 304. */
+function etagOf(body: string): string {
+  return `"${createHash('sha256').update(body).digest('base64url').slice(0, 27)}"`;
+}
 const SIGN_IN = '/auth/sign-in';
 
 /** Parse a request body as JSON, yielding `undefined` for a malformed body (so the
@@ -265,6 +284,33 @@ export function createExtApp(deps: ExtDeps): Hono {
     return c.text('accepted', 202);
   });
 
+  // Public version check (OTA version policy, phase 2 of the OTA release control design).
+  // Apps call it on launch with their installed version; the answer is ok | soft | hard
+  // with the localized prompt and store link. Unauthenticated by design — the policy is
+  // shown to every user of the app — keyed by the app id, and cacheable. An unknown app
+  // or one without a policy is `ok`, so misconfiguration never locks users out.
+  app.get('/v1/apps/:appId/version-check', async c => {
+    const appId = uuidSchema.safeParse(c.req.param('appId'));
+    const version = versionSchema.safeParse(c.req.query('version'));
+    const localeParam = c.req.query('locale');
+    const locale = localeParam === undefined ? undefined : localeSchema.safeParse(localeParam);
+    if (!appId.success || !version.success || locale?.success === false) {
+      return c.json({ error: 'invalid request' }, 400, { 'Access-Control-Allow-Origin': '*' });
+    }
+    const result = await deps.versionChecks.check(appId.data, version.data, locale?.data);
+    const body = JSON.stringify(result);
+    const etag = etagOf(body);
+    const headers = {
+      'Cache-Control': VERSION_CHECK_CACHE,
+      ETag: etag,
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'application/json; charset=utf-8',
+    };
+    if (c.req.header('if-none-match') === etag) {
+      return c.body(null, 304, headers);
+    }
+    return c.body(body, 200, headers);
+  });
   // Inbound webhooks from Sentry, Vercel and GitHub (notification relay design §5).
   app.route('/', createInboundRoutes(deps.inbound));
   // Discord bot install (relay design §6): /discord/install and /discord/callback.
@@ -299,6 +345,7 @@ export async function extHandler(request: Request): Promise<Response> {
     deliveries: integration?.deliveries,
     runs: execution.runs,
     broker: getCredential().broker,
+    versionChecks: getOtaDomain().versionChecks,
     callbackUrl: execution.callbackUrl,
     postJson,
     // Undefined here → the webhook route 503s, mirroring the integration-unconfigured 503.

@@ -50,3 +50,51 @@ export class NotAuthorizedToResumeError extends ForbiddenError {
     this.name = 'NotAuthorizedToResumeError';
   }
 }
+
+/** An approval request the workspace doesn't own, or that doesn't exist — NOT_FOUND. */
+export class ApprovalNotFoundError extends NotFoundError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`Approval request ${id} was not found`, options);
+    this.name = 'ApprovalNotFoundError';
+  }
+}
+
+/** The request is no longer collecting votes (approved, rejected, expired or superseded) — BAD_REQUEST. */
+export class ApprovalNotPendingError extends BadRequestError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`Approval request ${id} is no longer pending`, options);
+    this.name = 'ApprovalNotPendingError';
+  }
+}
+
+/** `prevent_self` is set and the voter requested the change — BAD_REQUEST. */
+export class SelfApprovalError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('You cannot approve a change you requested', options);
+    this.name = 'SelfApprovalError';
+  }
+}
+
+/** The voter holds none of the roles the request requires — FORBIDDEN. */
+export class NotAuthorizedToApproveError extends ForbiddenError {
+  constructor(options?: ErrorOptions) {
+    super('You are not in a role authorized to approve this change', options);
+    this.name = 'NotAuthorizedToApproveError';
+  }
+}
+
+/** The request sets `reason_required` and the vote carried no reason — BAD_REQUEST. */
+export class ApprovalReasonRequiredError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('This approval requires a reason', options);
+    this.name = 'ApprovalReasonRequiredError';
+  }
+}
+
+/** The voter already voted on this request — BAD_REQUEST (one vote per person). */
+export class DuplicateApprovalVoteError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('You have already voted on this approval', options);
+    this.name = 'DuplicateApprovalVoteError';
+  }
+}

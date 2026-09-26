@@ -113,6 +113,19 @@ export class ProjectService {
     }
   }
 
+  /** An app of the project, or throw ProjectAppNotFoundError (product domains scope per-app data through this). */
+  async requireApp(workspaceId: string, projectId: string, appId: string) {
+    await this.requireProject(workspaceId, projectId);
+    try {
+      return await this.deps.apps.getInProject(workspaceId, projectId, appId);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new ProjectAppNotFoundError(appId, { cause: error });
+      }
+      throw error;
+    }
+  }
+
   /** A project's apps, name-ordered. */
   async listApps(workspaceId: string, projectId: string) {
     await this.requireProject(workspaceId, projectId);
