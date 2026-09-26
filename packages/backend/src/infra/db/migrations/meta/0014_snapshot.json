@@ -1,5 +1,5 @@
 {
-  "id": "7a7f38a7-103e-445b-893f-319c76823520",
+  "id": "843be43d-f3dd-48eb-9f4d-dbc6728c7e05",
   "prevId": "d42f0dc6-d391-493c-b2b4-258d58631859",
   "version": "7",
   "dialect": "postgresql",
@@ -132,609 +132,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mocco_app_version_policies": {
-      "name": "mocco_app_version_policies",
-      "schema": "",
-      "columns": {
-        "app_id": {
-          "name": "app_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "min_supported_version": {
-          "name": "min_supported_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recommended_version": {
-          "name": "recommended_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "blocked_versions": {
-          "name": "blocked_versions",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "messages": {
-          "name": "messages",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "store_url": {
-          "name": "store_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "soft_prompt_interval_hours": {
-          "name": "soft_prompt_interval_hours",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 72
-        },
-        "approval_policy": {
-          "name": "approval_policy",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "mocco_app_version_policies_app_workspace_fk": {
-          "name": "mocco_app_version_policies_app_workspace_fk",
-          "tableFrom": "mocco_app_version_policies",
-          "tableTo": "mocco_project_apps",
-          "columnsFrom": [
-            "app_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_app_version_policies_project_workspace_fk": {
-          "name": "mocco_app_version_policies_project_workspace_fk",
-          "tableFrom": "mocco_app_version_policies",
-          "tableTo": "mocco_projects",
-          "columnsFrom": [
-            "project_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_app_version_policies_interval_check": {
-          "name": "mocco_app_version_policies_interval_check",
-          "value": "\"mocco_app_version_policies\".\"soft_prompt_interval_hours\" BETWEEN 1 AND 8760"
-        },
-        "mocco_app_version_policies_revision_check": {
-          "name": "mocco_app_version_policies_revision_check",
-          "value": "\"mocco_app_version_policies\".\"revision\" >= 1"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.mocco_app_version_policy_changes": {
-      "name": "mocco_app_version_policy_changes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "app_id": {
-          "name": "app_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "before": {
-          "name": "before",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "after": {
-          "name": "after",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "direction": {
-          "name": "direction",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "actor_user_id": {
-          "name": "actor_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approval_request_id": {
-          "name": "approval_request_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mocco_app_version_policy_changes_app_idx": {
-          "name": "mocco_app_version_policy_changes_app_idx",
-          "columns": [
-            {
-              "expression": "app_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mocco_app_version_policy_changes_actor_user_id_mocco_users_id_fk": {
-          "name": "mocco_app_version_policy_changes_actor_user_id_mocco_users_id_fk",
-          "tableFrom": "mocco_app_version_policy_changes",
-          "tableTo": "mocco_users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "mocco_app_version_policy_changes_approval_request_id_mocco_approval_requests_id_fk": {
-          "name": "mocco_app_version_policy_changes_approval_request_id_mocco_approval_requests_id_fk",
-          "tableFrom": "mocco_app_version_policy_changes",
-          "tableTo": "mocco_approval_requests",
-          "columnsFrom": [
-            "approval_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "mocco_app_version_policy_changes_app_workspace_fk": {
-          "name": "mocco_app_version_policy_changes_app_workspace_fk",
-          "tableFrom": "mocco_app_version_policy_changes",
-          "tableTo": "mocco_project_apps",
-          "columnsFrom": [
-            "app_id",
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id",
-            "workspace_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_app_version_policy_changes_direction_check": {
-          "name": "mocco_app_version_policy_changes_direction_check",
-          "value": "\"mocco_app_version_policy_changes\".\"direction\" IN ('tighten','relax','none')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.mocco_approval_requests": {
-      "name": "mocco_approval_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_type": {
-          "name": "subject_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_id": {
-          "name": "subject_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "action": {
-          "name": "action",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "requirements": {
-          "name": "requirements",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requested_by_user_id": {
-          "name": "requested_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resolved_at": {
-          "name": "resolved_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mocco_approval_requests_workspace_state_idx": {
-          "name": "mocco_approval_requests_workspace_state_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mocco_approval_requests_subject_idx": {
-          "name": "mocco_approval_requests_subject_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mocco_approval_requests_workspace_id_mocco_workspaces_id_fk": {
-          "name": "mocco_approval_requests_workspace_id_mocco_workspaces_id_fk",
-          "tableFrom": "mocco_approval_requests",
-          "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_requests_requested_by_user_id_mocco_users_id_fk": {
-          "name": "mocco_approval_requests_requested_by_user_id_mocco_users_id_fk",
-          "tableFrom": "mocco_approval_requests",
-          "tableTo": "mocco_users",
-          "columnsFrom": [
-            "requested_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_approval_requests_kind_check": {
-          "name": "mocco_approval_requests_kind_check",
-          "value": "\"mocco_approval_requests\".\"kind\" IN ('pre_approval','review')"
-        },
-        "mocco_approval_requests_state_check": {
-          "name": "mocco_approval_requests_state_check",
-          "value": "\"mocco_approval_requests\".\"state\" IN ('pending','approved','rejected','expired','superseded')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.mocco_approval_votes": {
-      "name": "mocco_approval_votes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "request_id": {
-          "name": "request_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role_id": {
-          "name": "role_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decision": {
-          "name": "decision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mocco_approval_votes_request_user_uq": {
-          "name": "mocco_approval_votes_request_user_uq",
-          "columns": [
-            {
-              "expression": "request_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mocco_approval_votes_workspace_id_mocco_workspaces_id_fk": {
-          "name": "mocco_approval_votes_workspace_id_mocco_workspaces_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_request_id_mocco_approval_requests_id_fk": {
-          "name": "mocco_approval_votes_request_id_mocco_approval_requests_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_approval_requests",
-          "columnsFrom": [
-            "request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_user_id_mocco_users_id_fk": {
-          "name": "mocco_approval_votes_user_id_mocco_users_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "mocco_approval_votes_role_id_mocco_roles_id_fk": {
-          "name": "mocco_approval_votes_role_id_mocco_roles_id_fk",
-          "tableFrom": "mocco_approval_votes",
-          "tableTo": "mocco_roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "mocco_approval_votes_decision_check": {
-          "name": "mocco_approval_votes_decision_check",
-          "value": "\"mocco_approval_votes\".\"decision\" IN ('approve','reject')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.mocco_audit_log": {
@@ -1241,6 +638,258 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mocco_domain_event_deliveries": {
+      "name": "mocco_domain_event_deliveries",
+      "schema": "",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subscriber": {
+          "name": "subscriber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delivered_at": {
+          "name": "delivered_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "mocco_domain_event_deliveries_event_id_mocco_domain_events_id_fk": {
+          "name": "mocco_domain_event_deliveries_event_id_mocco_domain_events_id_fk",
+          "tableFrom": "mocco_domain_event_deliveries",
+          "tableTo": "mocco_domain_events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "mocco_domain_event_deliveries_pk": {
+          "name": "mocco_domain_event_deliveries_pk",
+          "columns": [
+            "event_id",
+            "subscriber"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mocco_domain_events": {
+      "name": "mocco_domain_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigserial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_type": {
+          "name": "subject_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mocco_domain_events_workspace_occurred_at_idx": {
+          "name": "mocco_domain_events_workspace_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_domain_events_type_occurred_at_idx": {
+          "name": "mocco_domain_events_type_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_domain_events_occurred_at_idx": {
+          "name": "mocco_domain_events_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mocco_domain_events_workspace_dedupe_key_uq": {
+          "name": "mocco_domain_events_workspace_dedupe_key_uq",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "dedupe_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"mocco_domain_events\".\"dedupe_key\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_domain_events_workspace_id_mocco_workspaces_id_fk": {
+          "name": "mocco_domain_events_workspace_id_mocco_workspaces_id_fk",
+          "tableFrom": "mocco_domain_events",
+          "tableTo": "mocco_workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mocco_domain_events_project_workspace_fk": {
+          "name": "mocco_domain_events_project_workspace_fk",
+          "tableFrom": "mocco_domain_events",
+          "tableTo": "mocco_projects",
+          "columnsFrom": [
+            "project_id",
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id",
+            "workspace_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "mocco_domain_events_seq_uq": {
+          "name": "mocco_domain_events_seq_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "seq"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2095,16 +1744,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "mocco_project_apps_id_workspace_uq": {
-          "name": "mocco_project_apps_id_workspace_uq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "id",
-            "workspace_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "mocco_project_apps_platform_check": {

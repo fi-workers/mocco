@@ -52,8 +52,10 @@ Export the domain's handlers from a pure factory in `domain/<x>/jobs.ts`
 imports its own `instance.ts` (see [composition](#composition)). Kinds are `<domain>.<verb>`; keep
 them in an `as const` object in the domain. Two handlers for one kind throw at startup.
 
-`ctx` carries `jobId`, `kind`, `attempt` (1 on the first try), `workspaceId`, `now()` and
-`deadline` (when this run's lock expires).
+`ctx` carries `jobId`, `kind`, `attempt` (1 on the first try), `maxAttempts`, `isFinalAttempt`
+(no attempts left after this one: a throw now ends the job `dead`; computed by the runner so
+handlers never re-implement the rule), `workspaceId`, `now()` and `deadline` (when this run's lock
+expires).
 
 ### Handlers must tolerate running twice
 
@@ -140,6 +142,11 @@ The job goes back to `queued` with `run_at` at that time (a time in the past mea
 (`JobPolicy.maxConsecutiveDeferrals`, tracked in `mocco_jobs.deferrals`). Past five, each further
 RetryAt counts as an attempt, so a handler that always asks for "later" still ends `dead` after
 `max_attempts`. Any other outcome, including a reclaim, resets the count.
+
+A **free wait**, `new RetryAt(at, reason, { consumesAttempt: false })`, is for waiting that is not a
+failure (a shared rate limit bucket, a fairness quota, a paused dependency): the runner always
+refunds the attempt and does not count it in `deferrals`, so it never makes the job `dead`. The
+handler must bound such waits itself (the notification delivery fails after 24 h queued).
 
 ## Schedules
 
@@ -230,6 +237,13 @@ Two roots, so that no domain's `instance.ts` imports another's through the job r
 - **`runtime/jobs.ts` → `getJobRunner()` / `createJobRunner(db, deps)`** sits above the domains,
   like transport. It builds the `JobHandlerRegistry` from each domain's pure handler factory. The
   tick route uses it.
+- **Handlers that need another domain's service get it built here, not imported from its
+  `instance.ts`.** The event handlers are the example: `runtime/jobs.ts` builds its own
+  `EventBus` with the pure `createEventBus({ db, queue, now })` (`domain/events/subscriptions.ts`)
+  over a queue whose kicks run on the same runner, and passes it to `createEventHandlers`.
+  Importing `getEventBus()` instead would close the cycle
+  `events/instance → jobs/instance → (kick) runtime/jobs → events/instance`, which
+  `import-x/no-cycle` rejects. See [domain events](./events.md#subscribing).
 
 ## Testing
 

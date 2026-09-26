@@ -3,7 +3,9 @@
 import { approvalRouter } from '@backend/transport/trpc/routers/approval';
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
+import { inboundRouter } from '@backend/transport/trpc/routers/inbound';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
+import { notificationRouter } from '@backend/transport/trpc/routers/notification';
 import { otaRouter } from '@backend/transport/trpc/routers/ota';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
 import { productRouter } from '@backend/transport/trpc/routers/product';
@@ -27,6 +29,8 @@ export const appRouter = router({
   project: projectRouter,
   product: productRouter,
   ota: otaRouter,
+  inbound: inboundRouter,
+  notification: notificationRouter,
 });
 
 export type AppRouter = typeof appRouter;

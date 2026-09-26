@@ -11,6 +11,7 @@ import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { GrantService } from '@backend/domain/credential/GrantService';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
+import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -58,6 +59,7 @@ describe('approval router on pglite', () => {
 
   const makeRuns = (): RunService =>
     new RunService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),
@@ -79,6 +81,7 @@ describe('approval router on pglite', () => {
     const runs = makeRuns();
     const roles = new RoleService({ roles: new RoleRepo(t.db), memberships: new RoleMembershipRepo(t.db) });
     const gates = new GateService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       runGates: new RunGateRepo(t.db),
       resumes: new ResumeRepo(t.db),

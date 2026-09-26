@@ -158,6 +158,8 @@ export class JobRunner {
         jobId: job.id,
         kind: job.kind,
         attempt: job.attempts,
+        maxAttempts: job.maxAttempts,
+        isFinalAttempt: job.attempts >= job.maxAttempts,
         workspaceId: job.workspaceId,
         now: this.deps.now,
         deadline: job.lockedUntil ?? new Date(this.deps.now().getTime() + this.visibilityMs),
@@ -181,6 +183,16 @@ export class JobRunner {
   private async deferred(job: Job, retry: RetryAt): Promise<JobOutcome> {
     const now = this.deps.now();
     const runAt = retry.at.getTime() < now.getTime() ? now : retry.at;
+    if (retry.isFreeWait) {
+      // A wait, not a failure: always refunded, and it doesn't count towards the cap.
+      const isWritten = await this.deps.jobs.defer(job, {
+        runAt,
+        reason: describeError(retry),
+        refundAttempt: true,
+        countsDeferral: false,
+      });
+      return unlessLost(isWritten, JobOutcomes.deferred);
+    }
     const shouldRefund = job.deferrals < JobPolicy.maxConsecutiveDeferrals;
     if (!shouldRefund && job.attempts >= job.maxAttempts) {
       return await this.dead(
@@ -192,6 +204,7 @@ export class JobRunner {
       runAt,
       reason: describeError(retry),
       refundAttempt: shouldRefund,
+      countsDeferral: true,
     });
     return unlessLost(isWritten, JobOutcomes.deferred);
   }
