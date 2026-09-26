@@ -22,6 +22,7 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
@@ -32,9 +33,9 @@ import type { Context } from '@backend/transport/trpc/trpc';
 /** Injected per-handler deps. `connection`/`commitSync`/`commitConfig` are present only
  * when the GitHub App is configured; `runs` is always present (no external dependency). */
 export interface TrpcDeps extends Services {
-  connection?: ConnectionService;
-  commitSync?: CommitSyncService;
-  commitConfig?: CommitConfigService;
+  connection: ConnectionService | undefined;
+  commitSync: CommitSyncService | undefined;
+  commitConfig: CommitConfigService | undefined;
   runs: RunService;
   roles: RoleService;
   gates: GateService;
@@ -46,8 +47,9 @@ export interface TrpcDeps extends Services {
   versionPolicies: VersionPolicyService;
   externalCredentials: ExternalCredentialService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
-  inbound?: InboundDomain;
-  notifications?: ChannelService;
+  inbound: InboundDomain | undefined;
+  notifications: ChannelService | undefined;
+  notificationActivity: ActivityService | undefined;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -82,16 +84,20 @@ export function createTrpcHandler(deps: TrpcDeps) {
         externalCredentials: deps.externalCredentials,
         inbound: deps.inbound,
         notifications: deps.notifications,
+        notificationActivity: deps.notificationActivity,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
     });
 }
 
-/** Production tRPC fetch handler (prod is mounted via the Pages-Router `pages/api/trpc/[trpc].ts`). */
-export async function trpcHandler(request: Request): Promise<Response> {
+/** The production services every tRPC context carries — the ONE place they are
+ * composed. Both `trpcHandler` below and the Pages-Router API route
+ * (`pages/api/trpc/[trpc].ts`) build their context from this, so a router's
+ * service can't be wired in one entry point and forgotten in the other. */
+export function productionServices(): TrpcDeps {
   const integration = getIntegration();
-  return await createTrpcHandler({
+  return {
     ...getServices(),
     connection: integration?.connection,
     commitSync: integration?.commitSync,
@@ -108,5 +114,11 @@ export async function trpcHandler(request: Request): Promise<Response> {
     externalCredentials: getOtaDomain().externalCredentials,
     inbound: getInbound(),
     notifications: getNotification().channels,
-  })(request);
+    notificationActivity: getNotification().activity,
+  };
+}
+
+/** Production tRPC fetch handler (prod is mounted via the Pages-Router `pages/api/trpc/[trpc].ts`). */
+export async function trpcHandler(request: Request): Promise<Response> {
+  return await createTrpcHandler(productionServices())(request);
 }

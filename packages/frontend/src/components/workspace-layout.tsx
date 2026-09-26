@@ -9,7 +9,7 @@ import { cn } from '@frontend/lib/utils';
 
 import type { ReactNode } from 'react';
 
-type Section = 'overview' | 'members' | 'access' | 'audit' | 'settings';
+type Section = 'overview' | 'members' | 'access' | 'notifications' | 'audit' | 'settings';
 
 interface Props {
   workspaceId: string;
@@ -61,6 +61,7 @@ export default function WorkspaceLayout({ workspaceId, active, children }: Props
     { key: 'overview', label: 'Overview', href: Routes.workspace(workspaceId) },
     { key: 'members', label: 'Members', href: Routes.workspaceMembers(workspaceId) },
     { key: 'access', label: 'Access', href: Routes.workspaceAccess(workspaceId) },
+    { key: 'notifications', label: 'Notifications', href: Routes.workspaceNotifications(workspaceId) },
     { key: 'audit', label: 'Audit', href: Routes.workspaceAudit(workspaceId) },
     { key: 'settings', label: 'Settings', href: Routes.workspaceSettings(workspaceId) },
   ];
@@ -79,6 +80,7 @@ export default function WorkspaceLayout({ workspaceId, active, children }: Props
             <Link
               key={item.key}
               href={item.href}
+              aria-current={item.key === active ? 'page' : undefined}
               className={cn(
                 'rounded-lg px-3 py-2 text-sm font-medium transition',
                 item.key === active

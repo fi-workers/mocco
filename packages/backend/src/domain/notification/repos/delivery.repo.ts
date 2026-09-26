@@ -1,6 +1,7 @@
+import { InboundEventTypes } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { DeliveryStatuses } from '@mocco/common/notification';
-import { and, count, desc, eq, gte, inArray, lt, min, notExists, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, exists, gte, inArray, lt, min, notExists, notInArray, or, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -8,7 +9,10 @@ import type { Db } from '@backend/infra/db/types';
 import type { DeliveryStatus } from '@mocco/common/notification';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 
-const { notificationDeliveries, jobs } = schema;
+const { notificationDeliveries, jobs, domainEvents } = schema;
+
+/** Event types that come from inbound receipts: the trace reaches those through the receipt. */
+const INBOUND_TYPES: readonly string[] = Object.values(InboundEventTypes);
 
 /** A delivery a run may still act on (not settled). */
 const UNSETTLED: readonly DeliveryStatus[] = [DeliveryStatuses.queued, DeliveryStatuses.sending];
@@ -23,6 +27,14 @@ export type DeliveryUpdate = Pick<
   PgUpdateSetSource<typeof notificationDeliveries>,
   'status' | 'responseCode' | 'error' | 'externalMessageId' | 'nextAttemptAt' | 'sentAt' | 'sendingAt'
 >;
+
+/** A Mocco event that was delivered somewhere, as the activity trace reads it. */
+export interface DeliveredEventRow {
+  id: string;
+  type: string;
+  payload: unknown;
+  occurredAt: Date;
+}
 
 /** Data access for mocco_notification_deliveries (ADR 0012). Reads by id are
  * platform-scoped (the job runner drains every workspace); the row carries its workspace. */
@@ -68,6 +80,68 @@ export class DeliveryRepo {
         ),
       )
       .orderBy(desc(notificationDeliveries.createdAt), desc(notificationDeliveries.id))
+      .limit(options.limit);
+  }
+
+  /** Every delivery of the workspace for these events (the activity trace), oldest first. */
+  async findByEventIds(workspaceId: string, eventIds: readonly string[]): Promise<DeliveryRow[]> {
+    if (eventIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.workspaceId, workspaceId),
+          inArray(notificationDeliveries.eventId, [...eventIds]),
+        ),
+      )
+      .orderBy(notificationDeliveries.createdAt, notificationDeliveries.id);
+  }
+
+  /**
+   * The workspace's Mocco events (not inbound: those are reached through their receipt)
+   * that have at least one delivery, optionally to `channelId`, newest first, strictly
+   * before `before` in (occurred_at, id) order. The activity trace's second stream.
+   */
+  async findDeliveredEvents(
+    workspaceId: string,
+    options: { channelId?: string; before?: { at: Date; id: string }; limit: number },
+  ): Promise<DeliveredEventRow[]> {
+    const delivered = this.db
+      .select({ id: notificationDeliveries.id })
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.workspaceId, workspaceId),
+          eq(notificationDeliveries.eventId, domainEvents.id),
+          options.channelId === undefined ? undefined : eq(notificationDeliveries.channelId, options.channelId),
+        ),
+      );
+    const { before } = options;
+    return await this.db
+      .select({
+        id: domainEvents.id,
+        type: domainEvents.type,
+        payload: domainEvents.payload,
+        occurredAt: domainEvents.occurredAt,
+      })
+      .from(domainEvents)
+      .where(
+        and(
+          eq(domainEvents.workspaceId, workspaceId),
+          notInArray(domainEvents.type, [...INBOUND_TYPES]),
+          exists(delivered),
+          before === undefined
+            ? undefined
+            : or(
+                lt(domainEvents.occurredAt, before.at),
+                and(eq(domainEvents.occurredAt, before.at), lt(domainEvents.id, before.id)),
+              ),
+        ),
+      )
+      .orderBy(desc(domainEvents.occurredAt), desc(domainEvents.id))
       .limit(options.limit);
   }
 

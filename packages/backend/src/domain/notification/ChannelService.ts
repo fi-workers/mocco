@@ -51,6 +51,9 @@ export interface ChannelServiceDeps {
   rateLimits: DiscordRateLimitRepo;
   /** Undefined without DISCORD_BOT_TOKEN: reads still work, Discord calls throw. */
   discord: DiscordChannelApi | undefined;
+  /** Whether the bot install routes are configured (the Discord OAuth pair and the bot
+   * token); false by default, and the install route answers 503. */
+  installAvailable?: boolean;
   now: () => Date;
 }
 
@@ -219,6 +222,11 @@ export class ChannelService {
         throw new Error(`unexpected Discord result ${JSON.stringify(unexpected)}`);
       }
     }
+  }
+
+  /** What this deployment can do with Discord, so the UI can explain a missing setup. */
+  discordSetup(): { installAvailable: boolean; botConfigured: boolean } {
+    return { installAvailable: this.deps.installAvailable ?? false, botConfigured: this.deps.discord !== undefined };
   }
 
   /** Discord servers the bot is installed in for the workspace. */

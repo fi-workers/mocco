@@ -12,9 +12,14 @@ export const Routes = {
   workspaceAccess: (id: string) => `/workspaces/${id}/access`,
   workspaceAudit: (id: string) => `/workspaces/${id}/audit`,
   workspaceSettings: (id: string) => `/workspaces/${id}/settings`,
+  workspaceNotifications: (id: string) => `/workspaces/${id}/notifications`,
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',
+  /** A customer guide page, e.g. `notificationsGuide('sentry')` → `/docs/notifications/sentry`. */
+  notificationsGuide: (page: string) => `/docs/notifications/${page}`,
+  /** Starts the Discord bot install (a Hono route: full navigation, not a client push). */
+  discordInstall: (workspaceId: string) => `/api/ext/discord/install?workspaceId=${encodeURIComponent(workspaceId)}`,
 } as const;
 
 // Only the static string routes — the dynamic builders (e.g. `workspace`) are
