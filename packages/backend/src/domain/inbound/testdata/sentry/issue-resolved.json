@@ -1,0 +1,57 @@
+{
+  "action": "resolved",
+  "installation": {
+    "uuid": "24b397fc-a86e-43ef-9297-949e21b82480"
+  },
+  "data": {
+    "issue": {
+      "url": "https://sentry.io/api/0/organizations/example-org/issues/1234567890/",
+      "web_url": "https://example-org.sentry.io/issues/1234567890/",
+      "project_url": "https://example-org.sentry.io/issues/?project=4509877862268928",
+      "id": "1234567890",
+      "shareId": null,
+      "shortId": "WEB-1Y",
+      "title": "TypeError: Cannot read properties of undefined (reading 'id')",
+      "culprit": "app/components/Checkout.tsx in handleSubmit",
+      "permalink": "https://example-org.sentry.io/issues/1234567890/",
+      "logger": null,
+      "level": "error",
+      "status": "resolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "javascript",
+      "project": {
+        "id": "4509877862268928",
+        "name": "web",
+        "slug": "web",
+        "platform": "javascript-nextjs"
+      },
+      "type": "error",
+      "metadata": {
+        "type": "TypeError",
+        "value": "Cannot read properties of undefined (reading 'id')",
+        "filename": "app/components/Checkout.tsx"
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "isUnhandled": true,
+      "count": "1",
+      "userCount": 1,
+      "firstSeen": "2026-09-24T10:00:00.000000Z",
+      "lastSeen": "2026-09-24T10:00:00.000000Z"
+    }
+  },
+  "actor": {
+    "type": "user",
+    "id": "1",
+    "name": "Jane Doe"
+  }
+}

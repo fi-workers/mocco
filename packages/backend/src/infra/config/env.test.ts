@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { JobTiming } from '@backend/domain/jobs/policy';
+
 const base = {
   DATABASE_URL: 'postgres://x',
   GITHUB_APP_ID: '4284809',
@@ -63,5 +65,23 @@ describe('getEnv', () => {
     vi.stubEnv('GITHUB_WEBHOOK_SECRET', 'whsec');
     const { getEnv } = await import('./env');
     expect(getEnv().GITHUB_WEBHOOK_SECRET).toBe('whsec');
+  });
+
+  it('leaves the job tick secrets optional and defaults the tick budget', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://x');
+    const { getEnv } = await import('./env');
+    const env = getEnv();
+    expect(env.CRON_SECRET).toBeUndefined();
+    expect(env.JOBS_TICK_SECRET).toBeUndefined();
+    expect(env.JOBS_TICK_BUDGET_MS).toBe(JobTiming.defaultTickBudgetMs);
+  });
+
+  it('parses the job tick vars when set', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://x');
+    vi.stubEnv('CRON_SECRET', 'cron');
+    vi.stubEnv('JOBS_TICK_SECRET', 'tick');
+    vi.stubEnv('JOBS_TICK_BUDGET_MS', '20000');
+    const { getEnv } = await import('./env');
+    expect(getEnv()).toMatchObject({ CRON_SECRET: 'cron', JOBS_TICK_SECRET: 'tick', JOBS_TICK_BUDGET_MS: 20_000 });
   });
 });
