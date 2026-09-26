@@ -1,6 +1,8 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
+import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
+import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { OtaTools, PolicyDirections } from '@mocco/common/ota';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
@@ -31,8 +33,17 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
+import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
+import type {
+  ChannelKind,
+  ChannelStatus,
+  DeliveryStatus,
+  DiscordChannelConfig,
+  NeutralMessage,
+  RuleFilter,
+} from '@mocco/common/notification';
 import type { OtaTool, PolicyDirection, VersionMessage, VersionPolicyRules } from '@mocco/common/ota';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
@@ -871,6 +882,382 @@ export const jobSchedules = pgTable(
     // Exactly one of cron / interval_seconds.
     check('mocco_job_schedules_timing_check', sql`(${t.cron} IS NULL) <> (${t.intervalSeconds} IS NULL)`),
     check('mocco_job_schedules_interval_check', sql`${t.intervalSeconds} IS NULL OR ${t.intervalSeconds} > 0`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Domain events (platform foundations §15, ADR 0018). A fact one domain publishes for
+// others to react to; `EventBus.publish` inserts the row and enqueues one
+// `events.deliver` job per subscriber. Pruned after 30 days — the audit log, not this
+// table, is the compliance record. See docs/reference/events.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A published domain event. */
+export const domainEvents = pgTable(
+  'mocco_domain_events',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Insert order across the table, for ordering and debugging. Assigned at insert, not
+    // at commit, so a concurrent publish can become visible with a lower seq than one
+    // already read: not a gap-free cursor for reconcilers.
+    seq: bigserial({ mode: 'bigint' }).notNull().unique('mocco_domain_events_seq_uq'),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id'),
+    // A catalog type from @mocco/common/events (`gate.pending`, …).
+    type: text().notNull(),
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    payload: jsonb()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Set by publishers that may publish the same fact twice (e.g. a redelivered inbound
+    // webhook): a second publish with the key returns the first event.
+    dedupeKey: text('dedupe_key'),
+    occurredAt: timestamp('occurred_at').notNull(),
+    createdAt,
+  },
+  t => [
+    index('mocco_domain_events_workspace_occurred_at_idx').on(t.workspaceId, t.occurredAt),
+    index('mocco_domain_events_type_occurred_at_idx').on(t.type, t.occurredAt),
+    // The prune path (retention counts from occurred_at).
+    index('mocco_domain_events_occurred_at_idx').on(t.occurredAt),
+    uniqueIndex('mocco_domain_events_workspace_dedupe_key_uq')
+      .on(t.workspaceId, t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
+    // A project event is pinned to its workspace (skipped by Postgres while project_id is null).
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_domain_events_project_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One subscriber has handled one event. The `events.deliver` handler checks it first,
+ * so a delivery job that runs again (a second enqueue, a retry after the subscriber
+ * returned) doesn't call the subscriber twice. Deleted with its event. */
+export const domainEventDeliveries = pgTable(
+  'mocco_domain_event_deliveries',
+  {
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => domainEvents.id, { onDelete: 'cascade' }),
+    subscriber: text().notNull(),
+    deliveredAt: timestamp('delivered_at').notNull(),
+  },
+  t => [primaryKey({ columns: [t.eventId, t.subscriber], name: 'mocco_domain_event_deliveries_pk' })],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Notifications (platform foundations §12 F9, notification relay design §6–§8).
+// A channel is a destination (a Discord channel today); rules pick which events
+// reach it; a delivery is one event sent (or not) to one channel, driven by the
+// `notification.deliver` job. See docs/reference/notifications.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A Discord server the Mocco bot was installed into for a workspace (relay design §6). */
+export const discordGuilds = pgTable(
+  'mocco_discord_guilds',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Discord's guild id, taken from the OAuth token response (never the callback query).
+    guildId: text('guild_id').notNull(),
+    guildName: text('guild_name').notNull(),
+    // SET NULL: the install outlives the user who made it.
+    installedByUserId: uuid('installed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When this workspace last installed the bot into the guild (refreshed on every
+    // install). A bot that joined the guild after it was re-added elsewhere: the row is stale.
+    installedAt: timestamp('installed_at').notNull().defaultNow(),
+    createdAt,
+  },
+  t => [
+    // Its prefix serves workspace listing.
+    uniqueIndex('mocco_discord_guilds_workspace_guild_uq').on(t.workspaceId, t.guildId),
+    // A UNIQUE CONSTRAINT so channels' composite FK can reference (id, workspace_id).
+    unique('mocco_discord_guilds_id_workspace_uq').on(t.id, t.workspaceId),
+  ],
+);
+
+/** A destination in a workspace, e.g. one Discord channel the Mocco bot posts to. */
+export const notificationChannels = pgTable(
+  'mocco_notification_channels',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<ChannelKind>().notNull(),
+    // Customer label shown in the UI.
+    name: text().notNull(),
+    // Non-secret settings: `{ guildId, channelId, channelName }` for Discord.
+    config: jsonb().$type<DiscordChannelConfig>().notNull(),
+    // The destination's id at the vendor (the Discord channel id), repeated from
+    // `config` as a column so uniqueness is a plain index.
+    externalId: text('external_id').notNull(),
+    // The Discord install the channel belongs to (mocco_discord_guilds.id); required for
+    // Discord channels. Deleting a stale install deletes its channels.
+    guildId: uuid('guild_id'),
+    // A customer-supplied bot token later ("bring your own bot"); null = the Mocco bot.
+    secretSealed: text('secret_sealed'),
+    status: text().$type<ChannelStatus>().notNull().default(ChannelStatuses.active),
+    // Why the channel was disabled (e.g. Discord 403 Missing Access); null while active.
+    disabledReason: text('disabled_reason'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    // One channel per vendor destination per workspace; its prefix serves workspace listing.
+    uniqueIndex('mocco_notification_channels_workspace_kind_external_uq').on(t.workspaceId, t.kind, t.externalId),
+    // A UNIQUE CONSTRAINT so rules' composite FK can reference (id, workspace_id).
+    unique('mocco_notification_channels_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_notification_channels_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ChannelKinds))})`),
+    check(
+      'mocco_notification_channels_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(ChannelStatuses))})`,
+    ),
+    check(
+      'mocco_notification_channels_guild_check',
+      sql`${t.kind} NOT IN (${sqlInList([ChannelKinds.discord])}) OR ${t.guildId} IS NOT NULL`,
+    ),
+    index('mocco_notification_channels_guild_idx').on(t.guildId),
+    // Pins the channel to an install of its own workspace.
+    foreignKey({
+      columns: [t.guildId, t.workspaceId],
+      foreignColumns: [discordGuilds.id, discordGuilds.workspaceId],
+      name: 'mocco_notification_channels_guild_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** Which events a channel receives: an exact type or `prefix.*`, plus a flat equality filter on the facts. */
+export const notificationRules = pgTable(
+  'mocco_notification_rules',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    // An exact catalog type (`vercel.deployment.error`) or a prefix wildcard (`github.*`).
+    eventType: text('event_type').notNull(),
+    // Only events from this inbound source (payload.sourceId). No FK yet: the inbound
+    // sources table (mocco_inbound_sources) lands with the ingest route slice.
+    sourceId: uuid('source_id'),
+    filter: jsonb()
+      .$type<RuleFilter>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt,
+  },
+  t => [
+    index('mocco_notification_rules_channel_idx').on(t.channelId),
+    // The fan-out reads every rule of the event's workspace.
+    index('mocco_notification_rules_workspace_idx').on(t.workspaceId),
+    // The same rule twice on a channel is one rule, so applying a preset again is a no-op.
+    uniqueIndex('mocco_notification_rules_channel_rule_uq').on(
+      t.channelId,
+      t.eventType,
+      sql`coalesce(${t.sourceId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      t.filter,
+    ),
+    // Pins the rule to its channel's workspace, and deletes it with the channel.
+    foreignKey({
+      columns: [t.channelId, t.workspaceId],
+      foreignColumns: [notificationChannels.id, notificationChannels.workspaceId],
+      name: 'mocco_notification_rules_channel_workspace_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * One event sent (or not) to one channel. Created by the fan-out with the rendered
+ * message and settled by `notification.deliver`. Deleted with its event when events
+ * are pruned (30 days), so the activity trace and its deliveries age out together.
+ */
+export const notificationDeliveries = pgTable(
+  'mocco_notification_deliveries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // SET NULL: a deleted channel keeps its delivery history; a queued delivery then ends `suppressed`.
+    channelId: uuid('channel_id').references(() => notificationChannels.id, { onDelete: 'set null' }),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => domainEvents.id, { onDelete: 'cascade' }),
+    // The first rule that matched; SET NULL when the rule is removed later.
+    ruleId: uuid('rule_id').references(() => notificationRules.id, { onDelete: 'set null' }),
+    status: text().$type<DeliveryStatus>().notNull().default(DeliveryStatuses.queued),
+    // Send attempts made (calls to the sender), not job claims.
+    attempts: integer().notNull().default(0),
+    // The last HTTP status the sender reported, when it reported one.
+    responseCode: integer('response_code'),
+    // The last failure or retry reason (already redacted by the sender).
+    error: text(),
+    // The vendor's message id once sent (Discord message id).
+    externalMessageId: text('external_message_id'),
+    // What is (or was) sent, rendered once at fan-out.
+    message: jsonb().$type<NeutralMessage>().notNull(),
+    // When the delivery job will try again (a rate limit or sender pause); null otherwise.
+    nextAttemptAt: timestamp('next_attempt_at'),
+    // When a run claimed the delivery (status `sending`); a stale claim may be resent.
+    sendingAt: timestamp('sending_at'),
+    sentAt: timestamp('sent_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    // One delivery per event per channel: a redelivered event fans out to nothing new.
+    uniqueIndex('mocco_notification_deliveries_event_channel_uq').on(t.eventId, t.channelId),
+    // Recent deliveries of a workspace (activity).
+    index('mocco_notification_deliveries_workspace_created_at_idx').on(t.workspaceId, t.createdAt.desc()),
+    // Per-workspace fairness: sends in the last minute.
+    index('mocco_notification_deliveries_workspace_sent_at_idx')
+      .on(t.workspaceId, t.sentAt)
+      .where(sql`${t.sentAt} IS NOT NULL`),
+    index('mocco_notification_deliveries_channel_idx').on(t.channelId),
+    // The FK's SET NULL on rule delete.
+    index('mocco_notification_deliveries_rule_idx')
+      .on(t.ruleId)
+      .where(sql`${t.ruleId} IS NOT NULL`),
+    // The reconcile's scan of unsettled deliveries.
+    index('mocco_notification_deliveries_unsettled_idx')
+      .on(t.createdAt)
+      .where(sql`${t.status} IN ('queued','sending')`),
+    check(
+      'mocco_notification_deliveries_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(DeliveryStatuses))})`,
+    ),
+    check('mocco_notification_deliveries_attempts_check', sql`${t.attempts} >= 0`),
+  ],
+);
+
+/**
+ * Discord pacing shared by every runner: a bucket (`channel:<discord channel id>` or
+ * `global`) is blocked until `blocked_until`. Platform-scoped (the bot is shared).
+ */
+export const discordRateLimits = pgTable('mocco_discord_rate_limits', {
+  bucket: text().primaryKey(),
+  blockedUntil: timestamp('blocked_until').notNull(),
+});
+
+/** Discord bot install handshake state — single-use, TTL'd, bound to the user and workspace
+ * (same shape as mocco_github_connect_states). */
+export const discordConnectStates = pgTable(
+  'mocco_discord_connect_states',
+  {
+    state: text().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdAt,
+    expiresAt: timestamp('expires_at').notNull(),
+    consumedAt: timestamp('consumed_at'),
+  },
+  t => [index('mocco_discord_connect_states_workspace_idx').on(t.workspaceId)],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Inbound webhook sources (notification relay design §5, ADR 0019). A source is one
+// vendor account a workspace connected: its unguessable ingest key is the URL path
+// segment, and its signing secret is sealed (SecretBox, AAD
+// 'mocco_inbound_sources:<id>'). Every delivery leaves a receipt, deduped by the
+// vendor's delivery id: the "why didn't it arrive?" trace, and the republish source
+// after a crash between recording and publishing. Receipts are pruned after 30 days.
+// See docs/reference/inbound.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A connected webhook source (Sentry, Vercel or GitHub) of a workspace. */
+export const inboundSources = pgTable(
+  'mocco_inbound_sources',
+  {
+    // SourceService generates the id (randomUUID) so the AAD is known when sealing.
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<InboundKind>().notNull(),
+    name: text().notNull(),
+    // 32 random bytes, base64url. An identifier, not a credential: every request must
+    // also carry a valid signature.
+    ingestKey: text('ingest_key').notNull(),
+    secretSealed: text('secret_sealed').notNull(),
+    status: text().$type<InboundSourceStatus>().notNull().default(InboundSourceStatuses.active),
+    lastReceivedAt: timestamp('last_received_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_inbound_sources_ingest_key_uq').on(t.ingestKey),
+    index('mocco_inbound_sources_workspace_idx').on(t.workspaceId),
+    // Target of the receipts' composite FK, which pins a receipt to its source's workspace.
+    unique('mocco_inbound_sources_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_inbound_sources_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(InboundKinds))})`),
+    check(
+      'mocco_inbound_sources_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(InboundSourceStatuses))})`,
+    ),
+  ],
+);
+
+/** One delivery a source received, and what became of it. */
+export const inboundReceipts = pgTable(
+  'mocco_inbound_receipts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Insert order: the trace's cursor (newest first).
+    seq: bigserial({ mode: 'bigint' }).notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    sourceId: uuid('source_id').notNull(),
+    // The vendor's delivery id (Request-ID, payload id, X-GitHub-Delivery): the dedupe key.
+    externalId: text('external_id').notNull(),
+    // The vendor's name for the delivery (`issue.created`, `push`), when it has one.
+    sourceEvent: text('source_event'),
+    outcome: text().$type<InboundOutcome>().notNull(),
+    // Why it produced no event (ignored) or was dropped (over_quota).
+    reason: text(),
+    eventType: text('event_type'),
+    domainEventId: uuid('domain_event_id').references(() => domainEvents.id, { onDelete: 'set null' }),
+    // The event payload ({ sourceId, facts, message }), kept so a stuck pending
+    // receipt can be republished.
+    normalized: jsonb(),
+    // Failed publishes of a pending receipt. The republish scan takes the fewest first,
+    // and gives up (ignored) after INBOUND_MAX_PUBLISH_ATTEMPTS.
+    publishAttempts: integer('publish_attempts').notNull().default(0),
+    receivedAt: timestamp('received_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_inbound_receipts_source_external_id_uq').on(t.sourceId, t.externalId),
+    // The trace: a workspace's receipts, newest first.
+    index('mocco_inbound_receipts_workspace_seq_idx').on(t.workspaceId, t.seq.desc()),
+    // The trace filtered by source.
+    index('mocco_inbound_receipts_source_seq_idx').on(t.sourceId, t.seq.desc()),
+    // The daily quota and the hard ceiling: a workspace's receipts in the last 24 hours.
+    index('mocco_inbound_receipts_workspace_received_at_idx').on(t.workspaceId, t.receivedAt),
+    // inbound.republish-stale: pending receipts, fewest failed publishes first, then oldest.
+    index('mocco_inbound_receipts_pending_idx')
+      .on(t.publishAttempts, t.receivedAt)
+      .where(sql`${t.outcome} = 'pending'`),
+    // inbound.prune (retention counts from received_at).
+    index('mocco_inbound_receipts_received_at_idx').on(t.receivedAt),
+    // The SET NULL lookup when a domain event is pruned.
+    index('mocco_inbound_receipts_domain_event_idx').on(t.domainEventId),
+    foreignKey({
+      columns: [t.sourceId, t.workspaceId],
+      foreignColumns: [inboundSources.id, inboundSources.workspaceId],
+      name: 'mocco_inbound_receipts_source_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_inbound_receipts_outcome_check', sql`${t.outcome} IN (${sqlInList(Object.values(InboundOutcomes))})`),
+    check('mocco_inbound_receipts_publish_attempts_check', sql`${t.publishAttempts} >= 0`),
   ],
 );
 

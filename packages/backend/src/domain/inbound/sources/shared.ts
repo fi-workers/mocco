@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { NeutralMessageLimits, neutralMessageLength } from '@mocco/common/notification';
+import { z } from 'zod';
 
 import type { Facts, InboundEventType } from '@mocco/common/inbound';
 import type { NeutralMessage, NeutralMessageActor, Severity } from '@mocco/common/notification';
@@ -152,6 +153,19 @@ export function parseJson(rawBody: string): unknown {
  */
 export function ownValue<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
   return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+const SOURCE_EVENT_MAX = 100;
+const actionSchema = z.object({ action: z.string() });
+
+/**
+ * The vendor's own name for a delivery, for the receipt's `source_event` column
+ * (`issue.created`, `push.opened`): `name`, plus `.action` when the body has a
+ * string `action`. Sanitized and capped, since it is stored as text.
+ */
+export function sourceEventLabel(name: string, json: unknown): string {
+  const action = actionSchema.safeParse(json);
+  return truncate(action.success ? `${name}.${action.data.action}` : name, SOURCE_EVENT_MAX);
 }
 
 export function ignored(reason: string): ParsedInbound {

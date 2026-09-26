@@ -1,7 +1,7 @@
 import { NeutralMessageLimits } from '@mocco/common/notification';
 import { describe, expect, it } from 'vitest';
 
-import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/sentry';
+import { deliveryId, parse, sourceEvent, verify } from '@backend/domain/inbound/sources/sentry';
 import {
   encode,
   expectEvent,
@@ -167,5 +167,17 @@ describe('sentry parse', () => {
       'sentry issue payload does not match the expected shape',
     );
     expect(expectIgnored(parse('[]', issueHeaders))).toBe('sentry issue payload does not match the expected shape');
+  });
+});
+
+describe('sentry sourceEvent', () => {
+  it('is <resource>.<action>', () => {
+    expect(sourceEvent(readFixture(created), issueHeaders)).toBe('issue.created');
+    expect(sourceEvent(readFixture('sentry/issue-resolved.json'), issueHeaders)).toBe('issue.resolved');
+  });
+
+  it('is the resource alone for a body without an action, and undefined without the header', () => {
+    expect(sourceEvent('not json', issueHeaders)).toBe('issue');
+    expect(sourceEvent(readFixture(created), new Headers())).toBeUndefined();
   });
 });

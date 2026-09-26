@@ -8,6 +8,7 @@ import { createProvider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { GrantService } from '@backend/domain/credential/GrantService';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
+import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -33,6 +34,7 @@ const makeAudit = (db: TestDb['db']): AuditService => new AuditService({ audit: 
 
 const makeRuns = (db: TestDb['db']): RunService =>
   new RunService({
+    bus: createTestEventBus(db),
     runs: new RunRepo(db),
     steps: new RunStepRepo(db),
     events: new RunEventRepo(db),
@@ -58,6 +60,7 @@ const makeGrants = (db: TestDb['db']): GrantService => new GrantService({ grants
 /** GateService wired to the test DB — always present in the context (no external gate). */
 const makeGates = (db: TestDb['db']): GateService =>
   new GateService({
+    bus: createTestEventBus(db),
     runs: new RunRepo(db),
     runGates: new RunGateRepo(db),
     resumes: new ResumeRepo(db),

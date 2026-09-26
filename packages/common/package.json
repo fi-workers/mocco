@@ -7,6 +7,7 @@
     "./audit": "./src/audit.ts",
     "./auth": "./src/auth.ts",
     "./credential": "./src/credential.ts",
+    "./events": "./src/events.ts",
     "./execution": "./src/execution.ts",
     "./governance": "./src/governance.ts",
     "./inbound": "./src/inbound.ts",
@@ -15,6 +16,7 @@
     "./mocco-config": "./src/mocco-config.ts",
     "./ota": "./src/ota.ts",
     "./notification": "./src/notification.ts",
+    "./notification-presets": "./src/notification-presets.ts",
     "./project": "./src/project.ts",
     "./workspace": "./src/workspace.ts"
   },

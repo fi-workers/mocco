@@ -1,7 +1,14 @@
 import { AuditActions } from '@mocco/common/audit';
+import { DomainEventTypes } from '@mocco/common/events';
 import { RunStates } from '@mocco/common/execution';
 import { GateStates, ResumeDecisions } from '@mocco/common/governance';
 
+import { publishBestEffort } from '@backend/domain/events/ports';
+import {
+  EventSubjectTypes,
+  governanceDedupeKey,
+  loadRunEventSubject,
+} from '@backend/domain/execution/run-event-subject';
 import {
   DuplicateVoteError,
   GateNotCurrentError,
@@ -14,6 +21,7 @@ import { checkVote, toEvaluatorVotes, VoteDenials } from '@backend/domain/govern
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import type { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import type { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
@@ -38,6 +46,9 @@ export interface GateServiceDeps {
    * `gate.rejected` here; the append is fail-open (AuditService.record swallows +
    * logs), so an audit failure never breaks the resume/reject the caller drove. */
   audit: AuditService;
+  /** The domain event bus (ADR 0018). `gate.resumed` / `gate.rejected` are published
+   * AFTER the gate settles, best-effort (a failure is logged, the outcome stands). */
+  bus: EventPublisher;
 }
 
 /** Gate-related run events — the append-only progression log the timeline renders. */
@@ -116,6 +127,17 @@ export class GateService {
       })),
     );
     return toEvaluatorVotes(requirements, votes);
+  }
+
+  /** The gate-subject part of a gate event payload. */
+  private async gateEventSubject(workspaceId: string, runId: string, gate: { name: string }, gateItemIndex: number) {
+    const subject = await loadRunEventSubject(this.deps.runs, workspaceId, runId);
+    return {
+      ...subject,
+      gateName: gate.name,
+      gateItemIndex,
+      facts: { ...subject.facts, gate: gate.name },
+    };
   }
 
   /** The run + its current gate after a vote — the mutation's return payload. */
@@ -201,6 +223,17 @@ export class GateService {
         subjectId: gate.id,
         payload: { runId, gateName: gate.name, itemIndex: gateItemIndex, reason: normalizedReason ?? null },
       });
+      await publishBestEffort(this.deps.bus, DomainEventTypes.gateRejected, async () => ({
+        type: DomainEventTypes.gateRejected,
+        workspaceId,
+        subject: { type: EventSubjectTypes.runGate, id: gate.id },
+        dedupeKey: governanceDedupeKey(DomainEventTypes.gateRejected, gate.id),
+        payload: {
+          ...(await this.gateEventSubject(workspaceId, runId, gate, gateItemIndex)),
+          actorUserId: userId,
+          reason: normalizedReason ?? null,
+        },
+      }));
     } else if (outcome === GateStates.resumed) {
       await this.deps.runGates.updateState(workspaceId, gate.id, {
         state: GateStates.resumed,
@@ -212,6 +245,23 @@ export class GateService {
         type: GateEventTypes.gateResumed,
         payload: { itemIndex: gateItemIndex, name: gate.name },
       });
+      const resumedBy = votes
+        .filter(vote => vote.decision === ResumeDecisions.resume)
+        .map(vote => ({ userId: vote.principalId, role: vote.role }));
+      // Published before the run continues, so its `seq` precedes whatever the
+      // continuation publishes (`gate.pending` at the next gate, `run.*`). That is publish
+      // order only: deliveries run as separate jobs and may reach a subscriber in any order.
+      await publishBestEffort(this.deps.bus, DomainEventTypes.gateResumed, async () => ({
+        type: DomainEventTypes.gateResumed,
+        workspaceId,
+        subject: { type: EventSubjectTypes.runGate, id: gate.id },
+        dedupeKey: governanceDedupeKey(DomainEventTypes.gateResumed, gate.id),
+        payload: {
+          ...(await this.gateEventSubject(workspaceId, runId, gate, gateItemIndex)),
+          actorUserId: userId,
+          resumedBy,
+        },
+      }));
       // Continue the run from past the gate (dispatch the next item, pause at the
       // next gate, or finish) — the injected RunService slice.
       await this.deps.resumeRun(run, gateItemIndex);
@@ -226,9 +276,7 @@ export class GateService {
           runId,
           gateName: gate.name,
           itemIndex: gateItemIndex,
-          principals: votes
-            .filter(vote => vote.decision === ResumeDecisions.resume)
-            .map(vote => ({ userId: vote.principalId, role: vote.role })),
+          principals: resumedBy,
         },
       });
     }

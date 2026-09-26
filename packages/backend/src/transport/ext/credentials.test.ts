@@ -11,6 +11,7 @@ import { createProvider } from '@backend/domain/auth/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
+import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { hashToken } from '@backend/domain/execution/callback-token';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
@@ -188,6 +189,7 @@ describe('ext POST /credentials (pglite)', () => {
 
   function deps(): ExtDeps {
     const runService = new RunService({
+      bus: createTestEventBus(t.db),
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
       events: new RunEventRepo(t.db),

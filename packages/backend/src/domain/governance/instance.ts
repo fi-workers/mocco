@@ -4,6 +4,7 @@
 // so `getGovernance()` never returns undefined and the tRPC context carries it
 // non-optionally.
 import { getAudit } from '@backend/domain/audit/instance';
+import { getEventBus } from '@backend/domain/events/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -66,6 +67,7 @@ export function getGovernance(): Governance {
         events: new RunEventRepo(db),
         resumeRun: async (run, gateItemIndex) => await execution.runs.resumeFromGate(run, gateItemIndex),
         audit: getAudit().audit,
+        bus: getEventBus(),
       }),
       // Subject handlers are bound here as product domains land (OTA version policy next).
       approvals: createApprovalService(db, getAudit().audit),

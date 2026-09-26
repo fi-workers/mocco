@@ -15,6 +15,7 @@ import {
   parseJson,
   type ParsedInbound,
   sanitize,
+  sourceEventLabel,
   truncate,
 } from '@backend/domain/inbound/sources/shared';
 
@@ -71,6 +72,12 @@ export function verify(rawBody: Uint8Array, headers: Headers, secret: string): b
 
 export function deliveryId(_rawBody: string, headers: Headers): string | undefined {
   return headerValue(headers, DELIVERY_HEADER);
+}
+
+/** `<resource>.<action>`, e.g. `issue.created`; undefined without the resource header. */
+export function sourceEvent(rawBody: string, headers: Headers): string | undefined {
+  const resource = headerValue(headers, RESOURCE_HEADER);
+  return resource === undefined ? undefined : sourceEventLabel(resource, parseJson(rawBody));
 }
 
 export function parse(rawBody: string, headers: Headers): ParsedInbound {

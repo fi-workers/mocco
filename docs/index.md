@@ -40,6 +40,8 @@ related:
 - [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
 - [0013 — Mocco is a multi-product platform (draft)](./adr/0013-mocco-is-a-multi-product-platform.md)
 - [0014 — Background jobs on a Postgres job table driven by a tick (draft)](./adr/0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md)
+- [0018 — Domain events are separate from the audit log (draft)](./adr/0018-domain-events-vs-audit-log.md)
+- [0019 — Inbound webhooks use per-source ingest URLs with mandatory signatures (draft)](./adr/0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md)
 
 ## Implementation
 
@@ -73,6 +75,9 @@ related:
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
+- [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
+- [Inbound webhook sources](./reference/inbound.md) — per-source ingest URLs, vendor secrets, receipts and outcomes, quota, retention
+- [Notifications](./reference/notifications.md) — channels, rules and filters, the delivery lifecycle, the Discord failure policy
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access
@@ -101,6 +106,7 @@ Feature designs (`specs/`) and the task-by-task plans that executed them (`plans
   - [Slice 3b — Commit sync](./superpowers/plans/2026-07-20-slice3b-commit-sync.md)
   - [Slice 3c — Config parse & commit detail](./superpowers/plans/2026-07-20-slice3c-config-detail.md)
   - [Env management](./superpowers/plans/2026-07-25-env-management.md)
+  - [Inbound sources service](./superpowers/plans/2026-09-25-inbound-service.md)
 
 ## Meta
 

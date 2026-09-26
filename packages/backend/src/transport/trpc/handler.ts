@@ -5,7 +5,9 @@ import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { appRouter } from '@backend/transport/trpc/root';
@@ -16,9 +18,11 @@ import type { RunService } from '@backend/domain/execution/RunService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
@@ -41,6 +45,9 @@ export interface TrpcDeps extends Services {
   products: ProductEnablementService;
   versionPolicies: VersionPolicyService;
   externalCredentials: ExternalCredentialService;
+  /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
+  inbound?: InboundDomain;
+  notifications?: ChannelService;
 }
 
 /** DI factory — production binds it below; tests bind it to pglite. */
@@ -73,6 +80,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         products: deps.products,
         versionPolicies: deps.versionPolicies,
         externalCredentials: deps.externalCredentials,
+        inbound: deps.inbound,
+        notifications: deps.notifications,
         session: await deps.auth.getSession(request.headers),
         headers: request.headers,
       }),
@@ -97,5 +106,7 @@ export async function trpcHandler(request: Request): Promise<Response> {
     products: getProjectDomain().products,
     versionPolicies: getOtaDomain().versionPolicies,
     externalCredentials: getOtaDomain().externalCredentials,
+    inbound: getInbound(),
+    notifications: getNotification().channels,
   })(request);
 }

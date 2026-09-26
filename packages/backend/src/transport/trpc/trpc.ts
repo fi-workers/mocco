@@ -9,9 +9,11 @@ import type { RunService } from '@backend/domain/execution/RunService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
@@ -49,6 +51,11 @@ export interface Context {
   versionPolicies: VersionPolicyService;
   /** Always present — sealed publishing tokens of the team's existing OTA tools. */
   externalCredentials: ExternalCredentialService;
+  /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
+   * the inbound router asserts it. */
+  inbound?: InboundDomain;
+  /** Notification channels, rules and deliveries; the notification router asserts it. */
+  notifications?: ChannelService;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
