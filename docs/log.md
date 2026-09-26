@@ -92,3 +92,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   released by the broker only to a gated step) and the `ota-*` provider ids in the `.mocco.yml` spec.
 - Docs touched: `reference/ota-external-credentials.md`, `reference/mocco-yml-spec.md`, `index.md`
 - Source: branch `feat/ota-external-credentials`
+
+## 2026-09-26 — Notifications screen and customer guides
+
+- Added the customer guides for notifications (`customer/notifications/*`: overview, connecting Discord, Sentry,
+  Vercel, GitHub, Mocco events, troubleshooting) with screenshots taken from a local run of the Notifications
+  screen. The add-channel screenshot is omitted: that dialog needs a live Discord bot, so the steps stay text-only.
+- Added "tRPC context composition" to the backend conventions: one `productionServices()` builds every context,
+  and optional services are required `X | undefined` keys so a builder can't silently drop one.
+- Docs touched: `customer/notifications/*`, `reference/backend-conventions.md`
+- Source: branch `feat/notifications-ui-v2`

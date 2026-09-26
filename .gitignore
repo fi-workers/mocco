@@ -27,6 +27,9 @@ infra/local/cert/*.pem
 !.claude/skills/
 CLAUDE.local.md
 
+# Customer guide screenshots, copied from docs/customer at dev/build time
+packages/frontend/public/docs/
+
 # Playwright
 test-results/
 playwright-report/

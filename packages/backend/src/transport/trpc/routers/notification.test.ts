@@ -24,8 +24,14 @@ import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-member
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
+import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
+import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { ActivityService } from '@backend/domain/notification/ActivityService';
+import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
+import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
+import { RuleRepo } from '@backend/domain/notification/repos/rule.repo';
 import {
   botInGuild,
   createTestChannelService,
@@ -129,6 +135,13 @@ describe('notification router on pglite', () => {
       grants: new GrantService({ grants: new CredentialGrantRepo(t.db) }),
       audit: makeAudit(),
       notifications: service,
+      notificationActivity: new ActivityService({
+        receipts: new InboundReceiptRepo(t.db),
+        sources: new InboundSourceRepo(t.db),
+        channels: new ChannelRepo(t.db),
+        rules: new RuleRepo(t.db),
+        deliveries: new DeliveryRepo(t.db),
+      }),
       session,
       headers,
     };
@@ -163,6 +176,8 @@ describe('notification router on pglite', () => {
   ): Record<string, () => Promise<unknown>> => {
     const { workspaceId, guildId, channelId, ruleId } = scope;
     return {
+      discordSetup: async () => await api.notification.discordSetup({ workspaceId }),
+      activity: async () => await api.notification.activity({ workspaceId }),
       guilds: async () => await api.notification.guilds({ workspaceId }),
       guildChannels: async () => await api.notification.guildChannels({ workspaceId, guildId }),
       channels: async () => await api.notification.channels({ workspaceId }),
@@ -226,6 +241,8 @@ describe('notification router on pglite', () => {
 
     // Workspace-only reads succeed (and see nothing of A); every id of A is NOT_FOUND.
     expect(codes).toEqual({
+      discordSetup: 'OK',
+      activity: 'OK',
       guilds: 'OK',
       guildChannels: 'NOT_FOUND',
       channels: 'OK',
@@ -259,6 +276,8 @@ describe('notification router on pglite', () => {
     );
 
     expect(codes).toEqual({
+      discordSetup: 'OK',
+      activity: 'OK',
       guilds: 'OK',
       guildChannels: 'FORBIDDEN',
       channels: 'OK',
@@ -286,6 +305,19 @@ describe('notification router on pglite', () => {
     });
     expect(rule).toMatchObject({ eventType: 'github.*', filter: { repo: 'fi-workers/api' }, sourceId: null });
     await admin.api.notification.removeRule({ workspaceId, ruleId: rule.id });
+  });
+
+  it('answers the Discord setup and an activity trace with the delivery of a Mocco event', async () => {
+    const { owner, workspaceId } = await ownerWithChannel('owner@example.com');
+
+    expect(await owner.api.notification.discordSetup({ workspaceId })).toEqual({
+      installAvailable: false,
+      botConfigured: true,
+    });
+    expect(await owner.api.notification.activity({ workspaceId })).toEqual({ items: [], nextCursor: null });
+    await expect(
+      owner.api.notification.activity({ workspaceId, cursor: { receiptsBeforeSeq: '-1' } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('maps domain errors: duplicate channel CONFLICT, unknown event type BAD_REQUEST, bad input BAD_REQUEST', async () => {
