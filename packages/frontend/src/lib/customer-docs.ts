@@ -1,36 +1,50 @@
-// Build-time reader for the customer guides in docs/customer/notifications/ (notification
-// relay design §10). Only getStaticProps / getStaticPaths call it, so node:fs and the
-// Markdown lexer never reach the browser bundle. The Markdown becomes a small tree
-// (lib/doc-ast.ts) that the page renders as React elements.
+// Build-time reader for the customer guides in docs/customer/<set>/ (one folder per
+// product area, e.g. notifications, ota). Only getStaticProps / getStaticPaths call it,
+// so node:fs and the Markdown lexer never reach the browser bundle. The Markdown becomes
+// a small tree (lib/doc-ast.ts) that the page renders as React elements.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { Lexer } from 'marked';
 
+import { GuideSets } from '@frontend/lib/guide-sets';
 import { Routes } from '@frontend/lib/routes';
 
 import type { DocBlock, DocInline, DocNavEntry, DocPage } from '@frontend/lib/doc-ast';
+import type { GuideSet } from '@frontend/lib/guide-sets';
 import type { Token, Tokens } from 'marked';
 
-/** The guides, relative to the frontend package (the cwd of `next build` / `next dev`). */
-const GUIDES_DIR = path.join(process.cwd(), '..', '..', 'docs', 'customer', 'notifications');
+/** A set's guides, relative to the frontend package (the cwd of `next build` / `next dev`). */
+const guidesDir = (set: GuideSet) => path.join(process.cwd(), '..', '..', 'docs', 'customer', set);
 
-/** Where the build copies the guides' screenshots (scripts/copy-customer-docs-images.mjs). */
-export const GUIDE_IMAGES_PATH = '/docs/notifications/images';
+/** Where the build copies a set's screenshots (scripts/copy-customer-docs-images.mjs). */
+const imagesPath = (set: GuideSet) => `/docs/${set}/images`;
 
-/** Reading order of the guides in the side nav; any other page follows alphabetically. */
-const ORDER = ['overview', 'connect-discord', 'sentry', 'vercel', 'github', 'mocco-events', 'troubleshooting'];
+/** Reading order of each set's guides in the side nav; any other page follows alphabetically. */
+const ORDER: Record<GuideSet, readonly string[]> = {
+  [GuideSets.notifications]: [
+    'overview',
+    'connect-discord',
+    'sentry',
+    'vercel',
+    'github',
+    'mocco-events',
+    'troubleshooting',
+  ],
+  [GuideSets.ota]: ['overview', 'force-update', 'pipeline', 'gate-eas-update', 'gate-codepush', 'gate-hot-updater'],
+};
 
 const SLUG = /^[a-z0-9-]+$/u;
 const GUIDE_FILE = /^([a-z0-9-]+)\.md$/u;
+const SETS = new Set<string>(Object.values(GuideSets));
 
-function rank(slug: string): number {
-  const index = ORDER.indexOf(slug);
-  return index === -1 ? ORDER.length : index;
+function rank(set: GuideSet, slug: string): number {
+  const index = ORDER[set].indexOf(slug);
+  return index === -1 ? ORDER[set].length : index;
 }
 
-function readGuide(slug: string): string {
-  return readFileSync(path.join(GUIDES_DIR, `${slug}.md`), 'utf8');
+function readGuide(set: GuideSet, slug: string): string {
+  return readFileSync(path.join(guidesDir(set), `${slug}.md`), 'utf8');
 }
 
 /** Split the YAML frontmatter from the body; only `title` and `description` are read. */
@@ -59,8 +73,9 @@ function pngSize(file: string): { width: number; height: number } {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-/** A link in a guide, as the app serves it: `./x.md#a` → `/docs/notifications/x#a`. */
-function resolveHref(href: string): { href: string; external: boolean } {
+/** A link in a guide, as the app serves it: `./x.md#a` → `/docs/<same set>/x#a`, and
+ * `../<set>/x.md#a` → `/docs/<set>/x#a`. */
+function resolveHref(set: GuideSet, href: string): { href: string; external: boolean } {
   if (/^(?:https?:\/\/|mailto:)/u.test(href)) {
     return { href, external: true };
   }
@@ -70,9 +85,13 @@ function resolveHref(href: string): { href: string; external: boolean } {
   }
   const guide = /^\.\/([a-z0-9-]+)\.md(#.*)?$/u.exec(href);
   if (guide?.[1] !== undefined) {
-    return { href: `${Routes.notificationsGuide(guide[1])}${guide[2] ?? ''}`, external: false };
+    return { href: `${Routes.guide(set, guide[1])}${guide[2] ?? ''}`, external: false };
   }
-  throw new Error(`customer guide link ${href} must be ./<page>.md, an anchor or an http(s) URL`);
+  const other = /^\.\.\/([a-z0-9-]+)\/([a-z0-9-]+)\.md(#.*)?$/u.exec(href);
+  if (other?.[1] !== undefined && other[2] !== undefined && SETS.has(other[1])) {
+    return { href: `${Routes.guide(other[1], other[2])}${other[3] ?? ''}`, external: false };
+  }
+  throw new Error(`customer guide link ${href} must be ./<page>.md, ../<set>/<page>.md, an anchor or an http(s) URL`);
 }
 
 function plainText(tokens: readonly Token[]): string {
@@ -84,14 +103,14 @@ function plainText(tokens: readonly Token[]): string {
     .join('');
 }
 
-function inline(tokens: readonly Token[]): DocInline[] {
+function inline(set: GuideSet, tokens: readonly Token[]): DocInline[] {
   return tokens.flatMap((token): DocInline[] => {
     switch (token.type) {
       case 'strong': {
-        return [{ t: 'strong', c: inline((token as Tokens.Strong).tokens) }];
+        return [{ t: 'strong', c: inline(set, (token as Tokens.Strong).tokens) }];
       }
       case 'em': {
-        return [{ t: 'em', c: inline((token as Tokens.Em).tokens) }];
+        return [{ t: 'em', c: inline(set, (token as Tokens.Em).tokens) }];
       }
       case 'codespan': {
         return [{ t: 'code', v: (token as Tokens.Codespan).text }];
@@ -101,7 +120,7 @@ function inline(tokens: readonly Token[]): DocInline[] {
       }
       case 'link': {
         const link = token as Tokens.Link;
-        return [{ t: 'link', ...resolveHref(link.href), c: inline(link.tokens) }];
+        return [{ t: 'link', ...resolveHref(set, link.href), c: inline(set, link.tokens) }];
       }
       case 'image': {
         const image = token as Tokens.Image;
@@ -112,15 +131,15 @@ function inline(tokens: readonly Token[]): DocInline[] {
         return [
           {
             t: 'image',
-            src: `${GUIDE_IMAGES_PATH}/${name}`,
+            src: `${imagesPath(set)}/${name}`,
             alt: image.text,
-            ...pngSize(path.join(GUIDES_DIR, 'images', name)),
+            ...pngSize(path.join(guidesDir(set), 'images', name)),
           },
         ];
       }
       case 'text': {
         const text = token as Tokens.Text;
-        return text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(text.tokens);
+        return text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(set, text.tokens);
       }
       case 'escape': {
         return [{ t: 'text', v: (token as Tokens.Escape).text }];
@@ -133,22 +152,27 @@ function inline(tokens: readonly Token[]): DocInline[] {
   });
 }
 
-function blocks(tokens: readonly Token[]): DocBlock[] {
+function blocks(set: GuideSet, tokens: readonly Token[]): DocBlock[] {
   return tokens.flatMap((token): DocBlock[] => {
     switch (token.type) {
       case 'heading': {
         const heading = token as Tokens.Heading;
         return [
-          { t: 'heading', depth: heading.depth, id: slugify(plainText(heading.tokens)), c: inline(heading.tokens) },
+          {
+            t: 'heading',
+            depth: heading.depth,
+            id: slugify(plainText(heading.tokens)),
+            c: inline(set, heading.tokens),
+          },
         ];
       }
       case 'paragraph': {
-        return [{ t: 'p', c: inline((token as Tokens.Paragraph).tokens) }];
+        return [{ t: 'p', c: inline(set, (token as Tokens.Paragraph).tokens) }];
       }
       case 'text': {
         // A tight list item's text.
         const text = token as Tokens.Text;
-        return [{ t: 'p', c: text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(text.tokens) }];
+        return [{ t: 'p', c: text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(set, text.tokens) }];
       }
       case 'list': {
         const list = token as Tokens.List;
@@ -157,7 +181,7 @@ function blocks(tokens: readonly Token[]): DocBlock[] {
             t: 'list',
             ordered: list.ordered,
             start: list.start === '' ? 1 : list.start,
-            items: list.items.map(item => blocks(item.tokens)),
+            items: list.items.map(item => blocks(set, item.tokens)),
           },
         ];
       }
@@ -166,15 +190,15 @@ function blocks(tokens: readonly Token[]): DocBlock[] {
         return [{ t: 'code', lang: code.lang ?? '', v: code.text }];
       }
       case 'blockquote': {
-        return [{ t: 'quote', c: blocks((token as Tokens.Blockquote).tokens) }];
+        return [{ t: 'quote', c: blocks(set, (token as Tokens.Blockquote).tokens) }];
       }
       case 'table': {
         const table = token as Tokens.Table;
         return [
           {
             t: 'table',
-            header: table.header.map(cell => inline(cell.tokens)),
-            rows: table.rows.map(row => row.map(cell => inline(cell.tokens))),
+            header: table.header.map(cell => inline(set, cell.tokens)),
+            rows: table.rows.map(row => row.map(cell => inline(set, cell.tokens))),
           },
         ];
       }
@@ -189,24 +213,24 @@ function blocks(tokens: readonly Token[]): DocBlock[] {
   });
 }
 
-/** Every guide slug, in reading order. */
-export function listGuideSlugs(): string[] {
-  const slugs = readdirSync(GUIDES_DIR).flatMap(file => {
+/** Every guide slug of a set, in reading order. */
+export function listGuideSlugs(set: GuideSet): string[] {
+  const slugs = readdirSync(guidesDir(set)).flatMap(file => {
     const slug = GUIDE_FILE.exec(file)?.[1];
     return slug === undefined ? [] : [slug];
   });
-  return slugs.toSorted((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  return slugs.toSorted((a, b) => rank(set, a) - rank(set, b) || (a < b ? -1 : 1));
 }
 
-export function listGuides(): DocNavEntry[] {
-  return listGuideSlugs().map(slug => ({ slug, title: splitFrontmatter(readGuide(slug)).title }));
+export function listGuides(set: GuideSet): DocNavEntry[] {
+  return listGuideSlugs(set).map(slug => ({ slug, title: splitFrontmatter(readGuide(set, slug)).title }));
 }
 
 /** One guide as a render tree. The page's own `# Title` is kept as its heading. */
-export function readGuidePage(slug: string): DocPage {
+export function readGuidePage(set: GuideSet, slug: string): DocPage {
   if (!SLUG.test(slug)) {
     throw new Error(`invalid guide slug ${slug}`);
   }
-  const { title, description, body } = splitFrontmatter(readGuide(slug));
-  return { slug, title, description, blocks: blocks(new Lexer({ gfm: true }).lex(body)) };
+  const { title, description, body } = splitFrontmatter(readGuide(set, slug));
+  return { slug, title, description, blocks: blocks(set, new Lexer({ gfm: true }).lex(body)) };
 }

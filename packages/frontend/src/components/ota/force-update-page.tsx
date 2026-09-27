@@ -199,6 +199,13 @@ export default function ForceUpdatePage({ workspaceId, projectId }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
+      <p className="text-sm text-muted-foreground">
+        Tell apps on old store builds to update. Raising a version can wait for approval; lowering one applies at once
+        and is reviewed afterwards.{' '}
+        <Link href={Routes.otaGuide('force-update')} className="underline underline-offset-2">
+          Read the guide
+        </Link>
+      </p>
       <nav aria-label="Store apps" className="flex flex-wrap gap-2">
         {storeApps.map(app => (
           <Link

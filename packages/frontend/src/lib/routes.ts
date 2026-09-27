@@ -27,8 +27,12 @@ export const Routes = {
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',
-  /** A customer guide page, e.g. `notificationsGuide('sentry')` → `/docs/notifications/sentry`. */
+  /** A customer guide page of a set, e.g. `guide('ota', 'force-update')` → `/docs/ota/force-update`. */
+  guide: (set: string, page: string) => `/docs/${set}/${page}`,
+  /** A notifications guide page, e.g. `notificationsGuide('sentry')` → `/docs/notifications/sentry`. */
   notificationsGuide: (page: string) => `/docs/notifications/${page}`,
+  /** An OTA guide page, e.g. `otaGuide('gate-eas-update')` → `/docs/ota/gate-eas-update`. */
+  otaGuide: (page: string) => `/docs/ota/${page}`,
   /** Starts the Discord bot install (a Hono route: full navigation, not a client push). */
   discordInstall: (workspaceId: string) => `/api/ext/discord/install?workspaceId=${encodeURIComponent(workspaceId)}`,
 } as const;

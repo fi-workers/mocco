@@ -1,17 +1,21 @@
-// Copies the customer guides' screenshots (docs/customer/notifications/images/) to where
-// the app serves them (packages/frontend/public/docs/notifications/images/). The guides
-// keep the images next to the Markdown, so GitHub renders them too; the frontend's `dev`
-// and `build` scripts run this first. The copy is gitignored.
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+// Copies each customer guide set's screenshots (docs/customer/<set>/images/) to where the
+// app serves them (packages/frontend/public/docs/<set>/images/). The guides keep the
+// images next to the Markdown, so GitHub renders them too; the frontend's `dev` and
+// `build` scripts run this first. The copy is gitignored.
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const from = path.join(root, 'docs', 'customer', 'notifications', 'images');
-const to = path.join(root, 'packages', 'frontend', 'public', 'docs', 'notifications', 'images');
+const guides = path.join(root, 'docs', 'customer');
+const served = path.join(root, 'packages', 'frontend', 'public', 'docs');
 
-rmSync(to, { recursive: true, force: true });
-mkdirSync(to, { recursive: true });
-if (existsSync(from)) {
-  cpSync(from, to, { recursive: true });
+rmSync(served, { recursive: true, force: true });
+for (const entry of readdirSync(guides, { withFileTypes: true })) {
+  const from = path.join(guides, entry.name, 'images');
+  if (entry.isDirectory() && existsSync(from)) {
+    const to = path.join(served, entry.name, 'images');
+    mkdirSync(to, { recursive: true });
+    cpSync(from, to, { recursive: true });
+  }
 }

@@ -1,4 +1,5 @@
 import { OTA_CREDENTIAL_NAME_PATTERN, OtaTools } from '@mocco/common/ota';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import {
@@ -14,6 +15,7 @@ import {
   Tones,
 } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
+import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { CredentialGrantDto } from '@mocco/common/credential';
@@ -31,10 +33,19 @@ const toolLabels: Record<OtaTool, string> = {
   [OtaTools.generic]: 'Other tool',
 };
 
-/** What the publishing workflow exports the released token as, where the tool fixes it. */
+/** What the publishing workflow exports the released token as, where the tool's CLI
+ * reads a fixed variable (CodePush CLIs take `--accessKey`; hot-updater reads its
+ * storage plugin's own variables). */
 const toolEnvironment: Partial<Record<OtaTool, string>> = {
   [OtaTools.eas]: 'EXPO_TOKEN',
-  [OtaTools.codepush]: 'CODE_PUSH_ACCESS_KEY',
+};
+
+/** The customer guide for each tool. */
+const toolGuides: Record<OtaTool, string> = {
+  [OtaTools.eas]: 'gate-eas-update',
+  [OtaTools.codepush]: 'gate-codepush',
+  [OtaTools.hotUpdater]: 'gate-hot-updater',
+  [OtaTools.generic]: 'pipeline',
 };
 
 /** A static token older than this gets a rotation reminder. */
@@ -285,14 +296,22 @@ function TokenCard({
         </dd>
         <dt className="text-muted-foreground">Released to</dt>
         <dd>
-          {grants.length === 0
-            ? 'No pipeline yet — a workspace admin adds an allowlist grant for this provider and role.'
-            : grants
-                .map(
-                  grant =>
-                    `${repoName(grant.repoId)} · ${grant.pipeline} · gate ${grant.gateName} (≤ ${grant.maxTtlSeconds}s)`,
-                )
-                .join('; ')}
+          {grants.length === 0 ? (
+            <>
+              No pipeline yet. A workspace owner or admin adds a release for this provider and role under{' '}
+              <Link href={Routes.workspaceAccess(workspaceId)} className="underline underline-offset-2">
+                Access
+              </Link>
+              .
+            </>
+          ) : (
+            grants
+              .map(
+                grant =>
+                  `${repoName(grant.repoId)} · ${grant.pipeline} · gate ${grant.gateName} (≤ ${grant.maxTtlSeconds}s)`,
+              )
+              .join('; ')
+          )}
         </dd>
       </dl>
       <div className="flex flex-col gap-1">
@@ -301,6 +320,11 @@ function TokenCard({
           {environment === undefined ? '' : ` (the workflow exports it as ${environment})`}:
         </p>
         <CopyField label={`.mocco.yml credential for ${credential.name}`} value={snippet} />
+        <Link
+          href={Routes.otaGuide(toolGuides[credential.tool])}
+          className="w-fit text-xs underline underline-offset-2">
+          Publishing with {toolLabels[credential.tool]}
+        </Link>
       </div>
       {mode === Modes.rotate ? (
         <RotateForm
@@ -350,7 +374,10 @@ export default function PublishingTokens({ workspaceId, projectId }: Props) {
       <p className="text-sm text-muted-foreground">
         Keep publishing with your OTA tool. Mocco holds its publishing token and releases it only to a pipeline step
         that passed an approved gate, so nobody can push an update without the approval. The token itself is static: the
-        ttl limits Mocco’s grant, not the token, so publish from GitHub-hosted runners and rotate it on a schedule.
+        ttl limits Mocco’s grant, not the token, so publish from GitHub-hosted runners and rotate it on a schedule.{' '}
+        <Link href={Routes.otaGuide('pipeline')} className="underline underline-offset-2">
+          Read the setup guide
+        </Link>
       </p>
       {credentialsQuery.isPending ? <Spinner /> : null}
       {credentialsQuery.isError ? (

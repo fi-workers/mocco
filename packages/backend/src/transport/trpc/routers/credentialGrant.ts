@@ -7,7 +7,7 @@ import { credentialGrantCreateInputSchema, credentialGrantSchema } from '@mocco/
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { NotFoundError } from '@backend/domain/errors';
+import { ForbiddenError, NotFoundError } from '@backend/domain/errors';
 import { protectedProcedure, router } from '@backend/transport/trpc/trpc';
 
 // Every grant procedure is workspace-scoped and takes `workspaceId` in its input;
@@ -20,6 +20,9 @@ const workspaceScopedInput = z.object({ workspaceId: z.uuid() });
 const rethrowMappedDomainError = (cause: unknown): void => {
   if (cause instanceof NotFoundError) {
     throw new TRPCError({ code: 'NOT_FOUND', message: cause.message, cause });
+  }
+  if (cause instanceof ForbiddenError) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: cause.message, cause });
   }
 };
 
@@ -44,8 +47,22 @@ const protectedGrantProcedure = protectedProcedure.use(async ({ ctx, getRawInput
   return result;
 });
 
+// Changing the allowlist is owner/admin-only: a grant decides which pipeline gate may receive which
+// credential, so a member who could edit it could route production credentials to their own pipeline. A plain member gets FORBIDDEN,
+// a non-member NOT_FOUND (`assertAdmin` implies membership); reads stay open to members.
+const adminGrantProcedure = protectedGrantProcedure.use(async ({ ctx, getRawInput, next }) => {
+  const { workspaceId } = workspaceScopedInput.parse(await getRawInput());
+  try {
+    await ctx.workspace.assertAdmin(ctx.headers, workspaceId);
+  } catch (error) {
+    rethrowMappedDomainError(error);
+    throw error;
+  }
+  return await next();
+});
+
 export const credentialGrantRouter = router({
-  create: protectedGrantProcedure
+  create: adminGrantProcedure
     .input(workspaceScopedInput.extend(credentialGrantCreateInputSchema.shape))
     .output(z.object({ grant: credentialGrantSchema }))
     .mutation(async ({ ctx, input }) => {
@@ -58,7 +75,7 @@ export const credentialGrantRouter = router({
     .output(z.object({ grants: z.array(credentialGrantSchema) }))
     .query(async ({ ctx, input }) => ({ grants: await ctx.grants.list(input.workspaceId) })),
 
-  delete: protectedGrantProcedure
+  delete: adminGrantProcedure
     .input(workspaceScopedInput.extend({ grantId: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.grants.delete(input.workspaceId, input.grantId);
