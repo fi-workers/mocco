@@ -161,7 +161,7 @@ describe('JobRepo (pglite)', () => {
     it('defer reschedules at the requested time and can refund the attempt', async () => {
       await enqueue();
       const job = await claimOne();
-      await repo.defer(job, { runAt: at(MINUTE), reason: 'rate limited', refundAttempt: true });
+      await repo.defer(job, { runAt: at(MINUTE), reason: 'rate limited', refundAttempt: true, countsDeferral: true });
       expect(await read(job.id)).toMatchObject({
         status: JobStatuses.queued,
         runAt: at(MINUTE),
@@ -170,14 +170,19 @@ describe('JobRepo (pglite)', () => {
         lastError: 'rate limited',
       });
       const again = await claimOne(at(MINUTE));
-      await repo.defer(again, { runAt: at(2 * MINUTE), reason: 'still limited', refundAttempt: false });
+      await repo.defer(again, {
+        runAt: at(2 * MINUTE),
+        reason: 'still limited',
+        refundAttempt: false,
+        countsDeferral: true,
+      });
       expect(await read(job.id)).toMatchObject({ attempts: 1, deferrals: 2 });
     });
 
     it('a regular failure resets the consecutive deferral count', async () => {
       await enqueue();
       const job = await claimOne();
-      await repo.defer(job, { runAt: T0, reason: 'later', refundAttempt: true });
+      await repo.defer(job, { runAt: T0, reason: 'later', refundAttempt: true, countsDeferral: true });
       await repo.fail(await claimOne(), { now: T0, error: 'boom', retryAt: T0 });
       expect(await read(job.id)).toMatchObject({ deferrals: 0 });
     });
@@ -198,7 +203,7 @@ describe('JobRepo (pglite)', () => {
 
     it('resets the consecutive deferral count of a reclaimed job', async () => {
       await enqueue();
-      await repo.defer(await claimOne(), { runAt: T0, reason: 'later', refundAttempt: true });
+      await repo.defer(await claimOne(), { runAt: T0, reason: 'later', refundAttempt: true, countsDeferral: true });
       await repo.claim({ now: T0, limit: 1, visibilityMs: MINUTE, workerId: 'w1' });
       await repo.reclaimExpired(at(2 * MINUTE));
       const [row] = await t.db.select().from(jobs);

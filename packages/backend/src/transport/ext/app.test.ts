@@ -9,6 +9,7 @@ import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
+import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
@@ -109,6 +110,7 @@ describe('ext GitHub setup callback (pglite)', () => {
         audit: new AuditService({ audit: new AuditRepo(t.db) }),
       }),
       runs: new RunService({
+        bus: createTestEventBus(t.db),
         runs: new RunRepo(t.db),
         steps: new RunStepRepo(t.db),
         events: new RunEventRepo(t.db),

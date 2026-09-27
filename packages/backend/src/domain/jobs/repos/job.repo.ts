@@ -178,13 +178,16 @@ export class JobRepo {
 
   /** A RetryAt: re-queue at `runAt`, bump the consecutive deferral count and, when
    * `refundAttempt`, give back the attempt the claim counted. */
-  async defer(job: Claimed, outcome: { runAt: Date; reason: string; refundAttempt: boolean }): Promise<boolean> {
+  async defer(
+    job: Claimed,
+    outcome: { runAt: Date; reason: string; refundAttempt: boolean; countsDeferral: boolean },
+  ): Promise<boolean> {
     return await this.writeClaimed(job, {
       status: JobStatuses.queued,
       runAt: outcome.runAt,
       lockedUntil: null,
       lastError: outcome.reason,
-      deferrals: sql`${jobs.deferrals} + 1`,
+      deferrals: outcome.countsDeferral ? sql`${jobs.deferrals} + 1` : undefined,
       attempts: outcome.refundAttempt ? sql`${jobs.attempts} - 1` : undefined,
     });
   }

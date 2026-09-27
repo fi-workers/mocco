@@ -40,6 +40,7 @@ related:
 - [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
 - [0013 — Mocco is a multi-product platform (draft)](./adr/0013-mocco-is-a-multi-product-platform.md)
 - [0014 — Background jobs on a Postgres job table driven by a tick (draft)](./adr/0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md)
+- [0018 — Domain events are separate from the audit log (draft)](./adr/0018-domain-events-vs-audit-log.md)
 
 ## Implementation
 
@@ -70,6 +71,8 @@ related:
 - [Workspace model](./reference/workspace.md) — tables, invariants, contracts, known gaps
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
+- [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
+- [Notifications](./reference/notifications.md) — channels, rules and filters, the delivery lifecycle, the Discord failure policy
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access
