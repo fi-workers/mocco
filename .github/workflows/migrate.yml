@@ -3,9 +3,10 @@
 # main branch may use, and this workflow never runs on pull requests
 # (docs/reference/ci-conventions.md).
 #
-# It calls drizzle-kit directly, not `yarn db:migrate`: that script goes through
-# with-env, where the committed env/.env.local (the local DATABASE_URL) wins over the
-# process environment. drizzle.config.ts reads process.env.DATABASE_URL.
+# It runs scripts/migrate-production.mjs, not `yarn db:migrate`: that script goes
+# through with-env, where the committed env/.env.local (the local DATABASE_URL) wins
+# over the process environment. The drizzle-kit CLI hides its errors behind a spinner,
+# so the script uses drizzle-orm's migrator (same journal) and prints the error code.
 #
 # Vercel deploys main at the same time. Migrations are additive, and this job
 # (about a minute) finishes well before a production build (several minutes), so new
@@ -20,6 +21,7 @@ on:
       - packages/backend/src/infra/db/migrations/**
       - drizzle.config.ts
       - .github/workflows/migrate.yml
+      - scripts/migrate-production.mjs
   workflow_dispatch:
 
 permissions:
@@ -60,4 +62,4 @@ jobs:
       - name: Apply migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: yarn drizzle-kit migrate
+        run: node scripts/migrate-production.mjs
