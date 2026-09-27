@@ -14,6 +14,7 @@
     "./integration": "./src/integration.ts",
     "./jobs": "./src/jobs.ts",
     "./mocco-config": "./src/mocco-config.ts",
+    "./ota": "./src/ota.ts",
     "./notification": "./src/notification.ts",
     "./notification-presets": "./src/notification-presets.ts",
     "./project": "./src/project.ts",

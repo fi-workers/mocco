@@ -6,6 +6,7 @@ import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { InboundDomain } from '@backend/domain/inbound/instance';
@@ -13,6 +14,7 @@ import type { CommitConfigService } from '@backend/domain/integration/CommitConf
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
+import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Session } from '@mocco/common/auth';
@@ -34,6 +36,8 @@ export interface Context {
   roles: RoleService;
   /** Always present — resolves a run's gate; the run router's resumeGate delegates here. */
   gates: GateService;
+  /** Always present — approvals outside runs (#114). */
+  approvals: ApprovalService;
   /** Always present — the credential allowlist has no external dependency to gate on. */
   grants: GrantService;
   /** Always present — the audit hash chain is self-contained (no external dependency). */
@@ -42,6 +46,8 @@ export interface Context {
   projects: ProjectService;
   /** Always present — which product lines the workspace has enabled. */
   products: ProductEnablementService;
+  /** Always present — OTA version policy and native force update. */
+  versionPolicies: VersionPolicyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
   inbound?: InboundDomain;

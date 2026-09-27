@@ -11,6 +11,7 @@
     "./ext/app": "./src/transport/ext/app.ts",
     "./governance/instance": "./src/domain/governance/instance.ts",
     "./integration/instance": "./src/domain/integration/instance.ts",
+    "./ota/instance": "./src/domain/ota/instance.ts",
     "./project/instance": "./src/domain/project/instance.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
     "./trpc/root": "./src/transport/trpc/root.ts",

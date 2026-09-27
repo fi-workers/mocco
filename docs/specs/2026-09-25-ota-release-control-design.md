@@ -18,6 +18,8 @@ related:
   - ../research/codepush-market.md
   - ../reference/roadmap.md
   - ../reference/project.md
+  - ../reference/approvals.md
+  - ../reference/ota-version-policy.md
 ---
 
 # OTA release control — phased scope and design
@@ -51,9 +53,9 @@ One rule set applies to every release change. The classification is a pure funct
 | Roll back, roll back to embedded, disable a release | relax | immediate, audited, post-hoc approval |
 | Lower minimum or recommended version, remove a blocked version | relax | immediate, audited, post-hoc approval |
 
-**Post-hoc approval.** Every relax change creates an approval request in state `pending_review` that references the applied change. It uses the same requirements as the tighten path. Until it is approved, the release screen and the audit export flag it as an unreviewed emergency change. An unreviewed change never blocks operations; it is an evidence gap the team can see.
+**Post-hoc approval.** Every relax change creates an approval request of kind `review` that references the applied change. It uses the same requirements as the tighten path. Until it is approved, the release screen and the audit export flag it as an unreviewed emergency change. An unreviewed change never blocks operations; it is an evidence gap the team can see.
 
-Implementation: the platform slice *approvals outside runs* (#114) provides `ApprovalService` and the vote policy extracted from `GateService`. This spec adds the `pending_review` state and the `review` kind to it.
+Implementation: the platform slice *approvals outside runs* (#114) provides `ApprovalService`, the `pre_approval` and `review` kinds, and the vote policy extracted from `GateService`. See [approvals reference](../reference/approvals.md).
 
 ## 3. Phase 1 — gate existing OTA tools
 
@@ -137,7 +139,7 @@ A policy applies to one `mocco_project_apps` row whose platform is `ios` or `and
 | `store_url` | text, nullable. Defaults from `store_app_id`. |
 | `soft_prompt_interval_hours` | int, default 72 |
 | `approval_policy` | jsonb `GateRequirements`, nullable. Null means tighten changes apply without approval (small teams). |
-| `revision` | bigint, incremented on every change. It is the cache key. |
+| `revision` | int, incremented on every change. It is the cache key and the optimistic-concurrency token. |
 | `updated_at` | |
 
 `mocco_app_version_policy_changes` (append-only history): `id`, `workspace_id`, `app_id`, `before` jsonb, `after` jsonb, `direction` (`tighten` \| `relax`), `actor_user_id`, `approval_request_id` (nullable), `reason`, `created_at`.
@@ -145,7 +147,7 @@ A policy applies to one `mocco_project_apps` row whose platform is `ios` or `and
 ### Invariants
 
 - Versions are dotted numeric (`^\d+(\.\d+){0,3}$`) and compare segment by segment, with missing segments treated as 0 (`2.3` equals `2.3.0`). One pure `compareVersions` in `@mocco/common`, with property tests.
-- `recommended_version ≥ min_supported_version` when both are set (checked in the service and as a DB check on the parsed form, which is stored alongside).
+- `recommended_version ≥ min_supported_version` when both are set (checked by the shared rules schema at the boundary; versions are stored as text).
 - **Store-live check.** A tighten change to version X requires confirmation that X is live on the store. In v1 this is an explicit operator attestation, recorded in the change and the audit entry. Once store sync (#94) exists, it becomes an automatic check against the store's current version.
 - A tighten change on an app with an `approval_policy` becomes an `ApprovalService` request whose pinned action is the full `after` policy. It applies only if the policy's `revision` has not moved since the request was made; otherwise the request is superseded.
 
@@ -176,7 +178,7 @@ It ships with a default modal: `hard` cannot be dismissed, and `soft` respects t
 
 ### Console
 
-The app page gets a **Version policy** panel: the current policy, a change form that labels each edit as tighten or relax before submitting, pending approvals, and history. Adoption preview ("raising the minimum to 3.0 blocks 7% of active users") needs version telemetry. It comes from the version-check requests themselves (counted per version per day, no device id stored), rolled up by the job queue.
+The app page gets a **Version policy** panel: the current policy, a change form that labels each edit as tighten or relax before submitting, pending approvals, and history. Adoption preview ("raising the minimum to 3.0 blocks 7% of active users") needs version telemetry. Counting version-check requests on the server does not work: the response is CDN-cached for 60 seconds, so cached answers never reach the origin and the counts would be wrong. The telemetry therefore needs a separate, uncached client report (a daily beacon from the React Native package, no device id stored), designed with the client package.
 
 ## 5. Phase 3 — Expo Updates hosting
 
@@ -207,7 +209,7 @@ When a candidate's adoption rises and its crash rate (from a Sentry or Crashlyti
 | Needs | Phase | Status |
 |---|---|---|
 | Project/app entity (#108) | 1–5 | PR #242 |
-| Approvals outside runs (#114) + `pending_review` | 1–5 | next in this stack |
+| Approvals outside runs (#114), including `review` requests | 1–5 | stacked PR after this one |
 | SecretBox (#110) | 1 | PR #248 |
 | Public `/v1` surface on the ext app | 2 | v1 uses app id only; keys from #113 later |
 | SDK packaging (#115) | 2 (client package), 3 | open |
@@ -219,9 +221,9 @@ When a candidate's adoption rises and its crash rate (from a Sentry or Crashlyti
 
 In dependency order. Issue numbers are attached under #99.
 
-1. `feat(platform)`: approvals outside runs with post-hoc review (#114, extended here).
+1. `feat(platform)`: approvals outside runs with post-hoc review (#114).
 2. `feat(ota)`: version policy domain, direction-aware changes and history.
-3. `feat(ota)`: public version-check endpoint with caching and per-version counts.
+3. `feat(ota)`: public version-check endpoint with caching (per-version adoption telemetry moves to the client package, §4 Console).
 4. `feat(ota)`: version policy console panel.
 5. `feat(sdk)`: `@mocco/react-native-version` with the default modal and Play In-App Updates adapter (after #115).
 6. `feat(credential)`: provider registry in the broker.

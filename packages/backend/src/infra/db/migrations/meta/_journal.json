@@ -127,6 +127,13 @@
       "when": 1790311287677,
       "tag": "0017_cute_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790430172548,
+      "tag": "0018_legal_the_leader",
+      "breakpoints": true
     }
   ]
 }
