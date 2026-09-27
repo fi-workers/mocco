@@ -4,7 +4,7 @@ description: Drizzle and Postgres schema conventions — mocco_ table prefix, sn
 type: reference
 status: active
 created: 2026-07-01
-updated: 2026-07-01
+updated: 2026-09-27
 confidence: high
 owner: andrea
 code_refs: [packages/backend/src/infra/db/schema.ts]
@@ -52,6 +52,8 @@ between separate lambdas and only Postgres can arbitrate it.
 - `yarn db:generate` → `packages/backend/src/infra/db/migrations/*.sql` (+ meta), **git-tracked**.
 - `yarn db:migrate` → apply. Local uses docker Postgres (`make docker-up`).
 - Schema change = generate + migrate. Reset with `docker compose down -v`.
+- **Production** is migrated by `.github/workflows/migrate.yml` when a migration lands on main (or by running that workflow by hand). The `DATABASE_URL` secret in the `migrations` environment must be Supabase's **session** pooler or direct connection (port 5432). The transaction pooler the app uses (port 6543) doesn't keep a connection across statements, and migrations need one.
+- Vercel deploys main at the same time, and the migration finishes first, so migrations stay additive. A migration that drops something must ship after the code that stops using it is already live.
 
 ## Better Auth
 
