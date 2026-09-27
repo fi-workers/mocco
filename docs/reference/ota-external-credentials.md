@@ -28,7 +28,7 @@ code_refs:
 ## Flow
 
 1. A project member stores the token: `ota.externalCredential.create({ tool, name, secret })`. Tools are `eas`, `codepush`, `hot_updater`, `generic`.
-2. A workspace owner or admin (members can't; see [approvals](./approvals.md)) adds an allowlist grant for `(repo, pipeline, gate, provider = ota-<tool>, role = <name>)` with a max ttl — the existing credential grant.
+2. A workspace owner or admin (members can't; see [approvals](./approvals.md)) adds an allowlist grant for `(repo, pipeline, gate, provider = ota-<tool>, role = <name>)` with a max ttl — the existing credential grant, edited under **Access → Credential releases**.
 3. `.mocco.yml` requests it on the publishing step, behind a gate:
 
    ```yaml
@@ -54,7 +54,7 @@ The project's **OTA tokens** tab (`/workspaces/{id}/p/{projectId}/ota-tokens`, s
 
 - **Add:** tool, name (checked against the slug pattern before submit) and the token in a password field. The field is cleared after a successful add.
 - **Each token:** name, tool, fingerprint, provider id, who added it and when, and the last rotation. A token whose last rotation (or creation) is 90 days old or more gets a *rotate* badge.
-- **Released to:** the allowlist grants whose `provider` and `role` match the token (`credentialGrant.list`), with repo, pipeline, gate and max ttl. With no grant, it says a workspace admin has to add one.
+- **Released to:** the allowlist grants whose `provider` and `role` match the token (`credentialGrant.list`), with repo, pipeline, gate and max ttl. With no grant, it links to Access, where an owner or admin adds one.
 - **`.mocco.yml` snippet** to copy for the publishing step, and the variable the workflow exports the token as, for tools that fix one (`EXPO_TOKEN`, `CODE_PUSH_ACCESS_KEY`).
 - **Rotate** replaces the token in place (new fingerprint). **Delete** asks inline first. Neither shows the old value.
 

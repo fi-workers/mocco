@@ -1,4 +1,5 @@
 import { OTA_CREDENTIAL_NAME_PATTERN, OtaTools } from '@mocco/common/ota';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import {
@@ -14,6 +15,7 @@ import {
   Tones,
 } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
+import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { CredentialGrantDto } from '@mocco/common/credential';
@@ -285,14 +287,22 @@ function TokenCard({
         </dd>
         <dt className="text-muted-foreground">Released to</dt>
         <dd>
-          {grants.length === 0
-            ? 'No pipeline yet — a workspace admin adds an allowlist grant for this provider and role.'
-            : grants
-                .map(
-                  grant =>
-                    `${repoName(grant.repoId)} · ${grant.pipeline} · gate ${grant.gateName} (≤ ${grant.maxTtlSeconds}s)`,
-                )
-                .join('; ')}
+          {grants.length === 0 ? (
+            <>
+              No pipeline yet. A workspace owner or admin adds a release for this provider and role under{' '}
+              <Link href={Routes.workspaceAccess(workspaceId)} className="underline underline-offset-2">
+                Access
+              </Link>
+              .
+            </>
+          ) : (
+            grants
+              .map(
+                grant =>
+                  `${repoName(grant.repoId)} · ${grant.pipeline} · gate ${grant.gateName} (≤ ${grant.maxTtlSeconds}s)`,
+              )
+              .join('; ')
+          )}
         </dd>
       </dl>
       <div className="flex flex-col gap-1">
