@@ -28,7 +28,7 @@ code_refs:
 ## Flow
 
 1. A project member stores the token: `ota.externalCredential.create({ tool, name, secret })`. Tools are `eas`, `codepush`, `hot_updater`, `generic`.
-2. A workspace admin adds an allowlist grant for `(repo, pipeline, gate, provider = ota-<tool>, role = <name>)` with a max ttl — the existing credential grant.
+2. A workspace owner or admin (members can't; see [approvals](./approvals.md)) adds an allowlist grant for `(repo, pipeline, gate, provider = ota-<tool>, role = <name>)` with a max ttl — the existing credential grant.
 3. `.mocco.yml` requests it on the publishing step, behind a gate:
 
    ```yaml

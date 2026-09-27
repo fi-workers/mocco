@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@frontend/components/ui/button';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { trpc } from '@frontend/lib/trpc';
+import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
 
 import type { RoleDto } from '@mocco/common/governance';
 import type { WorkspaceMemberDetailDto } from '@mocco/common/workspace';
@@ -13,15 +14,18 @@ interface Props {
   workspaceId: string;
 }
 
-/** One role: its assigned members (add from the workspace, remove) and a delete. */
+/** One role: its assigned members (add from the workspace, remove) and a delete.
+ * Only owners and admins get the controls; the server refuses anyone else. */
 function RoleCard({
   workspaceId,
   role,
   workspaceMembers,
+  isAdmin,
 }: {
   workspaceId: string;
   role: RoleDto;
   workspaceMembers: WorkspaceMemberDetailDto[];
+  isAdmin: boolean;
 }) {
   const utils = trpc.useUtils();
   const membersQuery = trpc.role.listMembers.useQuery({ workspaceId, roleId: role.id });
@@ -60,16 +64,18 @@ function RoleCard({
     <li className="flex flex-col gap-4 rounded-xl border border-border px-4 py-4">
       <div className="flex items-center gap-3">
         <span className="flex-1 truncate text-sm font-semibold">{role.name}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive"
-          pending={isDeleting}
-          onClick={() => {
-            fireAndForget(removeRole());
-          }}>
-          Delete role
-        </Button>
+        {isAdmin ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive"
+            pending={isDeleting}
+            onClick={() => {
+              fireAndForget(removeRole());
+            }}>
+            Delete role
+          </Button>
+        ) : null}
       </div>
 
       {members.length === 0 ? (
@@ -82,45 +88,49 @@ function RoleCard({
                 <div className="truncate text-sm font-medium">{member.user.name ?? member.user.email}</div>
                 <div className="truncate text-xs text-muted-foreground">{member.user.email}</div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  fireAndForget(remove(member.userId));
-                }}>
-                Remove
-              </Button>
+              {isAdmin ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    fireAndForget(remove(member.userId));
+                  }}>
+                  Remove
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
 
-      <div className="flex items-center gap-2">
-        <select
-          aria-label={`Add a member to ${role.name}`}
-          className={inputClass}
-          value={selectedUserId}
-          disabled={candidates.length === 0}
-          onChange={event => {
-            setSelectedUserId(event.target.value);
-          }}>
-          <option value="">{candidates.length === 0 ? 'Everyone is assigned' : 'Select a member…'}</option>
-          {candidates.map(member => (
-            <option key={member.userId} value={member.userId}>
-              {member.user.name ?? member.user.email} ({member.user.email})
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="secondary"
-          pending={isAdding}
-          disabled={selectedUserId === ''}
-          onClick={() => {
-            fireAndForget(add());
-          }}>
-          Add
-        </Button>
-      </div>
+      {isAdmin ? (
+        <div className="flex items-center gap-2">
+          <select
+            aria-label={`Add a member to ${role.name}`}
+            className={inputClass}
+            value={selectedUserId}
+            disabled={candidates.length === 0}
+            onChange={event => {
+              setSelectedUserId(event.target.value);
+            }}>
+            <option value="">{candidates.length === 0 ? 'Everyone is assigned' : 'Select a member…'}</option>
+            {candidates.map(member => (
+              <option key={member.userId} value={member.userId}>
+                {member.user.name ?? member.user.email} ({member.user.email})
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="secondary"
+            pending={isAdding}
+            disabled={selectedUserId === ''}
+            onClick={() => {
+              fireAndForget(add());
+            }}>
+            Add
+          </Button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -134,6 +144,7 @@ export default function WorkspaceAccess({ workspaceId }: Props) {
   const roles = rolesQuery.data?.roles ?? [];
   const membersQuery = trpc.workspace.members.useQuery({ workspaceId });
   const workspaceMembers = membersQuery.data?.members ?? [];
+  const { isAdmin } = useWorkspaceAdmin(workspaceId);
 
   const { mutateAsync: createRole, isPending: isCreating } = trpc.role.create.useMutation();
   const [roleName, setRoleName] = useState('');
@@ -155,35 +166,44 @@ export default function WorkspaceAccess({ workspaceId }: Props) {
         <h1 className="text-xl font-semibold tracking-tight">Access</h1>
         <p className="text-sm text-muted-foreground">
           Define roles and assign members. Gates require an authorized role to resume a run.
+          {isAdmin ? null : ' You have read-only access; owners and admins manage roles.'}
         </p>
       </div>
 
-      <form
-        className="flex items-center gap-2"
-        onSubmit={event => {
-          event.preventDefault();
-          fireAndForget(create());
-        }}>
-        <input
-          aria-label="New role name"
-          className={inputClass}
-          value={roleName}
-          placeholder="e.g. deployer"
-          onChange={event => {
-            setRoleName(event.target.value);
-          }}
-        />
-        <Button type="submit" pending={isCreating} disabled={roleName.trim() === ''}>
-          Create role
-        </Button>
-      </form>
+      {isAdmin ? (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={event => {
+            event.preventDefault();
+            fireAndForget(create());
+          }}>
+          <input
+            aria-label="New role name"
+            className={inputClass}
+            value={roleName}
+            placeholder="e.g. deployer"
+            onChange={event => {
+              setRoleName(event.target.value);
+            }}
+          />
+          <Button type="submit" pending={isCreating} disabled={roleName.trim() === ''}>
+            Create role
+          </Button>
+        </form>
+      ) : null}
 
       {roles.length === 0 ? (
         <p className="text-sm text-muted-foreground">No roles yet. Create one to start assigning members.</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {roles.map(role => (
-            <RoleCard key={role.id} workspaceId={workspaceId} role={role} workspaceMembers={workspaceMembers} />
+            <RoleCard
+              key={role.id}
+              workspaceId={workspaceId}
+              role={role}
+              workspaceMembers={workspaceMembers}
+              isAdmin={isAdmin}
+            />
           ))}
         </ul>
       )}

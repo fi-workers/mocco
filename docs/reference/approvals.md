@@ -4,7 +4,7 @@ description: How any domain asks for an N-of-M approval of a pinned change (or r
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 confidence: high
 owner: andrea
 tags: [reference, governance, approvals, audit]
@@ -45,6 +45,7 @@ States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All
 - **One vote per person**, backed by the unique index.
 - **Superseding** only touches pending `pre_approval` requests; a pending `review` is evidence about an applied change and is never superseded.
 - **Expiry.** A vote on a request past `expires_at` marks it `expired` and is refused. `expireDue` expires the rest (to be driven by the job queue).
+- **Who manages roles.** Only workspace owners and admins can create or delete roles, change who holds them (`role.create | delete | addMember | removeMember`), or change the credential allowlist (`credentialGrant.create | delete`). Members can read both. Otherwise a member could add themselves to an approver role and approve their own change, or route a production credential to their own pipeline. A plain member gets `FORBIDDEN`.
 - **Audit.** `approval.requested` on creation; `approval.approved` (with the approving principals and roles), `approval.rejected`, `approval.superseded` and `approval.expired` on resolution.
 
 ## Errors
