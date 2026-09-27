@@ -1,6 +1,7 @@
 import { inboundEventPayloadSchema } from '@mocco/common/events';
 import { inboundEventTypeSchema, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 
+import { errorSummary } from '@backend/domain/errors';
 import { DomainEventPayloadError, UnknownDomainEventTypeError } from '@backend/domain/events/errors';
 import {
   INBOUND_BATCH_SIZE,
@@ -75,18 +76,6 @@ type ParsedEvent = Extract<ParsedInbound, { kind: typeof ParsedInboundKinds.even
 const overQuotaReason = `workspace is over the daily limit of ${INBOUND_DAILY_LIMIT} events`;
 const unparseableReason = 'stored event no longer matches the event catalog';
 const givenUpReason = `publishing failed ${INBOUND_MAX_PUBLISH_ATTEMPTS} times`;
-
-/**
- * What a log line may say about an error: its class and a driver error code, never the
- * message or the error itself (a query error's message and params carry the ingest
- * key, the payload or a sealed secret).
- */
-export function errorSummary(error: unknown): { error: string; code?: string } {
-  const name = error instanceof Error ? error.name : 'unknown error';
-  const { cause } = error instanceof Error ? error : { cause: undefined };
-  const code: unknown = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
-  return typeof code === 'string' ? { error: name, code } : { error: name };
-}
 
 /** A publish that can never succeed, however often it is retried. */
 function isDeterministic(error: unknown): boolean {

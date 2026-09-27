@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { ExecutorIds } from '@mocco/common/execution';
 import { versionCheckResponseSchema } from '@mocco/common/ota';
 import { AppPlatforms } from '@mocco/common/project';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
@@ -188,5 +189,24 @@ describe('GET /api/ext/v1/apps/:appId/version-check (pglite)', () => {
     expect(again.status).toBe(304);
     const other = await check(iosAppId, 'version=1.0', { 'if-none-match': etag });
     expect(other.status).toBe(200);
+  });
+
+  it('a missing table (an unapplied migration) is a bare 500, logged with the route and the driver code only', async () => {
+    const logged: unknown[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      logged.push(...args);
+    });
+    await t.db.execute(sql`drop table mocco_app_version_policy_changes`);
+    await t.db.execute(sql`drop table mocco_app_version_policies`);
+
+    const response = await check(androidAppId, 'version=2.0.0');
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('Internal server error');
+    expect(logged).toContainEqual(
+      expect.objectContaining({ method: 'GET', route: '/api/ext/v1/apps/:appId/version-check', code: '42P01' }),
+    );
+    expect(JSON.stringify(logged)).not.toContain(androidAppId);
+    vi.restoreAllMocks();
   });
 });

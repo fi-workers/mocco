@@ -17,3 +17,15 @@ export abstract class BadRequestError extends Error {}
 
 /** The request conflicts with existing state (e.g. a handle already taken) — maps to CONFLICT. */
 export abstract class ConflictError extends Error {}
+
+/**
+ * What a log line may say about an error: its class and a driver error code, never the
+ * message or the error itself (a query error's message and params carry the ingest
+ * key, the payload or a sealed secret).
+ */
+export function errorSummary(error: unknown): { error: string; code?: string } {
+  const name = error instanceof Error ? error.name : 'unknown error';
+  const { cause } = error instanceof Error ? error : { cause: undefined };
+  const code: unknown = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+  return typeof code === 'string' ? { error: name, code } : { error: name };
+}
