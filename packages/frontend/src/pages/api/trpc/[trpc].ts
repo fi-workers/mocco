@@ -41,6 +41,7 @@ export default createNextApiHandler({
       projects: project.projects,
       products: project.products,
       versionPolicies: getOtaDomain().versionPolicies,
+      externalCredentials: getOtaDomain().externalCredentials,
       session: await auth.getSession(headers),
       headers,
     };

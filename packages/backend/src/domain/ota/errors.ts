@@ -1,4 +1,4 @@
-import { BadRequestError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
 /** Version policies apply to store builds only (iOS and Android apps) — BAD_REQUEST. */
 export class NotAStoreAppError extends BadRequestError {
@@ -21,5 +21,29 @@ export class VersionPolicyConflictError extends BadRequestError {
   constructor(appId: string, options?: ErrorOptions) {
     super(`The version policy of app ${appId} changed meanwhile; reload and try again`, options);
     this.name = 'VersionPolicyConflictError';
+  }
+}
+
+/** An external OTA credential the project doesn't have — NOT_FOUND. */
+export class OtaCredentialNotFoundError extends NotFoundError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`OTA credential ${id} was not found`, options);
+    this.name = 'OtaCredentialNotFoundError';
+  }
+}
+
+/** Another credential in the workspace already uses this name — CONFLICT. */
+export class OtaCredentialNameTakenError extends ConflictError {
+  constructor(name: string, options?: ErrorOptions) {
+    super(`An OTA credential named "${name}" already exists in this workspace`, options);
+    this.name = 'OtaCredentialNameTakenError';
+  }
+}
+
+/** This server has no SecretBox key, so it cannot store secrets — BAD_REQUEST. */
+export class SecretStorageUnavailableError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('This server is not configured to store secrets (SECRETS_ENCRYPTION_KEYS is not set)', options);
+    this.name = 'SecretStorageUnavailableError';
   }
 }

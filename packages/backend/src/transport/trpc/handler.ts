@@ -23,6 +23,7 @@ import type { CommitConfigService } from '@backend/domain/integration/CommitConf
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
+import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -43,6 +44,7 @@ export interface TrpcDeps extends Services {
   projects: ProjectService;
   products: ProductEnablementService;
   versionPolicies: VersionPolicyService;
+  externalCredentials: ExternalCredentialService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound?: InboundDomain;
   notifications?: ChannelService;
@@ -77,6 +79,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         projects: deps.projects,
         products: deps.products,
         versionPolicies: deps.versionPolicies,
+        externalCredentials: deps.externalCredentials,
         inbound: deps.inbound,
         notifications: deps.notifications,
         session: await deps.auth.getSession(request.headers),
@@ -102,6 +105,7 @@ export async function trpcHandler(request: Request): Promise<Response> {
     projects: getProjectDomain().projects,
     products: getProjectDomain().products,
     versionPolicies: getOtaDomain().versionPolicies,
+    externalCredentials: getOtaDomain().externalCredentials,
     inbound: getInbound(),
     notifications: getNotification().channels,
   })(request);

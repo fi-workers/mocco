@@ -4,7 +4,7 @@ description: Draft v1 spec for the repo-root .mocco.yml declaring pipelines and 
 type: reference
 status: draft
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-09-25
 confidence: medium
 owner: andrea
 code_refs: []
@@ -98,7 +98,7 @@ Note: `audit` is **not** a top-level file field — the append-only hash chain i
 ### enum
 - `concurrency.mode`: `oldest_first` \| `newest_first` \| `newest_ready_first` \| `unordered`
 - `safety.prevent_outdated`: `reject` \| `skip` \| `off`
-- `credential.provider`: `aws-oidc` \| `gcp-oidc` \| `azure-oidc` \| `vault` (adapter extension)
+- `credential.provider`: `aws-oidc` \| `gcp-oidc` \| `azure-oidc` \| `vault` (adapter extension); `ota-eas` \| `ota-codepush` \| `ota-hot-updater` \| `ota-generic` release a stored OTA publishing token ([OTA external credentials](./ota-external-credentials.md))
 
 ## Design decisions (draft, subject to change)
 

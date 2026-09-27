@@ -85,3 +85,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   control design: CDN caching makes server-side counts wrong, so it needs an uncached client report.
 - Docs touched: `reference/ota-version-policy.md`, `specs/2026-09-25-ota-release-control-design.md`
 - Source: branch `feat/ota-version-check`
+
+## 2026-09-25 — OTA external credentials
+
+- Added the OTA external credentials reference (phase 1: the existing OTA tool's publishing token, sealed and
+  released by the broker only to a gated step) and the `ota-*` provider ids in the `.mocco.yml` spec.
+- Docs touched: `reference/ota-external-credentials.md`, `reference/mocco-yml-spec.md`, `index.md`
+- Source: branch `feat/ota-external-credentials`

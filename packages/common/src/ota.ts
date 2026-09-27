@@ -235,3 +235,52 @@ export function pickVersionMessage(
   );
   return key === undefined ? null : (messages[key] ?? null);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Phase 1 — gate existing OTA tools. Mocco stores the team's publishing token for its
+// current OTA tool and releases it only to a pipeline step that reached a resumed gate
+// (through the credential broker). The broker `provider` is `ota-<tool>`; the broker
+// `role` is the credential's name.
+// ─────────────────────────────────────────────────────────────
+
+/** The OTA tools whose publishing credential Mocco can hold. */
+export const OtaTools = {
+  eas: 'eas',
+  codepush: 'codepush',
+  hotUpdater: 'hot_updater',
+  generic: 'generic',
+} as const;
+export type OtaTool = (typeof OtaTools)[keyof typeof OtaTools];
+export const otaToolSchema = z.enum(Object.values(OtaTools) as [OtaTool, ...OtaTool[]]);
+
+/** The credential-broker provider id for each tool (what `.mocco.yml` puts in `credential.provider`). */
+export const OtaCredentialProviders = {
+  [OtaTools.eas]: 'ota-eas',
+  [OtaTools.codepush]: 'ota-codepush',
+  [OtaTools.hotUpdater]: 'ota-hot-updater',
+  [OtaTools.generic]: 'ota-generic',
+} as const satisfies Record<OtaTool, string>;
+
+/** A credential name: it doubles as the broker `role`, so it is a stable slug. */
+export const OTA_CREDENTIAL_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+/** A stored external credential — wire shape. The secret itself never leaves the server. */
+export const otaExternalCredentialSchema = z.object({
+  id: z.uuid(),
+  projectId: z.uuid(),
+  tool: otaToolSchema,
+  name: z.string(),
+  provider: z.string(),
+  secretFingerprint: z.string(),
+  createdByUserId: z.uuid().nullable(),
+  createdAt: z.date(),
+  rotatedAt: z.date().nullable(),
+});
+export type OtaExternalCredentialDto = z.infer<typeof otaExternalCredentialSchema>;
+
+export const otaExternalCredentialCreateInputSchema = z.object({
+  tool: otaToolSchema,
+  name: z.string().regex(OTA_CREDENTIAL_NAME_PATTERN),
+  secret: z.string().min(1).max(8192),
+});
+export type OtaExternalCredentialCreateInput = z.infer<typeof otaExternalCredentialCreateInputSchema>;
