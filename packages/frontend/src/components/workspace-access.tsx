@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import CredentialGrants from '@frontend/components/credential-grants';
 import { Button } from '@frontend/components/ui/button';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { trpc } from '@frontend/lib/trpc';
@@ -207,6 +208,8 @@ export default function WorkspaceAccess({ workspaceId }: Props) {
           ))}
         </ul>
       )}
+
+      <CredentialGrants workspaceId={workspaceId} isAdmin={isAdmin} />
     </div>
   );
 }
