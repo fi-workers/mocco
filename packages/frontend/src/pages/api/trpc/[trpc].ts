@@ -1,13 +1,7 @@
 // tRPC Pages Router API route. tRPC's own Node adapter builds the per-request
-// context from the neutral services (session read from the request headers).
-import { getAudit } from '@mocco/backend/audit/instance';
-import { getServices } from '@mocco/backend/auth/instance';
-import { getCredential } from '@mocco/backend/credential/instance';
-import { getExecution } from '@mocco/backend/execution/instance';
-import { getGovernance } from '@mocco/backend/governance/instance';
-import { getIntegration } from '@mocco/backend/integration/instance';
-import { getOtaDomain } from '@mocco/backend/ota/instance';
-import { getProjectDomain } from '@mocco/backend/project/instance';
+// context: the production services come from the backend's single composition
+// (`productionServices`), plus the session read from the request headers.
+import { productionServices } from '@mocco/backend/trpc/handler';
 import { appRouter } from '@mocco/backend/trpc/root';
 import { createNextApiHandler } from '@trpc/server/adapters/next';
 
@@ -19,32 +13,9 @@ import type { Context } from '@mocco/backend/trpc/trpc';
 export default createNextApiHandler({
   router: appRouter,
   createContext: async ({ req }): Promise<Context> => {
-    const { auth, workspace } = getServices();
+    const services = productionServices();
     const headers = headersFromNode(req.headers);
-    const integration = getIntegration();
-    const execution = getExecution();
-    const governance = getGovernance();
-    const credential = getCredential();
-    const project = getProjectDomain();
-    return {
-      auth,
-      workspace,
-      connection: integration?.connection,
-      commitSync: integration?.commitSync,
-      commitConfig: integration?.commitConfig,
-      runs: execution.runs,
-      roles: governance.roles,
-      gates: governance.gates,
-      approvals: governance.approvals,
-      grants: credential.grants,
-      audit: getAudit().audit,
-      projects: project.projects,
-      products: project.products,
-      versionPolicies: getOtaDomain().versionPolicies,
-      externalCredentials: getOtaDomain().externalCredentials,
-      session: await auth.getSession(headers),
-      headers,
-    };
+    return { ...services, session: await services.auth.getSession(headers), headers };
   },
   // The client only ever sees the masked message (errorFormatter); keep the real
   // internal error visible server-side. Structured Sentry capture hooks in here.

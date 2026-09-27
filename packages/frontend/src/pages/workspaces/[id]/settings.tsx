@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
 import WorkspaceSettings from '@frontend/components/workspace-settings';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // Workspace settings (rename + delete), client-rendered inside the workspace frame.
 export default function WorkspaceSettingsPage() {
@@ -12,7 +13,7 @@ export default function WorkspaceSettingsPage() {
   return (
     <AppShell>
       {id ? (
-        <WorkspaceLayout workspaceId={id} active="settings">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.settings}>
           <WorkspaceSettings workspaceId={id} />
         </WorkspaceLayout>
       ) : null}

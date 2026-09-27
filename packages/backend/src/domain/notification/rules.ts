@@ -3,6 +3,8 @@
 // re-runs the same function through `explainNoMatch` to tell a customer why a
 // channel got nothing, so the explanation can never disagree with the decision.
 import { isEventPatternMatch } from '@mocco/common/events';
+import { factsSchema } from '@mocco/common/inbound';
+import { z } from 'zod';
 
 import type { Facts } from '@mocco/common/inbound';
 import type { RuleFilter } from '@mocco/common/notification';
@@ -21,6 +23,22 @@ export interface MatchableEvent {
   type: string;
   facts: Facts;
   sourceId?: string;
+}
+
+/** The part of an event payload rules read: every catalog payload carries flat `facts`;
+ * inbound payloads add the `sourceId` that received them (relay design §4). */
+export const matchablePayloadSchema = z.object({ facts: factsSchema, sourceId: z.string().optional() });
+
+/** What the matcher reads from an event of `type` with `payload`, or undefined when the
+ * payload has no facts (a stored payload that no longer parses). */
+// eslint-disable-next-line sonarjs/function-return-type -- undefined is the "cannot be read" answer
+export function parseMatchableEvent(type: string, payload: unknown): MatchableEvent | undefined {
+  const parsed = matchablePayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const { facts, sourceId } = parsed.data;
+  return { type, facts, ...(sourceId !== undefined && { sourceId }) };
 }
 
 type RuleCheck = { matches: true } | { matches: false; reason: string };

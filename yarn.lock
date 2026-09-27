@@ -1848,6 +1848,7 @@ __metadata:
     eslint: "npm:10.6.0"
     eslint-plugin-jsx-a11y: "npm:6.10.2"
     lucide-react: "npm:1.24.0"
+    marked: "npm:18.0.14"
     next: "npm:16.2.10"
     react: "npm:19.2.1"
     react-doctor: "npm:0.7.1"
@@ -8892,6 +8893,15 @@ __metadata:
     "@babel/types": "npm:^7.29.0"
     source-map-js: "npm:^1.2.1"
   checksum: 10/436ad518726b691cf9ac1a14ab14705784f28075892a092b06e8b17ac7303fe57e8a2789989c68b560653a909a8df49d1582bb73f9bdad4bcbab892201251049
+  languageName: node
+  linkType: hard
+
+"marked@npm:18.0.14":
+  version: 18.0.14
+  resolution: "marked@npm:18.0.14"
+  bin:
+    marked: bin/marked.js
+  checksum: 10/d97c79d605ef9f786a379fc86893421f9598f7f05a8e837206279b3a50e9e1f3666769876ea7d8b58b378325da47d2d63758f9d28347440ae25feefbfcf2aeac
   languageName: node
   linkType: hard
 

@@ -14,6 +14,7 @@ import {
   ruleEventTypeSchema,
   ruleFilterSchema,
 } from '@mocco/common/notification';
+import { activityPageSchema, activityQuerySchema, discordSetupSchema } from '@mocco/common/notification-activity';
 import { rulePresetSchema } from '@mocco/common/notification-presets';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -83,6 +84,26 @@ const adminNotificationProcedure = notificationProcedure.use(async ({ ctx, getRa
 const channelInput = workspaceScopedInput.extend({ channelId: z.uuid() });
 
 export const notificationRouter = router({
+  // Whether this deployment can install the bot at all (the install route answers 503
+  // otherwise), so the UI explains a missing setup instead of linking to an error.
+  discordSetup: protectedNotificationProcedure
+    .input(workspaceScopedInput)
+    .output(discordSetupSchema)
+    .query(({ ctx }) => ctx.notifications.discordSetup()),
+
+  // The activity trace (relay design §8): receipts and Mocco events, newest first, with
+  // what every channel got. `cursor` is the previous page's `nextCursor`.
+  activity: protectedNotificationProcedure
+    .input(workspaceScopedInput.extend(activityQuerySchema.shape))
+    .output(activityPageSchema)
+    .query(async ({ ctx, input }) => {
+      if (ctx.notificationActivity === undefined) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'The activity trace is not available' });
+      }
+      const { workspaceId, ...query } = input;
+      return await ctx.notificationActivity.list(workspaceId, query);
+    }),
+
   guilds: protectedNotificationProcedure
     .input(workspaceScopedInput)
     .output(z.object({ guilds: z.array(discordGuildSchema) }))

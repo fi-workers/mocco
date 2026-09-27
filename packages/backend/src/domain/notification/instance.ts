@@ -3,6 +3,9 @@
 // import. The fan-out and the delivery job are composed elsewhere: the fan-out in
 // createEventBus (domain/events/subscriptions.ts), the job in runtime/jobs.ts.
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
+import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
+import { ActivityService } from '@backend/domain/notification/ActivityService';
 import { ChannelService } from '@backend/domain/notification/ChannelService';
 import { createDiscordApiFromEnv, createDiscordOAuthFromEnv } from '@backend/domain/notification/discord-config';
 import { DiscordInstallService } from '@backend/domain/notification/DiscordInstallService';
@@ -20,6 +23,8 @@ export interface Notification {
   channels: ChannelService;
   /** The bot install; undefined unless DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_BOT_TOKEN are set. */
   install: DiscordInstallService | undefined;
+  /** The activity trace; a read model over receipts, events and deliveries. */
+  activity: ActivityService;
 }
 
 const state: { notification?: Notification } = {};
@@ -31,16 +36,27 @@ export function getNotification(): Notification {
     const now = () => new Date();
     const appOrigin = resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL });
     const guilds = new DiscordGuildRepo(db);
+    const channels = new ChannelRepo(db);
+    const rules = new RuleRepo(db);
+    const deliveries = new DeliveryRepo(db);
     const oauth = createDiscordOAuthFromEnv(env, { fetch, appOrigin });
     state.notification = {
       channels: new ChannelService({
         guilds,
-        channels: new ChannelRepo(db),
-        rules: new RuleRepo(db),
-        deliveries: new DeliveryRepo(db),
+        channels,
+        rules,
+        deliveries,
         rateLimits: new DiscordRateLimitRepo(db),
         discord: createDiscordApiFromEnv(env, { fetch, now }),
+        installAvailable: oauth !== undefined,
         now,
+      }),
+      activity: new ActivityService({
+        receipts: new InboundReceiptRepo(db),
+        sources: new InboundSourceRepo(db),
+        channels,
+        rules,
+        deliveries,
       }),
       install:
         oauth === undefined

@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-09-25
+updated: 2026-09-26
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -40,6 +40,12 @@ Env var names are ours (`AUTH_SECRET`), never vendor-branded.
 Services are **constructor-injected classes** — `new AuthService(provider)`, `new WorkspaceService(provider)`. A composition root (`auth/instance.ts`) binds them once; tests construct the same classes over pglite.
 
 - **No test-only code in production modules**: no `*ForTesting` hooks, seams, or swappable singletons. Explicit constructor arguments _are_ the seam. Hoisted module-mocking (`vi.mock`) is not a substitute (ADR 0008). If a test can't reach something, fix the design (inject the dependency), don't add a seam.
+
+## tRPC context composition
+
+The production services a tRPC context carries are composed in **one** place: `productionServices()` in `transport/trpc/handler.ts`. Both the backend fetch handler and the Pages-Router API route (`pages/api/trpc/[trpc].ts`) spread it and add only `session` and `headers`; neither lists services itself.
+
+Services that may be absent (the GitHub App, inbound, notifications) are **required keys typed `X | undefined`** on `Context` and `TrpcDeps`, never optional (`?:`) properties. A context builder that forgets one then fails to compile. An optional key once let the API route drop `notifications` and `inbound` silently, so those routers answered "not available" in the real app while every test (built through `handler.ts`) passed. Tests get the absent defaults from `transport/trpc/testing/context-services.ts`.
 
 ## Domain errors → transport codes
 

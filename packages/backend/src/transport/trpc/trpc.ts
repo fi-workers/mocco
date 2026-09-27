@@ -13,6 +13,7 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
@@ -20,17 +21,19 @@ import type { ProductEnablementService } from '@backend/domain/project/ProductEn
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Session } from '@mocco/common/auth';
 
-/** Per-request tRPC context — session read via the neutral auth surface. */
+/** Per-request tRPC context — session read via the neutral auth surface. Optional
+ * services are required keys typed `X | undefined`, so a context builder that forgets
+ * one fails to compile instead of silently disabling a router. */
 export interface Context {
   /** Injected services (production instances or per-test pglite ones). */
   auth: AuthService;
   workspace: WorkspaceService;
   /** Present only when the GitHub App is configured; the integration router asserts it. */
-  connection?: ConnectionService;
+  connection: ConnectionService | undefined;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
-  commitSync?: CommitSyncService;
+  commitSync: CommitSyncService | undefined;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
-  commitConfig?: CommitConfigService;
+  commitConfig: CommitConfigService | undefined;
   /** Always present — the execution domain has no external dependency to gate on. */
   runs: RunService;
   /** Always present — the governance domain has no external dependency to gate on. */
@@ -53,9 +56,11 @@ export interface Context {
   externalCredentials: ExternalCredentialService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
-  inbound?: InboundDomain;
+  inbound: InboundDomain | undefined;
   /** Notification channels, rules and deliveries; the notification router asserts it. */
-  notifications?: ChannelService;
+  notifications: ChannelService | undefined;
+  /** The notification activity trace; the notification router's `activity` asserts it. */
+  notificationActivity: ActivityService | undefined;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;
