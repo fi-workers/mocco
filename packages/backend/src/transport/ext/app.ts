@@ -10,10 +10,12 @@ import { Providers } from '@mocco/common/integration';
 import { versionSchema } from '@mocco/common/ota';
 import { waitUntil } from '@vercel/functions';
 import { Hono } from 'hono';
+import { routePath } from 'hono/route';
 import { z } from 'zod';
 
 import { getServices } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
+import { errorSummary } from '@backend/domain/errors';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
@@ -320,8 +322,14 @@ export function createExtApp(deps: ExtDeps): Hono {
   app.route('/', createJobTickRoutes(deps.jobTick));
 
   // Defense-in-depth (symmetric with the tRPC maskInternalError): an unexpected
-  // throw surfaces as a fixed generic 500 — never a vendor/SQL/token detail.
-  app.onError((_error, c) => c.text('Internal server error', 500));
+  // throw surfaces as a fixed generic 500 — never a vendor/SQL/token detail. The log
+  // line names the matched route pattern (never the raw path, which can carry an
+  // ingest key) and only the error class and driver code, e.g. 42P01 for a table a
+  // deploy is missing because its migration wasn't applied.
+  app.onError((error, c) => {
+    console.error('[ext] unhandled error', { method: c.req.method, route: routePath(c), ...errorSummary(error) });
+    return c.text('Internal server error', 500);
+  });
 
   return app;
 }
