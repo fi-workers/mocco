@@ -88,7 +88,7 @@ steps:
     credential: { provider: ota-eas, role: acme-production, ttl: 900, gate: prod }
 ```
 
-The `publish` workflow calls `POST /api/ext/credentials` with its run token (the existing broker contract). If every broker check passes (step dispatched, pinned config, gate resumed, allowlist grant), the broker asks the **sealed-secret provider** for `ota-eas` / `acme-production`. That provider opens the stored token with SecretBox and returns it as the credential `value`. The workflow exports it (`EXPO_TOKEN`, `CODE_PUSH_ACCESS_KEY`, or the hot-updater storage credentials) and runs the tool's own CLI.
+The `publish` workflow calls `POST /api/ext/credentials` with its run token (the existing broker contract). If every broker check passes (step dispatched, pinned config, gate resumed, allowlist grant), the broker asks the **sealed-secret provider** for `ota-eas` / `acme-production`. That provider opens the stored token with SecretBox and returns it as the credential `value`. The workflow exports it the way the tool expects (`EXPO_TOKEN`, a CodePush CLI's `--accessKey`, or the hot-updater storage credentials) and runs the tool's own CLI.
 
 ### Model
 
