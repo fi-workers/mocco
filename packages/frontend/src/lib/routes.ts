@@ -17,6 +17,11 @@ export const Routes = {
   workspaceProducts: (id: string) => `/workspaces/${id}/products`,
   /** A project's home: its apps and linked repos. Project-scoped products live below it. */
   project: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}`,
+  /** A project's OTA screen (force update); `appId` selects the store app shown. */
+  projectOta: (id: string, projectId: string, appId?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/ota`;
+    return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
+  },
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',

@@ -23,6 +23,7 @@ export type WorkspaceSection = (typeof WorkspaceSections)[keyof typeof Workspace
 
 export const ProjectSections = {
   overview: 'overview',
+  ota: 'ota',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
 
@@ -47,6 +48,7 @@ export const workspaceNav: readonly NavEntry<WorkspaceSection, (workspaceId: str
 
 export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string, projectId: string) => string>[] = [
   { key: ProjectSections.overview, label: 'Overview', href: Routes.project, product: null },
+  { key: ProjectSections.ota, label: 'Force update', href: Routes.projectOta, product: Products.ota },
 ];
 
 /** How each product is presented on the Products page. `available` = it has screens today. */
