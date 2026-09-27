@@ -4,7 +4,7 @@ description: How Mocco holds the publishing token of a team's existing OTA tool 
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 confidence: high
 owner: andrea
 tags: [reference, ota, credential-broker, secrets, governance]
@@ -18,6 +18,7 @@ code_refs:
   - packages/backend/src/domain/credential/providers/routing.ts
   - packages/backend/src/domain/credential/CredentialBroker.ts
   - packages/backend/src/transport/trpc/routers/ota.ts
+  - packages/frontend/src/components/ota/publishing-tokens.tsx
 ---
 
 # OTA external credentials
@@ -46,6 +47,16 @@ code_refs:
 - The secret is write-only. No API returns it; the tRPC `.output()` strips the sealed column, and the UI shows an 8-hex `secretFingerprint` (SHA-256 prefix). Create, rotate and delete are audited (`ota.credential.created|rotated|deleted`) without the secret.
 - Lookup at issue time is by `(run's workspace, tool, name)` only, so a run can never obtain another workspace's token, nor another tool's token under the same name.
 - A deploy without `SECRETS_ENCRYPTION_KEYS` boots. Storing a credential then fails with `SecretStorageUnavailableError` (`BAD_REQUEST`), and releasing one is an audited DENY.
+
+## Console
+
+The project's **OTA tokens** tab (`/workspaces/{id}/p/{projectId}/ota-tokens`, shown when the OTA product is enabled):
+
+- **Add:** tool, name (checked against the slug pattern before submit) and the token in a password field. The field is cleared after a successful add.
+- **Each token:** name, tool, fingerprint, provider id, who added it and when, and the last rotation. A token whose last rotation (or creation) is 90 days old or more gets a *rotate* badge.
+- **Released to:** the allowlist grants whose `provider` and `role` match the token (`credentialGrant.list`), with repo, pipeline, gate and max ttl. With no grant, it says a workspace admin has to add one.
+- **`.mocco.yml` snippet** to copy for the publishing step, and the variable the workflow exports the token as, for tools that fix one (`EXPO_TOKEN`, `CODE_PUSH_ACCESS_KEY`).
+- **Rotate** replaces the token in place (new fingerprint). **Delete** asks inline first. Neither shows the old value.
 
 ## Broker changes
 
