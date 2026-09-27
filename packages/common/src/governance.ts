@@ -117,3 +117,78 @@ export const gateResumeInputSchema = z.object({
   reason: z.string().min(1).optional(),
 });
 export type GateResumeInput = z.infer<typeof gateResumeInputSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Approvals outside runs (#114). Any domain can ask "may this pinned change
+// happen?" under the same `GateRequirements` a run gate uses — OTA promotion,
+// version-policy changes, flag changesets. A `pre_approval` request must be
+// approved before its change is applied; a `review` request records the post-hoc
+// review of a change that was applied at once (a rollback, a pause — the
+// direction rules in the OTA release control design).
+// ─────────────────────────────────────────────────────────────
+
+/** Whether a request gates a change (`pre_approval`) or reviews one already applied (`review`). */
+export const ApprovalKinds = {
+  preApproval: 'pre_approval',
+  review: 'review',
+} as const;
+export type ApprovalKind = (typeof ApprovalKinds)[keyof typeof ApprovalKinds];
+export const approvalKindSchema = z.enum(Object.values(ApprovalKinds) as [ApprovalKind, ...ApprovalKind[]]);
+
+/** A request's lifecycle: `pending` → `approved` | `rejected` | `expired` | `superseded`. */
+export const ApprovalStates = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+  expired: 'expired',
+  superseded: 'superseded',
+} as const;
+export type ApprovalState = (typeof ApprovalStates)[keyof typeof ApprovalStates];
+export const approvalStateSchema = z.enum(Object.values(ApprovalStates) as [ApprovalState, ...ApprovalState[]]);
+
+/** A single vote on an approval request. */
+export const ApprovalDecisions = {
+  approve: 'approve',
+  reject: 'reject',
+} as const;
+export type ApprovalDecision = (typeof ApprovalDecisions)[keyof typeof ApprovalDecisions];
+export const approvalDecisionSchema = z.enum(
+  Object.values(ApprovalDecisions) as [ApprovalDecision, ...ApprovalDecision[]],
+);
+
+/** An approval request — the pinned change (`action`) and the requirements snapshot. Wire shape. */
+export const approvalRequestSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid(),
+  kind: approvalKindSchema,
+  subjectType: z.string(),
+  subjectId: z.string(),
+  action: z.record(z.string(), z.unknown()),
+  requirements: gateRequirementsSchema,
+  requestedByUserId: z.uuid().nullable(),
+  state: approvalStateSchema,
+  expiresAt: z.date().nullable(),
+  resolvedAt: z.date().nullable(),
+  createdAt: z.date(),
+});
+export type ApprovalRequestDto = z.infer<typeof approvalRequestSchema>;
+
+/** A vote on an approval request — one per (request, user) by DB constraint. */
+export const approvalVoteSchema = z.object({
+  id: z.uuid(),
+  requestId: z.uuid(),
+  userId: z.uuid(),
+  roleId: z.uuid().nullable(),
+  decision: approvalDecisionSchema,
+  reason: z.string().nullable(),
+  createdAt: z.date(),
+});
+export type ApprovalVoteDto = z.infer<typeof approvalVoteSchema>;
+
+/** Vote input. `reason` is required only when the requirements set `reason_required`
+ * — enforced in the service so the error is a domain error. */
+export const approvalVoteInputSchema = z.object({
+  decision: approvalDecisionSchema,
+  reason: z.string().min(1).optional(),
+});
+export type ApprovalVoteInput = z.infer<typeof approvalVoteInputSchema>;

@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3100",
-    "build": "next build",
+    "dev": "node ../../scripts/copy-customer-docs-images.mjs && next dev -p 3100",
+    "build": "node ../../scripts/copy-customer-docs-images.mjs && next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "doctor": "react-doctor . --no-score --blocking error",
@@ -25,6 +25,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.24.0",
+    "marked": "18.0.14",
     "next": "16.2.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",

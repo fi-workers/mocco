@@ -6,32 +6,42 @@ import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { ActivityService } from '@backend/domain/notification/ActivityService';
+import type { ChannelService } from '@backend/domain/notification/ChannelService';
+import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Session } from '@mocco/common/auth';
 
-/** Per-request tRPC context — session read via the neutral auth surface. */
+/** Per-request tRPC context — session read via the neutral auth surface. Optional
+ * services are required keys typed `X | undefined`, so a context builder that forgets
+ * one fails to compile instead of silently disabling a router. */
 export interface Context {
   /** Injected services (production instances or per-test pglite ones). */
   auth: AuthService;
   workspace: WorkspaceService;
   /** Present only when the GitHub App is configured; the integration router asserts it. */
-  connection?: ConnectionService;
+  connection: ConnectionService | undefined;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
-  commitSync?: CommitSyncService;
+  commitSync: CommitSyncService | undefined;
   /** Present only when the GitHub App is configured (same condition as `connection`). */
-  commitConfig?: CommitConfigService;
+  commitConfig: CommitConfigService | undefined;
   /** Always present — the execution domain has no external dependency to gate on. */
   runs: RunService;
   /** Always present — the governance domain has no external dependency to gate on. */
   roles: RoleService;
   /** Always present — resolves a run's gate; the run router's resumeGate delegates here. */
   gates: GateService;
+  /** Always present — approvals outside runs (#114). */
+  approvals: ApprovalService;
   /** Always present — the credential allowlist has no external dependency to gate on. */
   grants: GrantService;
   /** Always present — the audit hash chain is self-contained (no external dependency). */
@@ -40,6 +50,17 @@ export interface Context {
   projects: ProjectService;
   /** Always present — which product lines the workspace has enabled. */
   products: ProductEnablementService;
+  /** Always present — OTA version policy and native force update. */
+  versionPolicies: VersionPolicyService;
+  /** Always present — sealed publishing tokens of the team's existing OTA tools. */
+  externalCredentials: ExternalCredentialService;
+  /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
+   * the inbound router asserts it. */
+  inbound: InboundDomain | undefined;
+  /** Notification channels, rules and deliveries; the notification router asserts it. */
+  notifications: ChannelService | undefined;
+  /** The notification activity trace; the notification router's `activity` asserts it. */
+  notificationActivity: ActivityService | undefined;
   session: Session | null;
   /** Original request headers — forwarded to neutral auth calls (cookie-based). */
   headers: Headers;

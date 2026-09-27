@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -24,9 +25,10 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { createProjectDomain } from '@backend/domain/project/instance';
+import { members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
   const response = await auth.handler(
@@ -91,7 +93,7 @@ describe('role router on pglite', () => {
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     const api = appRouter.createCaller({
-      ...createProjectDomain(t.db),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,
@@ -195,6 +197,39 @@ describe('role router on pglite', () => {
       await expect(memberB.api.role.delete({ workspaceId: wsB.id, roleId: role.id })).rejects.toMatchObject({
         code: 'NOT_FOUND',
       });
+    });
+  });
+
+  describe('admin-only changes', () => {
+    it('a plain member can read roles but gets FORBIDDEN on every change, including joining a role', async () => {
+      const owner = await signedInCaller('owner-admin@example.com');
+      const { workspace: ws } = await owner.api.workspace.create({ name: 'W' });
+      const { role } = await owner.api.role.create({ workspaceId: ws.id, name: 'approver' });
+      await owner.api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId: owner.userId });
+
+      const member = await signedInCaller('plain-member@example.com');
+      await t.db
+        .insert(members)
+        .values({ organizationId: ws.id, userId: member.userId, role: WorkspaceMemberRoles.member });
+
+      await expect(member.api.role.list({ workspaceId: ws.id })).resolves.toMatchObject({
+        roles: [expect.objectContaining({ id: role.id })],
+      });
+      const readable = await member.api.role.listMembers({ workspaceId: ws.id, roleId: role.id });
+      expect(readable.members).toHaveLength(1);
+
+      const refused = { code: 'FORBIDDEN' };
+      await expect(member.api.role.create({ workspaceId: ws.id, name: 'mine' })).rejects.toMatchObject(refused);
+      await expect(
+        member.api.role.addMember({ workspaceId: ws.id, roleId: role.id, userId: member.userId }),
+      ).rejects.toMatchObject(refused);
+      await expect(
+        member.api.role.removeMember({ workspaceId: ws.id, roleId: role.id, userId: owner.userId }),
+      ).rejects.toMatchObject(refused);
+      await expect(member.api.role.delete({ workspaceId: ws.id, roleId: role.id })).rejects.toMatchObject(refused);
+
+      const after = await owner.api.role.listMembers({ workspaceId: ws.id, roleId: role.id });
+      expect(after.members.map(entry => entry.userId)).toEqual([owner.userId]);
     });
   });
 });

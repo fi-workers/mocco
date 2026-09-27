@@ -12,9 +12,29 @@ export const Routes = {
   workspaceAccess: (id: string) => `/workspaces/${id}/access`,
   workspaceAudit: (id: string) => `/workspaces/${id}/audit`,
   workspaceSettings: (id: string) => `/workspaces/${id}/settings`,
+  workspaceNotifications: (id: string) => `/workspaces/${id}/notifications`,
+  workspaceProjects: (id: string) => `/workspaces/${id}/projects`,
+  workspaceProducts: (id: string) => `/workspaces/${id}/products`,
+  /** A project's home: its apps and linked repos. Project-scoped products live below it. */
+  project: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}`,
+  /** A project's OTA screen (force update); `appId` selects the store app shown. */
+  projectOta: (id: string, projectId: string, appId?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/ota`;
+    return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
+  },
+  /** The publishing tokens Mocco holds for the project's existing OTA tool. */
+  projectOtaTokens: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/ota-tokens`,
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',
+  /** A customer guide page of a set, e.g. `guide('ota', 'force-update')` → `/docs/ota/force-update`. */
+  guide: (set: string, page: string) => `/docs/${set}/${page}`,
+  /** A notifications guide page, e.g. `notificationsGuide('sentry')` → `/docs/notifications/sentry`. */
+  notificationsGuide: (page: string) => `/docs/notifications/${page}`,
+  /** An OTA guide page, e.g. `otaGuide('gate-eas-update')` → `/docs/ota/gate-eas-update`. */
+  otaGuide: (page: string) => `/docs/ota/${page}`,
+  /** Starts the Discord bot install (a Hono route: full navigation, not a client push). */
+  discordInstall: (workspaceId: string) => `/api/ext/discord/install?workspaceId=${encodeURIComponent(workspaceId)}`,
 } as const;
 
 // Only the static string routes — the dynamic builders (e.g. `workspace`) are

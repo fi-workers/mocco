@@ -7,7 +7,7 @@ import { roleCreateInputSchema, roleMemberSchema, roleSchema } from '@mocco/comm
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { NotFoundError } from '@backend/domain/errors';
+import { ForbiddenError, NotFoundError } from '@backend/domain/errors';
 import { protectedProcedure, router } from '@backend/transport/trpc/trpc';
 
 // Every role procedure is workspace-scoped and takes `workspaceId` in its input;
@@ -20,6 +20,9 @@ const workspaceScopedInput = z.object({ workspaceId: z.uuid() });
 const rethrowMappedDomainError = (cause: unknown): void => {
   if (cause instanceof NotFoundError) {
     throw new TRPCError({ code: 'NOT_FOUND', message: cause.message, cause });
+  }
+  if (cause instanceof ForbiddenError) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: cause.message, cause });
   }
 };
 
@@ -44,8 +47,22 @@ const protectedRoleProcedure = protectedProcedure.use(async ({ ctx, getRawInput,
   return result;
 });
 
+// Changing roles or their members is owner/admin-only: roles decide who may resume a gate or approve a change, so a
+// member who could edit them could approve their own work. A plain member gets FORBIDDEN,
+// a non-member NOT_FOUND (`assertAdmin` implies membership); reads stay open to members.
+const adminRoleProcedure = protectedRoleProcedure.use(async ({ ctx, getRawInput, next }) => {
+  const { workspaceId } = workspaceScopedInput.parse(await getRawInput());
+  try {
+    await ctx.workspace.assertAdmin(ctx.headers, workspaceId);
+  } catch (error) {
+    rethrowMappedDomainError(error);
+    throw error;
+  }
+  return await next();
+});
+
 export const roleRouter = router({
-  create: protectedRoleProcedure
+  create: adminRoleProcedure
     .input(workspaceScopedInput.extend(roleCreateInputSchema.shape))
     .output(z.object({ role: roleSchema }))
     .mutation(async ({ ctx, input }) => ({ role: await ctx.roles.create(input.workspaceId, input.name) })),
@@ -55,7 +72,7 @@ export const roleRouter = router({
     .output(z.object({ roles: z.array(roleSchema) }))
     .query(async ({ ctx, input }) => ({ roles: await ctx.roles.list(input.workspaceId) })),
 
-  delete: protectedRoleProcedure
+  delete: adminRoleProcedure
     .input(workspaceScopedInput.extend({ roleId: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.roles.delete(input.workspaceId, input.roleId);
@@ -67,14 +84,14 @@ export const roleRouter = router({
     .output(z.object({ members: z.array(roleMemberSchema) }))
     .query(async ({ ctx, input }) => ({ members: await ctx.roles.listMembers(input.workspaceId, input.roleId) })),
 
-  addMember: protectedRoleProcedure
+  addMember: adminRoleProcedure
     .input(workspaceScopedInput.extend({ roleId: z.uuid(), userId: z.uuid() }))
     .output(z.object({ member: roleMemberSchema.pick({ id: true, roleId: true, userId: true, createdAt: true }) }))
     .mutation(async ({ ctx, input }) => ({
       member: await ctx.roles.addMember(input.workspaceId, input.roleId, input.userId),
     })),
 
-  removeMember: protectedRoleProcedure
+  removeMember: adminRoleProcedure
     .input(workspaceScopedInput.extend({ roleId: z.uuid(), userId: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.roles.removeMember(input.workspaceId, input.roleId, input.userId);

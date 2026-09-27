@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-09-25
+updated: 2026-09-26
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -40,6 +40,12 @@ Env var names are ours (`AUTH_SECRET`), never vendor-branded.
 Services are **constructor-injected classes** — `new AuthService(provider)`, `new WorkspaceService(provider)`. A composition root (`auth/instance.ts`) binds them once; tests construct the same classes over pglite.
 
 - **No test-only code in production modules**: no `*ForTesting` hooks, seams, or swappable singletons. Explicit constructor arguments _are_ the seam. Hoisted module-mocking (`vi.mock`) is not a substitute (ADR 0008). If a test can't reach something, fix the design (inject the dependency), don't add a seam.
+
+## tRPC context composition
+
+The production services a tRPC context carries are composed in **one** place: `productionServices()` in `transport/trpc/handler.ts`. Both the backend fetch handler and the Pages-Router API route (`pages/api/trpc/[trpc].ts`) spread it and add only `session` and `headers`; neither lists services itself.
+
+Services that may be absent (the GitHub App, inbound, notifications) are **required keys typed `X | undefined`** on `Context` and `TrpcDeps`, never optional (`?:`) properties. A context builder that forgets one then fails to compile. An optional key once let the API route drop `notifications` and `inbound` silently, so those routers answered "not available" in the real app while every test (built through `handler.ts`) passed. Tests get the absent defaults from `transport/trpc/testing/context-services.ts`.
 
 ## Domain errors → transport codes
 
@@ -93,6 +99,11 @@ The GitHub App webhook (`POST /api/ext/github/webhook`, [ADR 0011](../adr/0011-e
 4. **Resolve tenancy via `installation_id → connection → repo by (connection_id, external_repo_id)` — never by `external_repo_id` alone.** A push carries only a global GitHub installation id and a provider repo id, neither workspace-scoped; two workspaces can legitimately watch the same external repo. The connection is looked up first (`findByExternalAccount(provider, installationId)`), then the repo is looked up scoped to that connection's id. Anything that doesn't resolve at any step (unconnected installation, unregistered repo, unclaimed install) is **parked** — logged and dropped, never thrown — since webhooks are fire-and-forget.
 5. **Error hygiene to GitHub**: the ext app's `onError` handler (symmetric with the tRPC `errorFormatter`) returns a fixed generic `500` body on any unexpected throw — never a vendor/SQL/token detail. Expected failures (invalid signature, missing delivery id, unconfigured secret) return their own specific status with a generic message; nothing internal leaks either path.
 
+The customer-configured inbound webhooks (`POST /api/ext/inbound/:ingestKey`, [inbound
+sources](./inbound.md)) differ on purpose: they read the body as **bytes** (`arrayBuffer()`), so a
+BOM or invalid UTF-8 is verified exactly as sent, and they record, quota-check and publish on the
+request path, because `202` there means "recorded" and the receipt, not a log line, is the trace.
+
 ## Config snapshot (`.mocco.yml` per commit)
 
 After `CommitSyncService` records a push's commits, the same deferred `waitUntil` pass snapshots each new commit's `.mocco.yml` — the fetch/parse/store never happens on the webhook request path, same rationale as the sync itself.
@@ -110,9 +121,23 @@ A procedure that takes a `workspaceId` (or any tenant id) in its **input** must 
 
 - The **repo filters** by `workspaceId` (defence in depth); the **router proves** the caller belongs to it (the actual gate).
 - Authorize in the router's workspace-scoped middleware via `WorkspaceService.assertMember(headers, workspaceId)` — it throws `WorkspaceNotFoundError` (→ `NOT_FOUND`, so a non-member can't even learn the workspace exists) and runs **before** any resolver touches the id. Read the id from the raw input (`getRawInput()`), since middleware runs before input parsing.
+- Writes that change workspace settings (inbound sources, later notification channels) also need
+  an owner or admin: `WorkspaceService.assertAdmin(headers, workspaceId)` looks up the caller's
+  own roles once (`callerRoles`, better-auth `getActiveMemberRole`, comma-split and trimmed) and throws `WorkspaceNotFoundError` (→ `NOT_FOUND`) for a non-member and
+  `WorkspaceAdminRequiredError` (→ `FORBIDDEN`) for a plain member. It implies membership, so an
+  admin-only procedure calls it instead of `assertMember` (see `adminInboundProcedure` in the
+  inbound router).
 - Vendor-mediated domains (workspace via better-auth) get this for free — the org plugin authorizes by the session cookie. A domain that owns its own `mocco_` tables and takes `workspaceId` as input (e.g. `integration`) must call `assertMember` explicitly.
 
 **Project-scoped domains** (every product after deploy governance, [ADR 0013](../adr/0013-mocco-is-a-multi-product-platform.md)) don't hand-roll this: their routers compose `protectedProjectProcedure` / `productProcedure(product)` from `transport/trpc/project-procedures.ts`, which run `assertMember` and prove the `projectId` belongs to the workspace before any resolver. See [project model](./project.md).
+
+A write that needs more than membership (workspace-level settings such as notification channels)
+calls `WorkspaceService.assertAdmin(headers, workspaceId)` instead of `assertMember`: it reads the
+caller's roles (`callerRoles`, the org plugin's `getActiveMemberRole`, comma-joined sets split and
+trimmed) and implies membership, so a non-member gets `WorkspaceNotFoundError` (`NOT_FOUND`) and a
+plain member `WorkspaceAdminRequiredError` (a `ForbiddenError` → `FORBIDDEN`). Role names are
+`WorkspaceMemberRoles` in `@mocco/common/workspace`. The notification router's
+`adminNotificationProcedure` is the example.
 
 This can't be statically lint-enforced, so it is covered by **cross-tenant tests**: a non-member passing the victim's `workspaceId` must be rejected on every procedure (read, write, and install).
 

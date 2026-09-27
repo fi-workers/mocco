@@ -132,3 +132,82 @@ export type DiscordChannelConfig = z.infer<typeof discordChannelConfigSchema>;
  */
 export const ruleFilterSchema = z.record(z.string(), z.union([z.string(), z.boolean()]));
 export type RuleFilter = z.infer<typeof ruleFilterSchema>;
+
+/**
+ * An event type a rule can name: an exact type (`vercel.deployment.error`) or a
+ * dotted prefix wildcard (`github.*`, `github.pull_request.*`). Whether an exact
+ * type is known is checked by the service against the catalog.
+ */
+export const ruleEventTypeSchema = z
+  .string()
+  .regex(
+    /^[a-z][a-z_]*(?:\.[a-z][a-z_]*)*(?:\.\*)?$/u,
+    'an event type like `gate.pending` or a prefix like `github.*`',
+  );
+
+// Wire shapes of the `notification` tRPC router. `z.object` strips unknown keys at
+// runtime, so a repo row passed through `.output()` loses every column not listed
+// here (`secret_sealed`, `external_id`, the workspace id).
+
+export const discordGuildSchema = z.object({
+  id: z.string(),
+  guildId: z.string(),
+  guildName: z.string(),
+  createdAt: z.date(),
+});
+export type DiscordGuildDto = z.infer<typeof discordGuildSchema>;
+
+export const discordTextChannelSchema = z.object({ id: z.string(), name: z.string(), type: z.number() });
+export type DiscordTextChannelDto = z.infer<typeof discordTextChannelSchema>;
+
+export const notificationChannelSchema = z.object({
+  id: z.string(),
+  kind: channelKindSchema,
+  name: z.string(),
+  config: discordChannelConfigSchema,
+  status: channelStatusSchema,
+  disabledReason: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type NotificationChannelDto = z.infer<typeof notificationChannelSchema>;
+
+/** The test message sent when a channel is created: shown right away, so a missing
+ * permission surfaces at setup instead of on the first real event. */
+export const channelTestResultSchema = z.object({
+  sent: z.boolean(),
+  reason: z.string().nullable(),
+  /** The bot cannot reach the channel; it was created disabled. */
+  channelDisabled: z.boolean(),
+});
+export type ChannelTestResult = z.infer<typeof channelTestResultSchema>;
+
+export const notificationRuleSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  eventType: z.string(),
+  sourceId: z.string().nullable(),
+  filter: ruleFilterSchema,
+  createdAt: z.date(),
+});
+export type NotificationRuleDto = z.infer<typeof notificationRuleSchema>;
+
+export const notificationDeliverySchema = z.object({
+  id: z.string(),
+  channelId: z.string().nullable(),
+  eventId: z.string(),
+  ruleId: z.string().nullable(),
+  status: deliveryStatusSchema,
+  attempts: z.number(),
+  responseCode: z.number().nullable(),
+  error: z.string().nullable(),
+  externalMessageId: z.string().nullable(),
+  message: neutralMessageShape,
+  nextAttemptAt: z.date().nullable(),
+  sentAt: z.date().nullable(),
+  createdAt: z.date(),
+});
+export type NotificationDeliveryDto = z.infer<typeof notificationDeliverySchema>;
+
+/** Most deliveries one `deliveries` read returns. */
+export const DELIVERY_LIST_MAX = 100;

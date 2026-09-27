@@ -9,7 +9,7 @@ export const NotificationJobKinds = {
   deliver: 'notification.deliver',
   /** Fails deliveries whose job died before settling them (every 5 minutes). */
   reconcile: 'notification.reconcile',
-  /** Deletes expired Discord rate limit buckets (daily). */
+  /** Deletes expired Discord rate limit buckets and install states (daily). */
   prune: 'notification.prune',
 } as const;
 

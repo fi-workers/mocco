@@ -1,7 +1,9 @@
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
-import { GateStates } from '@mocco/common/governance';
+import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
+import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
+import { OtaTools, PolicyDirections } from '@mocco/common/ota';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { sql } from 'drizzle-orm';
 import {
@@ -23,7 +25,15 @@ import {
 
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
-import type { GateRequirements, GateState, ResumeDecision } from '@mocco/common/governance';
+import type {
+  ApprovalDecision,
+  ApprovalKind,
+  ApprovalState,
+  GateRequirements,
+  GateState,
+  ResumeDecision,
+} from '@mocco/common/governance';
+import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
 import type {
@@ -34,6 +44,7 @@ import type {
   NeutralMessage,
   RuleFilter,
 } from '@mocco/common/notification';
+import type { OtaTool, PolicyDirection, VersionMessage, VersionPolicyRules } from '@mocco/common/ota';
 import type { AppPlatform, Product } from '@mocco/common/project';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -721,6 +732,8 @@ export const projectApps = pgTable(
       name: 'mocco_project_apps_project_workspace_fk',
     }).onDelete('cascade'),
     check('mocco_project_apps_platform_check', sql`${t.platform} IN (${sqlInList(Object.values(AppPlatforms))})`),
+    // A UNIQUE CONSTRAINT so per-app tables' composite FKs can reference (id, workspace_id).
+    unique('mocco_project_apps_id_workspace_uq').on(t.id, t.workspaceId),
   ],
 );
 
@@ -944,6 +957,32 @@ export const domainEventDeliveries = pgTable(
 // `notification.deliver` job. See docs/reference/notifications.md.
 // ─────────────────────────────────────────────────────────────
 
+/** A Discord server the Mocco bot was installed into for a workspace (relay design §6). */
+export const discordGuilds = pgTable(
+  'mocco_discord_guilds',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Discord's guild id, taken from the OAuth token response (never the callback query).
+    guildId: text('guild_id').notNull(),
+    guildName: text('guild_name').notNull(),
+    // SET NULL: the install outlives the user who made it.
+    installedByUserId: uuid('installed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When this workspace last installed the bot into the guild (refreshed on every
+    // install). A bot that joined the guild after it was re-added elsewhere: the row is stale.
+    installedAt: timestamp('installed_at').notNull().defaultNow(),
+    createdAt,
+  },
+  t => [
+    // Its prefix serves workspace listing.
+    uniqueIndex('mocco_discord_guilds_workspace_guild_uq').on(t.workspaceId, t.guildId),
+    // A UNIQUE CONSTRAINT so channels' composite FK can reference (id, workspace_id).
+    unique('mocco_discord_guilds_id_workspace_uq').on(t.id, t.workspaceId),
+  ],
+);
+
 /** A destination in a workspace, e.g. one Discord channel the Mocco bot posts to. */
 export const notificationChannels = pgTable(
   'mocco_notification_channels',
@@ -960,6 +999,9 @@ export const notificationChannels = pgTable(
     // The destination's id at the vendor (the Discord channel id), repeated from
     // `config` as a column so uniqueness is a plain index.
     externalId: text('external_id').notNull(),
+    // The Discord install the channel belongs to (mocco_discord_guilds.id); required for
+    // Discord channels. Deleting a stale install deletes its channels.
+    guildId: uuid('guild_id'),
     // A customer-supplied bot token later ("bring your own bot"); null = the Mocco bot.
     secretSealed: text('secret_sealed'),
     status: text().$type<ChannelStatus>().notNull().default(ChannelStatuses.active),
@@ -978,6 +1020,17 @@ export const notificationChannels = pgTable(
       'mocco_notification_channels_status_check',
       sql`${t.status} IN (${sqlInList(Object.values(ChannelStatuses))})`,
     ),
+    check(
+      'mocco_notification_channels_guild_check',
+      sql`${t.kind} NOT IN (${sqlInList([ChannelKinds.discord])}) OR ${t.guildId} IS NOT NULL`,
+    ),
+    index('mocco_notification_channels_guild_idx').on(t.guildId),
+    // Pins the channel to an install of its own workspace.
+    foreignKey({
+      columns: [t.guildId, t.workspaceId],
+      foreignColumns: [discordGuilds.id, discordGuilds.workspaceId],
+      name: 'mocco_notification_channels_guild_workspace_fk',
+    }).onDelete('cascade'),
   ],
 );
 
@@ -1091,3 +1144,309 @@ export const discordRateLimits = pgTable('mocco_discord_rate_limits', {
   bucket: text().primaryKey(),
   blockedUntil: timestamp('blocked_until').notNull(),
 });
+
+/** Discord bot install handshake state — single-use, TTL'd, bound to the user and workspace
+ * (same shape as mocco_github_connect_states). */
+export const discordConnectStates = pgTable(
+  'mocco_discord_connect_states',
+  {
+    state: text().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdAt,
+    expiresAt: timestamp('expires_at').notNull(),
+    consumedAt: timestamp('consumed_at'),
+  },
+  t => [index('mocco_discord_connect_states_workspace_idx').on(t.workspaceId)],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Inbound webhook sources (notification relay design §5, ADR 0019). A source is one
+// vendor account a workspace connected: its unguessable ingest key is the URL path
+// segment, and its signing secret is sealed (SecretBox, AAD
+// 'mocco_inbound_sources:<id>'). Every delivery leaves a receipt, deduped by the
+// vendor's delivery id: the "why didn't it arrive?" trace, and the republish source
+// after a crash between recording and publishing. Receipts are pruned after 30 days.
+// See docs/reference/inbound.md.
+// ─────────────────────────────────────────────────────────────
+
+/** A connected webhook source (Sentry, Vercel or GitHub) of a workspace. */
+export const inboundSources = pgTable(
+  'mocco_inbound_sources',
+  {
+    // SourceService generates the id (randomUUID) so the AAD is known when sealing.
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<InboundKind>().notNull(),
+    name: text().notNull(),
+    // 32 random bytes, base64url. An identifier, not a credential: every request must
+    // also carry a valid signature.
+    ingestKey: text('ingest_key').notNull(),
+    secretSealed: text('secret_sealed').notNull(),
+    status: text().$type<InboundSourceStatus>().notNull().default(InboundSourceStatuses.active),
+    lastReceivedAt: timestamp('last_received_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_inbound_sources_ingest_key_uq').on(t.ingestKey),
+    index('mocco_inbound_sources_workspace_idx').on(t.workspaceId),
+    // Target of the receipts' composite FK, which pins a receipt to its source's workspace.
+    unique('mocco_inbound_sources_id_workspace_uq').on(t.id, t.workspaceId),
+    check('mocco_inbound_sources_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(InboundKinds))})`),
+    check(
+      'mocco_inbound_sources_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(InboundSourceStatuses))})`,
+    ),
+  ],
+);
+
+/** One delivery a source received, and what became of it. */
+export const inboundReceipts = pgTable(
+  'mocco_inbound_receipts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Insert order: the trace's cursor (newest first).
+    seq: bigserial({ mode: 'bigint' }).notNull(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    sourceId: uuid('source_id').notNull(),
+    // The vendor's delivery id (Request-ID, payload id, X-GitHub-Delivery): the dedupe key.
+    externalId: text('external_id').notNull(),
+    // The vendor's name for the delivery (`issue.created`, `push`), when it has one.
+    sourceEvent: text('source_event'),
+    outcome: text().$type<InboundOutcome>().notNull(),
+    // Why it produced no event (ignored) or was dropped (over_quota).
+    reason: text(),
+    eventType: text('event_type'),
+    domainEventId: uuid('domain_event_id').references(() => domainEvents.id, { onDelete: 'set null' }),
+    // The event payload ({ sourceId, facts, message }), kept so a stuck pending
+    // receipt can be republished.
+    normalized: jsonb(),
+    // Failed publishes of a pending receipt. The republish scan takes the fewest first,
+    // and gives up (ignored) after INBOUND_MAX_PUBLISH_ATTEMPTS.
+    publishAttempts: integer('publish_attempts').notNull().default(0),
+    receivedAt: timestamp('received_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_inbound_receipts_source_external_id_uq').on(t.sourceId, t.externalId),
+    // The trace: a workspace's receipts, newest first.
+    index('mocco_inbound_receipts_workspace_seq_idx').on(t.workspaceId, t.seq.desc()),
+    // The trace filtered by source.
+    index('mocco_inbound_receipts_source_seq_idx').on(t.sourceId, t.seq.desc()),
+    // The daily quota and the hard ceiling: a workspace's receipts in the last 24 hours.
+    index('mocco_inbound_receipts_workspace_received_at_idx').on(t.workspaceId, t.receivedAt),
+    // inbound.republish-stale: pending receipts, fewest failed publishes first, then oldest.
+    index('mocco_inbound_receipts_pending_idx')
+      .on(t.publishAttempts, t.receivedAt)
+      .where(sql`${t.outcome} = 'pending'`),
+    // inbound.prune (retention counts from received_at).
+    index('mocco_inbound_receipts_received_at_idx').on(t.receivedAt),
+    // The SET NULL lookup when a domain event is pruned.
+    index('mocco_inbound_receipts_domain_event_idx').on(t.domainEventId),
+    foreignKey({
+      columns: [t.sourceId, t.workspaceId],
+      foreignColumns: [inboundSources.id, inboundSources.workspaceId],
+      name: 'mocco_inbound_receipts_source_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_inbound_receipts_outcome_check', sql`${t.outcome} IN (${sqlInList(Object.values(InboundOutcomes))})`),
+    check('mocco_inbound_receipts_publish_attempts_check', sql`${t.publishAttempts} >= 0`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Approvals outside runs (#114). A pinned change any domain asks to make (OTA
+// promotion, a version-policy change, a flag changeset) collects votes under the
+// same GateRequirements a run gate uses, evaluated by the same pure evaluator.
+// `review` requests record the post-hoc review of a change applied at once.
+// ─────────────────────────────────────────────────────────────
+
+/** A request to approve (or review) one pinned change. */
+export const approvalRequests = pgTable(
+  'mocco_approval_requests',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text().$type<ApprovalKind>().notNull(),
+    // What the change is about, e.g. ('ota.version_policy', <appId>). Opaque to governance.
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    // The pinned intended (or, for a review, applied) change. Handlers apply exactly this.
+    action: jsonb()
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    // Snapshot at creation — a later policy edit never rewrites a pending request.
+    requirements: jsonb().$type<GateRequirements>().notNull(),
+    // SET NULL: a request outlives its requester; prevent_self then can't match (fail-closed).
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    state: text().$type<ApprovalState>().notNull().default(ApprovalStates.pending),
+    expiresAt: timestamp('expires_at'),
+    resolvedAt: timestamp('resolved_at'),
+    createdAt,
+  },
+  t => [
+    index('mocco_approval_requests_workspace_state_idx').on(t.workspaceId, t.state, t.createdAt),
+    index('mocco_approval_requests_subject_idx').on(t.workspaceId, t.subjectType, t.subjectId),
+    check('mocco_approval_requests_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ApprovalKinds))})`),
+    check('mocco_approval_requests_state_check', sql`${t.state} IN (${sqlInList(Object.values(ApprovalStates))})`),
+  ],
+);
+
+/** One person's vote on an approval request. */
+export const approvalVotes = pgTable(
+  'mocco_approval_votes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => approvalRequests.id, { onDelete: 'cascade' }),
+    // RESTRICT like mocco_resumes: a vote is evidence and keeps its voter.
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    // The required role the vote counted under (SET NULL if the role is later deleted).
+    roleId: uuid('role_id').references(() => roles.id, { onDelete: 'set null' }),
+    decision: text().$type<ApprovalDecision>().notNull(),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    // One vote per person per request (and serves request-scoped listing).
+    uniqueIndex('mocco_approval_votes_request_user_uq').on(t.requestId, t.userId),
+    check(
+      'mocco_approval_votes_decision_check',
+      sql`${t.decision} IN (${sqlInList(Object.values(ApprovalDecisions))})`,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// OTA release control — version policy and native force update (phase 2 of
+// docs/specs/2026-09-25-ota-release-control-design.md). One policy per store app
+// (an iOS or Android project app); every applied change is kept in an append-only
+// history with its direction and, for a gated change, the approval that applied it.
+// ─────────────────────────────────────────────────────────────
+
+/** A store app's version policy: the floors that trigger hard / soft update prompts. */
+export const appVersionPolicies = pgTable(
+  'mocco_app_version_policies',
+  {
+    appId: uuid('app_id').primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    minSupportedVersion: text('min_supported_version'),
+    recommendedVersion: text('recommended_version'),
+    blockedVersions: text('blocked_versions')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    messages: jsonb()
+      .$type<Record<string, VersionMessage>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    storeUrl: text('store_url'),
+    softPromptIntervalHours: integer('soft_prompt_interval_hours').notNull().default(72),
+    // Requirements for tightening changes; null = they apply without approval.
+    approvalPolicy: jsonb('approval_policy').$type<GateRequirements>(),
+    // Incremented on every applied change; the cache key and the optimistic-concurrency token.
+    revision: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [projectApps.id, projectApps.workspaceId],
+      name: 'mocco_app_version_policies_app_workspace_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_app_version_policies_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_app_version_policies_interval_check', sql`${t.softPromptIntervalHours} BETWEEN 1 AND 8760`),
+    check('mocco_app_version_policies_revision_check', sql`${t.revision} >= 1`),
+  ],
+);
+
+/** An applied version-policy change — append-only evidence. */
+export const appVersionPolicyChanges = pgTable(
+  'mocco_app_version_policy_changes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    before: jsonb().$type<VersionPolicyRules>(),
+    after: jsonb().$type<VersionPolicyRules>().notNull(),
+    direction: text().$type<PolicyDirection>().notNull(),
+    // SET NULL: the change outlives the person who made it.
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // The approval that applied a gated change (null for ungated / relaxing changes).
+    approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    index('mocco_app_version_policy_changes_app_idx').on(t.appId, t.createdAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [projectApps.id, projectApps.workspaceId],
+      name: 'mocco_app_version_policy_changes_app_workspace_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_app_version_policy_changes_direction_check',
+      sql`${t.direction} IN (${sqlInList(Object.values(PolicyDirections))})`,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// OTA release control — phase 1: the team's existing OTA tool's publishing token,
+// sealed with SecretBox and released by the credential broker only to a step that
+// reached a resumed gate. The row id is generated by the service (it is the SecretBox
+// AAD), the one exception to DB-generated ids (backend conventions, SecretBox).
+// ─────────────────────────────────────────────────────────────
+
+/** A sealed publishing credential for an external OTA tool. */
+export const otaExternalCredentials = pgTable(
+  'mocco_ota_external_credentials',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    tool: text().$type<OtaTool>().notNull(),
+    // Unique per workspace: it is the broker `role` a grant and `.mocco.yml` name.
+    name: text().notNull(),
+    // SecretBox envelope, AAD 'mocco_ota_external_credentials:<id>'. Never in a DTO.
+    secretSealed: text('secret_sealed').notNull(),
+    // First 8 hex chars of SHA-256 of the secret — for display only.
+    secretFingerprint: text('secret_fingerprint').notNull(),
+    // SET NULL: the credential outlives the person who stored it.
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    rotatedAt: timestamp('rotated_at'),
+  },
+  t => [
+    uniqueIndex('mocco_ota_external_credentials_workspace_name_uq').on(t.workspaceId, t.name),
+    index('mocco_ota_external_credentials_project_idx').on(t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_ota_external_credentials_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_external_credentials_tool_check', sql`${t.tool} IN (${sqlInList(Object.values(OtaTools))})`),
+  ],
+);

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import { factsSchema, InboundEventTypes } from './inbound';
+import { neutralMessageSchema } from './notification';
+
+import type { InboundEventType } from './inbound';
+
 /**
  * The domain event catalog (platform foundations §15, ADR 0018). A domain event is
  * a fact one domain publishes for others to react to (notifications, feedback, status,
@@ -9,8 +14,8 @@ import { z } from 'zod';
  * Every type has exactly one zod payload schema here; `EventBus.publish` parses the
  * payload with it, so a subscriber can trust the shape it is handed.
  *
- * The catalog is built from per-area parts. A new area (the inbound sources of #249,
- * products later) adds its own `*EventTypes` + `*EventPayloadSchemas` pair and spreads
+ * The catalog is built from per-area parts (governance, inbound). A new area (products
+ * later) adds its own `*EventTypes` + `*EventPayloadSchemas` pair and spreads
  * both into `DomainEventTypes` and `domainEventPayloadSchemas` below.
  */
 
@@ -96,15 +101,50 @@ export const governanceEventPayloadSchemas = {
   [GovernanceEventTypes.gateRejected]: gateRejectedPayloadSchema,
 } as const;
 
+/**
+ * Every inbound webhook event (`github.push`, `sentry.issue.created`, …; notification
+ * relay design §4) carries the same payload, so rules and templates treat all sources
+ * alike: the source it came through, its flat facts, and the message rendered once at
+ * ingest.
+ */
+export const inboundEventPayloadSchema = z.object({
+  /** `mocco_inbound_sources.id`. */
+  sourceId: z.uuid(),
+  facts: factsSchema,
+  message: neutralMessageSchema,
+});
+export type InboundEventPayload = z.infer<typeof inboundEventPayloadSchema>;
+
+export const inboundEventPayloadSchemas = {
+  [InboundEventTypes['sentry.issue.created']]: inboundEventPayloadSchema,
+  [InboundEventTypes['vercel.deployment.created']]: inboundEventPayloadSchema,
+  [InboundEventTypes['vercel.deployment.succeeded']]: inboundEventPayloadSchema,
+  [InboundEventTypes['vercel.deployment.error']]: inboundEventPayloadSchema,
+  [InboundEventTypes['vercel.deployment.canceled']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.push']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.pull_request.opened']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.pull_request.reopened']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.pull_request.merged']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.pull_request.closed']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.issues.opened']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.issues.reopened']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.issues.closed']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.release.published']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.workflow_run.failed']]: inboundEventPayloadSchema,
+  [InboundEventTypes['github.workflow_run.succeeded']]: inboundEventPayloadSchema,
+} as const satisfies Record<InboundEventType, z.ZodType>;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
+  ...InboundEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
 /** The payload schema of every type. Extension point: spread each area's schemas here. */
 export const domainEventPayloadSchemas = {
   ...governanceEventPayloadSchemas,
+  ...inboundEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;

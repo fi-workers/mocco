@@ -1,7 +1,7 @@
 import { NeutralMessageLimits } from '@mocco/common/notification';
 import { describe, expect, it } from 'vitest';
 
-import { deliveryId, parse, verify } from '@backend/domain/inbound/sources/github';
+import { deliveryId, parse, sourceEvent, verify } from '@backend/domain/inbound/sources/github';
 import { decodeBody } from '@backend/domain/inbound/sources/shared';
 import {
   encode,
@@ -315,5 +315,17 @@ describe('github parse: everything else', () => {
     expect(expectIgnored(parse('{"action":"opened"}', on('pull_request')))).toBe(
       'github pull_request payload does not match the expected shape',
     );
+  });
+});
+
+describe('github sourceEvent', () => {
+  it('is <event>.<action>, or the event alone when the body has no action', () => {
+    expect(sourceEvent(readFixture('github/pull-request-opened.json'), on('pull_request'))).toBe('pull_request.opened');
+    expect(sourceEvent(readFixture('github/push.json'), on('push'))).toBe('push');
+  });
+
+  it('is undefined without the event header, and sanitized', () => {
+    expect(sourceEvent(readFixture('github/push.json'), new Headers())).toBeUndefined();
+    expect(sourceEvent(JSON.stringify({ action: 'a\u{0}b' }), on('issues'))).toBe('issues.ab');
   });
 });

@@ -8,11 +8,12 @@ import { DeliveryService, type DeliveryServiceDeps } from '@backend/domain/notif
 import { deliverNotification } from '@backend/domain/notification/NotificationService';
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
+import type { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 
 /** Fail deliveries whose `notification.deliver` job died before settling them. */
 export const reconcileDeliveries = defineJob(NotificationJobKinds.reconcile, z.object({}));
 
-/** Delete expired Discord rate limit buckets. */
+/** Delete expired Discord rate limit buckets and expired or consumed install states. */
 export const pruneNotifications = defineJob(NotificationJobKinds.prune, z.object({}));
 
 /** The notification domain's platform schedules, ensured by every tick. */
@@ -28,8 +29,12 @@ export function createDeliverNotificationHandler(service: DeliveryService) {
   });
 }
 
+export interface NotificationHandlerDeps extends DeliveryServiceDeps {
+  connectStates: DiscordConnectStateRepo;
+}
+
 /** The notification domain's handlers, for the runtime registry (runtime/jobs.ts). */
-export function createNotificationHandlers(deps: DeliveryServiceDeps): JobHandler[] {
+export function createNotificationHandlers({ connectStates, ...deps }: NotificationHandlerDeps): JobHandler[] {
   const service = new DeliveryService(deps);
   return [
     createDeliverNotificationHandler(service),
@@ -38,6 +43,7 @@ export function createNotificationHandlers(deps: DeliveryServiceDeps): JobHandle
     }),
     handleJob(pruneNotifications, async (_payload, ctx) => {
       await service.pruneRateLimits(ctx.now());
+      await connectStates.prune(ctx.now());
     }),
   ];
 }

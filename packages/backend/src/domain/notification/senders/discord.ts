@@ -34,6 +34,7 @@ export const DiscordResultKinds = {
   sent: 'sent',
   deleted: 'deleted',
   listed: 'listed',
+  member: 'member',
   rate_limited: 'rate_limited',
   permanent: 'permanent',
   transient: 'transient',
@@ -103,6 +104,14 @@ export type DiscordSendResult = DiscordSent | DiscordFailure;
 export type DiscordDeleteResult = DiscordDeleted | DiscordFailure;
 export type DiscordChannelListResult = DiscordChannelList | DiscordFailure;
 
+/** The bot's own membership of a guild. */
+export interface DiscordBotMember {
+  kind: typeof DiscordResultKinds.member;
+  /** When the bot (last) joined the guild; null when Discord doesn't say. */
+  joinedAt: Date | null;
+}
+export type DiscordBotMemberResult = DiscordBotMember | DiscordFailure;
+
 export interface DiscordApiDeps {
   fetch: typeof fetch;
   botToken: string;
@@ -126,6 +135,10 @@ const rateLimitBodySchema = z.object({
 });
 
 const createdMessageSchema = z.object({ id: z.string().min(1) });
+
+const currentUserSchema = z.object({ id: z.string().min(1) });
+
+const guildMemberSchema = z.object({ joined_at: z.string().nullish() });
 
 const guildChannelsSchema = z.array(
   z.object({
@@ -292,6 +305,9 @@ const SENDER_LEVEL: Disabling = { disableChannel: false, disableSender: true };
 
 export class DiscordApi {
   private readonly timeoutMs: number;
+
+  /** The bot's own user id (`GET /users/@me`), fetched once per client. */
+  private botUserId: string | undefined;
 
   constructor(private readonly deps: DiscordApiDeps) {
     this.timeoutMs = deps.timeoutMs ?? DISCORD_DEFAULT_TIMEOUT_MS;
@@ -460,6 +476,52 @@ export class DiscordApi {
       return this.failure(outcome.response, outcome.text, bucketKey);
     }
     return { kind: DiscordResultKinds.deleted, bucket: this.bucket(outcome.response, bucketKey) };
+  }
+
+  /**
+   * The bot's membership of a guild: when it joined (`joined_at`). Discord documents no
+   * `GET /guilds/{id}/members/@me`, so this reads the bot's user id (`GET /users/@me`,
+   * once) and then `GET /guilds/{id}/members/{botId}` (Get Guild Member, no privileged
+   * intent). A bot that is not in the guild answers 404 Unknown Member / Unknown Guild.
+   */
+  async getBotMember(guildId: string): Promise<DiscordBotMemberResult> {
+    if (this.botUserId === undefined) {
+      const me = await this.request('GET', '/users/@me');
+      if (me.kind !== 'response') {
+        return me;
+      }
+      if (!me.response.ok) {
+        return this.failure(me.response, me.text);
+      }
+      const parsedMe = currentUserSchema.safeParse(parseJson(me.text));
+      if (!parsedMe.success) {
+        return {
+          kind: DiscordResultKinds.transient,
+          reason: 'Discord returned an unexpected user',
+          status: me.response.status,
+        };
+      }
+      this.botUserId = parsedMe.data.id;
+    }
+    const path = `/guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(this.botUserId)}`;
+    const outcome = await this.request('GET', path);
+    if (outcome.kind !== 'response') {
+      return outcome;
+    }
+    if (!outcome.response.ok) {
+      return this.failure(outcome.response, outcome.text);
+    }
+    const parsed = guildMemberSchema.safeParse(parseJson(outcome.text));
+    if (!parsed.success) {
+      return {
+        kind: DiscordResultKinds.transient,
+        reason: 'Discord returned an unexpected guild member',
+        status: outcome.response.status,
+      };
+    }
+    const joined = parsed.data.joined_at ?? null;
+    const joinedAt = joined === null || Number.isNaN(Date.parse(joined)) ? null : new Date(joined);
+    return { kind: DiscordResultKinds.member, joinedAt };
   }
 
   /** The guild's text and announcement channels, in Discord's display order. */

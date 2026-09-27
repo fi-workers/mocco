@@ -1,9 +1,8 @@
-import { factsSchema } from '@mocco/common/inbound';
 import { z } from 'zod';
 
 import { defineJob } from '@backend/domain/jobs/handlers';
 import { DeliveryPolicy, NotificationJobKinds } from '@backend/domain/notification/constants';
-import { isRuleMatch, type MatchableEvent } from '@backend/domain/notification/rules';
+import { isRuleMatch, matchablePayloadSchema, type MatchableEvent } from '@backend/domain/notification/rules';
 import { renderEventMessage } from '@backend/domain/notification/templates';
 
 import type { DeliveredEvent } from '@backend/domain/events/EventBus';
@@ -23,10 +22,6 @@ export interface NotificationServiceDeps {
   /** The app's origin, for the links in governance messages. */
   appOrigin: string;
 }
-
-/** The part of an event payload rules read: every catalog payload carries flat `facts`;
- * inbound payloads add the `sourceId` that received them (relay design §4). */
-const matchablePayloadSchema = z.object({ facts: factsSchema, sourceId: z.string().optional() });
 
 /** What the rule matcher reads from a catalog event. */
 export function toMatchableEvent(event: DeliveredEvent): MatchableEvent {

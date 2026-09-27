@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { createProvider, type Provider } from '@backend/domain/auth/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -202,6 +202,49 @@ describe('workspace (organization plugin) on pglite', () => {
     const rows = await t.db.select().from(t.schema.members);
     expect(rows).toHaveLength(2); // exactly owner + the updated member, no duplicates
     expect(new Set(rows.map(r => r.role))).toEqual(new Set(['owner', 'admin,member']));
+  });
+
+  /** A workspace with an owner, and a second user joined with `role` ('' = not a member). */
+  const joined = async (role: string) => {
+    const owner = await signUp(`owner-${randomUUID()}@example.com`);
+    const org = await auth.api.createOrganization({
+      body: { name: 'A', slug: `a-${randomUUID()}` },
+      headers: owner.headers,
+    });
+    const other = await signUp(`other-${randomUUID()}@example.com`);
+    if (role !== '') {
+      await t.db.insert(t.schema.members).values({ organizationId: org?.id ?? '', userId: other.user.id, role });
+    }
+    return { service: new WorkspaceService(auth), workspaceId: org?.id ?? '', owner, other };
+  };
+
+  describe('assertAdmin', () => {
+    // mocco_members_role_check stores only comma-joined known roles without spaces, so
+    // these are the role strings a member row can actually hold.
+    it.each(['member,admin', 'admin', 'owner'])('passes for a member with the role %j', async role => {
+      const { service, workspaceId, other } = await joined(role);
+      await expect(service.assertAdmin(other.headers, workspaceId)).resolves.toBeUndefined();
+    });
+
+    it('passes for the workspace creator (owner)', async () => {
+      const { service, workspaceId, owner } = await joined('member');
+      await expect(service.assertAdmin(owner.headers, workspaceId)).resolves.toBeUndefined();
+    });
+
+    it('refuses a plain member (FORBIDDEN family)', async () => {
+      const { service, workspaceId, other } = await joined('member');
+      await expect(service.assertAdmin(other.headers, workspaceId)).rejects.toThrow(WorkspaceAdminRequiredError);
+    });
+
+    it('refuses a non-member as not found', async () => {
+      const { service, workspaceId, other } = await joined('');
+      await expect(service.assertAdmin(other.headers, workspaceId)).rejects.toThrow(WorkspaceNotFoundError);
+    });
+
+    it("callerRoles returns the caller's stored roles as a list", async () => {
+      const { service, workspaceId, other } = await joined('member,admin');
+      expect(await service.callerRoles(other.headers, workspaceId)).toEqual(['member', 'admin']);
+    });
   });
 
   it('sign-up alone creates no workspace (zero-workspace contract for onboarding UI)', async () => {

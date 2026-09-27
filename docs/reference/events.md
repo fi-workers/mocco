@@ -13,6 +13,7 @@ related:
   - ./jobs.md
   - ./backend-conventions.md
   - ../superpowers/specs/2026-09-25-notification-relay-design.md
+  - ./inbound.md
 code_refs:
   - packages/common/src/events.ts
   - packages/backend/src/domain/events/EventBus.ts
@@ -44,6 +45,7 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `gate.pending` | `RunService`, when a run pauses at a gate | `run_gate` / gate id |
 | `gate.resumed` | `GateService`, when the votes satisfy the gate | `run_gate` / gate id |
 | `gate.rejected` | `GateService`, on a reject vote | `run_gate` / gate id |
+| `sentry.*`, `vercel.*`, `github.*` (16 types) | `InboundService`, for a mapped webhook delivery | `inbound_receipt` / receipt id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
 
@@ -81,8 +83,15 @@ Every governance payload names its run so a notification can render without anot
 The catalog is assembled from per-area parts. An area adds an `*EventTypes` object and a matching
 `*EventPayloadSchemas` object in `@mocco/common` and spreads both into `DomainEventTypes` and
 `domainEventPayloadSchemas`. The inbound source types (`sentry.issue.created`, `github.push`, …,
-issue #249, [notification relay design](../superpowers/specs/2026-09-25-notification-relay-design.md)
-§4) join this way.
+[notification relay design](../superpowers/specs/2026-09-25-notification-relay-design.md) §4) joined
+this way as the `inbound` area.
+
+### Inbound payloads
+
+All sixteen inbound types share `inboundEventPayloadSchema`: `{ sourceId, facts, message }`, where
+`facts` is the flat, filterable subset (`repo`, `branch`, `target`, …) and `message` the
+`NeutralMessage` rendered once at ingest. Each has the dedupe key `inbound:<receiptId>`. See
+[inbound webhook sources](./inbound.md).
 
 **Changes must stay backward-compatible for 30 days.** A stored payload is parsed again with the
 current schema when it is delivered, and events live 30 days. So never remove a type, remove or

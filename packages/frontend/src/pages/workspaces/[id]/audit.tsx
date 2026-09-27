@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import AppShell from '@frontend/components/app-shell';
 import WorkspaceAudit from '@frontend/components/workspace-audit';
 import WorkspaceLayout from '@frontend/components/workspace-layout';
+import { WorkspaceSections } from '@frontend/lib/products';
 
 // Workspace audit log (the tamper-evident hash chain), client-rendered inside the
 // workspace frame.
@@ -13,7 +14,7 @@ export default function WorkspaceAuditPage() {
   return (
     <AppShell>
       {id ? (
-        <WorkspaceLayout workspaceId={id} active="audit">
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.audit}>
           <WorkspaceAudit workspaceId={id} />
         </WorkspaceLayout>
       ) : null}

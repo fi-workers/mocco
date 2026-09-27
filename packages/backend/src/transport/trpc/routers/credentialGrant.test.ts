@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -24,11 +26,11 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
-import { providerConnections, repos } from '@backend/infra/db/schema';
+import { members, providerConnections, repos, users } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
+import { contextServices } from '@backend/transport/trpc/testing/context-services';
 
 /** A create-grant input for the given workspace + repo. Module-scoped (captures
  * nothing) per unicorn/consistent-function-scoping. */
@@ -105,7 +107,7 @@ describe('credentialGrant router on pglite', () => {
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     return appRouter.createCaller({
-      ...createProjectDomain(t.db),
+      ...contextServices(t.db),
       auth,
       workspace,
       runs,
@@ -195,6 +197,33 @@ describe('credentialGrant router on pglite', () => {
 
       await expect(memberB.credentialGrant.delete({ workspaceId: wsB.id, grantId: grant.id })).rejects.toMatchObject({
         code: 'NOT_FOUND',
+      });
+    });
+  });
+
+  describe('admin-only changes', () => {
+    it('a plain member can list grants but gets FORBIDDEN creating or deleting one', async () => {
+      const owner = await signedInCaller('owner-admin@example.com');
+      const { workspace: ws } = await owner.workspace.create({ name: 'W' });
+      const repoId = await seedRepo(ws.id);
+      const { grant } = await owner.credentialGrant.create(grantInput(ws.id, repoId));
+
+      const member = await signedInCaller('plain-member@example.com');
+      const [memberUser] = await t.db.select().from(users).where(eq(users.email, 'plain-member@example.com'));
+      await t.db
+        .insert(members)
+        .values({ organizationId: ws.id, userId: memberUser?.id ?? '', role: WorkspaceMemberRoles.member });
+
+      const { grants } = await member.credentialGrant.list({ workspaceId: ws.id });
+      expect(grants.map(entry => entry.id)).toEqual([grant.id]);
+      await expect(
+        member.credentialGrant.create({ ...grantInput(ws.id, repoId), pipeline: 'mine' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await expect(member.credentialGrant.delete({ workspaceId: ws.id, grantId: grant.id })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      await expect(owner.credentialGrant.list({ workspaceId: ws.id })).resolves.toMatchObject({
+        grants: [expect.objectContaining({ id: grant.id })],
       });
     });
   });

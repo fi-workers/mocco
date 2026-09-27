@@ -4,11 +4,15 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
-import { WorkspaceNotFoundError } from '@backend/domain/auth/errors';
+import { WorkspaceMemberRoles, type WorkspaceCreateInput } from '@mocco/common/workspace';
+
+import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { isAPIError } from '@backend/domain/auth/provider';
 
 import type { Provider } from '@backend/domain/auth/provider';
-import type { WorkspaceCreateInput } from '@mocco/common/workspace';
+
+/** Workspace roles that may change workspace-level settings (the org plugin's owner/admin). */
+const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
 
 export class WorkspaceService {
   constructor(private readonly provider: Provider) {}
@@ -91,6 +95,41 @@ export class WorkspaceService {
    */
   async assertMember(headers: Headers, workspaceId: string): Promise<void> {
     await this.listMembers(headers, workspaceId);
+  }
+
+  /**
+   * The caller's roles in a workspace. The vendor may store a comma-joined role set
+   * (`member,admin`), so it is split and trimmed. A non-member (or a missing
+   * workspace) gets WorkspaceNotFoundError, as in `assertMember`.
+   */
+  async callerRoles(headers: Headers, workspaceId: string): Promise<string[]> {
+    try {
+      const { role } = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers });
+      // sonarjs/null-dereference is a false positive: `role` and each part are non-nullable strings.
+      /* eslint-disable sonarjs/null-dereference */
+      return role
+        .split(',')
+        .map(part => part.trim())
+        .filter(part => part !== '');
+      /* eslint-enable sonarjs/null-dereference */
+    } catch (error) {
+      if (isAPIError(error)) {
+        throw new WorkspaceNotFoundError(workspaceId, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Assert the caller is an owner or admin of a workspace. It implies membership: a
+   * non-member gets WorkspaceNotFoundError (NOT_FOUND); a plain member gets
+   * WorkspaceAdminRequiredError (FORBIDDEN).
+   */
+  async assertAdmin(headers: Headers, workspaceId: string): Promise<void> {
+    const roles = await this.callerRoles(headers, workspaceId);
+    if (roles.every(role => !ADMIN_ROLES.has(role))) {
+      throw new WorkspaceAdminRequiredError(workspaceId);
+    }
   }
 
   /**
