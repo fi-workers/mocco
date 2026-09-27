@@ -39,7 +39,7 @@ code_refs:
      credential: { provider: ota-eas, role: acme-production, ttl: 900, gate: prod }
    ```
 
-4. The workflow calls `POST /api/ext/credentials` with its run token. The broker runs its usual fail-closed checks; on ALLOW the routing provider sends `ota-*` ids to the external-token provider, which opens the sealed token and returns it as the credential `value`. The workflow exports it (`EXPO_TOKEN`, `CODE_PUSH_ACCESS_KEY`, hot-updater storage credentials) and runs the tool's CLI.
+4. The workflow calls `POST /api/ext/credentials` with its run token. The broker runs its usual fail-closed checks; on ALLOW the routing provider sends `ota-*` ids to the external-token provider, which opens the sealed token and returns it as the credential `value`. The workflow exports it the way its tool expects (`EXPO_TOKEN` for EAS, the `--accessKey` of a CodePush CLI or `BITRISE_API_TOKEN` for Bitrise, the storage credentials in `.env.hotupdater` for hot-updater) and runs the tool's CLI.
 
 ## Storage and exposure
 
@@ -55,7 +55,7 @@ The project's **OTA tokens** tab (`/workspaces/{id}/p/{projectId}/ota-tokens`, s
 - **Add:** tool, name (checked against the slug pattern before submit) and the token in a password field. The field is cleared after a successful add.
 - **Each token:** name, tool, fingerprint, provider id, who added it and when, and the last rotation. A token whose last rotation (or creation) is 90 days old or more gets a *rotate* badge.
 - **Released to:** the allowlist grants whose `provider` and `role` match the token (`credentialGrant.list`), with repo, pipeline, gate and max ttl. With no grant, it links to Access, where an owner or admin adds one.
-- **`.mocco.yml` snippet** to copy for the publishing step, and the variable the workflow exports the token as, for tools that fix one (`EXPO_TOKEN`, `CODE_PUSH_ACCESS_KEY`).
+- **`.mocco.yml` snippet** to copy for the publishing step, and, for EAS Update, the variable the workflow exports the token as (`EXPO_TOKEN`).
 - **Rotate** replaces the token in place (new fingerprint). **Delete** asks inline first. Neither shows the old value.
 
 ## Broker changes
@@ -67,4 +67,4 @@ The project's **OTA tokens** tab (`/workspaces/{id}/p/{projectId}/ota-tokens`, s
 ## Limits
 
 - **The token is static.** The ttl bounds Mocco's grant, not the token. A compromised runner that received it keeps it until the team rotates it in the tool (then `ota.externalCredential.rotate`). Publish from GitHub-hosted runners, scope the tool's token as narrowly as it allows, and rotate on a schedule.
-- **Direction rules are procedural here.** A publishing token can do anything the tool allows, so a rollback pipeline gets the same token through its own (ungated) grant; its run is still audited. Enforced direction rules come with Mocco-hosted OTA (phase 3).
+- **Direction rules are procedural here.** A publishing token can do anything the tool allows, so a rollback pipeline gets the same token through its own grant. `.mocco.yml` requires every credentialed step to follow a gate, so that pipeline has a gate one on-call engineer can resume alone (`count: 1`, `prevent_self: false`); its run is still audited. Enforced direction rules come with Mocco-hosted OTA (phase 3).
