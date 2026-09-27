@@ -4,7 +4,7 @@ description: Per-store-app minimum, recommended and blocked versions; how each c
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 confidence: high
 owner: andrea
 tags: [reference, ota, version-policy, force-update, approvals]
@@ -19,6 +19,7 @@ code_refs:
   - packages/backend/src/transport/trpc/routers/ota.ts
   - packages/backend/src/domain/ota/VersionCheckService.ts
   - packages/backend/src/transport/ext/app.ts
+  - packages/frontend/src/components/ota/force-update-page.tsx
 ---
 
 # OTA version policy and native force update
@@ -62,6 +63,15 @@ A policy belongs to one project app whose platform is `ios` or `android` (a stor
 ## tRPC surface
 
 `ota.versionPolicy.get | change | history`, each taking `workspaceId`, `projectId`, `appId`. `change` takes the full new `rules`, an optional `reason`, and `storeLiveAttested`, and returns `{ outcome, policy, requestId }` where `requestId` is the pre-approval (`pending_approval`) or the post-hoc review (a relaxing change).
+
+## Console
+
+The project's **Force update** tab (`/workspaces/{id}/p/{projectId}/ota`, shown when the OTA product is enabled) has one view per iOS or Android app, picked with `?app=`:
+
+- **In force:** the current minimum, recommended and blocked versions, the approval policy, the revision, and the version-check URL to copy.
+- **Open requests:** the app's pending approval requests (`approval.list` filtered by subject `ota.version_policy` and the app id). A pre-approval shows the change against the policy in force. A post-hoc review shows the change it reviews. Members vote on the card. The requester sees no vote controls when the policy has `prevent_self`, because the server refuses their vote either way.
+- **Change form:** edits the full rule set (the English prompt; other locales are kept unchanged). Before submitting, it runs `classifyPolicyChange` to show whether the edit tightens, relaxes or does neither, and whether it will wait for approval. It asks for the store-live attestation only when `isVersionFloorRaised` is true. After a submit it resets to the policy in force.
+- **History:** every applied change as a field-by-field diff with its direction, actor and reason. A relaxing change is marked *Unreviewed* until its post-hoc review is approved.
 
 ## Public version check
 
