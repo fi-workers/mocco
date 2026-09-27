@@ -5,11 +5,13 @@ import {
   domainEventPayloadSchemas,
   gatePendingPayloadSchema,
   gateResumedPayloadSchema,
+  inboundEventPayloadSchema,
   isDomainEventType,
   isEventPatternMatch,
   runEventPayloadSchema,
   runFailedPayloadSchema,
 } from './events';
+import { InboundEventTypes } from './inbound';
 
 const RUN_SUBJECT = {
   workspaceId: '11111111-1111-4111-8111-111111111111',
@@ -100,5 +102,27 @@ describe('isEventPatternMatch', () => {
     expect(isEventPatternMatch('github.pull_request.*', 'github.pull_request.opened')).toBe(true);
     expect(isEventPatternMatch('github.pull_request.*', 'github.push')).toBe(false);
     expect(isEventPatternMatch('gate.*', 'gateway.opened')).toBe(false);
+  });
+});
+
+describe('inbound event types', () => {
+  const payload = {
+    sourceId: '33333333-3333-4333-8333-333333333333',
+    facts: { repo: 'acme/web', hasCommits: true },
+    message: { title: '2 commits · acme/web:main', severity: 'info', fields: [], footer: 'GitHub · acme/web' },
+  };
+
+  it('are all in the catalog with the shared inbound payload', () => {
+    const types = Object.values(InboundEventTypes);
+    expect(types).toHaveLength(16);
+    expect(types.every(type => isDomainEventType(type))).toBe(true);
+    expect(types.every(type => domainEventPayloadSchemas[type] === inboundEventPayloadSchema)).toBe(true);
+  });
+
+  it('parses { sourceId, facts, message } and rejects a non-uuid source or a nested fact', () => {
+    expect(inboundEventPayloadSchema.parse(payload)).toEqual(payload);
+    expect(inboundEventPayloadSchema.safeParse({ ...payload, sourceId: 'x' }).success).toBe(false);
+    expect(inboundEventPayloadSchema.safeParse({ ...payload, facts: { repo: { name: 'x' } } }).success).toBe(false);
+    expect(inboundEventPayloadSchema.safeParse({ ...payload, message: { title: '' } }).success).toBe(false);
   });
 });

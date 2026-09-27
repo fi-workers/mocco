@@ -33,6 +33,7 @@ const SIGNATURE_HEADER = 'x-vercel-signature';
 const PREVIEW_TARGET = 'preview';
 const UNKNOWN_PROJECT = 'project';
 const COMMIT_MESSAGE_MAX = 300;
+const SOURCE_EVENT_MAX = 100;
 
 interface DeploymentMapping {
   type: InboundEventType;
@@ -101,6 +102,12 @@ export function verify(rawBody: Uint8Array, headers: Headers, secret: string): b
 export function deliveryId(rawBody: string, _headers: Headers): string | undefined {
   const envelope = z.object({ id: z.string().trim().min(1) }).safeParse(parseJson(rawBody));
   return envelope.success ? nonEmpty(sanitize(envelope.data.id)) : undefined;
+}
+
+/** The payload's `type`, e.g. `deployment.succeeded`. */
+export function sourceEvent(rawBody: string, _headers: Headers): string | undefined {
+  const envelope = envelopeSchema.safeParse(parseJson(rawBody));
+  return envelope.success ? truncate(envelope.data.type, SOURCE_EVENT_MAX) : undefined;
 }
 
 export function parse(rawBody: string, _headers: Headers): ParsedInbound {

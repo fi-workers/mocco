@@ -1,6 +1,7 @@
 import { isDomainEventType } from '@mocco/common/events';
 import { inboundEventTypeSchema } from '@mocco/common/inbound';
-import { ChannelKinds, DELIVERY_LIST_MAX, RulePresets, Severities, rulePresetRules } from '@mocco/common/notification';
+import { ChannelKinds, DELIVERY_LIST_MAX, Severities } from '@mocco/common/notification';
+import { RulePresets, rulePresetRules } from '@mocco/common/notification-presets';
 
 import { DeliveryPolicy } from '@backend/domain/notification/constants';
 import {
@@ -36,13 +37,8 @@ import type {
   DiscordSendResult,
   DiscordTextChannel,
 } from '@backend/domain/notification/senders/discord';
-import type {
-  ChannelTestResult,
-  DeliveryStatus,
-  NeutralMessage,
-  RuleFilter,
-  RulePreset,
-} from '@mocco/common/notification';
+import type { ChannelTestResult, DeliveryStatus, NeutralMessage, RuleFilter } from '@mocco/common/notification';
+import type { RulePreset } from '@mocco/common/notification-presets';
 
 /** The Discord calls channel management makes with the Mocco bot. */
 export type DiscordChannelApi = Pick<DiscordApi, 'listTextChannels' | 'sendMessage' | 'getBotMember'>;

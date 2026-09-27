@@ -120,6 +120,13 @@
       "when": 1790310468898,
       "tag": "0016_complete_butterfly",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790311287677,
+      "tag": "0017_cute_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { EventJobKinds } from '@backend/domain/events/EventBus';
 import { createEventBus } from '@backend/domain/events/subscriptions';
+import { InboundJobKinds } from '@backend/domain/inbound/jobs';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobKinds } from '@backend/domain/jobs/prune';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
@@ -44,10 +45,17 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
 
-    expect(report).toMatchObject({ ran: 4, errors: [], outcomes: { succeeded: 4 } });
+    expect(report).toMatchObject({ ran: 6, errors: [], outcomes: { succeeded: 6 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
-      new Set([JobKinds.prune, EventJobKinds.prune, NotificationJobKinds.reconcile, NotificationJobKinds.prune]),
+      new Set([
+        JobKinds.prune,
+        EventJobKinds.prune,
+        NotificationJobKinds.reconcile,
+        NotificationJobKinds.prune,
+        InboundJobKinds.republishStale,
+        InboundJobKinds.prune,
+      ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);
     const ran = await t.db.select().from(jobs);

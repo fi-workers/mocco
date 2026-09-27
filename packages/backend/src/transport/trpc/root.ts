@@ -2,6 +2,7 @@
 // barrel — nothing is re-exported, a new router value is built).
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
+import { inboundRouter } from '@backend/transport/trpc/routers/inbound';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
 import { notificationRouter } from '@backend/transport/trpc/routers/notification';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
@@ -24,6 +25,7 @@ export const appRouter = router({
   audit: auditRouter,
   project: projectRouter,
   product: productRouter,
+  inbound: inboundRouter,
   notification: notificationRouter,
 });
 

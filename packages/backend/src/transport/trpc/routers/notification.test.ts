@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
-import { RulePresets } from '@mocco/common/notification';
+import { RulePresets } from '@mocco/common/notification-presets';
 import { WorkspaceMemberRoles } from '@mocco/common/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

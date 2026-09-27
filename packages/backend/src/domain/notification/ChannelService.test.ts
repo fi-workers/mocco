@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { ChannelStatuses, DeliveryStatuses, RulePresets, rulePresetRules } from '@mocco/common/notification';
+import { ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
+import { RulePresets, rulePresetRules } from '@mocco/common/notification-presets';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

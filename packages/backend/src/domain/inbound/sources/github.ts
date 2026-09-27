@@ -16,6 +16,7 @@ import {
   parseJson,
   type MessageDraft,
   type ParsedInbound,
+  sourceEventLabel,
   stripPrefix,
   truncate,
 } from '@backend/domain/inbound/sources/shared';
@@ -323,6 +324,12 @@ const eventParsers: Record<string, (json: unknown) => ParsedInbound> = {
   [GithubEvents.release]: parseRelease,
   [GithubEvents.workflow_run]: parseWorkflowRun,
 };
+
+/** `<X-GitHub-Event>.<action>`, e.g. `pull_request.opened`, or just the event (`push`). */
+export function sourceEvent(rawBody: string, headers: Headers): string | undefined {
+  const event = headerValue(headers, EVENT_HEADER);
+  return event === undefined ? undefined : sourceEventLabel(event, parseJson(rawBody));
+}
 
 /** Maps a delivery by its `X-GitHub-Event` header. */
 export function parse(rawBody: string, headers: Headers): ParsedInbound {

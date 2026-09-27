@@ -13,6 +13,7 @@ import { getCredential } from '@backend/domain/credential/instance';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getInbound } from '@backend/domain/inbound/instance';
 import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
 import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/github/constants';
 import { GithubApiError } from '@backend/domain/integration/github/errors';
@@ -23,12 +24,14 @@ import { getNotification } from '@backend/domain/notification/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
 import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
+import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import type { HttpPost } from '@backend/domain/execution/ports';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { InboundService } from '@backend/domain/inbound/InboundService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { GitHubProvider } from '@backend/domain/integration/github/provider';
@@ -63,6 +66,9 @@ export interface ExtDeps {
   /** The job tick (`/internal/jobs/tick`); undefined when neither CRON_SECRET nor
    * JOBS_TICK_SECRET is set, and the route 503s. */
   jobTick?: JobTickDeps;
+  /** Inbound webhooks (`/inbound/:ingestKey`); undefined when SECRETS_ENCRYPTION_KEYS is
+   * not set (sealed secrets can't be opened), and the route 503s. */
+  inbound?: InboundService;
   /** The Discord bot install (`/discord/install`, `/discord/callback`); undefined when
    * DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_BOT_TOKEN are not all set, and
    * both routes 503. */
@@ -259,6 +265,8 @@ export function createExtApp(deps: ExtDeps): Hono {
     return c.text('accepted', 202);
   });
 
+  // Inbound webhooks from Sentry, Vercel and GitHub (notification relay design §5).
+  app.route('/', createInboundRoutes(deps.inbound));
   // Discord bot install (relay design §6): /discord/install and /discord/callback.
   app.route('/', createDiscordInstallRoutes({ auth: deps.auth, discord: deps.discord }));
 
@@ -306,6 +314,7 @@ export async function extHandler(request: Request): Promise<Response> {
             maxJobs: DEFAULT_TICK_MAX_JOBS,
           }
         : undefined,
+    inbound: getInbound()?.inbound,
     discord: discordInstall === undefined ? undefined : { install: discordInstall, workspace: services.workspace },
   });
   return await app.fetch(request);
