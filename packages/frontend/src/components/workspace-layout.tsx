@@ -1,24 +1,25 @@
+import { Products } from '@mocco/common/project';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
+import { visibleEntries, workspaceNav } from '@frontend/lib/products';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 import { cn } from '@frontend/lib/utils';
 
+import type { WorkspaceSection } from '@frontend/lib/products';
 import type { ReactNode } from 'react';
-
-type Section = 'overview' | 'members' | 'access' | 'notifications' | 'audit' | 'settings';
 
 interface Props {
   workspaceId: string;
-  active: Section;
+  active: WorkspaceSection;
   children: ReactNode;
 }
 
-// The workspace-scoped frame: a left nav (overview / members / settings) beside
-// the section content, shown inside the global AppShell. Entering any workspace
+// The workspace-scoped frame: a left nav (the product registry's workspace sections,
+// filtered by the workspace's enabled products) beside the section content, shown inside the global AppShell. Entering any workspace
 // page makes it active server-side (which also validates membership — a
 // workspace the user isn't in bounces to /workspaces).
 export default function WorkspaceLayout({ workspaceId, active, children }: Props) {
@@ -57,14 +58,13 @@ export default function WorkspaceLayout({ workspaceId, active, children }: Props
   }, [workspaceId, setActive]);
 
   const workspace = listQuery.data?.workspaces.find(ws => ws.id === workspaceId);
-  const nav: { key: Section; label: string; href: string }[] = [
-    { key: 'overview', label: 'Overview', href: Routes.workspace(workspaceId) },
-    { key: 'members', label: 'Members', href: Routes.workspaceMembers(workspaceId) },
-    { key: 'access', label: 'Access', href: Routes.workspaceAccess(workspaceId) },
-    { key: 'notifications', label: 'Notifications', href: Routes.workspaceNotifications(workspaceId) },
-    { key: 'audit', label: 'Audit', href: Routes.workspaceAudit(workspaceId) },
-    { key: 'settings', label: 'Settings', href: Routes.workspaceSettings(workspaceId) },
-  ];
+  // Until the enabled products load, governance (always on) is the safe assumption.
+  const productsQuery = trpc.product.list.useQuery({ workspaceId });
+  const nav = visibleEntries(workspaceNav, productsQuery.data?.products ?? [Products.governance]).map(entry => ({
+    key: entry.key,
+    label: entry.label,
+    href: entry.href(workspaceId),
+  }));
 
   return (
     <div className="flex flex-1">

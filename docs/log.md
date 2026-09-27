@@ -102,3 +102,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   and optional services are required `X | undefined` keys so a builder can't silently drop one.
 - Docs touched: `customer/notifications/*`, `reference/backend-conventions.md`
 - Source: branch `feat/notifications-ui-v2`
+
+## 2026-09-26 — Multi-product app shell
+
+- Frontend conventions: the nav now comes from the product registry (`lib/products.ts`), hidden per disabled
+  product; the top bar gains a project switcher; project-scoped products live under
+  `/workspaces/[id]/p/[projectId]/…`.
+- Docs touched: `reference/frontend-conventions.md`
+- Source: branch `feat/app-shell-projects` (issue #109)
