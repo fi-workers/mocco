@@ -69,5 +69,8 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ping` | none | `{ "ok": true, "api": "v1" }` |
 | `GET /v1/whoami` | any | `{ projectId, kind, scopes }` |
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
+| `POST /v1/ota/apps/{otaAppId}/upload-sessions` | secret, `ota:write` | `201 { sessionToken, expiresAt }`: a 15-minute `mk_ups_` upload session |
+| `POST /v1/ota/uploads` | upload session | `201 { releaseId, assetBaseUrl, missing, rollbackTargets }`; see [Mocco-hosted OTA](./ota-hosting.md#uploads-from-ci) |
+| `POST /v1/ota/uploads/{releaseId}/finalize` | upload session | `200 { releaseId, status, updates }`, or `400 upload_rejected` whose `detail` says what to fix |
 
 Products add their routes to `transport/ext/v1/routes.ts` with `requireKey(deps, { scope })`. New fields are additive only inside `v1`; a breaking change is `/v2`.

@@ -19,6 +19,7 @@ import type { ChannelService } from '@backend/domain/notification/ChannelService
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import type { SigningService } from '@backend/domain/ota/SigningService';
+import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -61,6 +62,8 @@ export interface Context {
   otaHosting: OtaHostingService;
   /** Always present — OTA code-signing certificates (ADR 0022). */
   otaSigning: SigningService;
+  /** Always present — OTA releases uploaded from CI. */
+  otaUploads: UploadService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

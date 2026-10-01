@@ -140,3 +140,128 @@ export const ChannelPolicyOutcomes = {
   pendingApproval: 'pending_approval',
 } as const;
 export type ChannelPolicyOutcome = (typeof ChannelPolicyOutcomes)[keyof typeof ChannelPolicyOutcomes];
+
+/** Base64url SHA-256 without padding — how expo-updates names and checks an asset. */
+export const ASSET_HASH_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/** How long an upload session (and its presigned PUTs) stays valid. */
+export const UPLOAD_SESSION_TTL_SECONDS = 15 * 60;
+
+/** Finalize accepts a manifest `createdAt` at most this far ahead of, or behind, the server clock. */
+export const COMMIT_TIME_MAX_FUTURE_MS = 10 * 60 * 1000;
+export const COMMIT_TIME_MAX_PAST_MS = 24 * 60 * 60 * 1000;
+
+/** One asset of an Expo Updates manifest (protocol v1). */
+export const expoManifestAssetSchema = z.object({
+  hash: z.string().regex(ASSET_HASH_PATTERN),
+  key: z.string().min(1).max(200),
+  contentType: z.string().min(1).max(200),
+  fileExtension: z.string().max(20).optional(),
+  url: z.url(),
+});
+export type ExpoManifestAsset = z.infer<typeof expoManifestAssetSchema>;
+
+/** An Expo Updates protocol v1 manifest, as the CLI signs it. */
+export const expoManifestSchema = z.object({
+  id: z.uuid(),
+  createdAt: z.iso.datetime({ offset: true }),
+  runtimeVersion: z.string().min(1).max(100),
+  launchAsset: expoManifestAssetSchema,
+  assets: z.array(expoManifestAssetSchema).max(2000),
+  metadata: z.record(z.string(), z.unknown()),
+  extra: z.record(z.string(), z.unknown()).optional(),
+});
+export type ExpoManifest = z.infer<typeof expoManifestSchema>;
+
+/** A `rollBackToEmbedded` directive body (protocol v1). */
+export const rollBackToEmbeddedDirectiveSchema = z.object({
+  type: z.literal(OtaDirectiveTypes.rollBackToEmbedded),
+  parameters: z.object({ commitTime: z.iso.datetime({ offset: true }) }),
+});
+
+/** The detached signature of a signed body: what goes in `expo-signature`. */
+export const bodySignatureSchema = z.object({
+  sig: z.string().min(1).max(4096),
+  keyid: z
+    .string()
+    .regex(/^[\w.-]{1,64}$/)
+    .default(DEFAULT_SIGNING_KEY_ID),
+});
+export type BodySignature = z.infer<typeof bodySignatureSchema>;
+
+/** `POST /v1/ota/uploads` — declare a release and its assets. */
+export const uploadRequestSchema = z.object({
+  runtimeVersion: z.string().min(1).max(100),
+  platforms: z.array(otaPlatformSchema).min(1).max(2),
+  assets: z
+    .array(
+      z.object({
+        hash: z.string().regex(ASSET_HASH_PATTERN),
+        size: z.number().int().positive(),
+        contentType: z.string().min(1).max(200),
+        ext: z.string().max(20).nullable().default(null),
+      }),
+    )
+    .min(1)
+    .max(4000),
+  gitSha: z
+    .string()
+    .regex(/^[0-9a-f]{7,40}$/)
+    .nullable()
+    .default(null),
+  message: z.string().max(500).nullable().default(null),
+  mandatory: z.boolean().default(false),
+});
+export type UploadRequest = z.infer<typeof uploadRequestSchema>;
+
+/** The response: what to upload, and what to pre-sign for rollback. */
+export interface UploadResponse {
+  releaseId: string;
+  assetBaseUrl: string;
+  missing: { hash: string; putUrl: string; headers: Record<string, string> }[];
+  /** The current head of each channel on this runtime: the CLI signs a republish of it
+   * (newer `createdAt`), so rolling back from this release is instant. */
+  rollbackTargets: { channel: string; platform: OtaPlatform; updateId: string; manifest: string }[];
+}
+
+const signedBodySchema = z.object({
+  platform: otaPlatformSchema,
+  /** The exact JSON string that was signed; stored and served byte for byte. */
+  body: z.string().min(2).max(1_000_000),
+  signature: bodySignatureSchema.nullable().default(null),
+});
+
+/** `POST /v1/ota/uploads/:releaseId/finalize`. */
+export const finalizeRequestSchema = z.object({
+  updates: z.array(signedBodySchema).min(1).max(2),
+  /** Pre-signed copies of `rollbackTargets`, valid for devices on this release's update. */
+  republishes: z
+    .array(signedBodySchema.extend({ targetUpdateId: z.uuid() }))
+    .max(50)
+    .default([]),
+  /** Pre-signed `rollBackToEmbedded` directives, one per platform. */
+  directives: z.array(signedBodySchema).max(2).default([]),
+});
+export type FinalizeRequest = z.infer<typeof finalizeRequestSchema>;
+
+export const otaReleaseSchema = z.object({
+  id: z.uuid(),
+  appId: z.uuid(),
+  runtimeVersion: z.string(),
+  status: z.enum([
+    OtaReleaseStatuses.uploading,
+    OtaReleaseStatuses.verifying,
+    OtaReleaseStatuses.ready,
+    OtaReleaseStatuses.failed,
+    OtaReleaseStatuses.disabled,
+  ]),
+  message: z.string().nullable(),
+  gitSha: z.string().nullable(),
+  isMandatory: z.boolean(),
+  uploadedByPrincipal: z.string().nullable(),
+  platforms: z.array(otaPlatformSchema),
+  /** What one device downloads: the largest platform update's assets. */
+  downloadBytes: z.number(),
+  createdAt: z.date(),
+});
+export type OtaReleaseDto = z.infer<typeof otaReleaseSchema>;

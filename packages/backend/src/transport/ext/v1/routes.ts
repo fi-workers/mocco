@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 
 import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
+import { createOtaUploadRoutes } from '@backend/transport/ext/v1/ota-uploads';
 
 export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   const app = new Hono<V1Env>();
@@ -17,6 +18,10 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
     const { projectId, kind, scopes } = c.var.principal;
     return c.json({ projectId, kind, scopes });
   });
+
+  if (deps.ota !== undefined) {
+    app.route('/ota', createOtaUploadRoutes(deps, deps.ota));
+  }
 
   return app;
 }

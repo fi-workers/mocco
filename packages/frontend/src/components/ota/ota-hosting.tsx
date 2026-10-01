@@ -1,5 +1,10 @@
 import { ApprovalDecisions, ApprovalStates, gateRequirementsSchema } from '@mocco/common/governance';
-import { ChannelPolicyOutcomes, DEFAULT_SIGNING_KEY_ID, OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
+import {
+  ChannelPolicyOutcomes,
+  DEFAULT_SIGNING_KEY_ID,
+  OtaHostingApprovalSubjects,
+  OtaReleaseStatuses,
+} from '@mocco/common/ota-hosting';
 import { AppPlatforms } from '@mocco/common/project';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -25,7 +30,7 @@ import { trpc } from '@frontend/lib/trpc';
 import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
 
 import type { GateRequirements } from '@mocco/common/governance';
-import type { OtaAppDto, OtaChannelDto } from '@mocco/common/ota-hosting';
+import type { OtaAppDto, OtaChannelDto, OtaReleaseDto, OtaReleaseStatus } from '@mocco/common/ota-hosting';
 
 /** The policy a channel-policy approval would apply. */
 const pinnedPolicySchema = z.object({ policy: gateRequirementsSchema.nullable() });
@@ -468,6 +473,84 @@ function Channels(props: AppProps & { channels: readonly OtaChannelDto[] }) {
   );
 }
 
+const releaseStatusLabels: Record<OtaReleaseStatus, string> = {
+  [OtaReleaseStatuses.uploading]: 'Uploading',
+  [OtaReleaseStatuses.verifying]: 'Verifying',
+  [OtaReleaseStatuses.ready]: 'Ready',
+  [OtaReleaseStatuses.failed]: 'Failed',
+  [OtaReleaseStatuses.disabled]: 'Disabled',
+};
+
+const releaseStatusTones = {
+  [OtaReleaseStatuses.uploading]: Tones.neutral,
+  [OtaReleaseStatuses.verifying]: Tones.warn,
+  [OtaReleaseStatuses.ready]: Tones.ok,
+  [OtaReleaseStatuses.failed]: Tones.danger,
+  [OtaReleaseStatuses.disabled]: Tones.neutral,
+} as const;
+
+const formatBytes = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+function ReleaseRow({ release }: { release: OtaReleaseDto }) {
+  return (
+    <li className="flex flex-col gap-1 rounded-xl border border-border px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">{release.message ?? 'Untitled release'}</span>
+        <StatusBadge tone={releaseStatusTones[release.status]}>{releaseStatusLabels[release.status]}</StatusBadge>
+        {release.isMandatory ? <StatusBadge tone={Tones.warn}>Mandatory</StatusBadge> : null}
+      </div>
+      <p className="font-mono text-xs text-muted-foreground">
+        runtime {release.runtimeVersion}
+        {release.platforms.length > 0 ? ` · ${release.platforms.join(', ')}` : ''}
+        {release.downloadBytes > 0 ? ` · ${formatBytes(release.downloadBytes)} download` : ''}
+        {release.gitSha === null ? '' : ` · ${release.gitSha.slice(0, 7)}`}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Uploaded <Ago date={release.createdAt} />
+        {release.uploadedByPrincipal === null ? '' : ` by ${release.uploadedByPrincipal}`}
+      </p>
+    </li>
+  );
+}
+
+/** Releases CI uploaded, newest first. Polls while one is still being verified. */
+function Releases({ workspaceId, projectId, app }: AppProps) {
+  const releasesQuery = trpc.ota.hosting.releases.list.useQuery(
+    { workspaceId, projectId, appId: app.id },
+    {
+      refetchInterval: query =>
+        query.state.data?.releases.some(release => release.status === OtaReleaseStatuses.verifying) === true
+          ? 3000
+          : false,
+    },
+  );
+  const releases = releasesQuery.data?.releases ?? [];
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-sm font-medium">Releases</h2>
+        <p className="text-xs text-muted-foreground">
+          Publish from CI with <span className="font-mono">npx mocco-ota publish --app-id {app.id}</span> and a secret
+          API key with <span className="font-mono">ota:write</span>. Mocco re-hashes new assets before a release is
+          ready to promote.
+        </p>
+      </div>
+      {releasesQuery.isPending ? <Spinner /> : null}
+      {releasesQuery.isSuccess && releases.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+          No releases yet.
+        </p>
+      ) : null}
+      <ul className="flex flex-col gap-2">
+        {releases.map(release => (
+          <ReleaseRow key={release.id} release={release} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function HostedApp(props: AppProps) {
   const { workspaceId, projectId, app } = props;
   const channelsQuery = trpc.ota.hosting.channels.list.useQuery({ workspaceId, projectId, appId: app.id });
@@ -477,6 +560,7 @@ function HostedApp(props: AppProps) {
       <SetupCard app={app} channels={channels} />
       <Certificates {...props} />
       <Channels {...props} channels={channels} />
+      <Releases {...props} />
     </div>
   );
 }

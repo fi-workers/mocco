@@ -12,6 +12,10 @@ export const ProblemCodes = {
   rateLimited: 'rate_limited',
   badRequest: 'bad_request',
   notFound: 'not_found',
+  conflict: 'conflict',
+  forbidden: 'forbidden',
+  invalidSession: 'invalid_session',
+  uploadRejected: 'upload_rejected',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

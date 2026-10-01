@@ -7,25 +7,33 @@ import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
 import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin, schemeFor } from '@backend/domain/execution/endpoints';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getJobQueue } from '@backend/domain/jobs/instance';
 import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
 import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
 import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
+import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
 import { OtaChannelRepo } from '@backend/domain/ota/repos/ota-channel.repo';
 import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-external-credential.repo';
+import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
+import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
 import { SigningService } from '@backend/domain/ota/SigningService';
+import { UploadService } from '@backend/domain/ota/UploadService';
 import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import { getProjectDomain } from '@backend/domain/project/instance';
+import { getStorageDomain } from '@backend/domain/storage/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
+import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { StorageService } from '@backend/domain/storage/StorageService';
 import type { Env } from '@backend/infra/config/env';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
@@ -36,7 +44,16 @@ export interface OtaDomain {
   externalCredentials: ExternalCredentialService;
   otaHosting: OtaHostingService;
   otaSigning: SigningService;
+  otaUploads: UploadService;
 }
+
+/** The production queue, resolved on first enqueue (tests that never upload need no env). */
+const lazyQueue: JobQueue = {
+  enqueue: async (job, payload, options) => await getJobQueue().enqueue(job, payload, options),
+  kick: jobId => {
+    getJobQueue().kick(jobId);
+  },
+};
 
 /** Where device-facing OTA URLs live: the public API host when PUBLIC_API_DOMAIN is set
  * (`https://api.mocco.club/v1`), else the app origin's `/api/ext/v1`. */
@@ -59,10 +76,13 @@ export function createOtaDomain(
     secretBox?: () => SecretBox;
     /** The base of device-facing URLs (`publicApiBaseFromEnv` in production). */
     publicApiBase: string;
+    /** Where uploaded bundles go; undefined refuses uploads. */
+    storage?: StorageService;
+    queue?: JobQueue;
   },
 ): OtaDomain {
   const policies = new AppVersionPolicyRepo(db);
-  const { secretBox = getSecretBox, publicApiBase, ...services } = deps;
+  const { secretBox = getSecretBox, publicApiBase, storage, queue = lazyQueue, ...services } = deps;
   const versionPolicies = new VersionPolicyService({
     policies,
     changes: new AppVersionPolicyChangeRepo(db),
@@ -82,6 +102,7 @@ export function createOtaDomain(
   deps.approvals.registerHandler(OtaHostingApprovalSubjects.channelPolicy, async request => {
     await hosting.applyApprovedPolicy(request);
   });
+  const signing = new SigningService({ certificates: new SigningCertificateRepo(db), audit: services.audit });
   return {
     versionPolicies,
     versionChecks: new VersionCheckService({ policies }),
@@ -92,7 +113,17 @@ export function createOtaDomain(
       secretBox,
     }),
     otaHosting: hosting,
-    otaSigning: new SigningService({ certificates: new SigningCertificateRepo(db), audit: services.audit }),
+    otaSigning: signing,
+    otaUploads: new UploadService({
+      apps: new OtaAppRepo(db),
+      sessions: new UploadSessionRepo(db),
+      releases: new OtaReleaseRepo(db),
+      assets: new OtaAssetRepo(db),
+      signing,
+      storage,
+      queue,
+      audit: services.audit,
+    }),
   };
 }
 
@@ -107,6 +138,7 @@ export function getOtaDomain(): OtaDomain {
     approvals: getGovernance().approvals,
     audit: getAudit().audit,
     publicApiBase: publicApiBaseFromEnv(getEnv()),
+    storage: getStorageDomain()?.storage,
   });
   return state.ota;
 }

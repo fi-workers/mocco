@@ -1783,7 +1783,8 @@ export const otaAssets = pgTable(
     contentType: text('content_type').notNull(),
     fileExtension: text('file_extension'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
-    objectId: uuid('object_id').references(() => objects.id, { onDelete: 'restrict' }),
+    // Null until uploaded, and again if storage gc drops an abandoned upload.
+    objectId: uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
     verifiedAt: timestamp('verified_at'),
     createdAt,
   },
@@ -1868,5 +1869,34 @@ export const otaDeployments = pgTable(
       name: 'mocco_ota_deployments_channel_fk',
     }).onDelete('cascade'),
     check('mocco_ota_deployments_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(OtaDeploymentKinds))})`),
+  ],
+);
+
+/**
+ * Short-lived upload credentials for CI (OTA design §6.2). A session is minted from a
+ * secret API key with `ota:write` (and, later, from GitHub OIDC or a broker-approved
+ * run); only the token's hash is stored. One session uploads at most one release.
+ */
+export const otaUploadSessions = pgTable(
+  'mocco_ota_upload_sessions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    tokenHash: text('token_hash').notNull().unique('mocco_ota_upload_sessions_token_hash_uq'),
+    // Who the session speaks for, e.g. `apikey:<id>` or `github:repo:123:ref:refs/heads/main`.
+    principal: text().notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'set null' }),
+    releaseId: uuid('release_id').references(() => otaReleases.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt,
+  },
+  t => [
+    index('mocco_ota_upload_sessions_expires_idx').on(t.expiresAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_upload_sessions_app_fk',
+    }).onDelete('cascade'),
   ],
 );

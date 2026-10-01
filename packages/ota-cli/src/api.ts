@@ -1,0 +1,82 @@
+// The Mocco /v1 OTA upload endpoints, for the CLI. Refusals are problem+json whose
+// `detail` says what to fix; MoccoApiError carries it as the message.
+import { MoccoApiError } from './api-error';
+
+import type { FinalizeRequest, UploadRequest, UploadResponse } from '@mocco/common/ota-hosting';
+
+interface Problem {
+  title?: string;
+  detail?: string;
+}
+
+async function errorOf(response: Response, what: string): Promise<MoccoApiError> {
+  const text = await response.text();
+  let problem: Problem = {};
+  try {
+    problem = JSON.parse(text) as Problem;
+  } catch {
+    // Not problem+json (a proxy page, say): report the status alone.
+  }
+  const reason = problem.detail ?? problem.title ?? `HTTP ${response.status}`;
+  return new MoccoApiError(response.status, `${what} failed (${response.status}): ${reason}`);
+}
+
+export interface FinalizeResult {
+  releaseId: string;
+  status: string;
+  updates: Record<string, string>;
+}
+
+export class MoccoApi {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
+
+  private async postJson<T>(path: string, token: string, body: unknown, what: string): Promise<T> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw await errorOf(response, what);
+    }
+    return (await response.json()) as T;
+  }
+
+  /** Exchange a secret API key with `ota:write` for an upload session token. */
+  async createSession(appId: string, apiKey: string): Promise<string> {
+    const { sessionToken } = await this.postJson<{ sessionToken: string }>(
+      `/ota/apps/${appId}/upload-sessions`,
+      apiKey,
+      {},
+      'Starting an upload session',
+    );
+    return sessionToken;
+  }
+
+  async declare(session: string, request: UploadRequest): Promise<UploadResponse> {
+    return await this.postJson<UploadResponse>('/ota/uploads', session, request, 'Declaring the release');
+  }
+
+  async put(target: UploadResponse['missing'][number], bytes: Uint8Array): Promise<void> {
+    const response = await this.fetchImpl(target.putUrl, {
+      method: 'PUT',
+      headers: target.headers,
+      body: new Uint8Array(bytes),
+    });
+    if (!response.ok) {
+      throw await errorOf(response, `Uploading asset ${target.hash}`);
+    }
+  }
+
+  async finalize(session: string, releaseId: string, request: FinalizeRequest): Promise<FinalizeResult> {
+    return await this.postJson<FinalizeResult>(
+      `/ota/uploads/${releaseId}/finalize`,
+      session,
+      request,
+      'Finalizing the release',
+    );
+  }
+}

@@ -9,6 +9,8 @@ import { randomUUID } from 'node:crypto';
 
 import { waitUntil } from '@vercel/functions';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createEventHandlers, pruneEventsSchedule } from '@backend/domain/events/jobs';
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { createEventBus } from '@backend/domain/events/subscriptions';
@@ -29,6 +31,14 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
+import { createOtaHandlers, pruneUploadSessionsSchedule } from '@backend/domain/ota/jobs';
+import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
+import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
+import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
+import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
+import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
+import { SigningService } from '@backend/domain/ota/SigningService';
+import { UploadService } from '@backend/domain/ota/UploadService';
 import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
@@ -55,7 +65,7 @@ export interface JobRunnerRuntimeDeps {
   appOrigin: string;
   /** The Discord client deliveries send with; undefined without DISCORD_BOT_TOKEN. */
   discord: DiscordMessenger | undefined;
-  /** Object storage for the gc job; undefined when no store is configured. */
+  /** Object storage for the gc and OTA verify jobs; undefined when no store is configured. */
   storage: StorageService | undefined;
 }
 
@@ -81,6 +91,18 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     bus,
     now: deps.now,
   });
+  const audit = new AuditService({ audit: new AuditRepo(db) });
+  const uploads = new UploadService({
+    apps: new OtaAppRepo(db),
+    sessions: new UploadSessionRepo(db),
+    releases: new OtaReleaseRepo(db),
+    assets: new OtaAssetRepo(db),
+    signing: new SigningService({ certificates: new SigningCertificateRepo(db), audit }),
+    storage: deps.storage,
+    queue,
+    audit,
+    now: deps.now,
+  });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
@@ -96,6 +118,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     }),
     ...createStorageHandlers({ storage: deps.storage }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
+    ...createOtaHandlers({ uploads }),
   ];
   self.runner = new JobRunner({
     jobs,
@@ -110,6 +133,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       ...notificationSchedules,
       ...inboundSchedules,
       rateLimitPruneSchedule,
+      pruneUploadSessionsSchedule,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });
