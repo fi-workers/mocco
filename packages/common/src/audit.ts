@@ -43,6 +43,9 @@ export const AuditActions = {
   otaReleaseFailed: 'ota.release.failed',
   otaChannelChanged: 'ota.channel.changed',
   otaChannelChangeFailed: 'ota.channel.change_failed',
+  flagEnvironmentCreated: 'flag.environment.created',
+  flagCreated: 'flag.created',
+  flagChangesetApplied: 'flag.changeset.applied',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

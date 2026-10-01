@@ -1,5 +1,6 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
+import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
@@ -41,6 +42,14 @@ import {
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
+import type {
+  ChangeDiffEntry,
+  ChangeOp,
+  ChangesetSource,
+  ChangesetState,
+  FlagLifecycle,
+  FlagType,
+} from '@mocco/common/flags';
 import type {
   ApprovalDecision,
   ApprovalKind,
@@ -2029,6 +2038,161 @@ export const otaAdoptionDaily = pgTable(
       columns: [t.appId, t.workspaceId],
       foreignColumns: [otaApps.id, otaApps.workspaceId],
       name: 'mocco_ota_adoption_daily_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Feature flags (#101, ADRs 0023 and 0024). A flag is defined per project; each
+// environment (a flag target: an evaluation scope with no built-in meaning) holds a
+// config of it. Configs change only through changesets, and every applied changeset
+// bumps the environment's version and writes an immutable ruleset snapshot.
+// ─────────────────────────────────────────────────────────────
+
+/** An evaluation scope of a project's flags ("Environment" in the UI, ADR 0023). */
+export const flagEnvironments = pgTable(
+  'mocco_flag_environments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    key: text().notNull(),
+    name: text().notNull(),
+    // Set exactly when the environment is protected: changes then need this gate's approval.
+    changeGate: jsonb('change_gate').$type<GateRequirements>(),
+    // The version of the latest applied changeset; 0 until the first one.
+    currentVersion: integer('current_version').notNull().default(0),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_flag_environments_project_key_uq').on(t.projectId, t.key),
+    unique('mocco_flag_environments_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_flag_environments_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_flag_environments_key_check', sql`${t.key} ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'`),
+  ],
+);
+
+/** A flag's definition: its key, type and variants, shared by every environment. */
+export const flags = pgTable(
+  'mocco_flags',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    key: text().notNull(),
+    type: text().$type<FlagType>().notNull(),
+    variants: jsonb().$type<Record<string, unknown>>().notNull(),
+    description: text(),
+    lifecycle: text().$type<FlagLifecycle>().notNull().default(FlagLifecycles.temporary),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_flags_project_key_uq').on(t.projectId, t.key),
+    unique('mocco_flags_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_flags_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_flags_type_check', sql`${t.type} IN (${sqlInList(Object.values(FlagTypes))})`),
+    check('mocco_flags_lifecycle_check', sql`${t.lifecycle} IN (${sqlInList(Object.values(FlagLifecycles))})`),
+  ],
+);
+
+/** A flag's state in one environment. Written only by an applied changeset. */
+export const flagConfigs = pgTable(
+  'mocco_flag_configs',
+  {
+    environmentId: uuid('environment_id').notNull(),
+    flagId: uuid('flag_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    enabled: boolean().notNull().default(false),
+    killed: boolean().notNull().default(false),
+    defaultVariant: text('default_variant').notNull(),
+    // What a killed flag serves (ADR 0024).
+    offVariant: text('off_variant').notNull(),
+    // Mixed into percentage bucketing (`mocco-v1`); changed only by a changeset.
+    salt: text()
+      .notNull()
+      .default(sql`md5(random()::text || clock_timestamp()::text)`),
+    // The environment version that last changed this config.
+    version: integer().notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.environmentId, t.flagId], name: 'mocco_flag_configs_pk' }),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_configs_environment_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.flagId, t.workspaceId],
+      foreignColumns: [flags.id, flags.workspaceId],
+      name: 'mocco_flag_configs_flag_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A proposed change to one environment: ordered ops against `base_version`. */
+export const flagChangesets = pgTable(
+  'mocco_flag_changesets',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    environmentId: uuid('environment_id').notNull(),
+    state: text().$type<ChangesetState>().notNull(),
+    source: text().$type<ChangesetSource>().notNull(),
+    ops: jsonb().$type<ChangeOp[]>().notNull(),
+    // Rendered before/after per field, computed against the base version.
+    diff: jsonb().$type<ChangeDiffEntry[]>().notNull(),
+    // sha256 over {environmentId, baseVersion, ops}: what an approval pins.
+    contentHash: text('content_hash').notNull(),
+    baseVersion: integer('base_version').notNull(),
+    appliedVersion: integer('applied_version'),
+    proposedByUserId: uuid('proposed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    reason: text(),
+    createdAt,
+    resolvedAt: timestamp('resolved_at'),
+  },
+  t => [
+    index('mocco_flag_changesets_environment_idx').on(t.environmentId, t.createdAt),
+    uniqueIndex('mocco_flag_changesets_applied_version_uq').on(t.environmentId, t.appliedVersion),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_changesets_environment_fk',
+    }).onDelete('cascade'),
+    check('mocco_flag_changesets_state_check', sql`${t.state} IN (${sqlInList(Object.values(ChangesetStates))})`),
+    check('mocco_flag_changesets_source_check', sql`${t.source} IN (${sqlInList(Object.values(ChangesetSources))})`),
+    check('mocco_flag_changesets_applied_check', sql`(${t.state} = 'applied') = (${t.appliedVersion} IS NOT NULL)`),
+  ],
+);
+
+/** The compiled flagd document of each environment version. Immutable. */
+export const flagRulesetSnapshots = pgTable(
+  'mocco_flag_ruleset_snapshots',
+  {
+    environmentId: uuid('environment_id').notNull(),
+    version: integer().notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    // A strong ETag of the serialized document.
+    etag: text().notNull(),
+    document: jsonb().$type<Record<string, unknown>>().notNull(),
+    changesetId: uuid('changeset_id').references(() => flagChangesets.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    primaryKey({ columns: [t.environmentId, t.version], name: 'mocco_flag_ruleset_snapshots_pk' }),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_ruleset_snapshots_environment_fk',
     }).onDelete('cascade'),
   ],
 );

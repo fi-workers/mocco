@@ -44,6 +44,7 @@
     "@electric-sql/pglite": "0.5.4",
     "@mocco/sdk-core": "workspace:*",
     "@types/pg": "8.20.0",
+    "ajv": "8.20.0",
     "eslint": "10.6.0",
     "typescript": "5.9.3",
     "vitest": "4.1.9"

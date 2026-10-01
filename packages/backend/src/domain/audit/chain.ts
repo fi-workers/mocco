@@ -46,7 +46,7 @@ function compareCodeUnits(a: string, b: string): number {
  * keep their order (order is meaningful in a list); objects are key-sorted. A stable
  * canonical form is what makes the chain reproducible by any verifier.
  */
-function canonicalize(value: unknown): string {
+export function canonicalize(value: unknown): string {
   if (value === null || typeof value !== 'object') {
     // Primitives (string/number/boolean/null). JSON.stringify yields undefined for
     // unsupported values (undefined/function/symbol) — normalize those to null so the

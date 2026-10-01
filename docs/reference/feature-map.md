@@ -87,8 +87,8 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 
 | Feature | Status | Description |
 |---|---|---|
-| Flag targets ("Environments") | Not drawn | Evaluation scopes with bound SDK keys; protected by an attached change gate |
-| Flags, variants and targeting | Not drawn | Boolean, string, number and JSON flags; rules on context attributes, segments, percentage rollout (`mocco-v1` bucketing) |
+| Flag targets ("Environments") | Live | Evaluation scopes, each with its own versioned ruleset ([reference](./flags.md)); SDK keys and the change gate come next |
+| Flags, variants and targeting | Live | Boolean flags with per-environment on/off today; string, number and JSON flags; rules on context attributes, segments, percentage rollout (`mocco-v1` bucketing) |
 | Governed changesets | Not drawn | Changes to a protected target are approval requests with a diff (ADR 0020) |
 | Kill switch | Not drawn | One-way, ungated, audited; restore is gated |
 | Server SDK (local evaluation) | Not drawn | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |

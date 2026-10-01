@@ -18,5 +18,7 @@
 export const AdvisoryLockNamespaces = {
   /** Serializes appends to one workspace's audit hash chain (`AuditRepo.appendChained`). */
   auditChain: 1,
+  /** Serializes changeset applies to one flag environment (`RulesetPublisher`). */
+  flagEnvironment: 2,
 } as const;
 export type AdvisoryLockNamespace = (typeof AdvisoryLockNamespaces)[keyof typeof AdvisoryLockNamespaces];
