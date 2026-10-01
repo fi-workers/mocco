@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
 
-import { OtaDeploymentKinds } from '@mocco/common/ota-hosting';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
@@ -8,7 +7,7 @@ import * as schema from '@backend/infra/db/schema';
 
 import type { HeadState } from '@backend/domain/ota/serving/select';
 import type { Db } from '@backend/infra/db/types';
-import type { OtaPlatform } from '@mocco/common/ota-hosting';
+import type { OtaDeploymentKind, OtaPlatform } from '@mocco/common/ota-hosting';
 
 export type ChannelHeadRow = typeof schema.otaChannelHeads.$inferSelect;
 
@@ -26,6 +25,22 @@ export interface ChannelHeadSummary {
   version: number;
   updatedAt: Date;
 }
+
+/** A head with what its active and candidate updates are (release, commit time, content). */
+export interface ChannelHeadDetail {
+  head: ChannelHeadRow;
+  active: { id: string; releaseId: string; commitTime: Date; contentOfUpdateId: string } | null;
+  candidate: { id: string; releaseId: string; commitTime: Date; contentOfUpdateId: string } | null;
+}
+
+/** The fields one head change sets (left out = unchanged). */
+export type HeadWrite = Pick<ChannelHeadRow, 'platform' | 'runtimeVersion'> &
+  Partial<
+    Pick<
+      ChannelHeadRow,
+      'activeUpdateId' | 'candidateUpdateId' | 'previousUpdateId' | 'rolloutBp' | 'isPaused' | 'serveDirectiveId'
+    >
+  >;
 
 /** Data access for mocco_ota_channel_heads — the serving state — and the deployment history. */
 export class ChannelHeadRepo {
@@ -121,64 +136,82 @@ export class ChannelHeadRepo {
       );
   }
 
+  /** Every head of one channel, with what its active and candidate updates are. */
+  async listHeadsOfChannel(channelId: string): Promise<ChannelHeadDetail[]> {
+    return await this.db
+      .select({
+        head: schema.otaChannelHeads,
+        active: {
+          id: active.id,
+          releaseId: active.releaseId,
+          commitTime: active.commitTime,
+          contentOfUpdateId: active.contentOfUpdateId,
+        },
+        candidate: {
+          id: candidate.id,
+          releaseId: candidate.releaseId,
+          commitTime: candidate.commitTime,
+          contentOfUpdateId: candidate.contentOfUpdateId,
+        },
+      })
+      .from(schema.otaChannelHeads)
+      .leftJoin(active, eq(active.id, schema.otaChannelHeads.activeUpdateId))
+      .leftJoin(candidate, eq(candidate.id, schema.otaChannelHeads.candidateUpdateId))
+      .where(eq(schema.otaChannelHeads.channelId, channelId))
+      .orderBy(schema.otaChannelHeads.runtimeVersion, schema.otaChannelHeads.platform);
+  }
+
   /**
-   * Point each head at its new active update (a full promotion: no candidate, no
-   * directive, not paused), creating heads on first use, and append one deployment row —
-   * in one transaction.
+   * Change heads and append the deployment that explains it, in one transaction: the only
+   * write path for serving state. A head is created on first use (with a fresh rollout
+   * salt); each change bumps its version, the serving cache key.
    */
-  async promote(input: {
+  async writeHeads(input: {
     workspaceId: string;
     channelId: string;
-    releaseId: string;
-    runtimeVersion: string;
-    updates: readonly { platform: OtaPlatform; updateId: string }[];
-    actorUserId: string | null;
-    actorPrincipal: string | null;
-    approvalRequestId: string | null;
-    reason: string | null;
+    writes: readonly HeadWrite[];
+    deployment: {
+      releaseId: string | null;
+      kind: OtaDeploymentKind;
+      fromBp: number | null;
+      toBp: number | null;
+      actorUserId: string | null;
+      actorPrincipal: string | null;
+      approvalRequestId: string | null;
+      reason: string | null;
+    };
     now: Date;
   }): Promise<void> {
     await this.db.transaction(async tx => {
-      await tx
-        .insert(schema.otaChannelHeads)
-        .values(
-          input.updates.map(update => ({
-            workspaceId: input.workspaceId,
-            channelId: input.channelId,
-            platform: update.platform,
-            runtimeVersion: input.runtimeVersion,
-            activeUpdateId: update.updateId,
-            rolloutSalt: randomBytes(8).toString('hex'),
-            updatedAt: input.now,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [
-            schema.otaChannelHeads.channelId,
-            schema.otaChannelHeads.platform,
-            schema.otaChannelHeads.runtimeVersion,
-          ],
-          set: {
-            activeUpdateId: sql`excluded.active_update_id`,
-            candidateUpdateId: null,
-            rolloutBp: 0,
-            isPaused: false,
-            serveDirectiveId: null,
-            version: sql`${schema.otaChannelHeads.version} + 1`,
-            updatedAt: input.now,
-          },
-        });
+      await Promise.all(
+        input.writes.map(async ({ platform, runtimeVersion, ...set }) => {
+          // Plans set only the fields they change; the rest keep their values.
+          const changes = set;
+          await tx
+            .insert(schema.otaChannelHeads)
+            .values({
+              workspaceId: input.workspaceId,
+              channelId: input.channelId,
+              platform,
+              runtimeVersion,
+              rolloutSalt: randomBytes(8).toString('hex'),
+              updatedAt: input.now,
+              ...changes,
+            })
+            .onConflictDoUpdate({
+              target: [
+                schema.otaChannelHeads.channelId,
+                schema.otaChannelHeads.platform,
+                schema.otaChannelHeads.runtimeVersion,
+              ],
+              set: { ...changes, version: sql`${schema.otaChannelHeads.version} + 1`, updatedAt: input.now },
+            });
+        }),
+      );
       await tx.insert(schema.otaDeployments).values({
         workspaceId: input.workspaceId,
         channelId: input.channelId,
-        releaseId: input.releaseId,
-        kind: OtaDeploymentKinds.promote,
-        fromBp: null,
-        toBp: 10_000,
-        actorUserId: input.actorUserId,
-        actorPrincipal: input.actorPrincipal,
-        approvalRequestId: input.approvalRequestId,
-        reason: input.reason,
+        ...input.deployment,
         createdAt: input.now,
       });
     });

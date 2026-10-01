@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_ota_channel_heads" ADD COLUMN "previous_update_id" uuid;--> statement-breakpoint
+ALTER TABLE "mocco_ota_channel_heads" ADD CONSTRAINT "mocco_ota_channel_heads_previous_update_id_mocco_ota_updates_id_fk" FOREIGN KEY ("previous_update_id") REFERENCES "public"."mocco_ota_updates"("id") ON DELETE set null ON UPDATE no action;

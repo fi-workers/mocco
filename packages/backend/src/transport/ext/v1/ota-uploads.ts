@@ -9,6 +9,9 @@ import {
   finalizeRequestSchema,
   oidcExchangeRequestSchema,
   promotionRequestSchema,
+  rolloutBpOf,
+  stopActionSchema,
+  stopRequestSchema,
   uploadRequestSchema,
 } from '@mocco/common/ota-hosting';
 import { Hono } from 'hono';
@@ -41,6 +44,7 @@ export interface OtaUploadDeps {
     | 'releaseStatusAsKey'
     | 'promoteAsSession'
     | 'releaseStatusAsSession'
+    | 'stopAsKey'
     | 'promotionState'
     | 'requireKeyApp'
   >;
@@ -183,9 +187,27 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
         c.req.param('appId'),
         c.req.param('releaseId'),
         data.channel,
-        data.reason,
+        { reason: data.reason, rolloutBp: rolloutBpOf(data.rolloutPercent) },
       );
       return c.json(result, statusOfPromotion(result));
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  // Stop actions from CI — never gated: pause a rollout, roll back, or roll back to embedded.
+  const stopPaths = { pause: 'pause', rollback: 'rollback', 'rollback-to-embedded': 'rollback_embedded' } as const;
+  app.post('/apps/:appId/channels/:channel/:action{pause|rollback|rollback-to-embedded}', ciKey, async c => {
+    const action = stopActionSchema.parse(stopPaths[c.req.param('action') as keyof typeof stopPaths]);
+    const { data, refused } = await parseJson(c, stopRequestSchema);
+    if (refused !== undefined) {
+      return refused;
+    }
+    try {
+      return c.json(
+        await ota.channels.stopAsKey(c.var.principal, c.req.param('appId'), c.req.param('channel'), action, data),
+        201,
+      );
     } catch (error) {
       return problemOfError(error);
     }
@@ -231,12 +253,10 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
       return refused;
     }
     try {
-      const result = await ota.channels.promoteAsSession(
-        c.var.session,
-        c.req.param('releaseId'),
-        data.channel,
-        data.reason,
-      );
+      const result = await ota.channels.promoteAsSession(c.var.session, c.req.param('releaseId'), data.channel, {
+        reason: data.reason,
+        rolloutBp: rolloutBpOf(data.rolloutPercent),
+      });
       return c.json(result, statusOfPromotion(result));
     } catch (error) {
       return problemOfError(error);

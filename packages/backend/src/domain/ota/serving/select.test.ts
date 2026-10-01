@@ -70,6 +70,19 @@ describe('selectResponse', () => {
     ).toEqual({ kind: 'noop' });
   });
 
+  it('only adds devices when the rollout share grows (property over random salts and shares)', () => {
+    const ids = Array.from({ length: 300 }, (_, index) => `device-${index}`);
+    const trials = Array.from({ length: 50 }, (_, index) => ({
+      salt: `salt-${index}`,
+      low: (index * 137) % 9000,
+      high: ((index * 137) % 9000) + 1 + ((index * 61) % 1000),
+    }));
+    const isMonotone = trials.every(({ salt, low, high }) =>
+      ids.every(id => rolloutBucket(salt, id) >= low || rolloutBucket(salt, id) < high),
+    );
+    expect(isMonotone).toBe(true);
+  });
+
   it('buckets devices stably and roughly evenly', () => {
     expect(rolloutBucket('salt', 'device-1')).toBe(rolloutBucket('salt', 'device-1'));
     const buckets = Array.from({ length: 2000 }, (_, index) => rolloutBucket('salt', `d${index}`));

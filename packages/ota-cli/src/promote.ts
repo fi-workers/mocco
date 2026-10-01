@@ -20,6 +20,8 @@ export interface PromoteOptions extends WaitOptions {
   apiKey: string;
   releaseId: string;
   channel: string;
+  /** Below 100 starts a staged rollout to that share of devices. */
+  rolloutPercent?: number;
   /** On a protected channel, wait for the approval request to be decided. */
   isWaitingForApproval?: boolean;
   /** How long to wait for a decision. */
@@ -63,10 +65,11 @@ function logResult(result: PromotionResult, log: (line: string) => void): Promot
     log(`${result.channel} is protected: approval request ${result.requestId ?? ''} is waiting in the Mocco console.`);
     return result;
   }
+  const verb = result.kind === 'rollout' ? 'Started rolling out' : 'Promoted';
   log(
     result.changed
-      ? `Promoted release ${result.releaseId} to ${result.channel} (${result.platforms.join(', ')}).`
-      : `${result.channel} already serves release ${result.releaseId}.`,
+      ? `${verb} release ${result.releaseId ?? ''} to ${result.channel} (${result.platforms.join(', ')}).`
+      : `${result.channel} already serves release ${result.releaseId ?? ''}.`,
   );
   return result;
 }
@@ -105,7 +108,12 @@ export async function promote(options: PromoteOptions): Promise<PromotionResult>
     options,
   );
   const result = logResult(
-    await api.promote(options.appId, options.releaseId, options.channel, options.apiKey),
+    await api.promote(
+      options.appId,
+      options.releaseId,
+      { channel: options.channel, rolloutPercent: options.rolloutPercent ?? 100 },
+      options.apiKey,
+    ),
     options.log ?? (() => {}),
   );
   if (result.outcome === 'pending_approval' && options.isWaitingForApproval === true && result.requestId !== null) {
@@ -119,7 +127,7 @@ export async function promote(options: PromoteOptions): Promise<PromotionResult>
  * to its trust policy's channels). */
 export async function promoteWithSession(
   api: MoccoApi,
-  input: { session: string; releaseId: string; channel: string },
+  input: { session: string; releaseId: string; channel: string; rolloutPercent?: number },
   options: WaitOptions & { isWaitingForApproval?: boolean; approvalTimeoutMs?: number } = {},
 ): Promise<PromotionResult> {
   await waitUntilReady(
@@ -128,7 +136,10 @@ export async function promoteWithSession(
     options,
   );
   const result = logResult(
-    await api.sessionPromote(input.session, input.releaseId, input.channel),
+    await api.sessionPromote(input.session, input.releaseId, {
+      channel: input.channel,
+      rolloutPercent: input.rolloutPercent ?? 100,
+    }),
     options.log ?? (() => {}),
   );
   if (result.outcome === 'pending_approval' && options.isWaitingForApproval === true && result.requestId !== null) {

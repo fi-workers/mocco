@@ -40,9 +40,10 @@ export function rolloutBucket(salt: string, clientId: string): number {
 }
 
 /**
- * 1. No head → noop. 2. A directive → the directive. 3. The candidate for devices in the
- * rollout (not paused; a device without EAS-Client-ID is always control), else the active
- * update. 4. Nothing to serve, or the device already runs it → noop. 5. The update.
+ * 1. No head → noop. 2. A directive → the directive. 3. A device on the candidate → noop.
+ * 4. The candidate for devices in the rollout (not paused; a device without EAS-Client-ID
+ * is always control), else the active update. 5. Nothing to serve, or the device already
+ * runs it → noop. 6. The update.
  *
  * sonarjs/function-return-type is a false positive: every branch returns a `Selection`.
  */
@@ -54,6 +55,11 @@ export function selectResponse(input: SelectInput): Selection {
   }
   if (head.directive !== null) {
     return { kind: 'directive', part: head.directive };
+  }
+  // A device already on the candidate keeps it — while paused, or after the share was
+  // lowered: it can't be moved back to an older commitTime anyway.
+  if (head.candidate !== null && head.candidate.id === currentUpdateId) {
+    return { kind: 'noop' };
   }
   const isInRollout =
     !head.isPaused &&

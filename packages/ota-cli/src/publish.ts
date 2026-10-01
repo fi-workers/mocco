@@ -31,6 +31,8 @@ export interface PublishOptions {
   channel?: string;
   /** On a protected channel, wait for the approval (the session must still be valid). */
   isWaitingForApproval?: boolean;
+  /** Below 100 starts a staged rollout on `channel`. */
+  rolloutPercent?: number;
   log?: (line: string) => void;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -142,7 +144,12 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
     log(`Waiting for Mocco to verify the assets before promoting to ${options.channel}…`);
     await promoteWithSession(
       api,
-      { session, releaseId: result.releaseId, channel: options.channel },
+      {
+        session,
+        releaseId: result.releaseId,
+        channel: options.channel,
+        ...(options.rolloutPercent !== undefined && { rolloutPercent: options.rolloutPercent }),
+      },
       { log, isWaitingForApproval: options.isWaitingForApproval === true },
     );
   }

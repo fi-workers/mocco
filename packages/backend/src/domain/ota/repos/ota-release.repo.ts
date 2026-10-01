@@ -1,4 +1,4 @@
-import { OtaReleaseStatuses, OtaUpdateKinds } from '@mocco/common/ota-hosting';
+import { OtaDirectiveTypes, OtaReleaseStatuses, OtaUpdateKinds } from '@mocco/common/ota-hosting';
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
@@ -110,6 +110,35 @@ export class OtaReleaseRepo {
       })
       .from(schema.otaUpdates)
       .where(and(eq(schema.otaUpdates.releaseId, releaseId), eq(schema.otaUpdates.kind, OtaUpdateKinds.original)));
+  }
+
+  /** The pre-signed republish of `contentOfUpdateId` that is valid for devices on `supersedesUpdateId`. */
+  async findRepublish(supersedesUpdateId: string, contentOfUpdateId: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.otaUpdates)
+      .where(
+        and(
+          eq(schema.otaUpdates.kind, OtaUpdateKinds.republish),
+          eq(schema.otaUpdates.supersedesUpdateId, supersedesUpdateId),
+          eq(schema.otaUpdates.contentOfUpdateId, contentOfUpdateId),
+        ),
+      );
+    return row;
+  }
+
+  /** The pre-signed rollBackToEmbedded directive valid for devices on `supersedesUpdateId`. */
+  async findRollBackToEmbedded(supersedesUpdateId: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.otaSignedDirectives)
+      .where(
+        and(
+          eq(schema.otaSignedDirectives.type, OtaDirectiveTypes.rollBackToEmbedded),
+          eq(schema.otaSignedDirectives.supersedesUpdateId, supersedesUpdateId),
+        ),
+      );
+    return row;
   }
 
   async findUpdate(id: string) {

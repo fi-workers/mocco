@@ -209,3 +209,24 @@ export class OtaChannelNotAllowedError extends ForbiddenError {
     this.name = 'OtaChannelNotAllowedError';
   }
 }
+
+/** The channel isn't in a state the change applies to (no rollout to pause, nothing served). */
+export class OtaNothingToChangeError extends ConflictError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = 'OtaNothingToChangeError';
+  }
+}
+
+/** No pre-signed republish (or directive) exists for what a head serves. */
+export class OtaRollbackUnavailableError extends ConflictError {
+  constructor(channel: string, platform: string, opts: { isToEmbedded?: boolean } = {}, options?: ErrorOptions) {
+    super(
+      opts.isToEmbedded === true
+        ? `"${channel}" has no pre-signed roll-back-to-embedded directive on ${platform}`
+        : `"${channel}" has no pre-signed rollback on ${platform}: roll back to the embedded bundle, or publish a fix`,
+      options,
+    );
+    this.name = 'OtaRollbackUnavailableError';
+  }
+}

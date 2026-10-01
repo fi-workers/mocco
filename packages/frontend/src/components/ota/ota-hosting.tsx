@@ -4,6 +4,7 @@ import {
   DEFAULT_SIGNING_KEY_ID,
   OtaHostingApprovalSubjects,
   OtaReleaseStatuses,
+  StopActions,
 } from '@mocco/common/ota-hosting';
 import { AppPlatforms } from '@mocco/common/project';
 import Link from 'next/link';
@@ -350,33 +351,160 @@ function PendingPolicyRequests({ workspaceId, projectId, app, channel }: AppProp
   );
 }
 
-/** What a channel serves now, per runtime: the release behind each platform's head. */
-function ServingLine({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
+/** A percent field for rollout shares (0.01–100). */
+function PercentField({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
+  return (
+    <input
+      aria-label={label}
+      inputMode="decimal"
+      className={`${inputClass} w-20 py-1 text-xs`}
+      value={value}
+      onChange={event => {
+        onChange(event.target.value);
+      }}
+    />
+  );
+}
+
+const percentOf = (bp: number) => `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 2)}%`;
+
+/** What a channel serves and rolls out per runtime, with the rollout and rollback controls. */
+function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
+  const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
   const headsQuery = trpc.ota.hosting.channels.heads.useQuery(input);
   const releasesQuery = trpc.ota.hosting.releases.list.useQuery(input);
-  const heads = (headsQuery.data?.heads ?? []).filter(head => head.channelId === channel.id && head.releaseId !== null);
-  if (headsQuery.isSuccess && heads.length === 0) {
+  const [percent, setPercent] = useState('50');
+  const [notice, setNotice] = useState<string | null>(null);
+  const onDone = async (result: { outcome: string; kind: string }) => {
+    setNotice(
+      result.outcome === ChannelPolicyOutcomes.pendingApproval
+        ? `Sent for approval: ${channel.name} changes once it is approved.`
+        : 'Done.',
+    );
+    await Promise.all([
+      utils.ota.hosting.channels.heads.invalidate(input),
+      utils.approval.list.invalidate({ workspaceId }),
+    ]);
+  };
+  const rollout = trpc.ota.hosting.channels.changeRollout.useMutation({ onSuccess: onDone });
+  const stop = trpc.ota.hosting.channels.stop.useMutation({ onSuccess: onDone });
+  const heads = (headsQuery.data?.heads ?? []).filter(head => head.channelId === channel.id);
+  if (headsQuery.isSuccess && heads.every(head => head.releaseId === null && head.candidateReleaseId === null)) {
     return <p className="text-xs text-muted-foreground">Serves nothing yet: builds keep their embedded bundle.</p>;
   }
-  const releaseIds = heads
-    .map(head => head.releaseId)
-    .filter((id, index, all) => id !== null && all.indexOf(id) === index);
+  const nameOf = (releaseId: string | null) =>
+    releasesQuery.data?.releases.find(release => release.id === releaseId)?.message ?? releaseId?.slice(0, 8) ?? '—';
+  const runtimes = heads.map(head => head.runtimeVersion).filter((value, index, all) => all.indexOf(value) === index);
+  const isBusy = rollout.isPending || stop.isPending;
+
   return (
-    <ul className="flex flex-col gap-1">
-      {releaseIds.map(releaseId => {
-        const release = releasesQuery.data?.releases.find(candidate => candidate.id === releaseId);
-        const served = heads.filter(head => head.releaseId === releaseId);
+    <div className="flex flex-col gap-2">
+      {runtimes.map(runtimeVersion => {
+        const group = heads.filter(head => head.runtimeVersion === runtimeVersion);
+        const rolling = group.filter(head => head.candidateReleaseId !== null);
+        const isPaused = rolling.some(head => head.isPaused);
+        const target = { ...input, channelId: channel.id, runtimeVersion, reason: null };
         return (
-          <li key={releaseId} className="text-xs">
-            Serving <span className="font-medium">{release?.message ?? releaseId?.slice(0, 8)}</span>{' '}
-            <span className="font-mono text-muted-foreground">
-              · {served.map(head => head.platform).join(', ')} · runtime {served[0]?.runtimeVersion}
-            </span>
-          </li>
+          <div key={runtimeVersion} className="flex flex-col gap-1.5 rounded-lg bg-muted/30 p-2.5">
+            <ul className="flex flex-col gap-0.5 text-xs">
+              {group.map(head => (
+                <li key={head.platform}>
+                  <span className="font-mono text-muted-foreground">
+                    {head.platform} · runtime {head.runtimeVersion}:
+                  </span>{' '}
+                  {head.isServingEmbedded ? (
+                    <span className="font-medium">rolled back to the embedded bundle</span>
+                  ) : (
+                    <>
+                      {head.isRolledBack ? 'Rolled back to' : 'Serving'}{' '}
+                      <span className="font-medium">{nameOf(head.releaseId)}</span>
+                    </>
+                  )}
+                  {head.candidateReleaseId === null ? null : (
+                    <>
+                      {' '}
+                      · rolling out <span className="font-medium">{nameOf(head.candidateReleaseId)}</span> to{' '}
+                      {percentOf(head.rolloutBp)}
+                      {head.isPaused ? ' (paused)' : ''}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {rolling.length > 0 ? (
+                <>
+                  <PercentField value={percent} onChange={setPercent} label={`Rollout share on ${channel.name}`} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => {
+                      rollout.mutate({ ...target, kind: 'rollout', rolloutPercent: Number(percent) });
+                    }}>
+                    Set share
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => {
+                      rollout.mutate({ ...target, kind: 'complete' });
+                    }}>
+                    Complete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => {
+                      if (isPaused) {
+                        rollout.mutate({ ...target, kind: 'resume' });
+                      } else {
+                        stop.mutate({ ...target, action: StopActions.pause });
+                      }
+                    }}>
+                    {isPaused ? 'Resume' : 'Pause'}
+                  </Button>
+                </>
+              ) : null}
+              {group
+                .filter(head => head.canRollBack)
+                .map(head => (
+                  <Button
+                    key={`rollback-${head.platform}`}
+                    variant="destructive"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => {
+                      stop.mutate({ ...target, platform: head.platform, action: StopActions.rollback });
+                    }}>
+                    {head.candidateReleaseId === null ? 'Roll back' : 'Abort (roll back)'} {head.platform}
+                  </Button>
+                ))}
+              {group
+                .filter(head => head.canRollBackToEmbedded)
+                .map(head => (
+                  <Button
+                    key={`embedded-${head.platform}`}
+                    variant="ghost"
+                    size="sm"
+                    disabled={isBusy}
+                    onClick={() => {
+                      stop.mutate({ ...target, platform: head.platform, action: StopActions.rollbackEmbedded });
+                    }}>
+                    Roll back {head.platform} to embedded
+                  </Button>
+                ))}
+            </div>
+          </div>
         );
       })}
-    </ul>
+      {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
+      {rollout.error ? <p className="text-sm text-destructive">{errorMessage(rollout.error)}</p> : null}
+      {stop.error ? <p className="text-sm text-destructive">{errorMessage(stop.error)}</p> : null}
+    </div>
   );
 }
 
@@ -570,7 +698,7 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
           }}
         />
       ) : null}
-      <ServingLine {...props} />
+      <HeadControls {...props} />
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {change.error ? <p className="text-sm text-destructive">{errorMessage(change.error)}</p> : null}
       <PendingPolicyRequests {...props} />
@@ -671,6 +799,7 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
   const channelsQuery = trpc.ota.hosting.channels.list.useQuery(input);
   const channels = channelsQuery.data?.channels ?? [];
   const [channelId, setChannelId] = useState('');
+  const [share, setShare] = useState('100');
   const [notice, setNotice] = useState<string | null>(null);
   const promotion = trpc.ota.hosting.channels.promote.useMutation({
     onSuccess: async result => {
@@ -714,10 +843,22 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
             }
 
             setNotice(null);
-            promotion.mutate({ ...input, channelId: selected.id, releaseId: release.id });
+            promotion.mutate({
+              ...input,
+              channelId: selected.id,
+              releaseId: release.id,
+              rolloutPercent: Number(share),
+            });
           }}>
           {selected?.isProtected ? 'Request approval' : 'Promote'}
         </Button>
+        <span className="text-xs text-muted-foreground">to</span>
+        <PercentField
+          value={share}
+          onChange={setShare}
+          label={`Share of devices for ${release.message ?? release.id}`}
+        />
+        <span className="text-xs text-muted-foreground">% of devices</span>
       </div>
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {promotion.error ? <p className="text-sm text-destructive">{errorMessage(promotion.error)}</p> : null}

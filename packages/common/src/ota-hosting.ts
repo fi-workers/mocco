@@ -69,6 +69,21 @@ export const OtaDeploymentKinds = {
 } as const;
 export type OtaDeploymentKind = (typeof OtaDeploymentKinds)[keyof typeof OtaDeploymentKinds];
 
+/** Rollout shares are basis points: 10000 is every device. */
+export const FULL_ROLLOUT_BP = 10_000;
+
+/** Percent (0.01–100) to basis points. */
+export const rolloutBpOf = (percent: number) => Math.min(FULL_ROLLOUT_BP, Math.max(1, Math.round(percent * 100)));
+
+/** The actions that stop or undo a change — never gated, always audited. */
+export const StopActions = {
+  pause: OtaDeploymentKinds.pause,
+  rollback: OtaDeploymentKinds.rollback,
+  rollbackEmbedded: OtaDeploymentKinds.rollbackEmbedded,
+} as const;
+export type StopAction = (typeof StopActions)[keyof typeof StopActions];
+export const stopActionSchema = z.enum([StopActions.pause, StopActions.rollback, StopActions.rollbackEmbedded]);
+
 /** Approval subject types owned by OTA hosting (see ApprovalService). */
 export const OtaHostingApprovalSubjects = {
   channelPolicy: 'ota.channel_policy',
@@ -140,6 +155,20 @@ export const ChannelPolicyOutcomes = {
   pendingApproval: 'pending_approval',
 } as const;
 export type ChannelPolicyOutcome = (typeof ChannelPolicyOutcomes)[keyof typeof ChannelPolicyOutcomes];
+
+/** The result of a channel change: applied now (an open channel, or a stop action), or
+ * waiting for approval (a protected channel — `requestId` is the approval request). */
+export const promotionResultSchema = z.object({
+  channel: z.string(),
+  releaseId: z.uuid().nullable(),
+  kind: z.enum(Object.values(OtaDeploymentKinds) as [OtaDeploymentKind, ...OtaDeploymentKind[]]),
+  platforms: z.array(otaPlatformSchema),
+  /** True when heads changed now; false when nothing changed or approval is pending. */
+  changed: z.boolean(),
+  outcome: z.enum([ChannelPolicyOutcomes.applied, ChannelPolicyOutcomes.pendingApproval]),
+  requestId: z.uuid().nullable(),
+});
+export type PromotionResult = z.infer<typeof promotionResultSchema>;
 
 /** Base64url SHA-256 without padding — how expo-updates names and checks an asset. */
 export const ASSET_HASH_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -266,34 +295,44 @@ export const otaReleaseSchema = z.object({
 });
 export type OtaReleaseDto = z.infer<typeof otaReleaseSchema>;
 
-/** What a channel head serves now — wire shape for the console. */
+/** What a channel head serves and rolls out now — wire shape for the console. */
 export const otaChannelHeadSchema = z.object({
   channelId: z.uuid(),
   platform: otaPlatformSchema,
   runtimeVersion: z.string(),
+  /** The release whose content the active update serves (what devices outside a rollout get). */
   releaseId: z.uuid().nullable(),
+  /** The active update is a rollback (a re-dated republish of `releaseId`). */
+  isRolledBack: z.boolean(),
+  /** The release rolling out to `rolloutBp` of devices, if any. */
+  candidateReleaseId: z.uuid().nullable(),
+  rolloutBp: z.number(),
+  isPaused: z.boolean(),
+  /** Serving a roll-back-to-embedded directive. */
+  isServingEmbedded: z.boolean(),
+  /** A pre-signed rollback exists for what it serves now. */
+  canRollBack: z.boolean(),
+  canRollBackToEmbedded: z.boolean(),
   updatedAt: z.date(),
 });
 export type OtaChannelHeadDto = z.infer<typeof otaChannelHeadSchema>;
+
+/** `POST /v1/ota/apps/:appId/channels/:channel/{pause,rollback,rollback-to-embedded}`. */
+export const stopRequestSchema = z.object({
+  runtimeVersion: z.string().min(1).max(100).nullable().default(null),
+  /** Only this platform's head (rollbacks); both when null. */
+  platform: otaPlatformSchema.nullable().default(null),
+  reason: z.string().max(500).nullable().default(null),
+});
 
 /** `POST /v1/ota/apps/:appId/releases/:releaseId/promotions`. */
 export const promotionRequestSchema = z.object({
   channel: z.string().regex(CHANNEL_NAME_PATTERN),
   reason: z.string().max(500).nullable().default(null),
+  /** Below 100 starts a staged rollout of the release to that share of devices. */
+  rolloutPercent: z.number().min(0.01).max(100).default(100),
 });
 export type PromotionRequest = z.infer<typeof promotionRequestSchema>;
-
-/** The result of a promotion: applied now (an open channel), or waiting for approval
- * (a protected channel — `requestId` is the approval request). */
-export interface PromotionResult {
-  channel: string;
-  releaseId: string;
-  platforms: OtaPlatform[];
-  /** True when heads changed now; false when they already served it or approval is pending. */
-  changed: boolean;
-  outcome: ChannelPolicyOutcome;
-  requestId: string | null;
-}
 
 /** A ref pattern: an exact ref, or `*` as a wildcard within it (`refs/tags/v*`). */
 export const REF_PATTERN = /^refs\/[\w./*-]{1,200}$/;

@@ -72,7 +72,8 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |
 | `GET /v1/ota/apps/{otaAppId}/releases/{releaseId}` | secret, `ota:write` | `{ id, status, runtimeVersion }` |
-| `POST /v1/ota/apps/{otaAppId}/releases/{releaseId}/promotions` | secret, `ota:write` | `201` applied, `202` approval pending (protected channel), `200` no-op: `{ channel, releaseId, platforms, changed, outcome, requestId }`; `400`/`409` with a `detail` |
+| `POST /v1/ota/apps/{otaAppId}/releases/{releaseId}/promotions` | secret, `ota:write` | body `{ channel, rolloutPercent?, reason? }`; `201` applied, `202` approval pending (protected channel), `200` no-op: `{ channel, releaseId, kind, platforms, changed, outcome, requestId }`; `400`/`409` with a `detail` |
+| `POST /v1/ota/apps/{otaAppId}/channels/{channel}/pause` · `…/rollback` · `…/rollback-to-embedded` | secret, `ota:write` | `201 { kind, platforms, … }` — never gated; body `{ runtimeVersion?, platform?, reason? }`; `409` with a `detail` when nothing applies |
 | `GET /v1/ota/apps/{otaAppId}/promotions/{requestId}` | secret, `ota:write` | `{ requestId, state }` (`pending`, `approved`, `rejected`, `superseded`, `expired`) |
 | `POST /v1/ota/auth/oidc` | none (a GitHub Actions OIDC token in the body) | `201 { sessionToken, expiresAt, allowedChannels }`, or a fixed `403` |
 | `GET /v1/ota/uploads/{releaseId}` | upload session | `{ id, status, runtimeVersion }` of the session's release |

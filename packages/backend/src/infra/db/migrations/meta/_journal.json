@@ -190,6 +190,13 @@
       "when": 1790866118620,
       "tag": "0026_military_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790866656495,
+      "tag": "0027_military_carnage",
+      "breakpoints": true
     }
   ]
 }

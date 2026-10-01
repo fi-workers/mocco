@@ -56,12 +56,33 @@ export class MoccoApi {
     return (await response.json()) as { id: string; status: string };
   }
 
-  async promote(appId: string, releaseId: string, channel: string, apiKey: string): Promise<PromotionResult> {
+  async promote(
+    appId: string,
+    releaseId: string,
+    input: { channel: string; rolloutPercent: number },
+    apiKey: string,
+  ): Promise<PromotionResult> {
     return await this.postJson<PromotionResult>(
       `/ota/apps/${appId}/releases/${releaseId}/promotions`,
       apiKey,
-      { channel },
-      `Promoting to ${channel}`,
+      input,
+      `Promoting to ${input.channel}`,
+    );
+  }
+
+  /** Pause, roll back or roll back to embedded — never gated. */
+  async stop(
+    appId: string,
+    channel: string,
+    action: 'pause' | 'rollback' | 'rollback-to-embedded',
+    apiKey: string,
+    platform: string | null = null,
+  ): Promise<PromotionResult> {
+    return await this.postJson<PromotionResult>(
+      `/ota/apps/${appId}/channels/${channel}/${action}`,
+      apiKey,
+      { platform },
+      `${action} on ${channel}`,
     );
   }
 
@@ -99,12 +120,16 @@ export class MoccoApi {
     return (await response.json()) as { id: string; status: string };
   }
 
-  async sessionPromote(session: string, releaseId: string, channel: string): Promise<PromotionResult> {
+  async sessionPromote(
+    session: string,
+    releaseId: string,
+    input: { channel: string; rolloutPercent: number },
+  ): Promise<PromotionResult> {
     return await this.postJson<PromotionResult>(
       `/ota/uploads/${releaseId}/promotions`,
       session,
-      { channel },
-      `Promoting to ${channel}`,
+      input,
+      `Promoting to ${input.channel}`,
     );
   }
 
