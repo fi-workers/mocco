@@ -19,6 +19,7 @@
     "./notification-activity": "./src/notification-activity.ts",
     "./notification-presets": "./src/notification-presets.ts",
     "./project": "./src/project.ts",
+    "./storage": "./src/storage.ts",
     "./workspace": "./src/workspace.ts"
   },
   "scripts": {

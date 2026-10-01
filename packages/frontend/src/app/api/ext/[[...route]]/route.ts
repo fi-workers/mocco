@@ -11,3 +11,6 @@ export const maxDuration = 300;
 
 export const GET = async (request: Request): Promise<Response> => await extHandler(request);
 export const POST = async (request: Request): Promise<Response> => await extHandler(request);
+// Uploads to the filesystem storage driver's signed URLs (transport/ext/storage.ts).
+export const PUT = async (request: Request): Promise<Response> => await extHandler(request);
+export const HEAD = async (request: Request): Promise<Response> => await extHandler(request);

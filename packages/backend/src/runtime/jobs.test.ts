@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { DomainEventTypes } from '@mocco/common/events';
 import { JobStatuses } from '@mocco/common/jobs';
@@ -16,6 +19,11 @@ import { NotificationJobKinds } from '@backend/domain/notification/constants';
 import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { createFakeDiscordFetch, jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
+import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
+import { StorageJobKinds } from '@backend/domain/storage/jobs';
+import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
+import { StorageUrlSigner } from '@backend/domain/storage/signing';
+import { StorageService } from '@backend/domain/storage/StorageService';
 import { jobs, jobSchedules, notificationDeliveries } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createJobRunner } from '@backend/runtime/jobs';
@@ -41,11 +49,19 @@ describe('job runtime composition (pglite)', () => {
       waitUntil: () => {},
       appOrigin: 'https://mocco.test',
       discord: undefined,
+      storage: new StorageService({
+        objects: new ObjectRepo(t.db),
+        store: new FilesystemObjectStore({
+          root: await mkdtemp(path.join(tmpdir(), 'mocco-jobs-')),
+          baseUrl: 'https://mocco.test/api/ext/internal/storage',
+          signer: new StorageUrlSigner('test-signing-key'),
+        }),
+      }),
     });
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
 
-    expect(report).toMatchObject({ ran: 6, errors: [], outcomes: { succeeded: 6 } });
+    expect(report).toMatchObject({ ran: 7, errors: [], outcomes: { succeeded: 7 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -55,6 +71,7 @@ describe('job runtime composition (pglite)', () => {
         NotificationJobKinds.prune,
         InboundJobKinds.republishStale,
         InboundJobKinds.prune,
+        StorageJobKinds.gc,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);
@@ -77,6 +94,7 @@ describe('job runtime composition (pglite)', () => {
       },
       appOrigin: 'https://mocco.test',
       discord: new DiscordApi({ fetch: fake.fetch, botToken: 'bot', now: () => T0 }),
+      storage: undefined,
     });
     // A publisher's bus (its kicks are dropped: the tick below runs the event job).
     const publisher = createEventBus({

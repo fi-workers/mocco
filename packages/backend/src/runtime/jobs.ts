@@ -29,6 +29,10 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
+import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
+import { createStorageHandlers, storageGcSchedule } from '@backend/domain/storage/jobs';
+import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
+import { StorageService } from '@backend/domain/storage/StorageService';
 import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
@@ -49,6 +53,8 @@ export interface JobRunnerRuntimeDeps {
   appOrigin: string;
   /** The Discord client deliveries send with; undefined without DISCORD_BOT_TOKEN. */
   discord: DiscordMessenger | undefined;
+  /** Object storage for the gc job; undefined when no store is configured. */
+  storage: StorageService | undefined;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -86,6 +92,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       random: deps.random,
       connectStates: new DiscordConnectStateRepo(db),
     }),
+    ...createStorageHandlers({ storage: deps.storage }),
   ];
   self.runner = new JobRunner({
     jobs,
@@ -94,9 +101,21 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     now: deps.now,
     random: deps.random,
     workerId: deps.workerId,
-    systemSchedules: [pruneSchedule, pruneEventsSchedule, ...notificationSchedules, ...inboundSchedules],
+    systemSchedules: [
+      pruneSchedule,
+      pruneEventsSchedule,
+      ...notificationSchedules,
+      ...inboundSchedules,
+      ...(deps.storage === undefined ? [] : [storageGcSchedule]),
+    ],
   });
   return self.runner;
+}
+
+/** The gc job's storage service, or undefined when no store is configured. */
+function storageFromEnv(env: ReturnType<typeof getEnv>): StorageService | undefined {
+  const store = createObjectStoreFromEnv(env);
+  return store === undefined ? undefined : new StorageService({ objects: new ObjectRepo(getDb()), store });
 }
 
 const state: { runner?: JobRunner } = {};
@@ -113,6 +132,7 @@ export function getJobRunner(): JobRunner {
       waitUntil,
       appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
       discord: createDiscordApiFromEnv(env, { fetch, now }),
+      storage: storageFromEnv(env),
     });
   }
   return state.runner;

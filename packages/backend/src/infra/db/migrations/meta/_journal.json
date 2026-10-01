@@ -141,6 +141,13 @@
       "when": 1790430559968,
       "tag": "0019_worthless_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790853479844,
+      "tag": "0020_flawless_beast",
+      "breakpoints": true
     }
   ]
 }
