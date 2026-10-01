@@ -46,7 +46,8 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `gate.resumed` | `GateService`, when the votes satisfy the gate | `run_gate` / gate id |
 | `gate.rejected` | `GateService`, on a reject vote | `run_gate` / gate id |
 | `sentry.*`, `vercel.*`, `github.*` (16 types) | `InboundService`, for a mapped webhook delivery | `inbound_receipt` / receipt id |
-| `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a promotion to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
+| `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a change to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
+| `ota.emergency_launch.spike` | `OtaMetricsService` (the `ota.rollupMetrics` job), when a release's emergency launches today cross the threshold | `ota_update` / update id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
 

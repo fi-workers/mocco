@@ -3,6 +3,7 @@
 // (ota → governance): governance never imports a product domain.
 import { OtaApprovalSubjects } from '@mocco/common/ota';
 import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
+import { waitUntil as vercelWaitUntil } from '@vercel/functions';
 
 import { getAudit } from '@backend/domain/audit/instance';
 import { getEventBus } from '@backend/domain/events/instance';
@@ -13,6 +14,7 @@ import { getJobQueue } from '@backend/domain/jobs/instance';
 import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
+import { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
 import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
 import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
 import { ChannelHeadRepo } from '@backend/domain/ota/repos/channel-head.repo';
@@ -20,6 +22,7 @@ import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
 import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
 import { OtaChannelRepo } from '@backend/domain/ota/repos/ota-channel.repo';
 import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-external-credential.repo';
+import { OtaMetricsRepo } from '@backend/domain/ota/repos/ota-metrics.repo';
 import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
 import { TrustPolicyRepo } from '@backend/domain/ota/repos/trust-policy.repo';
@@ -58,6 +61,7 @@ export interface OtaDomain {
   otaChannels: OtaChannelService;
   otaUpdateChecks: UpdateCheckService;
   otaTrustPolicies: TrustPolicyService;
+  otaMetrics: OtaMetricsService;
 }
 
 /** The production queue, resolved on first enqueue (tests that never upload need no env). */
@@ -98,6 +102,8 @@ export function createOtaDomain(
     events?: EventPublisher;
     /** The app origin, for links in notification messages. */
     appOrigin?: string;
+    /** Keeps metrics writes alive after a response (Vercel `waitUntil`). */
+    waitUntil?: (promise: Promise<unknown>) => void;
   },
 ): OtaDomain {
   const policies = new AppVersionPolicyRepo(db);
@@ -109,6 +115,7 @@ export function createOtaDomain(
     oidcKeys,
     events,
     appOrigin,
+    waitUntil,
     ...services
   } = deps;
   const versionPolicies = new VersionPolicyService({
@@ -136,6 +143,14 @@ export function createOtaDomain(
   const releases = new OtaReleaseRepo(db);
   const heads = new ChannelHeadRepo(db);
   const assets = new OtaAssetRepo(db);
+  const metrics = new OtaMetricsService({
+    apps: new OtaAppRepo(db),
+    metrics: new OtaMetricsRepo(db),
+    releases,
+    ...(waitUntil !== undefined && { waitUntil }),
+    ...(events !== undefined && { events }),
+    ...(appOrigin !== undefined && { appOrigin }),
+  });
   const channelService = new OtaChannelService({
     apps: new OtaAppRepo(db),
     channels: new OtaChannelRepo(db),
@@ -177,7 +192,8 @@ export function createOtaDomain(
     otaSigning: signing,
     otaUploads: uploads,
     otaChannels: channelService,
-    otaUpdateChecks: new UpdateCheckService({ heads, assets, storage, cache }),
+    otaUpdateChecks: new UpdateCheckService({ heads, assets, storage, cache, metrics }),
+    otaMetrics: metrics,
     otaTrustPolicies: new TrustPolicyService({
       apps: new OtaAppRepo(db),
       channels: new OtaChannelRepo(db),
@@ -206,6 +222,7 @@ export function getOtaDomain(): OtaDomain {
     publicApiBase: publicApiBaseFromEnv(getEnv()),
     storage: getStorageDomain()?.storage,
     events: getEventBus(),
+    waitUntil: vercelWaitUntil,
     appOrigin: resolveBaseOrigin({ serviceDomain: getEnv().SERVICE_DOMAIN, vercelUrl: getEnv().VERCEL_URL }),
   });
   return state.ota;

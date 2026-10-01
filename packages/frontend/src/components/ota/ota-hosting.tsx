@@ -31,7 +31,14 @@ import { trpc } from '@frontend/lib/trpc';
 import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
 
 import type { GateRequirements } from '@mocco/common/governance';
-import type { OtaAppDto, OtaChannelDto, OtaReleaseDto, OtaReleaseStatus } from '@mocco/common/ota-hosting';
+import type {
+  OtaAppDto,
+  OtaChannelDto,
+  OtaChannelHeadDto,
+  OtaReleaseDto,
+  OtaReleaseStatus,
+  ReleaseAdoptionDto,
+} from '@mocco/common/ota-hosting';
 
 /** The policy a channel-policy approval would apply. */
 const pinnedPolicySchema = z.object({ policy: gateRequirementsSchema.nullable() });
@@ -368,12 +375,47 @@ function PercentField({ value, onChange, label }: { value: string; onChange: (va
 
 const percentOf = (bp: number) => `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 2)}%`;
 
+/** How many devices on this head checked in (24 h), and how many run the candidate. */
+function ReachNote({
+  reach,
+  channel,
+  head,
+}: {
+  reach: readonly {
+    channel: string;
+    platform: string;
+    runtimeVersion: string;
+    releaseId: string | null;
+    devices: number;
+  }[];
+  channel: string;
+  head: OtaChannelHeadDto;
+}) {
+  const here = reach.filter(
+    row => row.channel === channel && row.platform === head.platform && row.runtimeVersion === head.runtimeVersion,
+  );
+  const total = here.reduce((sum, row) => sum + row.devices, 0);
+  if (total === 0) {
+    return null;
+  }
+  const onCandidate = here
+    .filter(row => row.releaseId !== null && row.releaseId === head.candidateReleaseId)
+    .reduce((sum, row) => sum + row.devices, 0);
+  return (
+    <span className="text-muted-foreground">
+      {' '}
+      · {total} device(s) in 24 h{head.candidateReleaseId === null ? '' : `, ${onCandidate} on the candidate`}
+    </span>
+  );
+}
+
 /** What a channel serves and rolls out per runtime, with the rollout and rollback controls. */
 function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
   const headsQuery = trpc.ota.hosting.channels.heads.useQuery(input);
   const releasesQuery = trpc.ota.hosting.releases.list.useQuery(input);
+  const reachQuery = trpc.ota.hosting.metrics.channelReach.useQuery(input);
   const [percent, setPercent] = useState('50');
   const [notice, setNotice] = useState<string | null>(null);
   const onDone = async (result: { outcome: string; kind: string }) => {
@@ -429,6 +471,7 @@ function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { cha
                       {head.isPaused ? ' (paused)' : ''}
                     </>
                   )}
+                  <ReachNote reach={reachQuery.data?.reach ?? []} channel={channel.name} head={head} />
                 </li>
               ))}
             </ul>
@@ -866,7 +909,37 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
   );
 }
 
-function ReleaseRow(props: AppProps & { release: OtaReleaseDto }) {
+/** Devices on a release (24 h), emergency launches, and its last two weeks as bars. */
+function AdoptionLine({ adoption }: { adoption: ReleaseAdoptionDto | undefined }) {
+  if (adoption === undefined || (adoption.activeDevices === 0 && adoption.daily.length === 0)) {
+    return null;
+  }
+  const peak = Math.max(1, ...adoption.daily.map(day => day.activeDevices));
+  return (
+    <div className="flex flex-wrap items-end gap-3 text-xs text-muted-foreground">
+      <span>
+        <span className="font-medium text-foreground">{adoption.activeDevices}</span> device(s) in the last 24 h
+        {adoption.emergencyLaunches > 0 ? (
+          <span className="text-destructive"> · {adoption.emergencyLaunches} emergency launch(es)</span>
+        ) : null}
+      </span>
+      {adoption.daily.length > 0 ? (
+        <span className="flex h-6 items-end gap-0.5" role="img" aria-label="Active devices per day, last 14 days">
+          {adoption.daily.map(day => (
+            <span
+              key={day.day}
+              title={`${day.day}: ${day.activeDevices} active, ${day.newDevices} new, ${day.emergencyLaunches} emergency`}
+              className={day.emergencyLaunches > 0 ? 'w-1.5 bg-destructive/70' : 'w-1.5 bg-primary/60'}
+              style={{ height: `${Math.max(8, Math.round((day.activeDevices / peak) * 100))}%` }}
+            />
+          ))}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ReleaseRow(props: AppProps & { release: OtaReleaseDto; adoption: ReleaseAdoptionDto | undefined }) {
   const { release } = props;
   return (
     <li className="flex flex-col gap-1 rounded-xl border border-border px-4 py-3">
@@ -885,7 +958,16 @@ function ReleaseRow(props: AppProps & { release: OtaReleaseDto }) {
         Uploaded <Ago date={release.createdAt} />
         {release.uploadedByPrincipal === null ? '' : ` by ${release.uploadedByPrincipal}`}
       </p>
-      {release.status === OtaReleaseStatuses.ready ? <PromoteControl {...props} /> : null}
+      <AdoptionLine adoption={props.adoption} />
+      {release.status === OtaReleaseStatuses.ready ? (
+        <PromoteControl
+          workspaceId={props.workspaceId}
+          projectId={props.projectId}
+          app={props.app}
+          isAdmin={props.isAdmin}
+          release={release}
+        />
+      ) : null}
     </li>
   );
 }
@@ -903,10 +985,19 @@ function Releases(props: AppProps) {
     },
   );
   const releases = releasesQuery.data?.releases ?? [];
+  const adoptionQuery = trpc.ota.hosting.metrics.adoption.useQuery({ workspaceId, projectId, appId: app.id });
+  const reachQuery = trpc.ota.hosting.metrics.channelReach.useQuery({ workspaceId, projectId, appId: app.id });
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-sm font-medium">Releases</h2>
+        <h2 className="text-sm font-medium">
+          Releases
+          {reachQuery.data === undefined ? null : (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              {reachQuery.data.monthlyActiveDevices} monthly active device(s)
+            </span>
+          )}
+        </h2>
         <p className="text-xs text-muted-foreground">
           Publish from CI with <span className="font-mono">npx mocco-ota publish --app-id {app.id}</span> and a secret
           API key with <span className="font-mono">ota:write</span>. Mocco re-hashes new assets before a release is
@@ -928,6 +1019,7 @@ function Releases(props: AppProps) {
             app={app}
             isAdmin={props.isAdmin}
             release={release}
+            adoption={adoptionQuery.data?.releases.find(entry => entry.releaseId === release.id)}
           />
         ))}
       </ul>

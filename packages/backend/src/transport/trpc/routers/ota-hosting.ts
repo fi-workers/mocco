@@ -14,6 +14,7 @@ import {
   otaTrustPolicyInputSchema,
   otaTrustPolicySchema,
   promotionPreviewSchema,
+  releaseAdoptionSchema,
   promotionResultSchema,
   rolloutBpOf,
   stopActionSchema,
@@ -47,6 +48,48 @@ const adminOtaProcedure = otaProcedure.use(async ({ ctx, getRawInput, next }) =>
 });
 
 export const otaHostingRouter = router({
+  metrics: router({
+    /** Devices on each of the app's latest releases now, and per day for two weeks. */
+    adoption: otaProcedure
+      .input(appInput)
+      .output(z.object({ releases: z.array(releaseAdoptionSchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        const releases = await ctx.otaUploads.listReleases(app);
+        return {
+          releases: await ctx.otaMetrics.releaseAdoption(
+            app,
+            releases.slice(0, 20).map(release => release.id),
+          ),
+        };
+      }),
+
+    /** Devices per channel, platform, runtime and release (last 24 hours): rollout reach. */
+    channelReach: otaProcedure
+      .input(appInput)
+      .output(
+        z.object({
+          reach: z.array(
+            z.object({
+              channel: z.string(),
+              platform: z.string(),
+              runtimeVersion: z.string(),
+              releaseId: z.uuid().nullable(),
+              devices: z.number(),
+            }),
+          ),
+          monthlyActiveDevices: z.number(),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return {
+          reach: await ctx.otaMetrics.channelReach(app),
+          monthlyActiveDevices: await ctx.otaMetrics.monthlyActiveDevices(app.id),
+        };
+      }),
+  }),
+
   trustPolicies: router({
     list: otaProcedure
       .input(appInput)

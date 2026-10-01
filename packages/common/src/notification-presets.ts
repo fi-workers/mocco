@@ -36,6 +36,7 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: OtaEventTypes.otaPromotionRequested, filter: {} },
     { eventType: OtaEventTypes.otaPromotionApproved, filter: {} },
     { eventType: OtaEventTypes.otaPromotionRejected, filter: {} },
+    { eventType: OtaEventTypes.otaEmergencyLaunchSpike, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [

@@ -467,7 +467,7 @@ export class OtaChannelService {
 
   /** Publish an approval event for notifications. Best effort: it never undoes the change. */
   private async notify(
-    type: (typeof OtaEventTypes)[keyof typeof OtaEventTypes],
+    type: Exclude<(typeof OtaEventTypes)[keyof typeof OtaEventTypes], typeof OtaEventTypes.otaEmergencyLaunchSpike>,
     app: OtaAppRow,
     channel: OtaChannelRow,
     subject: { requestId: string; requestedBy: string; change: ChannelChange; release: OtaReleaseRow | null },

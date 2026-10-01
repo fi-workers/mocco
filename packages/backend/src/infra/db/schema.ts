@@ -7,6 +7,7 @@ import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/n
 import { OtaTools, PolicyDirections } from '@mocco/common/ota';
 import {
   CertificateStatuses,
+  OtaClientEventTypes,
   OtaDeploymentKinds,
   OtaDirectiveTypes,
   OtaPlatforms,
@@ -27,6 +28,7 @@ import {
   bigint,
   smallint,
   integer,
+  date,
   jsonb,
   index,
   uniqueIndex,
@@ -63,6 +65,7 @@ import type {
   CertificateStatus,
   OtaDeploymentKind,
   OtaDirectiveType,
+  OtaClientEventType,
   OtaPlatform,
   OtaProtocol,
   OtaReleaseStatus,
@@ -1591,6 +1594,11 @@ export const otaApps = pgTable(
     // Fixed at creation: signed manifests carry asset URLs under it.
     assetBaseUrl: text('asset_base_url').notNull(),
     signingRequired: boolean('signing_required').notNull().default(true),
+    // Mixed into device id hashes, so the same EAS-Client-ID hashes differently per app
+    // and the stored hash can't be matched against other apps or a rainbow table.
+    devicePepper: text('device_pepper')
+      .notNull()
+      .default(sql`md5(random()::text || clock_timestamp()::text)`),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
   },
@@ -1943,6 +1951,82 @@ export const otaUploadSessions = pgTable(
       columns: [t.appId, t.workspaceId],
       foreignColumns: [otaApps.id, otaApps.workspaceId],
       name: 'mocco_ota_upload_sessions_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** The latest state of each install, from update checks (OTA design §4.1). The client id
+ * is stored only as a peppered hash; no IP address is stored. */
+export const otaDevices = pgTable(
+  'mocco_ota_devices',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    clientIdHash: text('client_id_hash').notNull(),
+    platform: text().$type<OtaPlatform>().notNull(),
+    runtimeVersion: text('runtime_version').notNull(),
+    channel: text().notNull(),
+    // No FK: a device may report an update that was never Mocco's (the embedded one).
+    currentUpdateId: uuid('current_update_id'),
+    embeddedUpdateId: uuid('embedded_update_id'),
+    firstSeenAt: timestamp('first_seen_at').notNull(),
+    lastSeenAt: timestamp('last_seen_at').notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.appId, t.clientIdHash], name: 'mocco_ota_devices_pk' }),
+    index('mocco_ota_devices_update_idx').on(t.appId, t.currentUpdateId, t.lastSeenAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_devices_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** What apps report from devices: launches, emergency launches, errors. Pruned after 90 days. */
+export const otaClientEvents = pgTable(
+  'mocco_ota_client_events',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    updateId: uuid('update_id'),
+    clientIdHash: text('client_id_hash').notNull(),
+    type: text().$type<OtaClientEventType>().notNull(),
+    detail: jsonb().$type<Record<string, string | number | boolean>>(),
+    occurredAt: timestamp('occurred_at').notNull(),
+    createdAt,
+  },
+  t => [
+    index('mocco_ota_client_events_app_idx').on(t.appId, t.updateId, t.occurredAt),
+    index('mocco_ota_client_events_occurred_idx').on(t.occurredAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_client_events_app_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_client_events_type_check', sql`${t.type} IN (${sqlInList(Object.values(OtaClientEventTypes))})`),
+  ],
+);
+
+/** Daily adoption per update, rolled up by the `ota.rollupMetrics` job. */
+export const otaAdoptionDaily = pgTable(
+  'mocco_ota_adoption_daily',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    updateId: uuid('update_id').notNull(),
+    day: date({ mode: 'string' }).notNull(),
+    activeDevices: integer('active_devices').notNull().default(0),
+    newDevices: integer('new_devices').notNull().default(0),
+    emergencyLaunches: integer('emergency_launches').notNull().default(0),
+  },
+  t => [
+    primaryKey({ columns: [t.appId, t.updateId, t.day], name: 'mocco_ota_adoption_daily_pk' }),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_adoption_daily_app_fk',
     }).onDelete('cascade'),
   ],
 );

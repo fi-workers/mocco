@@ -112,6 +112,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
           channels: ota.otaChannels,
           updateChecks: ota.otaUpdateChecks,
           trustPolicies: ota.otaTrustPolicies,
+          metrics: ota.otaMetrics,
         },
       }),
     )

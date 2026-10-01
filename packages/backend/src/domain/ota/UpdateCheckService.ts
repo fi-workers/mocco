@@ -1,6 +1,7 @@
 import { selectResponse } from '@backend/domain/ota/serving/select';
 import { headKeyOf } from '@backend/domain/ota/serving/state-cache';
 
+import type { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
 import type { ChannelHeadRepo } from '@backend/domain/ota/repos/channel-head.repo';
 import type { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
 import type { Selection } from '@backend/domain/ota/serving/select';
@@ -10,6 +11,8 @@ import type { OtaPlatform } from '@mocco/common/ota-hosting';
 
 export interface UpdateCheckServiceDeps {
   heads: Pick<ChannelHeadRepo, 'findServingState'>;
+  /** Where update checks are counted (adoption); off the hot path. */
+  metrics?: Pick<OtaMetricsService, 'recordCheck'>;
   assets: Pick<OtaAssetRepo, 'findVerifiedObject'>;
   storage: StorageService | undefined;
   cache: ChannelStateCache;
@@ -22,6 +25,7 @@ export interface UpdateCheck {
   runtimeVersion: string;
   clientId: string | undefined;
   currentUpdateId: string | undefined;
+  embeddedUpdateId?: string;
 }
 
 /**
@@ -40,6 +44,17 @@ export class UpdateCheckService {
         (await this.deps.heads.findServingState(input.appId, input.channel, input.platform, input.runtimeVersion)) ??
         null;
       this.deps.cache.set(key, head);
+    }
+    if (input.clientId !== undefined && input.clientId !== '') {
+      this.deps.metrics?.recordCheck({
+        appId: input.appId,
+        clientId: input.clientId,
+        platform: input.platform,
+        runtimeVersion: input.runtimeVersion,
+        channel: input.channel,
+        currentUpdateId: input.currentUpdateId,
+        embeddedUpdateId: input.embeddedUpdateId,
+      });
     }
     return selectResponse({
       head: head ?? undefined,
