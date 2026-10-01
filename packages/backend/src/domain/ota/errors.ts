@@ -170,3 +170,42 @@ export class OtaChannelProtectedError extends ForbiddenError {
     this.name = 'OtaChannelProtectedError';
   }
 }
+
+/** A trust policy names a channel that doesn't exist or is protected. */
+export class TrustPolicyChannelError extends BadRequestError {
+  constructor(channel: string, options?: ErrorOptions) {
+    super(
+      `Channel "${channel}" can't be allowed: trusted publishing may promote only to existing unprotected channels`,
+      options,
+    );
+    this.name = 'TrustPolicyChannelError';
+  }
+}
+
+export class TrustPolicyNotFoundError extends NotFoundError {
+  constructor(policyId: string, options?: ErrorOptions) {
+    super(`Trust policy ${policyId} was not found`, options);
+    this.name = 'TrustPolicyNotFoundError';
+  }
+}
+
+/** Any refusal of an OIDC exchange. The caller only ever sees a fixed 403. */
+export class OidcExchangeDeniedError extends Error {
+  constructor(options?: ErrorOptions) {
+    super('OIDC token not accepted', options);
+    this.name = 'OidcExchangeDeniedError';
+  }
+}
+
+/** An upload session from a trust policy may promote only to the policy's channels. */
+export class OtaChannelNotAllowedError extends ForbiddenError {
+  constructor(channel: string, allowed: readonly string[], options?: ErrorOptions) {
+    super(
+      allowed.length === 0
+        ? `This upload session may not promote; its trust policy allows no channels (asked for "${channel}")`
+        : `This upload session may promote only to ${allowed.join(', ')} (asked for "${channel}")`,
+      options,
+    );
+    this.name = 'OtaChannelNotAllowedError';
+  }
+}

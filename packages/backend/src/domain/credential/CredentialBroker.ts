@@ -190,6 +190,7 @@ export class CredentialBroker {
     try {
       credentials = await this.deps.provider.issue({
         workspaceId: run.workspaceId,
+        runId: run.id,
         provider: credential.provider,
         role: credential.role,
         ttlSeconds: credential.ttl,

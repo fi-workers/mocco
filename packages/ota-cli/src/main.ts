@@ -21,12 +21,13 @@ const USAGE = `Usage:
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
 
-  mocco-ota publish [--channel <name>] [--platform ios|android|all] [--message <text>]
+  mocco-ota publish [--channel <name>] [--oidc] [--platform ios|android|all] [--message <text>]
                     [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
       Export, upload and finalize a signed release; with --channel, promote it once ready.
-      Needs MOCCO_API_KEY (a secret key with ota:write) and the signing key in
-      MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
+      Authenticates with MOCCO_API_KEY (a secret key with ota:write), or with --oidc in
+      GitHub Actions (trusted publishing; the default there when MOCCO_API_KEY is unset).
+      Signs with MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
 
   mocco-ota promote --release <id> --channel <name> [--project .]
       Point an unprotected channel at a ready release. Needs MOCCO_API_KEY.
@@ -113,11 +114,42 @@ async function runInit(args: readonly string[]): Promise<void> {
 }
 
 /** The API key from the environment, and the app and API base from app.json (or flags). */
-async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url'?: string }) {
+/** The secret API key from MOCCO_API_KEY, or a CliError saying how to set it. */
+function apiKeyOf(): string {
   const apiKey = process.env.MOCCO_API_KEY;
   if (apiKey === undefined || apiKey === '') {
-    throw new CliError('Set MOCCO_API_KEY to a secret API key with the ota:write scope');
+    throw new CliError(
+      'Set MOCCO_API_KEY to a secret API key with the ota:write scope (or use --oidc in GitHub Actions)',
+    );
   }
+  return apiKey;
+}
+
+/** The job's OIDC token for Mocco (GitHub Actions with `permissions: id-token: write`). */
+async function githubOidcToken(apiBase: string): Promise<string> {
+  const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+  const bearer = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  if (url === undefined || bearer === undefined) {
+    throw new CliError('--oidc needs GitHub Actions with `permissions: id-token: write`');
+  }
+  const audience = new URL(apiBase).origin;
+  const response = await fetch(`${url}&audience=${encodeURIComponent(audience)}`, {
+    headers: { authorization: `bearer ${bearer}` },
+  });
+  if (!response.ok) {
+    throw new CliError(`GitHub refused the OIDC token request (${response.status})`);
+  }
+  const { value } = (await response.json()) as { value: string };
+  return value;
+}
+
+/** Trusted publishing when asked, or when running in Actions without a key. */
+function isOidcWanted(isAsked: boolean): boolean {
+  const apiKey = process.env.MOCCO_API_KEY;
+  return isAsked || ((apiKey === undefined || apiKey === '') && process.env.ACTIONS_ID_TOKEN_REQUEST_URL !== undefined);
+}
+
+async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url'?: string }) {
   const { json } = await readAppJson(projectDir);
   const expo = json.expo ?? {};
   const fromUrl = expo.updates?.url === undefined ? undefined : parseManifestUrl(expo.updates.url);
@@ -126,7 +158,7 @@ async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url
   if (appId === undefined || apiBase === undefined) {
     throw new CliError('app.json has no Mocco updates.url; run mocco-ota init, or pass --app-id and --api-url');
   }
-  return { apiKey, appId, apiBase, expo };
+  return { appId, apiBase, expo };
 }
 
 async function runPromote(args: readonly string[]): Promise<void> {
@@ -143,8 +175,8 @@ async function runPromote(args: readonly string[]): Promise<void> {
   if (values.release === undefined || values.channel === undefined) {
     throw new CliError('--release and --channel are required');
   }
-  const { apiKey, appId, apiBase } = await targetOf(path.resolve(values.project), values);
-  await promote({ apiBase, appId, apiKey, releaseId: values.release, channel: values.channel, log });
+  const { appId, apiBase } = await targetOf(path.resolve(values.project), values);
+  await promote({ apiBase, appId, apiKey: apiKeyOf(), releaseId: values.release, channel: values.channel, log });
 }
 
 async function runPublish(args: readonly string[]): Promise<void> {
@@ -153,6 +185,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
     options: {
       platform: { type: 'string', default: 'all' },
       channel: { type: 'string' },
+      oidc: { type: 'boolean', default: false },
       message: { type: 'string' },
       mandatory: { type: 'boolean', default: false },
       'skip-export': { type: 'boolean', default: false },
@@ -166,7 +199,8 @@ async function runPublish(args: readonly string[]): Promise<void> {
     },
   });
   const projectDir = path.resolve(values.project);
-  const { apiKey, appId, apiBase, expo } = await targetOf(projectDir, values);
+  const { appId, apiBase, expo } = await targetOf(projectDir, values);
+  const auth = isOidcWanted(values.oidc) ? { oidcToken: await githubOidcToken(apiBase) } : { apiKey: apiKeyOf() };
   const platforms = platformsOf(values.platform);
   const [first = OtaPlatforms.ios] = platforms;
   const distDir = path.resolve(projectDir, values.dist);
@@ -176,7 +210,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
   const result = await publish({
     apiBase,
     appId,
-    apiKey,
+    auth,
     distDir,
     platforms,
     runtimeVersion: values['runtime-version'] ?? runtimeVersionOf(expo, first),
@@ -186,15 +220,12 @@ async function runPublish(args: readonly string[]): Promise<void> {
     gitSha: values['git-sha'] ?? process.env.GITHUB_SHA ?? (await gitOutput(projectDir, ['rev-parse', 'HEAD'])),
     isMandatory: values.mandatory,
     expoConfig: expo,
+    ...(values.channel !== undefined && { channel: values.channel }),
     log,
   });
   log(
     `Done: release ${result.releaseId} (${result.reusedAssets} asset(s) reused, ${result.uploadedBytes} bytes uploaded).`,
   );
-  if (values.channel !== undefined) {
-    log(`Waiting for Mocco to verify the assets before promoting to ${values.channel}…`);
-    await promote({ apiBase, appId, apiKey, releaseId: result.releaseId, channel: values.channel, log });
-  }
 }
 
 /** Run the command line; resolves to the exit code. */

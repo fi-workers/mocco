@@ -1,0 +1,46 @@
+# Publish an Expo update to Mocco-hosted OTA with trusted publishing: the job's GitHub
+# OIDC token is exchanged for a 15-minute upload session, so no Mocco key is stored in
+# CI. The repository and ref must be trusted on the app (OTA hosting → Trusted
+# publishing), and the job needs `permissions: id-token: write`.
+name: Mocco OTA publish
+description: Export, sign and publish an Expo update to Mocco-hosted OTA with GitHub OIDC.
+inputs:
+  app-id:
+    description: The Mocco OTA app id. Defaults to the one in app.json's updates.url.
+    required: false
+  channel:
+    description: An unprotected channel to promote to once Mocco has verified the release.
+    required: false
+  platform:
+    description: ios, android or all.
+    required: false
+    default: all
+  working-directory:
+    description: The Expo project directory.
+    required: false
+    default: .
+  message:
+    description: The release message. Defaults to the commit subject.
+    required: false
+  cli-version:
+    description: The @mocco/ota-cli version to run.
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Publish
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_APP_ID: ${{ inputs.app-id }}
+        INPUT_CHANNEL: ${{ inputs.channel }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_MESSAGE: ${{ inputs.message }}
+        CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        args=(publish --oidc --platform "$INPUT_PLATFORM")
+        if [ -n "$INPUT_APP_ID" ]; then args+=(--app-id "$INPUT_APP_ID"); fi
+        if [ -n "$INPUT_CHANNEL" ]; then args+=(--channel "$INPUT_CHANNEL"); fi
+        if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
+        npx --yes "@mocco/ota-cli@${CLI_VERSION}" "${args[@]}"

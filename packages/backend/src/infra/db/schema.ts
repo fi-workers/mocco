@@ -1873,9 +1873,45 @@ export const otaDeployments = pgTable(
 );
 
 /**
+ * Trusted publishing (OTA design §6.2): a GitHub repository — by numeric id, so a rename
+ * can't hijack it — and ref (and optionally workflow and environment) whose Actions OIDC
+ * tokens may mint upload sessions, and the unprotected channels those may promote to.
+ */
+export const otaTrustPolicies = pgTable(
+  'mocco_ota_trust_policies',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    provider: text().notNull().default('github'),
+    repositoryId: bigint('repository_id', { mode: 'bigint' }).notNull(),
+    // The owner/name when the policy was made, for display only.
+    repository: text().notNull(),
+    refPattern: text('ref_pattern').notNull(),
+    workflowRef: text('workflow_ref'),
+    environment: text(),
+    allowedChannels: text('allowed_channels')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    unique('mocco_ota_trust_policies_id_workspace_uq').on(t.id, t.workspaceId),
+    index('mocco_ota_trust_policies_app_idx').on(t.appId, t.repositoryId),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_trust_policies_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
  * Short-lived upload credentials for CI (OTA design §6.2). A session is minted from a
- * secret API key with `ota:write` (and, later, from GitHub OIDC or a broker-approved
- * run); only the token's hash is stored. One session uploads at most one release.
+ * secret API key with `ota:write`, a GitHub OIDC token matching a trust policy, or a
+ * broker-approved run step; only the token's hash is stored. One session uploads at most one release.
  */
 export const otaUploadSessions = pgTable(
   'mocco_ota_upload_sessions',
@@ -1887,6 +1923,9 @@ export const otaUploadSessions = pgTable(
     // Who the session speaks for, e.g. `apikey:<id>` or `github:repo:123:ref:refs/heads/main`.
     principal: text().notNull(),
     apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'set null' }),
+    trustPolicyId: uuid('trust_policy_id').references(() => otaTrustPolicies.id, { onDelete: 'set null' }),
+    // Channels the session may promote to; null for any unprotected one (a key or a broker run).
+    allowedChannels: text('allowed_channels').array(),
     releaseId: uuid('release_id').references(() => otaReleases.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at').notNull(),
     createdAt,

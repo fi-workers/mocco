@@ -26,11 +26,15 @@ code_refs:
   - packages/backend/src/domain/ota/UpdateCheckService.ts
   - packages/backend/src/domain/ota/serving/select.ts
   - packages/backend/src/transport/ext/v1/ota-manifest.ts
+  - packages/backend/src/domain/ota/TrustPolicyService.ts
+  - packages/backend/src/domain/integration/github/oidc.ts
+  - packages/backend/src/domain/ota/providers/mocco-ota.ts
+  - actions/ota-publish/action.yml
 ---
 
 # Mocco-hosted OTA updates
 
-> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), and promotion and serving (#129); gated promotion (#131) and rollout and rollback (#132) build on it.
+> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), and trusted publishing (#130); gated promotion (#131) and rollout and rollback (#132) build on it.
 
 ## OTA apps
 
@@ -76,6 +80,22 @@ The release is then `verifying` until the **`ota.verifyAssets`** job re-hashes e
 
 The console's **Releases** list shows each release's status, platforms, download size, git SHA and uploader.
 
+## Trusted publishing and Mocco runs
+
+CI can get an upload session three ways, and none needs more than 15 minutes; every session is stored as a token hash and audited as `ota.upload.authorized`:
+
+| From | How | Principal | May promote to |
+|---|---|---|---|
+| A secret API key with `ota:write` | `POST /v1/ota/apps/{id}/upload-sessions` | `apikey:<id>` | any unprotected channel |
+| A **GitHub Actions OIDC token** (trusted publishing) | `POST /v1/ota/auth/oidc {appId, token}` | `github:repo:<id>:ref:<ref>` | the trust policy's `allowed_channels` |
+| A **gated Mocco run step** | the credential broker, provider `mocco-ota`, role = the OTA app id | `mocco:run:<runId>` | any unprotected channel |
+
+**Trust policies** (OTA hosting → Trusted publishing; owners and admins) name a GitHub repository by its numeric id, so a rename or a fork can't match, plus a ref pattern (`refs/heads/main`, or `*` as a wildcard: `refs/tags/v*`). They can optionally pin the workflow (`job_workflow_ref`) and the environment. They also list the unprotected channels sessions may promote to. The exchange verifies the token against GitHub's JWKS (issuer `https://token.actions.githubusercontent.com`, audience Mocco's public API origin, expiry), then takes the oldest matching policy. Every refusal is the same `403` "OIDC token not accepted"; the reason is logged and audited as `ota.upload.denied`.
+
+In a workflow, `fi-workers/mocco/actions/ota-publish` runs `mocco-ota publish --oidc` (the default in Actions when `MOCCO_API_KEY` is unset). The job needs `permissions: id-token: write` and the signing key in `MOCCO_OTA_SIGNING_KEY`. With a `channel` it promotes through the session once the release is verified. The console shows the workflow step under the policies. The action runs the published `@mocco/ota-cli`, which ships with SDK packaging.
+
+**From a Mocco pipeline**, a step can request the credential `{ provider: mocco-ota, role: <OTA app id>, ttl, gate }`. The broker issues it only after its usual checks (run token, step dispatched, gate resumed, workspace grant), and the provider mints a run-bound session for an app in the run's workspace.
+
 ## Promotion
 
 Promoting a `ready` release to a channel points that channel's heads (one per platform and runtime version) at the release's updates. It is refused when the release isn't ready, when the channel is **protected** (that needs an approved request, which lands with gated promotion), and when the release is **older** than what the channel serves on a platform: devices load only a newer `commitTime`, so an older release would reach no one, and going back is a rollback. Promoting what a channel already serves changes nothing. Each promotion appends a `promote` deployment and is audited as `ota.channel.changed` with the actor (a user or `apikey:<id>`).
@@ -95,10 +115,10 @@ Responses carry `expo-sfv-version: 0` and `cache-control: private, max-age=0`. E
 
 `GET /v1/ota/apps/{id}/assets/{hash}` (the URL inside every signed manifest) redirects (302) to the verified bytes in the store: the CDN or bucket URL, or the filesystem driver's route. Unknown or unverified hashes are 404.
 
-## Tables (migrations 0022–0023)
+## Tables (migrations 0022–0024)
 
-`mocco_ota_apps`, `mocco_ota_signing_certificates`, `mocco_ota_channels`, `mocco_ota_upload_sessions` (token hash only, one release per session), plus the tables the next slices fill: `mocco_ota_releases`, `mocco_ota_updates` (the exact signed manifest bytes, never rewritten; the id is the Expo update id from CI), `mocco_ota_signed_directives`, `mocco_ota_assets` (content-addressed by base64url SHA-256, linked to `mocco_objects`), `mocco_ota_update_assets`, `mocco_ota_channel_heads` (serving state per channel, platform and runtime version) and `mocco_ota_deployments` (append-only channel history). All are workspace-scoped with composite FKs.
+`mocco_ota_apps`, `mocco_ota_signing_certificates`, `mocco_ota_channels`, `mocco_ota_upload_sessions` (token hash only, one release per session, its trust policy and allowed channels), `mocco_ota_trust_policies`, plus the tables the next slices fill: `mocco_ota_releases`, `mocco_ota_updates` (the exact signed manifest bytes, never rewritten; the id is the Expo update id from CI), `mocco_ota_signed_directives`, `mocco_ota_assets` (content-addressed by base64url SHA-256, linked to `mocco_objects`), `mocco_ota_update_assets`, `mocco_ota_channel_heads` (serving state per channel, platform and runtime version) and `mocco_ota_deployments` (append-only channel history). All are workspace-scoped with composite FKs.
 
 ## tRPC surface
 
-`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | promote`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.
+`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | promote`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.

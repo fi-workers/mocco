@@ -3,24 +3,33 @@ import { randomUUID } from 'node:crypto';
 import { AuditActions } from '@mocco/common/audit';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { GateStates } from '@mocco/common/governance';
+import { MOCCO_OTA_CREDENTIAL_PROVIDER } from '@mocco/common/ota-hosting';
+import { AppPlatforms } from '@mocco/common/project';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { BrokerDenials, CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { CredentialUnavailableError } from '@backend/domain/credential/errors';
+import { RoutingCredentialProvider } from '@backend/domain/credential/providers/routing';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
 import { hashToken } from '@backend/domain/execution/callback-token';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import { createApprovalService } from '@backend/domain/governance/instance';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { createOtaDomain } from '@backend/domain/ota/instance';
+import { MoccoOtaProvider } from '@backend/domain/ota/providers/mocco-ota';
+import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
+import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
 import {
   commitConfigs,
   commits,
+  otaUploadSessions,
   providerConnections,
   repos,
   runGates,
@@ -91,7 +100,60 @@ interface SeedOptions {
   grantMaxTtl?: number;
   /** Insert the grant under a DIFFERENT workspace (tenant-isolation probe). */
   grantWorkspaceId?: string;
+  /** The step's credential (and the grant's provider/role); defaults to CREDENTIAL. */
+  credential?: Credential;
+  /** Seed into this workspace instead of a new one. */
+  workspaceId?: string;
 }
+
+/** A broker whose only real provider is mocco-ota, and an OTA app in `workspaceId`. */
+async function otaBrokerFor(t: TestDb, audit: AuditService, workspaceId: string) {
+  const { projects } = createProjectDomain(t.db);
+  const ota = createOtaDomain(t.db, {
+    projects,
+    approvals: createApprovalService(t.db, audit),
+    audit,
+    publicApiBase: 'https://mocco.test/api/ext/v1',
+  });
+  const userId = expectOne(
+    await t.db
+      .insert(users)
+      .values({ id: randomUUID(), name: 'Ada', email: `${randomUUID()}@acme.test`, emailVerified: true })
+      .returning(),
+  ).id;
+  const project = await projects.create(workspaceId, { name: 'Acme', handle: `acme-${randomUUID().slice(0, 6)}` });
+  const projectApp = await projects.addApp(workspaceId, project.id, {
+    platform: AppPlatforms.reactNative,
+    name: 'Acme mobile',
+  });
+  const app = await ota.otaHosting.createApp(workspaceId, project.id, userId, projectApp.id);
+  const broker = new CredentialBroker({
+    runs: new RunRepo(t.db),
+    steps: new RunStepRepo(t.db),
+    runGates: new RunGateRepo(t.db),
+    configs: new CommitConfigRepo(t.db),
+    commits: new CommitRepo(t.db),
+    grants: new CredentialGrantRepo(t.db),
+    provider: new RoutingCredentialProvider(
+      new Map([
+        [MOCCO_OTA_CREDENTIAL_PROVIDER, new MoccoOtaProvider({ apps: new OtaAppRepo(t.db), uploads: ota.otaUploads })],
+      ]),
+      new StubCredentialProvider(),
+    ),
+    audit,
+  });
+  return { broker, appId: app.id };
+}
+
+const otaCredential = (appId: string): Credential => ({
+  provider: MOCCO_OTA_CREDENTIAL_PROVIDER,
+  role: appId,
+  ttl: 3600,
+  gate: 'approve',
+});
+
+const newWorkspace = async (t: TestDb) =>
+  expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
 
 describe('CredentialBroker (pglite, fail-closed)', () => {
   let t: TestDb;
@@ -128,12 +190,14 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       includeGrant = true,
       grantMaxTtl = 3600,
       grantWorkspaceId,
+      credential: requested = CREDENTIAL,
+      workspaceId: existingWorkspaceId,
     } = options;
-    const credential = stripCredential ? undefined : CREDENTIAL;
+    const credential = stripCredential ? undefined : requested;
 
-    const workspaceId = expectOne(
-      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
-    ).id;
+    const workspaceId =
+      existingWorkspaceId ??
+      expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
     const userId = expectOne(
       await t.db
         .insert(users)
@@ -224,8 +288,8 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
         repoId,
         pipeline: 'deploy',
         gateName: 'approve',
-        provider: 'aws',
-        role: 'deployer',
+        provider: requested.provider,
+        role: requested.role,
         maxTtlSeconds: grantMaxTtl,
       });
     }
@@ -244,7 +308,7 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       expect(result.credentials.value).toBe('stub-credential');
     }
     // Issued with the PINNED config's {provider, role, ttl} — never a request-body value.
-    expect(provider.calls).toEqual([{ workspaceId, provider: 'aws', role: 'deployer', ttlSeconds: 900 }]);
+    expect(provider.calls).toEqual([{ workspaceId, runId, provider: 'aws', role: 'deployer', ttlSeconds: 900 }]);
   });
 
   it('DENIES (audited, never a throw) when the provider has no such credential', async () => {
@@ -389,6 +453,59 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       // The verdict is unchanged despite the audit append failing.
       expect(result.ok).toBe(true);
       spy.mockRestore();
+    });
+  });
+
+  describe('the mocco-ota provider (Mocco-hosted OTA upload sessions)', () => {
+    it('mints a run-bound upload session (at most 15 minutes, stored as a hash) once every check passes', async () => {
+      const workspaceId = await newWorkspace(t);
+      const { broker: ota, appId } = await otaBrokerFor(t, audit, workspaceId);
+      const { runId } = await seed({ workspaceId, credential: otaCredential(appId) });
+
+      const result = await ota.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+
+      expect(result.ok).toBe(true);
+      const sessions = await t.db.select().from(otaUploadSessions);
+      expect(sessions.map(session => session.principal)).toEqual([`mocco:run:${runId}`]);
+      if (result.ok) {
+        expect(result.credentials.value).toMatch(/^mk_ups_/u);
+        expect(sessions[0]?.tokenHash).toBe(hashToken(result.credentials.value));
+        expect(result.credentials.expiresAt.getTime() - Date.now()).toBeLessThanOrEqual(15 * 60 * 1000);
+      }
+    });
+
+    it('is still gated by the broker: no session while the gate is pending', async () => {
+      const workspaceId = await newWorkspace(t);
+      const { broker: ota, appId } = await otaBrokerFor(t, audit, workspaceId);
+      const { runId } = await seed({ workspaceId, credential: otaCredential(appId), gateState: GateStates.pending });
+
+      const result = await ota.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+
+      expect(result).toEqual({ ok: false, reason: BrokerDenials.gateNotResumed });
+      expect(await t.db.select().from(otaUploadSessions)).toEqual([]);
+    });
+
+    it('is still gated by the broker: no session with a bad run token', async () => {
+      const workspaceId = await newWorkspace(t);
+      const { broker: ota, appId } = await otaBrokerFor(t, audit, workspaceId);
+      const { runId } = await seed({ workspaceId, credential: otaCredential(appId) });
+
+      const result = await ota.issue({ runId, stepIndex: STEP_INDEX, token: 'b'.repeat(64) });
+
+      expect(result).toEqual({ ok: false, reason: BrokerDenials.badToken });
+      expect(await t.db.select().from(otaUploadSessions)).toEqual([]);
+    });
+
+    it('denies an OTA app of another workspace as an unavailable credential', async () => {
+      const { appId } = await otaBrokerFor(t, audit, await newWorkspace(t));
+      const workspaceId = await newWorkspace(t);
+      const { broker: ota } = await otaBrokerFor(t, audit, workspaceId);
+      const { runId } = await seed({ workspaceId, credential: otaCredential(appId) });
+
+      const result = await ota.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
+
+      expect(result).toEqual({ ok: false, reason: BrokerDenials.credentialUnavailable });
+      expect(await t.db.select().from(otaUploadSessions)).toEqual([]);
     });
   });
 });

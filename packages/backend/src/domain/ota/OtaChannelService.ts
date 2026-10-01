@@ -3,6 +3,7 @@ import { OtaDeploymentKinds, OtaReleaseStatuses } from '@mocco/common/ota-hostin
 
 import {
   OtaAppNotFoundError,
+  OtaChannelNotAllowedError,
   OtaChannelNotFoundError,
   OtaChannelProtectedError,
   OtaReleaseNotFoundError,
@@ -17,6 +18,7 @@ import type { ChannelHeadRepo } from '@backend/domain/ota/repos/channel-head.rep
 import type { OtaAppRepo, OtaAppRow } from '@backend/domain/ota/repos/ota-app.repo';
 import type { OtaChannelRepo, OtaChannelRow } from '@backend/domain/ota/repos/ota-channel.repo';
 import type { OtaReleaseRepo, OtaReleaseRow } from '@backend/domain/ota/repos/ota-release.repo';
+import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
 import type { ChannelStateCache } from '@backend/domain/ota/serving/state-cache';
 import type { OtaChannelHeadDto, PromotionResult } from '@mocco/common/ota-hosting';
 
@@ -166,6 +168,43 @@ export class OtaChannelService {
       { userId: null, principal: `apikey:${principal.keyId}` },
       reason,
     );
+  }
+
+  /** Promote the release an upload session uploaded, within the session's allowed channels. */
+  async promoteAsSession(
+    session: UploadSessionRow,
+    releaseId: string,
+    channelName: string,
+    reason: string | null,
+  ): Promise<PromotionResult> {
+    if (session.releaseId !== releaseId) {
+      throw new OtaReleaseNotFoundError(releaseId);
+    }
+    if (session.allowedChannels !== null && !session.allowedChannels.includes(channelName)) {
+      throw new OtaChannelNotAllowedError(channelName, session.allowedChannels);
+    }
+    const app = await this.deps.apps.findById(session.appId);
+    if (app === undefined) {
+      throw new OtaAppNotFoundError(session.appId);
+    }
+    const channel = await this.deps.channels.findByName(app.id, channelName);
+    if (channel === undefined) {
+      throw new OtaChannelNotFoundError(channelName);
+    }
+    return await this.promoteTo(app, channel, releaseId, { userId: null, principal: session.principal }, reason);
+  }
+
+  /** The status of the release an upload session uploaded. */
+  async releaseStatusAsSession(session: UploadSessionRow, releaseId: string) {
+    if (session.releaseId !== releaseId) {
+      throw new OtaReleaseNotFoundError(releaseId);
+    }
+    const app = await this.deps.apps.findById(session.appId);
+    if (app === undefined) {
+      throw new OtaAppNotFoundError(session.appId);
+    }
+    const release = await this.requireRelease(app, releaseId);
+    return { id: release.id, status: release.status, runtimeVersion: release.runtimeVersion };
   }
 
   /** The app of a key's project, or OtaAppNotFoundError (other projects' apps look missing). */

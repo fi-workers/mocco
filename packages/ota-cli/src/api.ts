@@ -65,6 +65,40 @@ export class MoccoApi {
     );
   }
 
+  /** Exchange a GitHub Actions OIDC token for an upload session (trusted publishing). */
+  async exchangeOidc(appId: string, idToken: string): Promise<string> {
+    const response = await this.fetchImpl(`${this.baseUrl}/ota/auth/oidc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ appId, token: idToken }),
+    });
+    if (!response.ok) {
+      throw await errorOf(response, 'Exchanging the GitHub OIDC token (is the repository trusted in Mocco?)');
+    }
+    const { sessionToken } = (await response.json()) as { sessionToken: string };
+    return sessionToken;
+  }
+
+  /** The status of the release a session uploaded. */
+  async sessionReleaseStatus(session: string, releaseId: string): Promise<{ id: string; status: string }> {
+    const response = await this.fetchImpl(`${this.baseUrl}/ota/uploads/${releaseId}`, {
+      headers: { authorization: `Bearer ${session}` },
+    });
+    if (!response.ok) {
+      throw await errorOf(response, 'Reading the release');
+    }
+    return (await response.json()) as { id: string; status: string };
+  }
+
+  async sessionPromote(session: string, releaseId: string, channel: string): Promise<PromotionResult> {
+    return await this.postJson<PromotionResult>(
+      `/ota/uploads/${releaseId}/promotions`,
+      session,
+      { channel },
+      `Promoting to ${channel}`,
+    );
+  }
+
   /** Exchange a secret API key with `ota:write` for an upload session token. */
   async createSession(appId: string, apiKey: string): Promise<string> {
     const { sessionToken } = await this.postJson<{ sessionToken: string }>(

@@ -39,6 +39,18 @@ function fakeMocco(opts: { present?: readonly string[]; head?: { updateId: strin
         ? JSON.parse(request.body)
         : (request?.body as Uint8Array | undefined)?.byteLength;
     requests.push({ method, url, body });
+    if (url.endsWith('/ota/auth/oidc')) {
+      return Response.json(
+        { sessionToken: 'mk_ups_oidc', expiresAt: new Date(), allowedChannels: ['staging'] },
+        { status: 201 },
+      );
+    }
+    if (url.endsWith('/promotions')) {
+      return Response.json({ channel: 'staging', releaseId, platforms: ['ios'], changed: true }, { status: 201 });
+    }
+    if (method === 'GET' && url.endsWith(`/ota/uploads/${releaseId}`)) {
+      return Response.json({ id: releaseId, status: 'ready' });
+    }
     if (url.endsWith('/upload-sessions')) {
       return Response.json({ sessionToken: 'mk_ups_test', expiresAt: new Date() }, { status: 201 });
     }
@@ -90,12 +102,15 @@ describe('mocco-ota', () => {
     return dist;
   };
 
-  const publishWith = async (mocco: ReturnType<typeof fakeMocco>) => {
+  const publishWith = async (
+    mocco: ReturnType<typeof fakeMocco>,
+    extra: Partial<Parameters<typeof publish>[0]> = {},
+  ) => {
     const { json } = await readAppJson(projectDir);
     return await publish({
       apiBase: API,
       appId: APP_ID,
-      apiKey: 'mk_sec_test',
+      auth: { apiKey: 'mk_sec_test' },
       distDir: await writeExport(),
       platforms: ['ios'],
       runtimeVersion: '1.0.0',
@@ -106,6 +121,7 @@ describe('mocco-ota', () => {
       isMandatory: false,
       expoConfig: json.expo ?? {},
       fetch: mocco.fetch,
+      ...extra,
     });
   };
 
@@ -180,6 +196,22 @@ describe('mocco-ota', () => {
     const finalize = second.requests.at(-1)?.body as FinalizeRequest;
     const [republish] = finalize.republishes;
     expect(createdAtOf(republish?.body ?? '')).toBeGreaterThan(createdAtOf(finalize.updates[0]?.body ?? ''));
+  });
+
+  it('publishes with a GitHub OIDC token, then promotes through the session once ready', async () => {
+    const mocco = fakeMocco();
+
+    await publishWith(mocco, { auth: { oidcToken: 'github-jwt' }, channel: 'staging' });
+
+    expect(mocco.requests[0]).toMatchObject({
+      method: 'POST',
+      url: `${API}/ota/auth/oidc`,
+      body: { appId: APP_ID, token: 'github-jwt' },
+    });
+    expect(mocco.requests.slice(-2).map(request => `${request.method} ${request.url.replace(API, '')}`)).toEqual([
+      `GET /ota/uploads/${mocco.releaseId}`,
+      `POST /ota/uploads/${mocco.releaseId}/promotions`,
+    ]);
   });
 
   it('reads the API base and app id from the manifest URL, and the runtime version from app.json', () => {

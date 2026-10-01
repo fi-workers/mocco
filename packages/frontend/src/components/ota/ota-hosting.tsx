@@ -653,6 +653,252 @@ function Releases(props: AppProps) {
   );
 }
 
+/** The GitHub Actions job that publishes with trusted publishing (no stored Mocco key). */
+function workflowSnippet(app: OtaAppDto, channel: string): string {
+  return [
+    'permissions:',
+    '  id-token: write # lets the job request its OIDC token',
+    '  contents: read',
+    'steps:',
+    '  - uses: actions/checkout@v4',
+    '  - uses: fi-workers/mocco/actions/ota-publish@main',
+    '    with:',
+    `      app-id: ${app.id}`,
+    `      channel: ${channel}`,
+    '    env:',
+    // eslint-disable-next-line no-template-curly-in-string -- a GitHub Actions expression, not a JS template
+    '      MOCCO_OTA_SIGNING_KEY: ${{ secrets.MOCCO_OTA_SIGNING_KEY }}',
+  ].join('\n');
+}
+
+// eslint-disable-next-line sonarjs/null-dereference -- form state is a string, never null
+const trimmed = (value: string) => value.trim();
+const optionalOf = (value: string) => (trimmed(value) === '' ? null : trimmed(value));
+
+function TrustPolicyForm(props: AppProps & { channels: readonly OtaChannelDto[]; onDone: () => void }) {
+  const { workspaceId, projectId, app, channels, onDone } = props;
+  const utils = trpc.useUtils();
+  const [repository, setRepository] = useState('');
+  const [repositoryId, setRepositoryId] = useState('');
+  const [refPattern, setRefPattern] = useState('refs/heads/main');
+  const [workflowRef, setWorkflowRef] = useState('');
+  const [environment, setEnvironment] = useState('');
+  const [allowed, setAllowed] = useState<string[]>([]);
+  const creation = trpc.ota.hosting.trustPolicies.create.useMutation({
+    onSuccess: async () => {
+      await utils.ota.hosting.trustPolicies.list.invalidate({ workspaceId, projectId, appId: app.id });
+      onDone();
+    },
+  });
+  const open = channels.filter(channel => !channel.isProtected);
+  const toggleChannel = (name: string, isOn: boolean) => {
+    setAllowed(previous => (isOn ? [...previous, name] : previous.filter(other => other !== name)));
+  };
+
+  return (
+    <form
+      aria-label="Trust a GitHub repository"
+      className="flex flex-col gap-3 rounded-xl bg-muted/40 p-4"
+      onSubmit={event => {
+        event.preventDefault();
+        creation.mutate({
+          workspaceId,
+          projectId,
+          appId: app.id,
+          repository: trimmed(repository),
+          repositoryId: trimmed(repositoryId),
+          refPattern: trimmed(refPattern),
+          workflowRef: optionalOf(workflowRef),
+          environment: optionalOf(environment),
+          allowedChannels: allowed,
+        });
+      }}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={labelClass}>
+          Repository
+          <input
+            required
+            value={repository}
+            placeholder="acme/mobile"
+            onChange={event => {
+              setRepository(event.target.value);
+            }}
+            className={inputClass}
+          />
+        </label>
+        <label className={labelClass}>
+          Repository id
+          <input
+            required
+            inputMode="numeric"
+            value={repositoryId}
+            placeholder="123456789"
+            onChange={event => {
+              setRepositoryId(event.target.value);
+            }}
+            className={inputClass}
+          />
+        </label>
+        <label className={labelClass}>
+          Ref
+          <input
+            required
+            value={refPattern}
+            onChange={event => {
+              setRefPattern(event.target.value);
+            }}
+            className={`${inputClass} font-mono`}
+          />
+        </label>
+        <label className={labelClass}>
+          Environment (optional)
+          <input
+            value={environment}
+            placeholder="production"
+            onChange={event => {
+              setEnvironment(event.target.value);
+            }}
+            className={inputClass}
+          />
+        </label>
+      </div>
+      <label className={labelClass}>
+        Workflow (optional)
+        <input
+          value={workflowRef}
+          placeholder="acme/mobile/.github/workflows/ota.yml@refs/heads/main"
+          onChange={event => {
+            setWorkflowRef(event.target.value);
+          }}
+          className={`${inputClass} font-mono`}
+        />
+      </label>
+      <p className="text-xs text-muted-foreground">
+        The repository id is the numeric <span className="font-mono">id</span> at{' '}
+        <span className="font-mono">api.github.com/repos/OWNER/REPO</span>: a renamed or forked repository has a
+        different one. <span className="font-mono">*</span> in the ref matches anything (
+        <span className="font-mono">refs/tags/v*</span>).
+      </p>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1 text-xs font-medium text-muted-foreground">May promote to</legend>
+        {open.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No open channels: it can upload but not promote.</p>
+        ) : null}
+        {open.map(channel => (
+          <label key={channel.id} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={allowed.includes(channel.name)}
+              onChange={event => {
+                toggleChannel(channel.name, event.target.checked);
+              }}
+            />
+            <span className="font-mono text-xs">{channel.name}</span>
+          </label>
+        ))}
+      </fieldset>
+      {creation.error ? <p className="text-sm text-destructive">{errorMessage(creation.error)}</p> : null}
+      <div className="flex gap-2">
+        <Button type="submit" pending={creation.isPending} className="w-fit text-sm">
+          Trust repository
+        </Button>
+        <Button type="button" variant="ghost" className="text-sm" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Trusted publishing: GitHub Actions jobs that may upload without a stored Mocco key. */
+function TrustPolicies(props: AppProps & { channels: readonly OtaChannelDto[] }) {
+  const { workspaceId, projectId, app, isAdmin, channels } = props;
+  const utils = trpc.useUtils();
+  const input = { workspaceId, projectId, appId: app.id };
+  const policiesQuery = trpc.ota.hosting.trustPolicies.list.useQuery(input);
+  const removal = trpc.ota.hosting.trustPolicies.delete.useMutation({
+    onSuccess: async () => {
+      await utils.ota.hosting.trustPolicies.list.invalidate(input);
+    },
+  });
+  const [isAdding, setIsAdding] = useState(false);
+  const policies = policiesQuery.data?.policies ?? [];
+  const firstChannel = policies[0]?.allowedChannels[0] ?? 'staging';
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">Trusted publishing</h2>
+          <p className="text-xs text-muted-foreground">
+            GitHub Actions jobs from these repositories and refs publish with their OIDC token: no Mocco key stored in
+            CI. Each gets a 15-minute upload session.
+          </p>
+        </div>
+        {isAdmin && !isAdding ? (
+          <Button
+            variant="outline"
+            className="shrink-0 text-sm"
+            onClick={() => {
+              setIsAdding(true);
+            }}>
+            Trust a repository
+          </Button>
+        ) : null}
+      </div>
+      {isAdding ? (
+        <TrustPolicyForm
+          workspaceId={workspaceId}
+          projectId={projectId}
+          app={app}
+          isAdmin={isAdmin}
+          channels={channels}
+          onDone={() => {
+            setIsAdding(false);
+          }}
+        />
+      ) : null}
+      <ul className="flex flex-col gap-2">
+        {policies.map(policy => (
+          <li key={policy.id} className="flex flex-col gap-1 rounded-xl border border-border px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">{policy.repository}</span>
+              {isAdmin ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Stop trusting ${policy.repository} ${policy.refPattern}`}
+                  pending={removal.isPending && removal.variables.policyId === policy.id}
+                  onClick={() => {
+                    removal.mutate({ ...input, policyId: policy.id });
+                  }}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+            <p className="font-mono text-xs text-muted-foreground">
+              id {policy.repositoryId} · {policy.refPattern}
+              {policy.workflowRef === null ? '' : ` · ${policy.workflowRef}`}
+              {policy.environment === null ? '' : ` · env ${policy.environment}`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {policy.allowedChannels.length === 0
+                ? 'Uploads only (no promotion).'
+                : `May promote to ${policy.allowedChannels.join(', ')}.`}
+            </p>
+          </li>
+        ))}
+      </ul>
+      {policies.length > 0 ? (
+        <pre aria-label="Workflow step" className="overflow-x-auto rounded-lg bg-muted/40 p-3 font-mono text-xs">
+          {workflowSnippet(app, firstChannel)}
+        </pre>
+      ) : null}
+      {removal.error ? <p className="text-sm text-destructive">{errorMessage(removal.error)}</p> : null}
+    </section>
+  );
+}
+
 function HostedApp(props: AppProps) {
   const { workspaceId, projectId, app } = props;
   const channelsQuery = trpc.ota.hosting.channels.list.useQuery({ workspaceId, projectId, appId: app.id });
@@ -662,6 +908,7 @@ function HostedApp(props: AppProps) {
       <SetupCard app={app} channels={channels} />
       <Certificates {...props} />
       <Channels {...props} channels={channels} />
+      <TrustPolicies {...props} channels={channels} />
       <Releases {...props} />
     </div>
   );
