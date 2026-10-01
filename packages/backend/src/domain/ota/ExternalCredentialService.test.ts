@@ -54,6 +54,7 @@ describe('External OTA credentials (pglite)', () => {
     audit = new AuditService({ audit: new AuditRepo(t.db) });
     box = new SecretBox([{ id: 'k1', key: randomBytes(32) }]);
     service = createOtaDomain(t.db, {
+      publicApiBase: 'https://mocco.test/api/ext/v1',
       projects: createProjectDomain(t.db).projects,
       approvals: createApprovalService(t.db, audit),
       audit,
@@ -118,6 +119,7 @@ describe('External OTA credentials (pglite)', () => {
 
   it('fails with a domain error when secret storage is not configured', async () => {
     const unconfigured = createOtaDomain(t.db, {
+      publicApiBase: 'https://mocco.test/api/ext/v1',
       projects: createProjectDomain(t.db).projects,
       approvals: createApprovalService(t.db, audit),
       audit,

@@ -47,3 +47,68 @@ export class SecretStorageUnavailableError extends BadRequestError {
     this.name = 'SecretStorageUnavailableError';
   }
 }
+
+/** OTA hosting serves a project's React Native app; other platforms can't host updates. */
+export class NotAReactNativeAppError extends BadRequestError {
+  constructor(appId: string, options?: ErrorOptions) {
+    super(`App ${appId} is not a React Native app, so it can't host OTA updates`, options);
+    this.name = 'NotAReactNativeAppError';
+  }
+}
+
+export class OtaAppNotFoundError extends NotFoundError {
+  constructor(appId: string, options?: ErrorOptions) {
+    super(`OTA app ${appId} was not found`, options);
+    this.name = 'OtaAppNotFoundError';
+  }
+}
+
+export class OtaAppAlreadyExistsError extends ConflictError {
+  constructor(options?: ErrorOptions) {
+    super('This app already hosts OTA updates', options);
+    this.name = 'OtaAppAlreadyExistsError';
+  }
+}
+
+export class OtaChannelNotFoundError extends NotFoundError {
+  constructor(channelId: string, options?: ErrorOptions) {
+    super(`OTA channel ${channelId} was not found`, options);
+    this.name = 'OtaChannelNotFoundError';
+  }
+}
+
+export class OtaChannelNameTakenError extends ConflictError {
+  constructor(name: string, options?: ErrorOptions) {
+    super(`The app already has a channel named "${name}"`, options);
+    this.name = 'OtaChannelNameTakenError';
+  }
+}
+
+export class OtaChannelChangedError extends ConflictError {
+  constructor(options?: ErrorOptions) {
+    super('The channel changed since you loaded it; reload and try again', options);
+    this.name = 'OtaChannelChangedError';
+  }
+}
+
+/** The PEM isn't a usable code-signing certificate (not X.509, not RSA, or expired). */
+export class InvalidSigningCertificateError extends BadRequestError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`The signing certificate can't be used: ${reason}`, options);
+    this.name = 'InvalidSigningCertificateError';
+  }
+}
+
+export class SigningCertificateExistsError extends ConflictError {
+  constructor(options?: ErrorOptions) {
+    super('This certificate is already registered for the app', options);
+    this.name = 'SigningCertificateExistsError';
+  }
+}
+
+export class SigningCertificateNotFoundError extends NotFoundError {
+  constructor(certificateId: string, options?: ErrorOptions) {
+    super(`Signing certificate ${certificateId} was not found`, options);
+    this.name = 'SigningCertificateNotFoundError';
+  }
+}

@@ -70,6 +70,9 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   /** The Mocco bot's token; every Discord REST call sends it. */
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  /** The public API host (ADR 0017), a bare authority such as `api.mocco.club`. Device-facing
+   * OTA URLs are built on it when set; also read by next.config.ts for the /v1 rewrite. */
+  PUBLIC_API_DOMAIN: z.string().min(1).optional(),
   // Object storage (platform foundations §10). `s3` covers AWS S3, Cloudflare R2, MinIO
   // and Supabase Storage's S3 endpoint; `filesystem` is for dev and single-box
   // self-host. Unset: filesystem locally, and not configured on Vercel.

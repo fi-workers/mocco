@@ -16,6 +16,7 @@
     "./jobs": "./src/jobs.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./ota": "./src/ota.ts",
+    "./ota-hosting": "./src/ota-hosting.ts",
     "./notification": "./src/notification.ts",
     "./notification-activity": "./src/notification-activity.ts",
     "./notification-presets": "./src/notification-presets.ts",

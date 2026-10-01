@@ -17,6 +17,8 @@ import type { ConnectionService } from '@backend/domain/integration/ConnectionSe
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
+import type { SigningService } from '@backend/domain/ota/SigningService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -55,6 +57,10 @@ export interface Context {
   versionPolicies: VersionPolicyService;
   /** Always present — sealed publishing tokens of the team's existing OTA tools. */
   externalCredentials: ExternalCredentialService;
+  /** Always present — Mocco-hosted OTA apps and channels (ADR 0021). */
+  otaHosting: OtaHostingService;
+  /** Always present — OTA code-signing certificates (ADR 0022). */
+  otaSigning: SigningService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

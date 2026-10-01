@@ -72,7 +72,12 @@ describe('VersionPolicyService (pglite)', () => {
     audit = new AuditService({ audit: new AuditRepo(t.db) });
     const project = createProjectDomain(t.db);
     approvals = createApprovalService(t.db, audit);
-    service = createOtaDomain(t.db, { projects: project.projects, approvals, audit }).versionPolicies;
+    service = createOtaDomain(t.db, {
+      publicApiBase: 'https://mocco.test/api/ext/v1',
+      projects: project.projects,
+      approvals,
+      audit,
+    }).versionPolicies;
     workspaceId = expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
     const created = await project.projects.create(workspaceId, { name: 'Acme', handle: 'acme' });
     projectId = created.id;
