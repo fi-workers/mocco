@@ -148,6 +148,13 @@
       "when": 1790853479844,
       "tag": "0020_flawless_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790854882311,
+      "tag": "0021_cynical_rhino",
+      "breakpoints": true
     }
   ]
 }

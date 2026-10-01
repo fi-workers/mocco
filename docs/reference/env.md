@@ -80,6 +80,10 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 `CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. See [Background jobs and schedules](./jobs.md#env).
 
+## Public API host
+
+`PUBLIC_API_DOMAIN` (a bare host such as `api.mocco.club`, read by `next.config.ts` at build time) serves the public API at `https://<that host>/v1/*`, rewritten to the ext app's `/api/ext/v1/*`. Unset, the API is only at `/api/ext/v1`. See [public API](./public-api.md).
+
 ## Storage vars
 
 `STORAGE_DRIVER` (`s3` or `filesystem`) picks the object store; see [object storage](./storage.md). Unset, local dev uses `filesystem` and Vercel has none.

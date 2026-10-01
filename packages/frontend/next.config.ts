@@ -11,5 +11,23 @@ const config: NextConfig = {
   // Bridge Vercel's server-only VERCEL_ENV to the client so the EnvironmentRibbon
   // can mark preview/dev tabs. Empty off-Vercel (local) → the ribbon shows "development".
   env: { NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? '' },
+  // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
+  // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
+  rewrites: async () => {
+    // Next matches `host` against the hostname (no port), as a regex.
+    const apiHostname = (process.env.PUBLIC_API_DOMAIN ?? '').split(':', 1)[0] ?? '';
+    if (apiHostname === '') {
+      return [];
+    }
+    const escaped = apiHostname.replaceAll('.', String.raw`\.`);
+    const pattern = `^${escaped}$`;
+    return {
+      beforeFiles: [
+        { source: '/v1/:path*', has: [{ type: 'host', value: pattern }], destination: '/api/ext/v1/:path*' },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 };
 export default config;

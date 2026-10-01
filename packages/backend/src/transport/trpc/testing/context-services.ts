@@ -4,6 +4,7 @@
 // OTA handlers registered on it. Not imported by production code.
 import { randomBytes } from 'node:crypto';
 
+import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createApprovalService } from '@backend/domain/governance/instance';
@@ -24,6 +25,7 @@ export function contextServices(db: Db) {
     ...project,
     approvals,
     ...ota,
+    apiKeys: createApiKeyService(db, { projects: project.projects, audit }),
     // Optional services default to absent; a test that exercises one passes it after the spread.
     connection: undefined,
     commitSync: undefined,

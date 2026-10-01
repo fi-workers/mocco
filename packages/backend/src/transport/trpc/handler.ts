@@ -1,5 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
+import { getApiKeys } from '@backend/domain/apikey/instance';
 import { getAudit } from '@backend/domain/audit/instance';
 import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
@@ -12,6 +13,7 @@ import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
+import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
@@ -46,6 +48,7 @@ export interface TrpcDeps extends Services {
   products: ProductEnablementService;
   versionPolicies: VersionPolicyService;
   externalCredentials: ExternalCredentialService;
+  apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -82,6 +85,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         products: deps.products,
         versionPolicies: deps.versionPolicies,
         externalCredentials: deps.externalCredentials,
+        apiKeys: deps.apiKeys,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -112,6 +116,7 @@ export function productionServices(): TrpcDeps {
     products: getProjectDomain().products,
     versionPolicies: getOtaDomain().versionPolicies,
     externalCredentials: getOtaDomain().externalCredentials,
+    apiKeys: getApiKeys(),
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

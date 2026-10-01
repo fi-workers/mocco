@@ -19,6 +19,7 @@ import { NotificationJobKinds } from '@backend/domain/notification/constants';
 import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { createFakeDiscordFetch, jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
+import { RateLimitJobKinds } from '@backend/domain/ratelimit/jobs';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
 import { StorageJobKinds } from '@backend/domain/storage/jobs';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
@@ -61,7 +62,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
 
-    expect(report).toMatchObject({ ran: 7, errors: [], outcomes: { succeeded: 7 } });
+    expect(report).toMatchObject({ ran: 8, errors: [], outcomes: { succeeded: 8 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -72,6 +73,7 @@ describe('job runtime composition (pglite)', () => {
         InboundJobKinds.republishStale,
         InboundJobKinds.prune,
         StorageJobKinds.gc,
+        RateLimitJobKinds.prune,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);

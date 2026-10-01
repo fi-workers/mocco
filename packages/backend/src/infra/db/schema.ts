@@ -1,3 +1,4 @@
+import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
@@ -25,6 +26,7 @@ import {
   primaryKey,
 } from 'drizzle-orm/pg-core';
 
+import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type {
@@ -1499,5 +1501,55 @@ export const objects = pgTable(
     check('mocco_objects_visibility_check', sql`${t.visibility} IN (${sqlInList(Object.values(Visibilities))})`),
     check('mocco_objects_status_check', sql`${t.status} IN (${sqlInList(Object.values(ObjectStatuses))})`),
     check('mocco_objects_size_check', sql`${t.sizeBytes} >= 0`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Public /v1 API (ADR 0017): project-scoped API keys and the rate limiter's counters.
+// ─────────────────────────────────────────────────────────────
+
+export const apiKeys = pgTable(
+  'mocco_api_keys',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    kind: text().$type<ApiKeyKind>().notNull(),
+    name: text().notNull(),
+    // SHA-256 (hex) of the full token; the token itself is shown once and never stored.
+    tokenHash: text('token_hash').notNull(),
+    last4: text().notNull(),
+    scopes: text().array().$type<ApiScope[]>().notNull(),
+    // SET NULL: a key outlives the person who created it.
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    lastUsedAt: timestamp('last_used_at'),
+    expiresAt: timestamp('expires_at'),
+    revokedAt: timestamp('revoked_at'),
+  },
+  t => [
+    uniqueIndex('mocco_api_keys_token_hash_uq').on(t.tokenHash),
+    index('mocco_api_keys_project_idx').on(t.workspaceId, t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_api_keys_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_api_keys_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ApiKeyKinds))})`),
+  ],
+);
+
+/** Fixed-window counters for the Postgres rate limiter: one row per bucket per window. */
+export const rateLimitCounters = pgTable(
+  'mocco_rate_limit_counters',
+  {
+    bucket: text().notNull(),
+    windowStart: timestamp('window_start').notNull(),
+    count: integer().notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.bucket, t.windowStart], name: 'mocco_rate_limit_counters_pk' }),
+    // The hourly prune scans by window.
+    index('mocco_rate_limit_counters_window_idx').on(t.windowStart),
   ],
 );
