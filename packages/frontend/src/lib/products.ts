@@ -25,6 +25,7 @@ export const ProjectSections = {
   overview: 'overview',
   ota: 'ota',
   otaTokens: 'otaTokens',
+  apiKeys: 'apiKeys',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
 
@@ -51,6 +52,7 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
   { key: ProjectSections.overview, label: 'Overview', href: Routes.project, product: null },
   { key: ProjectSections.ota, label: 'Force update', href: Routes.projectOta, product: Products.ota },
   { key: ProjectSections.otaTokens, label: 'OTA tokens', href: Routes.projectOtaTokens, product: Products.ota },
+  { key: ProjectSections.apiKeys, label: 'API keys', href: Routes.projectApiKeys, product: null },
 ];
 
 /** How each product is presented on the Products page. `available` = it has screens today. */
