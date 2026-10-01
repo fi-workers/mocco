@@ -1729,6 +1729,8 @@ export const otaUpdates = pgTable(
     manifestBody: text('manifest_body').notNull(),
     signature: text(),
     keyid: text(),
+    // The certificate the signature verified against (which runtimes depend on which key).
+    certificateId: uuid('certificate_id').references(() => otaSigningCertificates.id, { onDelete: 'set null' }),
     launchAssetHash: text('launch_asset_hash').notNull(),
     totalBytes: bigint('total_bytes', { mode: 'number' }).notNull(),
     createdAt,

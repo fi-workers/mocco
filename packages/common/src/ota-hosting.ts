@@ -432,3 +432,72 @@ export type ReleaseAdoptionDto = z.infer<typeof releaseAdoptionSchema>;
 
 /** A release's emergency-launch rate at or over this (with enough launches) alerts. */
 export const EMERGENCY_LAUNCH_ALERT = { minLaunches: 5, rate: 0.05 } as const;
+
+/** One entry of a channel's history (`mocco_ota_deployments`) — wire shape. */
+export const otaDeploymentSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(Object.values(OtaDeploymentKinds) as [OtaDeploymentKind, ...OtaDeploymentKind[]]),
+  releaseId: z.uuid().nullable(),
+  releaseMessage: z.string().nullable(),
+  gitSha: z.string().nullable(),
+  fromBp: z.number().nullable(),
+  toBp: z.number().nullable(),
+  actorUserId: z.uuid().nullable(),
+  actorName: z.string().nullable(),
+  actorPrincipal: z.string().nullable(),
+  approvalRequestId: z.uuid().nullable(),
+  reason: z.string().nullable(),
+  createdAt: z.date(),
+});
+export type OtaDeploymentDto = z.infer<typeof otaDeploymentSchema>;
+
+/** How far back a channel timeline reaches (`?range=` on the channel page). */
+export const TimelineRanges = { week: '7d', month: '30d', all: 'all' } as const;
+export type TimelineRange = (typeof TimelineRanges)[keyof typeof TimelineRanges];
+export const timelineRangeSchema = z.enum([TimelineRanges.week, TimelineRanges.month, TimelineRanges.all]);
+
+/** A release with its updates, where they're served, and its approval history. */
+export const otaReleaseDetailSchema = z.object({
+  release: otaReleaseSchema,
+  updates: z.array(
+    z.object({
+      id: z.uuid(),
+      platform: otaPlatformSchema,
+      kind: z.enum([OtaUpdateKinds.original, OtaUpdateKinds.republish]),
+      commitTime: z.date(),
+      totalBytes: z.number(),
+      keyid: z.string().nullable(),
+      /** For a republish: the update it lets devices roll back from. */
+      supersedesUpdateId: z.uuid().nullable(),
+    }),
+  ),
+  servedOn: z.array(
+    z.object({
+      channelId: z.uuid(),
+      channel: z.string(),
+      platform: otaPlatformSchema,
+      runtimeVersion: z.string(),
+      /** active: everyone outside a rollout; candidate: the rollout share. */
+      role: z.enum(['active', 'candidate']),
+      rolloutBp: z.number(),
+    }),
+  ),
+  approvals: z.array(
+    z.object({
+      requestId: z.uuid(),
+      channelId: z.uuid(),
+      kind: z.string(),
+      state: z.string(),
+      requestedByUserId: z.uuid().nullable(),
+      createdAt: z.date(),
+    }),
+  ),
+});
+export type OtaReleaseDetailDto = z.infer<typeof otaReleaseDetailSchema>;
+
+/** Which runtime versions depend on a certificate: updates it verified, per runtime. */
+export const certificateUsageSchema = z.object({
+  certificateId: z.uuid(),
+  runtimes: z.array(z.object({ runtimeVersion: z.string(), updates: z.number(), lastCommitTime: z.date() })),
+});
+export type CertificateUsageDto = z.infer<typeof certificateUsageSchema>;

@@ -11,15 +11,19 @@ tags: [customer, ota, force-update, guide]
 related:
   - ./force-update.md
   - ./pipeline.md
+  - ./hosted-updates.md
+  - ./migrate-to-hosted.md
 ---
 
 # OTA and force update
 
-Mocco puts the changes that reach your users' phones behind the same approvals as a production deploy. Two parts are available today, and each works on its own.
+Mocco puts the changes that reach your users' phones behind the same approvals as a production deploy. Three parts are available today, and each works on its own.
 
 **Force update** tells an app on an old store build to update. You set a minimum supported version (older builds must update), a recommended version (older builds see a prompt they can dismiss) and versions to block outright. The app asks Mocco on launch. Raising a version waits for approval when you require it; lowering one applies at once and is reviewed afterwards, so nobody waits for an approver during an incident. See [Force update](./force-update.md).
 
 **Gated OTA publishing** keeps your current OTA tool (EAS Update, a hosted CodePush service or hot-updater). Mocco holds the tool's publishing token and hands it only to a pipeline step that passed an approved gate, so an update can't go out without the approval, and every release is in the audit log. Nothing changes in your app. See [Release a token to your pipeline](./pipeline.md) and the guide for your tool.
+
+**Hosted OTA updates** serve your React Native app's updates from Mocco to the stock `expo-updates` client: signed in your CI, rolled out by percentage, promoted to protected channels through approvals, and rolled back instantly. See [Host OTA updates on Mocco](./hosted-updates.md), and [Move to Mocco-hosted OTA](./migrate-to-hosted.md) if you use CodePush or EAS Update today.
 
 ## Before you start
 

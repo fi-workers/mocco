@@ -7,6 +7,7 @@ import {
   OtaDeploymentKinds,
   OtaHostingApprovalSubjects,
   OtaReleaseStatuses,
+  TimelineRanges,
 } from '@mocco/common/ota-hosting';
 import { z } from 'zod';
 
@@ -39,6 +40,10 @@ import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.
 import type { ChannelStateCache } from '@backend/domain/ota/serving/state-cache';
 import type {
   OtaChannelHeadDto,
+  OtaDeploymentDto,
+  OtaReleaseDetailDto,
+  OtaReleaseDto,
+  TimelineRange,
   OtaDeploymentKind,
   OtaPlatform,
   PromotionPreview,
@@ -883,6 +888,75 @@ export class OtaChannelService {
       }),
     );
     return { channel: channel.name, releaseId: release.id, platforms };
+  }
+
+  /** A channel's history within `range`, newest first. */
+  async timeline(app: OtaAppRow, channelId: string, range: TimelineRange): Promise<OtaDeploymentDto[]> {
+    const channel = await this.requireChannel(app, channelId);
+    const days = range === TimelineRanges.week ? 7 : 30;
+    const since = range === TimelineRanges.all ? null : new Date(this.now().getTime() - days * 24 * 60 * 60 * 1000);
+    const rows = await this.deps.heads.listDeployments(channel.id, since);
+    return rows.map(({ deployment, releaseMessage, gitSha, actorName }) => ({
+      id: deployment.id,
+      kind: deployment.kind,
+      releaseId: deployment.releaseId,
+      releaseMessage,
+      gitSha,
+      fromBp: deployment.fromBp,
+      toBp: deployment.toBp,
+      actorUserId: deployment.actorUserId,
+      actorName,
+      actorPrincipal: deployment.actorPrincipal,
+      approvalRequestId: deployment.approvalRequestId,
+      reason: deployment.reason,
+      createdAt: deployment.createdAt,
+    }));
+  }
+
+  /** A release's updates, the channel heads serving it, and its channel-change requests. */
+  async releaseDetail(app: OtaAppRow, releaseId: string, release: OtaReleaseDto): Promise<OtaReleaseDetailDto> {
+    const updates = await this.deps.releases.listUpdatesOf(releaseId);
+    const ids = updates.map(update => update.id);
+    const serving = await this.deps.heads.listServing(app.id, ids);
+    const requests = await this.deps.approvals.list(app.workspaceId, {
+      subjectType: OtaHostingApprovalSubjects.channelChange,
+    });
+    return {
+      release,
+      updates: updates.map(update => ({
+        id: update.id,
+        platform: update.platform,
+        kind: update.kind,
+        commitTime: update.commitTime,
+        totalBytes: update.totalBytes,
+        keyid: update.keyid,
+        supersedesUpdateId: update.supersedesUpdateId,
+      })),
+      servedOn: serving.map(({ head, channel }) => ({
+        channelId: head.channelId,
+        channel,
+        platform: head.platform,
+        runtimeVersion: head.runtimeVersion,
+        role: head.candidateUpdateId !== null && ids.includes(head.candidateUpdateId) ? 'candidate' : 'active',
+        rolloutBp: head.rolloutBp,
+      })),
+      approvals: requests
+        .filter(request => {
+          const pinned = channelChangeSchema.safeParse(request.action);
+          if (!pinned.success) {
+            return false;
+          }
+          return pinned.data.kind === OtaDeploymentKinds.promote && pinned.data.releaseId === releaseId;
+        })
+        .map(request => ({
+          requestId: request.id,
+          channelId: request.subjectId,
+          kind: channelChangeSchema.parse(request.action).kind,
+          state: request.state,
+          requestedByUserId: request.requestedByUserId,
+          createdAt: request.createdAt,
+        })),
+    };
   }
 
   /** What every channel head of the app serves and rolls out now, and which rollbacks are pre-signed. */

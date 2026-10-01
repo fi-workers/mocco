@@ -141,6 +141,15 @@ export class OtaReleaseRepo {
     return row;
   }
 
+  /** All of a release's updates (originals and pre-signed republishes), oldest first. */
+  async listUpdatesOf(releaseId: string) {
+    return await this.db
+      .select()
+      .from(schema.otaUpdates)
+      .where(eq(schema.otaUpdates.releaseId, releaseId))
+      .orderBy(schema.otaUpdates.commitTime);
+  }
+
   async findUpdate(id: string) {
     const [row] = await this.db.select().from(schema.otaUpdates).where(eq(schema.otaUpdates.id, id));
     return row;
@@ -156,7 +165,11 @@ export class OtaReleaseRepo {
   }
 
   /** The app's releases, newest first, with platforms and download size from their original updates. */
-  async listByApp(workspaceId: string, appId: string, limit = 50): Promise<OtaReleaseSummary[]> {
+  async listByApp(
+    workspaceId: string,
+    appId: string,
+    opts: { limit?: number; releaseId?: string } = {},
+  ): Promise<OtaReleaseSummary[]> {
     const rows = await this.db
       .select({
         release: schema.otaReleases,
@@ -173,10 +186,16 @@ export class OtaReleaseRepo {
           eq(schema.otaUpdates.kind, OtaUpdateKinds.original),
         ),
       )
-      .where(and(eq(schema.otaReleases.workspaceId, workspaceId), eq(schema.otaReleases.appId, appId)))
+      .where(
+        and(
+          eq(schema.otaReleases.workspaceId, workspaceId),
+          eq(schema.otaReleases.appId, appId),
+          opts.releaseId === undefined ? undefined : eq(schema.otaReleases.id, opts.releaseId),
+        ),
+      )
       .groupBy(schema.otaReleases.id)
       .orderBy(desc(schema.otaReleases.createdAt))
-      .limit(limit);
+      .limit(opts.limit ?? 50);
     return rows.map(row => ({
       ...row.release,
       platforms: row.platforms ?? [],

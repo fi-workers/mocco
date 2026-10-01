@@ -1,5 +1,5 @@
 import { CertificateStatuses } from '@mocco/common/ota-hosting';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
@@ -58,6 +58,20 @@ export class SigningCertificateRepo {
         ),
       );
     return getOrThrow(rows, `Signing certificate ${id} was not found`);
+  }
+
+  /** Per certificate and runtime version: how many of the app's updates it verified, and the latest. */
+  async listUsage(appId: string) {
+    return await this.db
+      .select({
+        certificateId: schema.otaUpdates.certificateId,
+        runtimeVersion: schema.otaUpdates.runtimeVersion,
+        updates: sql<number>`count(*)::int`,
+        lastCommitTime: sql<Date>`max(${schema.otaUpdates.commitTime})`,
+      })
+      .from(schema.otaUpdates)
+      .where(and(eq(schema.otaUpdates.appId, appId), isNotNull(schema.otaUpdates.certificateId)))
+      .groupBy(schema.otaUpdates.certificateId, schema.otaUpdates.runtimeVersion);
   }
 
   async retire(id: string) {
