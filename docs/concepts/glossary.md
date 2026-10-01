@@ -4,7 +4,7 @@ description: Disambiguates easily-confused Mocco, GitHub Actions, and GitLab CI 
 type: concept
 status: active
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [concept, glossary, terminology]
@@ -38,6 +38,13 @@ related:
 - **Approve ≡ Resume** — approval is not a separate concept; it is "an authorized person resuming a gate." All recorded in the audit log.
 - **Role** — the unit of resume authority. **People belong to a role, and you put the role into a gate's requirements.** e.g., gate = `SRE ×2 AND Security ×1`. Role membership is managed in Access.
 - **prevent_self** — the commit author/committer/triggerer cannot resume their own gate.
+
+## Feature flags
+
+- **Flag target** — an evaluation scope: a named ruleset plus the SDK keys bound to it, labelled "Environment" in the UI. It carries no governance meaning; a target is *protected* only when it has a change gate. → [ADR 0023](../adr/0023-flag-targets-are-evaluation-scopes.md)
+- **Changeset** — one proposed change to a target's flags (or segments) with its diff. On an unprotected target it applies at once; on a protected one it is an approval request under the target's change gate.
+- **Kill** — the one-way emergency action: the flag serves its declared off variant to everyone, at once, without waiting for an approver (audited, reviewed afterwards). Restoring is a normal, gated change. → [ADR 0024](../adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)
+- **Off variant** — the variant a flag declares as its safe value; what Kill serves. Distinct from *disabled*, which makes SDKs return the caller's code default.
 
 ## Core — authorization and enforcement (vendor-neutral)
 

@@ -36,6 +36,8 @@ related:
 | [0020](./0020-approvals-outside-pipeline-runs.md) | Approvals outside pipeline runs | draft | 2026-10-01 |
 | [0021](./0021-ota-client-is-expo-updates-protocol-v1.md) | The OTA client contract is the Expo Updates protocol v1 | draft | 2026-10-01 |
 | [0022](./0022-ota-signing-key-stays-in-ci.md) | OTA code signing: the key stays in CI, rollbacks are pre-signed | draft | 2026-10-01 |
+| [0023](./0023-flag-targets-are-evaluation-scopes.md) | Flag targets are evaluation scopes, not governance types | draft | 2026-10-02 |
+| [0024](./0024-flags-openfeature-flagd-ruleset-ofrep.md) | Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs | draft | 2026-10-02 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 

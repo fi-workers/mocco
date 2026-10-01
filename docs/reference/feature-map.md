@@ -79,7 +79,22 @@ The first product after deploy governance, in phases set by the [OTA release con
 |---|---|---|
 | Version policy and native force update | **Live** | Minimum, recommended and blocked versions per store app; tighten changes gated, relax changes reviewed after. See [OTA version policy](./ota-version-policy.md) |
 | Gate existing OTA tools | **Live** | Mocco holds the EAS / CodePush / hot-updater publishing token and releases it only to a step behind a resumed gate. See [OTA external credentials](./ota-external-credentials.md) |
-| Hosted Expo Updates | Not drawn | Mocco serves updates to the stock `expo-updates` client (ADR 0021); the key stays in CI (ADR 0022); promotions to protected channels need approval (ADR 0020) |
+| Hosted Expo Updates | **Live** (in review) | Mocco serves updates to the stock `expo-updates` client (ADR 0021); the key stays in CI (ADR 0022); promotions to protected channels need approval (ADR 0020). See [Mocco-hosted OTA](./ota-hosting.md) |
+
+### Product line 2 — Feature flags (#101)
+
+Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-design.md), [ADR 0023](../adr/0023-flag-targets-are-evaluation-scopes.md) and [ADR 0024](../adr/0024-flags-openfeature-flagd-ruleset-ofrep.md).
+
+| Feature | Status | Description |
+|---|---|---|
+| Flag targets ("Environments") | Not drawn | Evaluation scopes with bound SDK keys; protected by an attached change gate |
+| Flags, variants and targeting | Not drawn | Boolean, string, number and JSON flags; rules on context attributes, segments, percentage rollout (`mocco-v1` bucketing) |
+| Governed changesets | Not drawn | Changes to a protected target are approval requests with a diff (ADR 0020) |
+| Kill switch | Not drawn | One-way, ungated, audited; restore is gated |
+| Server SDK (local evaluation) | Not drawn | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
+| Client SDKs (OFREP) | Not drawn | Web and React Native OpenFeature providers on OFREP bulk evaluation; SSE streaming |
+| Telemetry and stale flags | Not drawn | Aggregated evaluation counts; flags no code evaluates any more |
+| Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate |
 
 ### Deploy loop depth
 
