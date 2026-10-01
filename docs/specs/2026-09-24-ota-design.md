@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-10-01
 confidence: medium
 owner: andrea
 tags: [spec, design, ota]
@@ -391,6 +391,8 @@ packages/backend/src/
 ## 6. Public API / SDK surface
 
 ### 6.1 Update check (Expo Updates protocol v1)
+
+> Confirmed against the expo-updates source in [ADR 0021](../adr/0021-ota-client-is-expo-updates-protocol-v1.md), with two corrections to this section: the client's default `keyid` is `"root"`, and an unsigned 204 is accepted even with code signing enforced, so a pre-signed `noUpdateAvailable` directive is optional.
 
 `GET /api/ext/v1/ota/apps/:appId/manifest`
 

@@ -33,6 +33,9 @@ related:
 | [0017](./0017-public-v1-api-keys-and-sdk-licensing.md) | Public /v1 API, publishable and secret keys, and MIT SDKs | draft | 2026-10-01 |
 | [0018](./0018-domain-events-vs-audit-log.md) | Domain events are separate from the audit log | draft | 2026-09-25 |
 | [0019](./0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md) | Inbound webhooks use per-source ingest URLs with mandatory signatures | draft | 2026-09-25 |
+| [0020](./0020-approvals-outside-pipeline-runs.md) | Approvals outside pipeline runs | draft | 2026-10-01 |
+| [0021](./0021-ota-client-is-expo-updates-protocol-v1.md) | The OTA client contract is the Expo Updates protocol v1 | draft | 2026-10-01 |
+| [0022](./0022-ota-signing-key-stays-in-ci.md) | OTA code signing: the key stays in CI, rollbacks are pre-signed | draft | 2026-10-01 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 
