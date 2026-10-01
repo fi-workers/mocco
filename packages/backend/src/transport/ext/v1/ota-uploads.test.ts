@@ -174,6 +174,50 @@ describe('/v1/ota uploads (pglite + filesystem store)', () => {
     expect(directives).toMatchObject([{ type: 'rollBackToEmbedded', supersedesUpdateId: updates.ios }]);
   });
 
+  it('pre-signs one republish per distinct channel head, also when channels share or differ', async () => {
+    const first = await publish(manifestOf());
+    await ota.otaUploads.verifyAssets(first.releaseId);
+    const second = await publish(manifestOf());
+    await ota.otaUploads.verifyAssets(second.releaseId);
+    const [one, two] = await t.db.select().from(otaUpdates);
+    const appRow = await ota.otaHosting.requireApp(workspaceId, projectId, otaAppId);
+    const channels = await Promise.all(
+      ['staging', 'beta', 'production'].map(
+        async name => await ota.otaHosting.createChannel(appRow, ownerId, { name, policy: null }),
+      ),
+    );
+    // staging and beta serve the same update; production serves another.
+    await t.db.insert(otaChannelHeads).values(
+      channels.map((channel, index) => ({
+        workspaceId,
+        channelId: channel.id,
+        platform: OtaPlatforms.ios,
+        runtimeVersion: RUNTIME,
+        activeUpdateId: index < 2 ? (one?.id ?? '') : (two?.id ?? ''),
+        rolloutSalt: 'salt',
+      })),
+    );
+
+    const session = await newSession();
+    const declared = await declare(session, [bundle, image]);
+    expect(declared.rollbackTargets.map(target => target.channel)).toHaveLength(2);
+    expect(declared.rollbackTargets.map(target => target.channel)).toEqual(
+      expect.arrayContaining(['production', 'staging, beta']),
+    );
+    const createdAt = new Date();
+    const manifest = manifestOf({ createdAt });
+    const later = new Date(createdAt.getTime() + 1).toISOString();
+    const response = await finalize(session, declared.releaseId, {
+      updates: [{ platform: OtaPlatforms.ios, body: manifest, signature: signBody(manifest) }],
+      republishes: declared.rollbackTargets.map(target => {
+        const body = JSON.stringify({ ...(JSON.parse(target.manifest) as object), id: randomUUID(), createdAt: later });
+        return { platform: OtaPlatforms.ios, targetUpdateId: target.updateId, body, signature: signBody(body) };
+      }),
+    });
+
+    expect(response.status).toBe(200);
+  });
+
   it('fails releases abandoned before finalize once their session has expired', async () => {
     const session = await newSession();
     const declared = await declare(session, [bundle]);

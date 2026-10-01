@@ -1726,8 +1726,10 @@ export const otaUpdates = pgTable(
     createdAt,
   },
   t => [
+    // One original per platform, and one republish per (platform, update it re-dates) —
+    // several channels can serve different updates a rollback must return to.
     unique('mocco_ota_updates_release_platform_kind_uq')
-      .on(t.releaseId, t.platform, t.kind, t.supersedesUpdateId)
+      .on(t.releaseId, t.platform, t.kind, t.supersedesUpdateId, t.contentOfUpdateId)
       .nullsNotDistinct(),
     index('mocco_ota_updates_app_platform_runtime_idx').on(t.appId, t.platform, t.runtimeVersion, t.commitTime),
     foreignKey({
@@ -1926,6 +1928,9 @@ export const otaUploadSessions = pgTable(
     trustPolicyId: uuid('trust_policy_id').references(() => otaTrustPolicies.id, { onDelete: 'set null' }),
     // Channels the session may promote to; null for any unprotected one (a key or a broker run).
     allowedChannels: text('allowed_channels').array(),
+    // The person the session acts for (the key's creator, the run's trigger), so a
+    // request from CI can't be approved by that same person.
+    actingUserId: uuid('acting_user_id').references(() => users.id, { onDelete: 'set null' }),
     releaseId: uuid('release_id').references(() => otaReleases.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at').notNull(),
     createdAt,

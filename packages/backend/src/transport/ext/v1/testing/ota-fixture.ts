@@ -31,6 +31,7 @@ import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createStorageRoutes } from '@backend/transport/ext/storage';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { OtaDomain } from '@backend/domain/ota/instance';
 import type { OtaPlatform, UploadResponse } from '@mocco/common/ota-hosting';
@@ -70,7 +71,7 @@ export interface ManifestOptions {
   launch?: FakeAsset;
 }
 
-export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey } = {}) {
+export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; events?: EventPublisher } = {}) {
   const t: TestDb = await createTestDb();
   const root = await mkdtemp(path.join(tmpdir(), 'mocco-ota-'));
   const signer = new StorageUrlSigner('ota-test-key');
@@ -96,6 +97,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey } =
     storage,
     queue,
     ...(options.oidcKeys !== undefined && { oidcKeys: options.oidcKeys }),
+    ...(options.events !== undefined && { events: options.events }),
   });
   const apiKeys = createApiKeyService(t.db, { projects, audit });
   const app = new Hono()
@@ -229,6 +231,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey } =
     t,
     app,
     ota,
+    approvals,
     enqueued,
     workspaceId,
     ownerId,

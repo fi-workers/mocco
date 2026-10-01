@@ -5,6 +5,7 @@
 // problem+json whose `detail` says exactly what to fix, so the CLI can print it as is.
 import { ApiScopes } from '@mocco/common/apikey';
 import {
+  ChannelPolicyOutcomes,
   finalizeRequestSchema,
   oidcExchangeRequestSchema,
   promotionRequestSchema,
@@ -28,6 +29,7 @@ import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
 import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
+import type { PromotionResult } from '@mocco/common/ota-hosting';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
@@ -35,7 +37,12 @@ export interface OtaUploadDeps {
   uploads: Pick<UploadService, 'createSession' | 'authenticate' | 'beginRelease' | 'finalize'>;
   channels: Pick<
     OtaChannelService,
-    'promoteAsKey' | 'releaseStatusAsKey' | 'promoteAsSession' | 'releaseStatusAsSession'
+    | 'promoteAsKey'
+    | 'releaseStatusAsKey'
+    | 'promoteAsSession'
+    | 'releaseStatusAsSession'
+    | 'promotionState'
+    | 'requireKeyApp'
   >;
   trustPolicies: Pick<TrustPolicyService, 'exchange'>;
 }
@@ -45,6 +52,14 @@ interface SessionEnv {
 }
 
 const BEARER = 'Bearer ';
+
+/** 201 when heads changed, 202 when a protected channel's approval is pending, 200 for a no-op. */
+function statusOfPromotion(result: PromotionResult): 200 | 201 | 202 {
+  if (result.outcome === ChannelPolicyOutcomes.pendingApproval) {
+    return 202;
+  }
+  return result.changed ? 201 : 200;
+}
 
 /** A domain error as problem+json; anything else is rethrown to the ext error handler. */
 function problemOfError(error: unknown): Response {
@@ -170,7 +185,17 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
         data.channel,
         data.reason,
       );
-      return c.json(result, result.changed ? 201 : 200);
+      return c.json(result, statusOfPromotion(result));
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  // A promotion request's state, so CI can wait for its approval (`promote --wait`).
+  app.get('/apps/:appId/promotions/:requestId', ciKey, async c => {
+    try {
+      const appRow = await ota.channels.requireKeyApp(c.var.principal, c.req.param('appId'));
+      return c.json(await ota.channels.promotionState(appRow.id, c.req.param('requestId')));
     } catch (error) {
       return problemOfError(error);
     }
@@ -212,7 +237,15 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
         data.channel,
         data.reason,
       );
-      return c.json(result, result.changed ? 201 : 200);
+      return c.json(result, statusOfPromotion(result));
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  sessions.get('/:releaseId/promotions/:requestId', async c => {
+    try {
+      return c.json(await ota.channels.promotionState(c.var.session.appId, c.req.param('requestId')));
     } catch (error) {
       return problemOfError(error);
     }

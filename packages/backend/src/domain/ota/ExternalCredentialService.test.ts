@@ -141,6 +141,7 @@ describe('External OTA credentials (pglite)', () => {
       const issued = await provider().issue({
         workspaceId,
         runId: RUN_ID,
+        triggeredByUserId: null,
         provider: 'ota-eas',
         role: 'prod',
         ttlSeconds: 900,
@@ -152,6 +153,7 @@ describe('External OTA credentials (pglite)', () => {
         provider().issue({
           workspaceId: other.workspaceId,
           runId: RUN_ID,
+          triggeredByUserId: null,
           provider: 'ota-eas',
           role: 'prod',
           ttlSeconds: 900,
@@ -162,7 +164,14 @@ describe('External OTA credentials (pglite)', () => {
     it("does not release another tool's credential under the same name", async () => {
       await service.create(workspaceId, projectId, userId, { tool: OtaTools.codepush, name: 'prod', secret: SECRET });
       await expect(
-        provider().issue({ workspaceId, runId: RUN_ID, provider: 'ota-eas', role: 'prod', ttlSeconds: 900 }),
+        provider().issue({
+          workspaceId,
+          runId: RUN_ID,
+          triggeredByUserId: null,
+          provider: 'ota-eas',
+          role: 'prod',
+          ttlSeconds: 900,
+        }),
       ).rejects.toBeInstanceOf(CredentialUnavailableError);
     });
 
@@ -178,7 +187,14 @@ describe('External OTA credentials (pglite)', () => {
         secretFingerprint: rowA.secretFingerprint,
       });
       await expect(
-        provider().issue({ workspaceId, runId: RUN_ID, provider: 'ota-eas', role: 'b', ttlSeconds: 900 }),
+        provider().issue({
+          workspaceId,
+          runId: RUN_ID,
+          triggeredByUserId: null,
+          provider: 'ota-eas',
+          role: 'b',
+          ttlSeconds: 900,
+        }),
       ).rejects.toBeInstanceOf(CredentialUnavailableError);
     });
   });

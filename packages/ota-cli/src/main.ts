@@ -21,16 +21,18 @@ const USAGE = `Usage:
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
 
-  mocco-ota publish [--channel <name>] [--oidc] [--platform ios|android|all] [--message <text>]
+  mocco-ota publish [--channel <name> [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
                     [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
-      Export, upload and finalize a signed release; with --channel, promote it once ready.
+      Export, upload and finalize a signed release; with --channel, promote it once ready
+      (--wait waits for approval on a protected channel, within the 15-minute session).
       Authenticates with MOCCO_API_KEY (a secret key with ota:write), or with --oidc in
       GitHub Actions (trusted publishing; the default there when MOCCO_API_KEY is unset).
       Signs with MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
 
-  mocco-ota promote --release <id> --channel <name> [--project .]
-      Point an unprotected channel at a ready release. Needs MOCCO_API_KEY.
+  mocco-ota promote --release <id> --channel <name> [--wait] [--project .]
+      Point a channel at a ready release; a protected channel gets an approval request
+      (--wait waits for the decision). Needs MOCCO_API_KEY.
 `;
 
 const run = promisify(execFile);
@@ -167,6 +169,7 @@ async function runPromote(args: readonly string[]): Promise<void> {
     options: {
       release: { type: 'string' },
       channel: { type: 'string' },
+      wait: { type: 'boolean', default: false },
       'app-id': { type: 'string' },
       'api-url': { type: 'string' },
       project: { type: 'string', default: '.' },
@@ -176,7 +179,15 @@ async function runPromote(args: readonly string[]): Promise<void> {
     throw new CliError('--release and --channel are required');
   }
   const { appId, apiBase } = await targetOf(path.resolve(values.project), values);
-  await promote({ apiBase, appId, apiKey: apiKeyOf(), releaseId: values.release, channel: values.channel, log });
+  await promote({
+    apiBase,
+    appId,
+    apiKey: apiKeyOf(),
+    releaseId: values.release,
+    channel: values.channel,
+    isWaitingForApproval: values.wait,
+    log,
+  });
 }
 
 async function runPublish(args: readonly string[]): Promise<void> {
@@ -185,6 +196,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
     options: {
       platform: { type: 'string', default: 'all' },
       channel: { type: 'string' },
+      wait: { type: 'boolean', default: false },
       oidc: { type: 'boolean', default: false },
       message: { type: 'string' },
       mandatory: { type: 'boolean', default: false },
@@ -220,7 +232,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
     gitSha: values['git-sha'] ?? process.env.GITHUB_SHA ?? (await gitOutput(projectDir, ['rev-parse', 'HEAD'])),
     isMandatory: values.mandatory,
     expoConfig: expo,
-    ...(values.channel !== undefined && { channel: values.channel }),
+    ...(values.channel !== undefined && { channel: values.channel, isWaitingForApproval: values.wait }),
     log,
   });
   log(

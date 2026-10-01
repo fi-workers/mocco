@@ -31,12 +31,12 @@ export function createNotificationService(deps: NotificationSubscriberDeps): Not
 
 /**
  * Subscribe the fan-out to every event family a rule can name: governance (`gate.*`,
- * `run.*`) and the inbound sources (`sentry.*`, `vercel.*`, `github.*`). A prefix with
+ * `run.*`), the inbound sources (`sentry.*`, `vercel.*`, `github.*`) and OTA (`ota.*`). A prefix with
  * no catalog types yet simply receives nothing until its types join the catalog.
  */
 export function registerNotificationSubscribers(bus: EventBus, deps: NotificationSubscriberDeps): void {
   const notifications = createNotificationService(deps);
-  const { gate, run, sentry, vercel, github } = NotificationSubscribers;
+  const { gate, run, sentry, vercel, github, ota } = NotificationSubscribers;
   bus.subscribe(gate.pattern, gate.name, async event => {
     await notifications.handle(event);
   });
@@ -50,6 +50,9 @@ export function registerNotificationSubscribers(bus: EventBus, deps: Notificatio
     await notifications.handle(event);
   });
   bus.subscribe(github.pattern, github.name, async event => {
+    await notifications.handle(event);
+  });
+  bus.subscribe(ota.pattern, ota.name, async event => {
     await notifications.handle(event);
   });
 }

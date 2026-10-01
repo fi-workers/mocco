@@ -27,8 +27,10 @@ export interface PublishOptions {
   isMandatory: boolean;
   /** The static Expo config, served to the app as `extra.expoClient`. */
   expoConfig: Record<string, unknown>;
-  /** Promote to this unprotected channel once Mocco has verified the release. */
+  /** Promote to this channel once Mocco has verified the release (a protected one asks for approval). */
   channel?: string;
+  /** On a protected channel, wait for the approval (the session must still be valid). */
+  isWaitingForApproval?: boolean;
   log?: (line: string) => void;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -138,7 +140,11 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
   );
   if (options.channel !== undefined) {
     log(`Waiting for Mocco to verify the assets before promoting to ${options.channel}…`);
-    await promoteWithSession(api, { session, releaseId: result.releaseId, channel: options.channel }, { log });
+    await promoteWithSession(
+      api,
+      { session, releaseId: result.releaseId, channel: options.channel },
+      { log, isWaitingForApproval: options.isWaitingForApproval === true },
+    );
   }
   return { ...result, uploadedBytes, reusedAssets: files.length - declared.missing.length };
 }

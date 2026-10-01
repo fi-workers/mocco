@@ -65,6 +65,15 @@ export class MoccoApi {
     );
   }
 
+  /** A promotion request's approval state (`pending` until someone decides). */
+  async promotionState(path: string, token: string): Promise<{ requestId: string; state: string }> {
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { headers: { authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      throw await errorOf(response, 'Reading the approval request');
+    }
+    return (await response.json()) as { requestId: string; state: string };
+  }
+
   /** Exchange a GitHub Actions OIDC token for an upload session (trusted publishing). */
   async exchangeOidc(appId: string, idToken: string): Promise<string> {
     const response = await this.fetchImpl(`${this.baseUrl}/ota/auth/oidc`, {

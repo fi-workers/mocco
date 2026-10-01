@@ -75,6 +75,8 @@ export interface SessionGrant {
   principal: string;
   apiKeyId?: string;
   trustPolicyId?: string;
+  /** The person the session acts for, if any (a key's creator, a run's trigger). */
+  actingUserId: string | null;
   /** Channels it may promote to; null for any unprotected one. */
   allowedChannels: string[] | null;
   /** Capped at 15 minutes. */
@@ -272,6 +274,10 @@ export class UploadService {
       originals.set(update.platform, { id: manifest.id, createdAt: new Date(manifest.createdAt) });
       this.addUpdate(content, app, release, update, manifest, { contentOf: manifest.id, supersedes: null });
     }, Promise.resolve());
+    const targets = input.republishes.map(republish => `${republish.platform}:${republish.targetUpdateId}`);
+    if (new Set(targets).size !== targets.length) {
+      throw new OtaUploadRejectedError('Each rollback target needs one republish per platform');
+    }
     await input.republishes.reduce(async (previous, republish) => {
       await previous;
       await this.addRepublish(content, app, release, republish, originals);
@@ -433,6 +439,7 @@ export class UploadService {
       apiKeyId: grant.apiKeyId ?? null,
       trustPolicyId: grant.trustPolicyId ?? null,
       allowedChannels: grant.allowedChannels,
+      actingUserId: grant.actingUserId,
       expiresAt,
       createdAt: this.now(),
     });
@@ -461,6 +468,7 @@ export class UploadService {
     return await this.mintSession(app, {
       principal: `apikey:${principal.keyId}`,
       apiKeyId: principal.keyId,
+      actingUserId: principal.createdByUserId,
       allowedChannels: null,
     });
   }
@@ -530,7 +538,20 @@ export class UploadService {
         return { hash: asset.hash, putUrl: upload.url, headers: upload.headers };
       }),
     );
-    const rollbackTargets = await this.deps.releases.listActiveHeads(app.id, input.runtimeVersion, input.platforms);
+    const heads = await this.deps.releases.listActiveHeads(app.id, input.runtimeVersion, input.platforms);
+    // One target per (platform, update): channels serving the same update share its republish.
+    const rollbackTargets = heads
+      .filter(
+        (head, index) =>
+          heads.findIndex(other => other.platform === head.platform && other.updateId === head.updateId) === index,
+      )
+      .map(head => ({
+        ...head,
+        channel: heads
+          .filter(other => other.platform === head.platform && other.updateId === head.updateId)
+          .map(other => other.channel)
+          .join(', '),
+      }));
     return { releaseId: release.id, assetBaseUrl: app.assetBaseUrl, missing, rollbackTargets };
   }
 
@@ -581,9 +602,12 @@ export class UploadService {
       isStored = await this.deps.releases.storeFinalized(release.id, content);
     } catch (error) {
       if (error instanceof UniqueConstraintError) {
-        throw new OtaUploadRejectedError('An update id in this release was used before; sign manifests with new ids', {
-          cause: error,
-        });
+        throw new OtaUploadRejectedError(
+          error.constraint === 'mocco_ota_updates_pkey'
+            ? 'An update id in this release was used before; sign manifests with new ids'
+            : `The release's updates conflict (${error.constraint})`,
+          { cause: error },
+        );
       }
       throw error;
     }

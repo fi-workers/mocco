@@ -22,6 +22,7 @@ export class MoccoOtaProvider implements CredentialProvider {
     }
     const session = await this.deps.uploads.mintSession(app, {
       principal: `mocco:run:${request.runId}`,
+      actingUserId: request.triggeredByUserId,
       allowedChannels: null,
       ttlSeconds: request.ttlSeconds,
     });

@@ -191,6 +191,7 @@ export class CredentialBroker {
       credentials = await this.deps.provider.issue({
         workspaceId: run.workspaceId,
         runId: run.id,
+        triggeredByUserId: run.triggeredByUserId,
         provider: credential.provider,
         role: credential.role,
         ttlSeconds: credential.ttl,

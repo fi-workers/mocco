@@ -170,7 +170,7 @@ describe('Expo Updates manifest endpoint (golden protocol tests)', () => {
     expect(unknown.status).toBe(404);
   });
 
-  it('promotes from CI only ready, newer releases to unprotected channels, and audits it', async () => {
+  it('promotes from CI only ready, newer releases, asks for approval on a protected channel, and audits it', async () => {
     const first = await f.publish();
     const promotionUrl = `${API}/ota/apps/${f.otaAppId}/releases/${first.releaseId}/promotions`;
     const promote = async (channel: string, url = promotionUrl) =>
@@ -198,8 +198,12 @@ describe('Expo Updates manifest endpoint (golden protocol tests)', () => {
       name: 'production',
       policy: { resume: [{ role: 'mobile-release', count: 1 }], prevent_self: true, reason_required: false },
     });
+    // A protected channel takes an approval request, and serves nothing until it's approved.
     const isProtected = await promote('production');
-    expect(isProtected.status).toBe(403);
+    expect(isProtected.status).toBe(202);
+    expect(await isProtected.json()).toMatchObject({ outcome: 'pending_approval', requestId: expect.any(String) });
+    const served = await check({ 'expo-channel-name': 'production' });
+    expect(served.status).toBe(204);
     const audit = await f.t.db.select().from(auditLog);
     expect(audit.filter(entry => entry.action === AuditActions.otaChannelChanged)).toHaveLength(2);
   });

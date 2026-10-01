@@ -380,6 +380,140 @@ function ServingLine({ workspaceId, projectId, app, channel }: AppProps & { chan
   );
 }
 
+const formatBytes = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+/** The pinned action of a promotion request (what the handler will apply). */
+const pinnedPromotionSchema = z.object({
+  releaseId: z.uuid(),
+  reason: z.string().nullable(),
+  principal: z.string().nullable(),
+});
+
+/** The release, its size and what it would change on the channel. */
+function PromotionDiff(props: AppProps & { channel: OtaChannelDto; releaseId: string }) {
+  const { workspaceId, projectId, app, channel, releaseId } = props;
+  const previewQuery = trpc.ota.hosting.channels.previewPromotion.useQuery({
+    workspaceId,
+    projectId,
+    appId: app.id,
+    channelId: channel.id,
+    releaseId,
+  });
+  const preview = previewQuery.data;
+  if (preview === undefined) {
+    return null;
+  }
+  return (
+    <ul className="flex flex-col gap-0.5 font-mono text-xs text-muted-foreground">
+      {preview.platforms.map(platform => (
+        <li key={platform.platform}>
+          {platform.platform}:{' '}
+          {platform.replacesUpdateId === null ? 'first update on this channel' : 'replaces the current update'} ·{' '}
+          {platform.newAssets} new asset(s), {formatBytes(platform.newBytes)} to download
+          {platform.removedAssets > 0 ? ` · ${platform.removedAssets} dropped` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Promotions to a protected channel waiting for approval, with what they'd ship. */
+function PendingPromotionRequests(props: AppProps & { channel: OtaChannelDto }) {
+  const { workspaceId, projectId, app, channel } = props;
+  const utils = trpc.useUtils();
+  const input = { workspaceId, projectId, appId: app.id };
+  const requestsQuery = trpc.approval.list.useQuery({
+    workspaceId,
+    subjectType: OtaHostingApprovalSubjects.channelChange,
+    subjectId: channel.id,
+    state: ApprovalStates.pending,
+  });
+  const releasesQuery = trpc.ota.hosting.releases.list.useQuery(input);
+  const vote = trpc.approval.vote.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.approval.list.invalidate({ workspaceId }),
+        utils.ota.hosting.channels.heads.invalidate(input),
+      ]);
+    },
+  });
+  const { data: session } = useSession();
+  const myUserId = session?.user.id ?? null;
+  const requests = requestsQuery.data?.requests ?? [];
+  if (requests.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {requests.map(request => {
+        const pinned = pinnedPromotionSchema.safeParse(request.action);
+        const releaseId = pinned.success ? pinned.data.releaseId : null;
+        const release = releasesQuery.data?.releases.find(candidate => candidate.id === releaseId);
+        const isMine = request.requirements.prevent_self && myUserId !== null && request.requestedByUserId === myUserId;
+        return (
+          <div
+            key={request.id}
+            className="flex flex-col gap-2 rounded-lg border border-amber-600/30 bg-amber-500/5 p-3">
+            <p className="text-sm">
+              <StatusBadge tone={Tones.warn}>Waiting for approval</StatusBadge>{' '}
+              <span className="font-medium">Promote {release?.message ?? releaseId?.slice(0, 8)}</span>{' '}
+              <span className="text-muted-foreground">
+                · requested <Ago date={request.createdAt} />
+                {pinned.success && pinned.data.principal !== null ? ` by ${pinned.data.principal}` : ''}
+              </span>
+            </p>
+            {release === undefined ? null : (
+              <p className="font-mono text-xs text-muted-foreground">
+                runtime {release.runtimeVersion} · {release.platforms.join(', ')} · {formatBytes(release.downloadBytes)}{' '}
+                download{release.gitSha === null ? '' : ` · ${release.gitSha.slice(0, 7)}`}
+              </p>
+            )}
+            {releaseId === null ? null : (
+              <PromotionDiff
+                workspaceId={workspaceId}
+                projectId={projectId}
+                app={app}
+                isAdmin={props.isAdmin}
+                channel={channel}
+                releaseId={releaseId}
+              />
+            )}
+            {pinned.success && pinned.data.reason !== null ? (
+              <p className="text-xs">Reason: {pinned.data.reason}</p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">Needs {describeApprovalPolicy(request.requirements)}.</p>
+            {isMine ? (
+              <p className="text-xs text-muted-foreground">You requested this change, so someone else has to decide.</p>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  pending={vote.isPending}
+                  onClick={() => {
+                    vote.mutate({ workspaceId, requestId: request.id, decision: ApprovalDecisions.approve });
+                  }}>
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  pending={vote.isPending}
+                  onClick={() => {
+                    vote.mutate({ workspaceId, requestId: request.id, decision: ApprovalDecisions.reject });
+                  }}>
+                  Reject
+                </Button>
+              </div>
+            )}
+            {vote.error ? <p className="text-sm text-destructive">{errorMessage(vote.error)}</p> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
   const { workspaceId, projectId, app, channel } = props;
   const utils = trpc.useUtils();
@@ -440,6 +574,7 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {change.error ? <p className="text-sm text-destructive">{errorMessage(change.error)}</p> : null}
       <PendingPolicyRequests {...props} />
+      <PendingPromotionRequests {...props} />
     </li>
   );
 }
@@ -520,10 +655,16 @@ const releaseStatusTones = {
   [OtaReleaseStatuses.disabled]: Tones.neutral,
 } as const;
 
-const formatBytes = (bytes: number) =>
-  bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function promotionNotice(result: { channel: string; platforms: string[]; changed: boolean; outcome: string }) {
+  if (result.outcome === ChannelPolicyOutcomes.pendingApproval) {
+    return `Sent for approval: ${result.channel} changes once it is approved.`;
+  }
+  return result.changed
+    ? `Promoted to ${result.channel} (${result.platforms.join(', ')}).`
+    : `${result.channel} already serves this release.`;
+}
 
-/** Promote a ready release to an open channel. Protected channels are listed but need an approval. */
+/** Promote a ready release: at once to an open channel, as an approval request to a protected one. */
 function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { release: OtaReleaseDto }) {
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
@@ -533,15 +674,15 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
   const [notice, setNotice] = useState<string | null>(null);
   const promotion = trpc.ota.hosting.channels.promote.useMutation({
     onSuccess: async result => {
-      setNotice(
-        result.changed
-          ? `Promoted to ${result.channel} (${result.platforms.join(', ')}).`
-          : `${result.channel} already serves this release.`,
-      );
-      await utils.ota.hosting.channels.heads.invalidate(input);
+      setNotice(promotionNotice(result));
+      await Promise.all([
+        utils.ota.hosting.channels.heads.invalidate(input),
+        utils.approval.list.invalidate({ workspaceId }),
+      ]);
     },
   });
-  const selected = channels.find(channel => channel.id === channelId) ?? channels.find(channel => !channel.isProtected);
+  const selected =
+    channels.find(channel => channel.id === channelId) ?? channels.find(channel => !channel.isProtected) ?? channels[0];
   if (channels.length === 0) {
     return null;
   }
@@ -557,7 +698,7 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
             setNotice(null);
           }}>
           {channels.map(channel => (
-            <option key={channel.id} value={channel.id} disabled={channel.isProtected}>
+            <option key={channel.id} value={channel.id}>
               {channel.isProtected ? `${channel.name} (protected: needs approval)` : channel.name}
             </option>
           ))}
@@ -565,7 +706,7 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
         <Button
           variant="outline"
           size="sm"
-          disabled={selected === undefined || selected.isProtected}
+          disabled={selected === undefined}
           pending={promotion.isPending}
           onClick={() => {
             if (selected === undefined) {
@@ -575,7 +716,7 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
             setNotice(null);
             promotion.mutate({ ...input, channelId: selected.id, releaseId: release.id });
           }}>
-          Promote
+          {selected?.isProtected ? 'Request approval' : 'Promote'}
         </Button>
       </div>
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
