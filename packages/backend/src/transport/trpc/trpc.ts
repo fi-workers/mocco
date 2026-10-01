@@ -17,6 +17,7 @@ import type { ConnectionService } from '@backend/domain/integration/ConnectionSe
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import type { SigningService } from '@backend/domain/ota/SigningService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
@@ -64,6 +65,8 @@ export interface Context {
   otaSigning: SigningService;
   /** Always present — OTA releases uploaded from CI. */
   otaUploads: UploadService;
+  /** Always present — what OTA channels serve, and promotions. */
+  otaChannels: OtaChannelService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

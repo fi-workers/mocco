@@ -407,7 +407,15 @@ export async function extHandler(request: Request): Promise<Response> {
         : undefined,
     inbound: getInbound()?.inbound,
     discord: discordInstall === undefined ? undefined : { install: discordInstall, workspace: services.workspace },
-    v1: { apiKeys: getApiKeys(), limiter: getRateLimiter(), ota: { uploads: getOtaDomain().otaUploads } },
+    v1: {
+      apiKeys: getApiKeys(),
+      limiter: getRateLimiter(),
+      ota: {
+        uploads: getOtaDomain().otaUploads,
+        channels: getOtaDomain().otaChannels,
+        updateChecks: getOtaDomain().otaUpdateChecks,
+      },
+    },
     storage:
       storageStore instanceof FilesystemObjectStore
         ? { store: storageStore, signer: storageSignerFromEnv(env) }

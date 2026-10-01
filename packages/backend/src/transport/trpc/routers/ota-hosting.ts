@@ -7,7 +7,9 @@ import {
   ChannelPolicyOutcomes,
   otaAppSchema,
   otaChannelCreateInputSchema,
+  otaChannelHeadSchema,
   otaChannelSchema,
+  otaPlatformSchema,
   otaReleaseSchema,
   signingCertificateInputSchema,
   signingCertificateSchema,
@@ -123,6 +125,37 @@ export const otaHostingRouter = router({
       .mutation(async ({ ctx, input }) => {
         const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
         return await ctx.otaHosting.changeChannelPolicy(app, ctx.session.user.id, input.channelId, input.policy);
+      }),
+
+    /** What each channel head serves now. */
+    heads: otaProcedure
+      .input(appInput)
+      .output(z.object({ heads: z.array(otaChannelHeadSchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return { heads: await ctx.otaChannels.listHeads(app) };
+      }),
+
+    /** Promote a ready release to an unprotected channel (protected ones need an approval). */
+    promote: otaProcedure
+      .input(
+        appInput.extend({
+          channelId: z.uuid(),
+          releaseId: z.uuid(),
+          reason: z.string().max(500).nullable().default(null),
+        }),
+      )
+      .output(
+        z.object({
+          channel: z.string(),
+          releaseId: z.uuid(),
+          platforms: z.array(otaPlatformSchema),
+          changed: z.boolean(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return await ctx.otaChannels.promote(app, input.channelId, input.releaseId, ctx.session.user.id, input.reason);
       }),
   }),
 });

@@ -38,6 +38,7 @@ export const AuditActions = {
   otaUploadAuthorized: 'ota.upload.authorized',
   otaReleaseUploaded: 'ota.release.uploaded',
   otaReleaseFailed: 'ota.release.failed',
+  otaChannelChanged: 'ota.channel.changed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

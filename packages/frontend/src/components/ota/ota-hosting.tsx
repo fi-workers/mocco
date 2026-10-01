@@ -350,6 +350,36 @@ function PendingPolicyRequests({ workspaceId, projectId, app, channel }: AppProp
   );
 }
 
+/** What a channel serves now, per runtime: the release behind each platform's head. */
+function ServingLine({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
+  const input = { workspaceId, projectId, appId: app.id };
+  const headsQuery = trpc.ota.hosting.channels.heads.useQuery(input);
+  const releasesQuery = trpc.ota.hosting.releases.list.useQuery(input);
+  const heads = (headsQuery.data?.heads ?? []).filter(head => head.channelId === channel.id && head.releaseId !== null);
+  if (headsQuery.isSuccess && heads.length === 0) {
+    return <p className="text-xs text-muted-foreground">Serves nothing yet: builds keep their embedded bundle.</p>;
+  }
+  const releaseIds = heads
+    .map(head => head.releaseId)
+    .filter((id, index, all) => id !== null && all.indexOf(id) === index);
+  return (
+    <ul className="flex flex-col gap-1">
+      {releaseIds.map(releaseId => {
+        const release = releasesQuery.data?.releases.find(candidate => candidate.id === releaseId);
+        const served = heads.filter(head => head.releaseId === releaseId);
+        return (
+          <li key={releaseId} className="text-xs">
+            Serving <span className="font-medium">{release?.message ?? releaseId?.slice(0, 8)}</span>{' '}
+            <span className="font-mono text-muted-foreground">
+              · {served.map(head => head.platform).join(', ')} · runtime {served[0]?.runtimeVersion}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
   const { workspaceId, projectId, app, channel } = props;
   const utils = trpc.useUtils();
@@ -406,6 +436,7 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
           }}
         />
       ) : null}
+      <ServingLine {...props} />
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {change.error ? <p className="text-sm text-destructive">{errorMessage(change.error)}</p> : null}
       <PendingPolicyRequests {...props} />
@@ -492,7 +523,69 @@ const releaseStatusTones = {
 const formatBytes = (bytes: number) =>
   bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-function ReleaseRow({ release }: { release: OtaReleaseDto }) {
+/** Promote a ready release to an open channel. Protected channels are listed but need an approval. */
+function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { release: OtaReleaseDto }) {
+  const utils = trpc.useUtils();
+  const input = { workspaceId, projectId, appId: app.id };
+  const channelsQuery = trpc.ota.hosting.channels.list.useQuery(input);
+  const channels = channelsQuery.data?.channels ?? [];
+  const [channelId, setChannelId] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const promotion = trpc.ota.hosting.channels.promote.useMutation({
+    onSuccess: async result => {
+      setNotice(
+        result.changed
+          ? `Promoted to ${result.channel} (${result.platforms.join(', ')}).`
+          : `${result.channel} already serves this release.`,
+      );
+      await utils.ota.hosting.channels.heads.invalidate(input);
+    },
+  });
+  const selected = channels.find(channel => channel.id === channelId) ?? channels.find(channel => !channel.isProtected);
+  if (channels.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label={`Channel to promote ${release.message ?? release.id} to`}
+          className={`${inputClass} w-auto py-1 text-xs`}
+          value={selected?.id ?? ''}
+          onChange={event => {
+            setChannelId(event.target.value);
+            setNotice(null);
+          }}>
+          {channels.map(channel => (
+            <option key={channel.id} value={channel.id} disabled={channel.isProtected}>
+              {channel.isProtected ? `${channel.name} (protected: needs approval)` : channel.name}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={selected === undefined || selected.isProtected}
+          pending={promotion.isPending}
+          onClick={() => {
+            if (selected === undefined) {
+              return;
+            }
+
+            setNotice(null);
+            promotion.mutate({ ...input, channelId: selected.id, releaseId: release.id });
+          }}>
+          Promote
+        </Button>
+      </div>
+      {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
+      {promotion.error ? <p className="text-sm text-destructive">{errorMessage(promotion.error)}</p> : null}
+    </div>
+  );
+}
+
+function ReleaseRow(props: AppProps & { release: OtaReleaseDto }) {
+  const { release } = props;
   return (
     <li className="flex flex-col gap-1 rounded-xl border border-border px-4 py-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -510,12 +603,14 @@ function ReleaseRow({ release }: { release: OtaReleaseDto }) {
         Uploaded <Ago date={release.createdAt} />
         {release.uploadedByPrincipal === null ? '' : ` by ${release.uploadedByPrincipal}`}
       </p>
+      {release.status === OtaReleaseStatuses.ready ? <PromoteControl {...props} /> : null}
     </li>
   );
 }
 
 /** Releases CI uploaded, newest first. Polls while one is still being verified. */
-function Releases({ workspaceId, projectId, app }: AppProps) {
+function Releases(props: AppProps) {
+  const { workspaceId, projectId, app } = props;
   const releasesQuery = trpc.ota.hosting.releases.list.useQuery(
     { workspaceId, projectId, appId: app.id },
     {
@@ -544,7 +639,14 @@ function Releases({ workspaceId, projectId, app }: AppProps) {
       ) : null}
       <ul className="flex flex-col gap-2">
         {releases.map(release => (
-          <ReleaseRow key={release.id} release={release} />
+          <ReleaseRow
+            key={release.id}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            app={app}
+            isAdmin={props.isAdmin}
+            release={release}
+          />
         ))}
       </ul>
     </section>

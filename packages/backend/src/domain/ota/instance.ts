@@ -9,9 +9,11 @@ import { resolveBaseOrigin, schemeFor } from '@backend/domain/execution/endpoint
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getJobQueue } from '@backend/domain/jobs/instance';
 import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
 import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { ChannelHeadRepo } from '@backend/domain/ota/repos/channel-head.repo';
 import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
 import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
 import { OtaChannelRepo } from '@backend/domain/ota/repos/ota-channel.repo';
@@ -19,7 +21,9 @@ import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-externa
 import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
 import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
+import { ChannelStateCache } from '@backend/domain/ota/serving/state-cache';
 import { SigningService } from '@backend/domain/ota/SigningService';
+import { UpdateCheckService } from '@backend/domain/ota/UpdateCheckService';
 import { UploadService } from '@backend/domain/ota/UploadService';
 import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
@@ -45,6 +49,8 @@ export interface OtaDomain {
   otaHosting: OtaHostingService;
   otaSigning: SigningService;
   otaUploads: UploadService;
+  otaChannels: OtaChannelService;
+  otaUpdateChecks: UpdateCheckService;
 }
 
 /** The production queue, resolved on first enqueue (tests that never upload need no env). */
@@ -103,6 +109,11 @@ export function createOtaDomain(
     await hosting.applyApprovedPolicy(request);
   });
   const signing = new SigningService({ certificates: new SigningCertificateRepo(db), audit: services.audit });
+  // One cache per domain instance: promotions here invalidate what the manifest endpoint serves.
+  const cache = new ChannelStateCache();
+  const releases = new OtaReleaseRepo(db);
+  const heads = new ChannelHeadRepo(db);
+  const assets = new OtaAssetRepo(db);
   return {
     versionPolicies,
     versionChecks: new VersionCheckService({ policies }),
@@ -117,13 +128,22 @@ export function createOtaDomain(
     otaUploads: new UploadService({
       apps: new OtaAppRepo(db),
       sessions: new UploadSessionRepo(db),
-      releases: new OtaReleaseRepo(db),
-      assets: new OtaAssetRepo(db),
+      releases,
+      assets,
       signing,
       storage,
       queue,
       audit: services.audit,
     }),
+    otaChannels: new OtaChannelService({
+      apps: new OtaAppRepo(db),
+      channels: new OtaChannelRepo(db),
+      releases,
+      heads,
+      audit: services.audit,
+      cache,
+    }),
+    otaUpdateChecks: new UpdateCheckService({ heads, assets, storage, cache }),
   };
 }
 

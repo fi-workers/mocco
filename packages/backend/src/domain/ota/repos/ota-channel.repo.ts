@@ -45,6 +45,15 @@ export class OtaChannelRepo {
   }
 
   /** A channel by id within its workspace (for the approval handler). */
+  /** An app's channel by name, or undefined. */
+  async findByName(appId: string, name: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.otaChannels)
+      .where(and(eq(schema.otaChannels.appId, appId), eq(schema.otaChannels.name, name)));
+    return row;
+  }
+
   async getInWorkspace(workspaceId: string, id: string) {
     const rows = await this.db
       .select()

@@ -2,7 +2,7 @@
 // `detail` says what to fix; MoccoApiError carries it as the message.
 import { MoccoApiError } from './api-error';
 
-import type { FinalizeRequest, UploadRequest, UploadResponse } from '@mocco/common/ota-hosting';
+import type { FinalizeRequest, PromotionResult, UploadRequest, UploadResponse } from '@mocco/common/ota-hosting';
 
 interface Problem {
   title?: string;
@@ -43,6 +43,26 @@ export class MoccoApi {
       throw await errorOf(response, what);
     }
     return (await response.json()) as T;
+  }
+
+  /** A release's status (`verifying` until Mocco has re-hashed its assets, then `ready`). */
+  async releaseStatus(appId: string, releaseId: string, apiKey: string): Promise<{ id: string; status: string }> {
+    const response = await this.fetchImpl(`${this.baseUrl}/ota/apps/${appId}/releases/${releaseId}`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      throw await errorOf(response, 'Reading the release');
+    }
+    return (await response.json()) as { id: string; status: string };
+  }
+
+  async promote(appId: string, releaseId: string, channel: string, apiKey: string): Promise<PromotionResult> {
+    return await this.postJson<PromotionResult>(
+      `/ota/apps/${appId}/releases/${releaseId}/promotions`,
+      apiKey,
+      { channel },
+      `Promoting to ${channel}`,
+    );
   }
 
   /** Exchange a secret API key with `ota:write` for an upload session token. */
