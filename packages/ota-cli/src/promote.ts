@@ -4,7 +4,7 @@
 import { MoccoApi } from './api';
 import { CliError } from './errors';
 
-import type { PromotionResult } from '@mocco/common/ota-hosting';
+import type { OtaPromotionResult as PromotionResult } from '@mocco/sdk-core';
 
 export interface WaitOptions {
   /** How long to wait for `ready`. */

@@ -1,34 +1,55 @@
 {
   "name": "@mocco/ota-cli",
   "version": "0.0.0",
-  "private": true,
-  "description": "Publish signed Expo Updates to Mocco-hosted OTA from CI.",
+  "description": "Publish signed Expo Updates to Mocco-hosted OTA from CI: init, publish, promote, pause, rollback.",
   "type": "module",
   "bin": {
-    "mocco-ota": "./bin/mocco-ota.mjs"
+    "mocco-ota": "./dist/cli.js"
   },
   "exports": {
-    "./init": "./src/init.ts",
-    "./publish": "./src/publish.ts"
+    "./init": {
+      "types": "./dist/init.d.ts",
+      "import": "./dist/init.js"
+    },
+    "./publish": {
+      "types": "./dist/publish.d.ts",
+      "import": "./dist/publish.js"
+    },
+    "./promote": {
+      "types": "./dist/promote.d.ts",
+      "import": "./dist/promote.js"
+    }
   },
   "scripts": {
+    "build": "tsup",
+    "dev": "node ./bin/mocco-ota.mjs",
     "lint": "eslint . --max-warnings 0",
     "ts-check": "tsc --noEmit",
-    "test": "vitest run",
-    "start": "node ./bin/mocco-ota.mjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo/code-signing-certificates": "0.0.7",
-    "@mocco/common": "workspace:*",
-    "tsx": "4.22.4",
+    "@mocco/sdk-core": "workspace:*",
     "zod": "4.1.13"
   },
   "devDependencies": {
+    "@mocco/common": "workspace:*",
     "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "tsx": "4.22.4",
     "typescript": "5.9.3",
     "vitest": "4.1.9"
   },
   "engines": {
     "node": ">=22"
+  },
+  "license": "MIT",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

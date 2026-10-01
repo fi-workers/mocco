@@ -64,3 +64,10 @@ export const apiKeyCreateInputSchema = z
     },
   );
 export type ApiKeyCreateInput = z.infer<typeof apiKeyCreateInputSchema>;
+
+/** `GET /v1/whoami`: the project and scopes a key speaks for. */
+export const whoamiResponseSchema = z.object({
+  projectId: z.uuid(),
+  kind: z.enum([ApiKeyKinds.publishable, ApiKeyKinds.secret]),
+  scopes: z.array(z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]])),
+});

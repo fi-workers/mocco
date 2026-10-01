@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Runs the TypeScript sources through tsx until SDK packaging (#115) ships a built bundle.
 import { register } from 'tsx/esm/api';
 

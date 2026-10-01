@@ -12,6 +12,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "declaration": true
+    "declaration": true,
+    "customConditions": ["@mocco/source"]
   }
 }
