@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next';
 
+// Next matches `host` against the hostname (no port), as a regex.
+const hostnameOf = (domain: string | undefined) => (domain ?? '').split(':', 1)[0] ?? '';
+const escape = (hostname: string) => hostname.replaceAll('.', String.raw`\.`);
+
 const config: NextConfig = {
+  // `next dev` serves local help centers at <site>.help.localhost (HELP_SITES_DOMAIN).
+  allowedDevOrigins: ['*.help.localhost'],
   // Transpile the internal workspace packages: @mocco/backend and the
   // @mocco/common schemas it pulls in across the package boundary (a transitive
   // dep — the app never imports @mocco/common directly).
@@ -14,20 +20,32 @@ const config: NextConfig = {
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
   rewrites: async () => {
-    // Next matches `host` against the hostname (no port), as a regex.
-    const apiHostname = (process.env.PUBLIC_API_DOMAIN ?? '').split(':', 1)[0] ?? '';
-    if (apiHostname === '') {
-      return [];
-    }
-    const escaped = apiHostname.replaceAll('.', String.raw`\.`);
-    const pattern = `^${escaped}$`;
-    return {
-      beforeFiles: [
-        { source: '/v1/:path*', has: [{ type: 'host', value: pattern }], destination: '/api/ext/v1/:path*' },
-      ],
-      afterFiles: [],
-      fallback: [],
-    };
+    const apiHostname = hostnameOf(process.env.PUBLIC_API_DOMAIN);
+    // Help centers (#96, ADR 0025): with HELP_SITES_DOMAIN set (e.g. help.mocco.club),
+    // https://<site>.<that domain>/* is served by pages/_sites/<site>/*.
+    const helpHostname = hostnameOf(process.env.HELP_SITES_DOMAIN);
+    const beforeFiles = [
+      ...(apiHostname === ''
+        ? []
+        : [
+            {
+              source: '/v1/:path*',
+              has: [{ type: 'host' as const, value: `^${escape(apiHostname)}$` }],
+              destination: '/api/ext/v1/:path*',
+            },
+          ]),
+      ...(helpHostname === ''
+        ? []
+        : [
+            {
+              // Everything but Next's own assets and the API routes.
+              source: '/:path((?!_next/|api/|favicon).*)',
+              has: [{ type: 'host' as const, value: String.raw`^(?<site>[a-z0-9-]+)\.${escape(helpHostname)}$` }],
+              destination: '/_sites/:site/:path',
+            },
+          ]),
+    ];
+    return { beforeFiles, afterFiles: [], fallback: [] };
   },
 };
 export default config;

@@ -8,7 +8,8 @@ export type DocInline =
   | { t: 'em'; c: DocInline[] }
   | { t: 'code'; v: string }
   | { t: 'link'; href: string; external: boolean; c: DocInline[] }
-  | { t: 'image'; src: string; alt: string; width: number; height: number }
+  // Guide screenshots carry their size; a help article's remote image may not.
+  | { t: 'image'; src: string; alt: string; width?: number; height?: number }
   | { t: 'br' };
 
 export type DocBlock =

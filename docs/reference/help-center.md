@@ -19,7 +19,7 @@ code_refs:
 
 # Help center
 
-The first slice of the [help center design](../specs/2026-09-24-help-center-design.md) (#96): the data model and the services to write, publish and read a help center. The public site, the editor, import, translation, search and custom domains come in later slices.
+The [help center design](../specs/2026-09-24-help-center-design.md) (#96) so far: the data model, the services to write, publish and read a help center, and the public site. The editor, import, translation, search and custom domains come in later slices.
 
 ## Sites
 
@@ -44,6 +44,10 @@ Text lives in `mocco_help_revisions`, append-only, one row per save: locale, tit
 ## Public read
 
 `HelpPublicReadService` reads by the site's slug, with no session: the site, the published tree in a language, a published article by its URL ref, and old paths in `mocco_help_redirects` (an imported site's URLs). A language the site doesn't have is served in the source language. Drafts never appear.
+
+## Public site
+
+With `HELP_SITES_DOMAIN` set, `https://<slug>.<domain>/` serves the site ([ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/` redirects to the source language, `/{locale}` lists the published collections, `/{locale}/articles/{shortId}-{slug}` shows an article (a stale slug or a missing language redirects to the canonical path), and an unknown site is a 404. Pages are generated on first request and regenerated at most every 60 seconds, so a publish shows up within a minute. Article Markdown renders through the same tree as the customer guides; links may be `http(s)`, `mailto`, site paths or anchors, and images must be `https`.
 
 ## Operator API
 

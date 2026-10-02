@@ -84,6 +84,8 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 `PUBLIC_API_DOMAIN` (a bare host such as `api.mocco.club`, read by `next.config.ts` at build time) serves the public API at `https://<that host>/v1/*`, rewritten to the ext app's `/api/ext/v1/*`. Unset, the API is only at `/api/ext/v1`. See [public API](./public-api.md).
 
+`HELP_SITES_DOMAIN` (a bare domain such as `help.mocco.club`, read by `next.config.ts` at build time) serves each help center at `https://<site slug>.<that domain>/`, rewritten to `pages/_sites/<site>/*` ([ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)). The domain needs a wildcard DNS record and certificate pointing at the deployment. Locally, `help.localhost` works without DNS. Unset, help centers aren't served.
+
 ## Storage vars
 
 `STORAGE_DRIVER` (`s3` or `filesystem`) picks the object store; see [object storage](./storage.md). Unset, local dev uses `filesystem` and Vercel has none.

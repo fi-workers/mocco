@@ -40,6 +40,7 @@ related:
 - [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
 - [0013 — Mocco is a multi-product platform (draft)](./adr/0013-mocco-is-a-multi-product-platform.md)
 - [0014 — Background jobs on a Postgres job table driven by a tick (draft)](./adr/0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md)
+- [0015 — Public multi-tenant sites use ISR on the Pages Router (draft)](./adr/0015-public-sites-use-isr-on-the-pages-router.md)
 - [0017 — Public /v1 API, publishable and secret keys, and MIT SDKs (draft)](./adr/0017-public-v1-api-keys-and-sdk-licensing.md)
 - [0018 — Domain events are separate from the audit log (draft)](./adr/0018-domain-events-vs-audit-log.md)
 - [0019 — Inbound webhooks use per-source ingest URLs with mandatory signatures (draft)](./adr/0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md)
