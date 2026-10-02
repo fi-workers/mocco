@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_approval_requests" ADD COLUMN "co_proposer_user_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "mocco_flag_changesets" ADD COLUMN "co_proposer_user_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;

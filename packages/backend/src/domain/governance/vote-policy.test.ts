@@ -17,11 +17,27 @@ const release = { roleId: 'r1', name: 'release' };
 const security = { roleId: 'r2', name: 'security' };
 const viewer = { roleId: 'r3', name: 'viewer' };
 
+/** A vote on a change `u2` proposed with its owner. */
+const voteWithCoProposer = (voterUserId: string, subjectOwnerUserId: string | null) =>
+  checkVote({
+    requirements: requirements(),
+    voterUserId,
+    subjectOwnerUserId,
+    coProposerUserIds: ['u2'],
+    voterRoles: [release],
+  });
+
 describe('checkVote', () => {
   it('bars the subject owner under prevent_self', () => {
     expect(
       checkVote({ requirements: requirements(), voterUserId: 'u1', subjectOwnerUserId: 'u1', voterRoles: [release] }),
     ).toEqual({ ok: false, denial: VoteDenials.self });
+  });
+
+  it('bars co-proposers under prevent_self, even when the owner is gone', () => {
+    expect(voteWithCoProposer('u2', 'u1')).toEqual({ ok: false, denial: VoteDenials.self });
+    expect(voteWithCoProposer('u2', null)).toEqual({ ok: false, denial: VoteDenials.self });
+    expect(voteWithCoProposer('u3', 'u1').ok).toBe(true);
   });
 
   it('lets the owner vote when prevent_self is off, and never matches a deleted owner', () => {

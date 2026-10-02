@@ -24,6 +24,9 @@ export interface VoteCheckInput {
   /** Who triggered the run / requested the change — barred when `prevent_self` is set.
    * Null (the user was deleted) never matches, so the guard stays fail-closed. */
   subjectOwnerUserId: string | null;
+  /** Others who proposed the change with the owner (a merged commit's pusher and author),
+   * barred by `prevent_self` too. */
+  coProposerUserIds?: readonly string[];
   voterRoles: MemberRole[];
   reason?: string;
 }
@@ -33,7 +36,7 @@ export type VoteCheck =
 
 /**
  * The voter guards shared by run gates and approval requests, in order:
- * `prevent_self` bars the subject's owner; the voter must hold at least one required
+ * `prevent_self` bars the subject's owner and co-proposers; the voter must hold at least one required
  * role (the first match is the role the vote counts under); `reason_required` needs a
  * non-blank reason. Pure — the callers fetch the roles and record the vote.
  *
@@ -43,7 +46,8 @@ export type VoteCheck =
 // eslint-disable-next-line sonarjs/function-return-type
 export function checkVote(input: VoteCheckInput): VoteCheck {
   const { requirements, voterUserId, subjectOwnerUserId, voterRoles } = input;
-  if (requirements.prevent_self && voterUserId === subjectOwnerUserId) {
+  const isProposer = voterUserId === subjectOwnerUserId || (input.coProposerUserIds ?? []).includes(voterUserId);
+  if (requirements.prevent_self && isProposer) {
     return { ok: false, denial: VoteDenials.self };
   }
   const requiredRoleNames = new Set(requirements.resume.map(requirement => requirement.role));

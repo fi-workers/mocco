@@ -72,22 +72,19 @@ export class FlagFileSyncService {
   }
 
   /**
-   * Who proposes the push's changesets: the workspace member signed in with the GitHub
-   * account that pushed, else the member whose verified email wrote the head commit.
-   * They can't approve the changesets themselves (`prevent_self`).
+   * Who proposes the push's changesets, and so can't approve them (`prevent_self`): the
+   * workspace member signed in with the GitHub account that pushed (or merged), and the
+   * member whose verified email wrote the head commit. The pusher is the proposer when
+   * known, else the author; the other one, when it is someone else, is a co-proposer.
    */
-  private async proposerOf(push: FlagFilePush): Promise<string | null> {
+  private async proposersOf(push: FlagFilePush): Promise<{ proposer: string | null; coProposers: string[] }> {
     const repo = new FlagFileSyncRepo(this.deps.db);
-    const bySender =
-      push.senderGithubId === null
-        ? undefined
-        : await repo.memberByGithubAccount(push.workspaceId, push.senderGithubId);
-    if (bySender !== undefined) {
-      return bySender;
-    }
-    const byEmail =
-      push.authorEmail === null ? undefined : await repo.memberByVerifiedEmail(push.workspaceId, push.authorEmail);
-    return byEmail ?? null;
+    const [pusher, author] = await Promise.all([
+      push.senderGithubId === null ? undefined : repo.memberByGithubAccount(push.workspaceId, push.senderGithubId),
+      push.authorEmail === null ? undefined : repo.memberByVerifiedEmail(push.workspaceId, push.authorEmail),
+    ]);
+    const proposer = pusher ?? author ?? null;
+    return { proposer, coProposers: author !== undefined && author !== proposer ? [author] : [] };
   }
 
   /** The project's flags and each environment's state, by environment key. */
@@ -217,8 +214,9 @@ export class FlagFileSyncService {
     projectId: string,
     push: FlagFilePush,
     source: string,
-    proposerUserId: string | null,
+    proposers: { proposer: string | null; coProposers: string[] },
   ): Promise<FlagFileSyncRow> {
+    const proposerUserId = proposers.proposer;
     const parsed = parseFlagsFile(source, this.decode);
     if (parsed.file === null) {
       return await this.record(workspaceId, projectId, push, proposerUserId, FlagFileSyncStates.invalid, parsed.issues);
@@ -255,6 +253,7 @@ export class FlagFileSyncService {
         environmentId: environment.id,
         ops: change.ops,
         proposerUserId,
+        coProposerUserIds: proposers.coProposers,
         repoId: push.repoId,
         commitSha: push.commitSha,
         reason: `${FLAGS_FILE_PATH} at ${push.commitSha.slice(0, 7)}`,
@@ -280,10 +279,10 @@ export class FlagFileSyncService {
     if (source === null) {
       return;
     }
-    const proposerUserId = await this.proposerOf(push);
+    const proposers = await this.proposersOf(push);
     await inOrder(projectIds, async projectId => {
       try {
-        await this.syncProject(push.workspaceId, projectId, push, source, proposerUserId);
+        await this.syncProject(push.workspaceId, projectId, push, source, proposers);
       } catch (error) {
         console.error(`[flags] .mocco/flags.yml sync failed for project ${projectId} at ${push.commitSha}`, error);
       }

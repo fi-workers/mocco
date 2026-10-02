@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -175,6 +176,38 @@ describe('FlagFileSyncService (pglite)', () => {
       });
     await expect(voteBy(developer)).rejects.toBeInstanceOf(SelfApprovalError);
     await voteBy(releaser);
+    expect(await configOf(production)).toMatchObject({ enabled: true, defaultVariant: 'on' });
+  });
+
+  it('bars the commit author too when someone else merged, and keeps them through a rebase', async () => {
+    const author = await seedMember('release');
+    await t.db.update(users).set({ email: 'author@acme.test', emailVerified: true }).where(eq(users.id, author));
+    const third = await seedMember('release');
+    files.set('g1', FILE('on'));
+
+    await sync.syncPush({ ...push('g1'), authorEmail: 'Author@acme.test' });
+
+    const pending = (await pendingOf(production)) as NonNullable<Awaited<ReturnType<typeof pendingOf>>>;
+    expect(pending).toMatchObject({ proposedByUserId: developer, coProposerUserIds: [author] });
+    // Another change moves production on, so the developer rebases the repo changeset.
+    await domain.flagKillSwitch.kill(workspaceId, projectId, releaser, {
+      environmentId: production,
+      flagKey: 'checkout',
+      reason: 'incident',
+    });
+    const { changeset: rebased } = await domain.flagGovernance.rebase(workspaceId, projectId, developer, pending.id);
+    expect(rebased).toMatchObject({ source: 'repo', commitSha: 'g1', coProposerUserIds: [author] });
+    expect(await pendingOf(production)).toMatchObject({ id: rebased.id });
+
+    const voteBy = async (userId: string) =>
+      await domain.flagGovernance.vote(workspaceId, projectId, userId, {
+        changesetId: rebased.id,
+        contentHash: rebased.contentHash,
+        decision: 'approve',
+      });
+    await expect(voteBy(developer)).rejects.toBeInstanceOf(SelfApprovalError);
+    await expect(voteBy(author)).rejects.toBeInstanceOf(SelfApprovalError);
+    await voteBy(third);
     expect(await configOf(production)).toMatchObject({ enabled: true, defaultVariant: 'on' });
   });
 

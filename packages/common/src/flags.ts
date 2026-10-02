@@ -377,6 +377,8 @@ export const changesetSchema = z.object({
   reason: z.string().nullable(),
   /** For a repo changeset: the commit of `.mocco/flags.yml` it came from. */
   commitSha: z.string().nullable(),
+  /** Others who proposed it with `proposedByUserId` (a commit's author when someone else pushed). */
+  coProposerUserIds: z.array(z.uuid()),
   /** The approval request deciding it (protected environments only). */
   approvalRequestId: z.uuid().nullable(),
   /** The gate it was proposed under, pinned: a later gate edit doesn't change it. */
