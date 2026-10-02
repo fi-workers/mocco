@@ -27,6 +27,12 @@ export interface HelpAuthoringDeps {
   sites: Pick<HelpSiteService, 'require'>;
   /** Runs after a publish (queues the article's translations). */
   onPublished?: (workspaceId: string, projectId: string, articleId: string) => Promise<void>;
+  /** Runs after a change readers see: a publish, an unpublish or a delete (refreshes the pages). */
+  onPublicChange?: (
+    workspaceId: string,
+    projectId: string,
+    article: { shortId: string; slug: string },
+  ) => Promise<void>;
   now?: () => Date;
 }
 
@@ -249,6 +255,7 @@ export class HelpAuthoringService {
       payload: { projectId, revisionId: article.draftRevisionId },
     });
     await this.deps.onPublished?.(workspaceId, projectId, article.id);
+    await this.deps.onPublicChange?.(workspaceId, projectId, article);
     return await this.article(workspaceId, projectId, article.id);
   }
 
@@ -263,6 +270,7 @@ export class HelpAuthoringService {
       subjectId: article.id,
       payload: { projectId },
     });
+    await this.deps.onPublicChange?.(workspaceId, projectId, article);
     return await this.article(workspaceId, projectId, article.id);
   }
 
@@ -276,6 +284,7 @@ export class HelpAuthoringService {
       subjectId: article.id,
       payload: { projectId, shortId: article.shortId },
     });
+    await this.deps.onPublicChange?.(workspaceId, projectId, article);
   }
 
   /** The article's source revisions, newest first. */

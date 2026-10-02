@@ -30,6 +30,8 @@ export interface HelpTranslationDeps {
   /** Without a translator (no LLM configured), nothing is translated automatically. */
   translator?: Translator;
   queue?: Pick<JobQueue, 'enqueue' | 'kick'>;
+  /** Runs after a language's text changes (refreshes the article's public pages). */
+  onTranslated?: (workspaceId: string, projectId: string, article: { shortId: string; slug: string }) => Promise<void>;
 }
 
 export class HelpTranslationService {
@@ -191,6 +193,7 @@ export class HelpTranslationService {
         sourceLocale: site.sourceLocale,
         locale,
       });
+      await this.deps.onTranslated?.(workspaceId, article.projectId, article);
     } catch (error) {
       if (!(error instanceof TranslationRejectedError)) {
         // An outage or a rate limit: the job retries.
@@ -262,6 +265,7 @@ export class HelpTranslationService {
       lastError: null,
       reviewedByUserId: actorUserId,
     });
+    await this.deps.onTranslated?.(workspaceId, projectId, article);
     return await this.translations(workspaceId, projectId, article.id);
   }
 
