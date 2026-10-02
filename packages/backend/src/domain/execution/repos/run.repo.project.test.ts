@@ -33,7 +33,6 @@ describe('RunRepo project-scoped reads (pglite)', () => {
     await t.close();
   });
 
-  /** A workspace with one project and one repository linked to it. */
   /** A repository in `workspaceId`, linked to `projectId` when one is given. */
   async function addRepo(workspaceId: string, projectId?: string) {
     const connection = expectOne(
@@ -61,6 +60,7 @@ describe('RunRepo project-scoped reads (pglite)', () => {
     return repoId;
   }
 
+  /** A workspace with one project and one repository linked to it. */
   async function seedProject() {
     const workspaceId = expectOne(
       await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
