@@ -41,6 +41,20 @@ The tab shows every article with its state: **Draft** has never been published, 
 
 ![The Help center tab: a collection with a section and two published articles, and the site's address](./images/help-center.png)
 
+## Import from Mintlify
+
+If your help site is on Mintlify, bring it over instead of writing it again. On the **Help center** tab, under **Import from Mintlify**, pick your docs folder (the one with `docs.json`), leave **Publish the imported articles** on if they should go live at once, and choose **Import**.
+
+- `docs.json`'s tabs, groups and pages become collections, sections and articles, in the same order.
+- Mintlify's components become plain Markdown: steps become a numbered list, tips and notes become quoted notes, and update entries become headings.
+- The images your pages use are uploaded to Mocco.
+- Each page's old address (such as `/features/widget-features`) redirects to its article, so links to the old site keep working once the address points at Mocco.
+- Importing again updates the same articles and only changes the ones whose text changed.
+
+When it's done, Mocco lists anything it couldn't bring over: images missing from the folder, and pages that aren't in `docs.json`'s navigation.
+
+![Importing the same folder again: every article unchanged, the images already stored, and the pages that aren't in the navigation](./images/import.png)
+
 ## 4. Write and publish
 
 The editor has the article's title and its text in Markdown on the left, and the article as readers will see it on the right, updated as you type. You can use headings (`##`), numbered and bulleted lists, **bold**, links, notes (lines starting with `>`) and tables. Links can go to web pages (`https://…`), email addresses (`mailto:…`) or other pages of the site (`/en/articles/…`). Images must be `https://` addresses.

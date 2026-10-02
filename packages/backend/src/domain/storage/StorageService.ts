@@ -199,6 +199,21 @@ export class StorageService {
     return ready;
   }
 
+  /**
+   * A ready object of the project and product whose declared sha256 matches, to reuse
+   * instead of storing the same bytes again. The hash is the uploader's declaration, so
+   * reuse stays within one project and product.
+   */
+  async findReady(input: {
+    workspaceId: string;
+    projectId: string;
+    product: Product;
+    visibility: Visibility;
+    sha256: string;
+  }): Promise<StoredObjectRow | undefined> {
+    return await this.deps.objects.findReadyBySha256(input);
+  }
+
   /** Store bytes the server already has (no client upload), recorded ready at once. */
   async putObject(input: Omit<ObjectInput, 'sizeBytes'> & { body: Uint8Array; cacheControl?: string }) {
     const declared: ObjectInput = { ...input, sizeBytes: input.body.byteLength };

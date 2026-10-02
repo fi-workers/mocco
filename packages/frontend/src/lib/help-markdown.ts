@@ -20,6 +20,7 @@ function articleLink(href: string): { href: string; external: boolean } | null {
 export function helpArticleBlocks(markdown: string): DocBlock[] {
   return markdownToBlocks(markdown, {
     link: articleLink,
-    image: (href, alt) => (/^https:\/\//u.test(href) ? { t: 'image', src: href, alt } : null),
+    // Absolute URLs only: storage serves imported images over http locally, https elsewhere.
+    image: (href, alt) => (/^https?:\/\//u.test(href) ? { t: 'image', src: href, alt } : null),
   });
 }

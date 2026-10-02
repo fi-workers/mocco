@@ -84,6 +84,23 @@ export const draftInputSchema = z.object({
 });
 export type DraftInput = z.infer<typeof draftInputSchema>;
 
+/** Images an article may embed; uploaded to storage and served publicly. */
+export const HELP_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export const helpImageInputSchema = z.object({
+  contentType: z.enum(HELP_IMAGE_TYPES),
+  sizeBytes: z
+    .int()
+    .min(1)
+    .max(10 * 1024 * 1024),
+  filename: z.string().min(1).max(120),
+  /** Hex SHA-256 of the bytes: an image the project already stored is reused. */
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/u)
+    .optional(),
+});
+export type HelpImageInput = z.infer<typeof helpImageInputSchema>;
+
 /** Turn a title into a URL label (ASCII only; a title without ASCII letters gets `article`). */
 export function slugify(title: string): string {
   /* eslint-disable sonarjs/null-dereference -- title and the words are strings, never null */

@@ -1,4 +1,4 @@
-import { ConflictError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
 /** The project has no help center yet — NOT_FOUND; the public site answers 404 too. */
 export class HelpSiteNotFoundError extends NotFoundError {
@@ -37,5 +37,13 @@ export class HelpNothingToPublishError extends ConflictError {
   constructor(articleId: string, options?: ErrorOptions) {
     super(`Article ${articleId} has no draft to publish`, options);
     this.name = 'HelpNothingToPublishError';
+  }
+}
+
+/** Image uploads need object storage, which this deployment hasn't configured — BAD_REQUEST. */
+export class HelpStorageNotConfiguredError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super("Images can't be uploaded: object storage isn't configured", options);
+    this.name = 'HelpStorageNotConfiguredError';
   }
 }

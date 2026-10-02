@@ -43,6 +43,22 @@ export class HelpTreeRepo {
     return row;
   }
 
+  async findCollectionBySlug(workspaceId: string, projectId: string, slug: string) {
+    const [row] = await this.db
+      .select()
+      .from(c)
+      .where(and(eq(c.workspaceId, workspaceId), eq(c.projectId, projectId), eq(c.slug, slug)));
+    return row;
+  }
+
+  async findSectionByTitle(workspaceId: string, collectionId: string, title: string) {
+    const [row] = await this.db
+      .select()
+      .from(sec)
+      .where(and(eq(sec.workspaceId, workspaceId), eq(sec.collectionId, collectionId), eq(sec.title, title)));
+    return row;
+  }
+
   /** The section, if its collection is in the project. */
   async findSection(workspaceId: string, projectId: string, sectionId: string) {
     const [row] = await this.db

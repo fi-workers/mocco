@@ -27,6 +27,11 @@ export const storagePolicies: Partial<Record<Product, StoragePolicy>> = {
       'video/*',
     ],
   },
+  // Images in help center articles, served publicly. No SVG: it can carry script.
+  [Products.helpcenter]: {
+    maxBytes: 10 * MiB,
+    contentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  },
   // Screenshots users attach to messenger conversations.
   [Products.messenger]: {
     maxBytes: 10 * MiB,

@@ -1,4 +1,5 @@
 // A project's help center (#96): turning it on with a public slug and its languages.
+
 import { AuditActions } from '@mocco/common/audit';
 
 import { HelpSiteExistsError, HelpSiteNotFoundError, HelpSlugTakenError } from '@backend/domain/helpcenter/errors';

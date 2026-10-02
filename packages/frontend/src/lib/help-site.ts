@@ -75,3 +75,15 @@ export async function loadHelpArticle(site: string, locale: string, ref: string)
     throw error;
   }
 }
+
+/** Where an old path now lives, or undefined (no such site or path). */
+export async function loadHelpRedirect(site: string, fromPath: string): Promise<string | undefined> {
+  try {
+    return await getHelpDomain().helpPublic.redirect(site, fromPath);
+  } catch (error) {
+    if (isMissingSite(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}

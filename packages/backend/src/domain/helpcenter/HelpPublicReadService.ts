@@ -1,6 +1,7 @@
 // What a help center shows the public (#96): published articles only, looked up by the
 // site's slug, in the asked language when it has one and in the source language
 // otherwise. The public pages and /v1 call this; nothing here needs a session.
+
 import { articlePath, ArticleStatuses } from '@mocco/common/help';
 
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';

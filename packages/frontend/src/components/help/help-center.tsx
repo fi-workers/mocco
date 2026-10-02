@@ -1,11 +1,13 @@
 // A project's help center in the console (#96): set it up (address and languages), then
 // its collections → sections → articles, with each article's state. Writing happens in
 // the article editor.
+
 import { HELP_LOCALE_NAMES, HELP_LOCALES, slugify } from '@mocco/common/help';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import ImportMintlify from '@frontend/components/help/import-mintlify';
 import {
   errorMessage,
   inputClass,
@@ -311,6 +313,7 @@ export default function HelpCenter({ workspaceId, projectId }: Props) {
         )}
       </div>
       <Tree workspaceId={workspaceId} projectId={projectId} />
+      <ImportMintlify workspaceId={workspaceId} projectId={projectId} />
     </div>
   );
 }
