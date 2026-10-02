@@ -2,7 +2,6 @@
 // an app's contact screen. Read-only and published content only, so publishable keys
 // may call it (scope help:read).
 import { ApiScopes } from '@mocco/common/apikey';
-import { helpLocaleSchema } from '@mocco/common/help';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -20,7 +19,14 @@ export interface HelpServingDeps {
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).max(500),
-  locale: helpLocaleSchema.optional(),
+  /** Any language tag (`en`, `en-KR`, `zh-Hant-TW`): its language is served where offered. */
+  locale: z
+    .string()
+    .max(35)
+    .regex(/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*$/u)
+    // eslint-disable-next-line sonarjs/null-dereference -- zod hands the transform a string
+    .transform(tag => tag.split(/[-_]/u, 1)[0]?.toLowerCase() ?? '')
+    .optional(),
   limit: z.coerce.number().int().min(1).max(20).default(5),
   /** `any`: one word is enough, for free text such as an inquiry being written. */
   match: z.enum(['all', 'any']).default('all'),

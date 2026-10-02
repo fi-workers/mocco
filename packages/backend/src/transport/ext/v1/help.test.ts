@@ -107,7 +107,8 @@ describe('/v1/help (pglite)', () => {
     const shortId = await publish();
     const key = await keyFor([ApiScopes.helpRead]);
 
-    const found = await search(key, 'q=%EC%9C%84%EC%A0%AF&locale=en');
+    // A device's language tag carries a region; its language is what counts.
+    const found = await search(key, 'q=%EC%9C%84%EC%A0%AF&locale=en-KR');
 
     expect(found).toEqual({
       status: 200,
