@@ -73,7 +73,7 @@ When the change reaches the default branch:
 
 - **Unprotected environments** update at once.
 - **Protected environments** get a change waiting for approval, marked with the commit it came from. A newer push replaces it.
-- **Who can't approve:** the person who pushed or merged (the member signed in with that GitHub account) proposed the change, so they can't approve it themselves.
+- **Who can't approve:** the change counts as proposed by the person who pushed or merged (the member signed in with that GitHub account) and by the commit's author (the member with that verified email). Neither can approve it.
 
 ![A change from commit 3f9c2a1 waiting for approval on a protected environment](./images/flags-repo-changeset.png)
 

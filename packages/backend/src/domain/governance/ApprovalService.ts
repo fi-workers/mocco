@@ -49,6 +49,8 @@ export interface ApprovalRequestInput {
   action: Record<string, unknown>;
   requirements: GateRequirements;
   requestedByUserId: string | null;
+  /** Others who proposed the change with the requester; `prevent_self` bars them too. */
+  coProposerUserIds?: string[];
   expiresAt?: Date | null;
 }
 
@@ -155,6 +157,7 @@ export class ApprovalService {
       action: input.action,
       requirements: input.requirements,
       requestedByUserId: input.requestedByUserId,
+      coProposerUserIds: input.coProposerUserIds ?? [],
       expiresAt: input.expiresAt ?? null,
     });
     await this.deps.audit.record(workspaceId, {
@@ -206,6 +209,7 @@ export class ApprovalService {
       requirements: request.requirements,
       voterUserId: userId,
       subjectOwnerUserId: request.requestedByUserId,
+      coProposerUserIds: request.coProposerUserIds,
       voterRoles,
       reason,
     });

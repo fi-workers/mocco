@@ -80,6 +80,8 @@ function PendingActions({ workspaceId, projectId, changeset }: Props) {
   const { data: session } = useSession();
   const myUserId = session?.user.id ?? null;
   const isMine = myUserId !== null && changeset.proposedByUserId === myUserId;
+  // A commit's author proposed it too when someone else pushed: they can't decide either.
+  const isCoProposer = myUserId !== null && changeset.coProposerUserIds.includes(myUserId);
   const refresh = async () => {
     await Promise.all([
       utils.flags.history.invalidate(),
@@ -93,7 +95,7 @@ function PendingActions({ workspaceId, projectId, changeset }: Props) {
   const rebase = trpc.flags.rebaseChangeset.useMutation({ onSuccess: refresh });
   const error = vote.error ?? withdraw.error ?? rebase.error;
   const input = { workspaceId, projectId, changesetId: changeset.id };
-  const canDecide = !(changeset.requirements?.prevent_self === true && isMine);
+  const canDecide = !(changeset.requirements?.prevent_self === true && (isMine || isCoProposer));
 
   return (
     <div className="flex flex-col gap-1.5">

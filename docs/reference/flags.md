@@ -256,7 +256,11 @@ A plan never contains `kill` or `restore`, so a sync never un-kills a flag. Plan
    - **Protected environment:** the repo's previous pending changeset there is superseded (`flag.changeset.superseded`) and the new one is proposed under the gate. A partial unique index keeps at most one pending repo changeset per environment and repo. A push that changes nothing in a protected environment also supersedes what the last push left pending there.
 5. Records the sync in `mocco_flag_file_syncs`: `applied`, `pending_approval`, `unchanged` or `invalid`, with the issues. The record is audited `flag.file.synced` and listed by `flags.fileSyncs`.
 
-**The proposer** of a sync's changesets, and so the person `prevent_self` keeps from approving them, is the workspace member who signed in with the GitHub account that pushed (`sender.id` → `mocco_accounts`). If there is none, it is the member whose **verified** email matches the head commit's author email. A git author email is a claim, so it only attributes when it matches a verified address of a member. A GitHub review never satisfies the gate (ADR 0002). Counting the pusher and the author both as proposers, when they are different people, needs approvals with several proposers and comes next.
+**Who proposed it:** a sync's changesets have up to two proposers, and `prevent_self` keeps both from approving:
+- the workspace member signed in with the GitHub account that pushed or merged (`sender.id` → `mocco_accounts`);
+- the member whose **verified** email matches the head commit's author email.
+
+The pusher is `proposed_by_user_id` when known, else the author. The other, when it is a different member, is in `co_proposer_user_ids`, on the changeset and on its approval request, and `checkVote` bars co-proposers like the owner. A git author email is a claim, so it only counts when it matches a verified address of a member. A GitHub review never satisfies the gate (ADR 0002). A rebase keeps a repo changeset's commit and co-proposers, and closes the old pending changeset before proposing the new one.
 
 ## API
 

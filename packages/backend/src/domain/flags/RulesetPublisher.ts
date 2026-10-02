@@ -36,6 +36,7 @@ export interface ApplyChangesetInput {
   /** A repo changeset (#145): the repo and the commit of `.mocco/flags.yml`. */
   repoId?: string;
   commitSha?: string;
+  coProposerUserIds?: string[];
 }
 
 /** An environment's head state as the publisher reads it. */
@@ -245,6 +246,7 @@ export class RulesetPublisher {
             reason: input.reason,
             repoId: input.repoId ?? null,
             commitSha: input.commitSha ?? null,
+            coProposerUserIds: input.coProposerUserIds ?? [],
             resolvedAt: now,
           })
         : await changesets.resolvePending(workspaceId, input.pendingChangesetId, ChangesetStates.applied, {

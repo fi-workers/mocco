@@ -48,6 +48,15 @@ export interface FlagGovernanceDeps {
   now?: () => Date;
 }
 
+/** Where a proposed changeset came from: a console edit, or a `.mocco/flags.yml` commit (#145). */
+export interface ChangesetOrigin {
+  source: ChangesetSource;
+  repoId: string | null;
+  commitSha: string | null;
+  /** Others who proposed it (a commit's author when someone else pushed); prevent_self bars them too. */
+  coProposerUserIds: string[];
+}
+
 /** What a changeset approval pins: the changeset and the exact content approvers saw. */
 const changesetActionSchema = z.object({
   changesetId: z.uuid(),
@@ -223,7 +232,7 @@ export class FlagGovernanceService {
     environment: FlagEnvironmentRow & { changeGate: GateRequirements },
     actorUserId: string | null,
     input: { baseVersion: number; ops: readonly ChangeOp[]; reason: string | null },
-    origin?: { source: ChangesetSource; repoId: string; commitSha: string },
+    origin?: ChangesetOrigin,
   ) {
     const { workspaceId } = environment;
     if (input.baseVersion !== environment.currentVersion) {
@@ -239,6 +248,7 @@ export class FlagGovernanceService {
       source: origin?.source ?? ChangesetSources.ui,
       repoId: origin?.repoId ?? null,
       commitSha: origin?.commitSha ?? null,
+      coProposerUserIds: origin?.coProposerUserIds ?? [],
       ops: [...input.ops],
       diff,
       contentHash: changesetContentHash(environment.id, input.baseVersion, input.ops),
@@ -260,6 +270,7 @@ export class FlagGovernanceService {
       },
       requirements: environment.changeGate,
       requestedByUserId: actorUserId,
+      coProposerUserIds: origin?.coProposerUserIds ?? [],
       expiresAt,
     });
     await changesets.setApprovalRequest(workspaceId, created.id, request.id);
@@ -385,15 +396,24 @@ export class FlagGovernanceService {
     if (environment.changeGate === null) {
       throw new ChangesetNotPendingError(changeset.id, 'on an unprotected environment');
     }
-    // Propose first: if the ops no longer apply, the old changeset stays as it was.
-    const rebased = await this.propose({ ...environment, changeGate: environment.changeGate }, actorUserId, {
-      baseVersion: environment.currentVersion,
-      ops: changeset.ops,
-      reason: changeset.reason,
-    });
+    // Check first: if the ops no longer apply, the old changeset stays as it was.
+    await this.deps.publisher.dryRun(this.deps.db, environment, changeset.ops);
+    // Close before re-proposing: a repo changeset may be the one pending per environment and repo.
     if (changeset.state === ChangesetStates.pending) {
       await this.close(changeset, ChangesetStates.superseded, AuditActions.flagChangesetWithdrawn, actorUserId);
     }
+    // The same origin: a rebased repo changeset keeps its commit and its co-proposers.
+    const rebased = await this.propose(
+      { ...environment, changeGate: environment.changeGate },
+      actorUserId,
+      { baseVersion: environment.currentVersion, ops: changeset.ops, reason: changeset.reason },
+      {
+        source: changeset.source,
+        repoId: changeset.repoId,
+        commitSha: changeset.commitSha,
+        coProposerUserIds: changeset.coProposerUserIds,
+      },
+    );
     return rebased;
   }
 

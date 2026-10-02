@@ -365,13 +365,20 @@ export class FlagService {
       environmentId: string;
       ops: ChangeOp[];
       proposerUserId: string | null;
+      /** Others who proposed it (the commit's author when someone else pushed). */
+      coProposerUserIds: string[];
       repoId: string;
       commitSha: string;
       reason: string;
     },
   ) {
     const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
-    const origin = { source: ChangesetSources.repo, repoId: input.repoId, commitSha: input.commitSha };
+    const origin = {
+      source: ChangesetSources.repo,
+      repoId: input.repoId,
+      commitSha: input.commitSha,
+      coProposerUserIds: input.coProposerUserIds,
+    };
     const { changeGate } = environment;
     if (changeGate !== null) {
       if (this.deps.governance === undefined) {

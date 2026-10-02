@@ -1350,6 +1350,11 @@ export const approvalRequests = pgTable(
     requirements: jsonb().$type<GateRequirements>().notNull(),
     // SET NULL: a request outlives its requester; prevent_self then can't match (fail-closed).
     requestedByUserId: uuid('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Others who proposed it (a merged commit's pusher and author, #145): prevent_self bars them too.
+    coProposerUserIds: uuid('co_proposer_user_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     state: text().$type<ApprovalState>().notNull().default(ApprovalStates.pending),
     expiresAt: timestamp('expires_at'),
     resolvedAt: timestamp('resolved_at'),
@@ -1725,6 +1730,11 @@ export const flagChangesets = pgTable(
     // A repo changeset (#145): the repo and the commit of `.mocco/flags.yml` it came from.
     repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'set null' }),
     commitSha: text('commit_sha'),
+    // Who else proposed it: the commit's author when someone else pushed (prevent_self bars them too).
+    coProposerUserIds: uuid('co_proposer_user_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     // A protected environment's changeset: the approval request deciding it, the gate it
     // was proposed under (pinned) and when it stops waiting.
     approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
