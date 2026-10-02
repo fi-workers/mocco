@@ -10,6 +10,7 @@
     "./execution/instance": "./src/domain/execution/instance.ts",
     "./ext/app": "./src/transport/ext/app.ts",
     "./governance/instance": "./src/domain/governance/instance.ts",
+    "./helpcenter/instance": "./src/domain/helpcenter/instance.ts",
     "./integration/instance": "./src/domain/integration/instance.ts",
     "./ota/instance": "./src/domain/ota/instance.ts",
     "./project/instance": "./src/domain/project/instance.ts",

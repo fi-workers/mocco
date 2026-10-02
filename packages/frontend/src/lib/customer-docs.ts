@@ -5,14 +5,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { Lexer } from 'marked';
-
 import { GuideSets } from '@frontend/lib/guide-sets';
+import { markdownToBlocks } from '@frontend/lib/markdown-blocks';
 import { Routes } from '@frontend/lib/routes';
 
-import type { DocBlock, DocInline, DocNavEntry, DocPage } from '@frontend/lib/doc-ast';
+import type { DocInline, DocNavEntry, DocPage } from '@frontend/lib/doc-ast';
 import type { GuideSet } from '@frontend/lib/guide-sets';
-import type { Token, Tokens } from 'marked';
 
 /** A set's guides, relative to the frontend package (the cwd of `next build` / `next dev`). */
 const guidesDir = (set: GuideSet) => path.join(process.cwd(), '..', '..', 'docs', 'customer', set);
@@ -61,20 +59,19 @@ function splitFrontmatter(source: string): { title: string; description: string;
   return { title: field('title'), description: field('description'), body };
 }
 
-/** GitHub-style heading anchors, so `page.md#some-heading` links keep working. */
-export function slugify(text: string): string {
-  // eslint-disable-next-line sonarjs/null-dereference -- a heading's text, never null
-  return text
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[^\p{L}\p{N}\s-]/gu, '')
-    .replaceAll(/\s/gu, '-');
-}
-
 /** PNG width and height from the IHDR chunk (bytes 16–23). */
 function pngSize(file: string): { width: number; height: number } {
   const bytes = readFileSync(file);
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+/** A guide's screenshot: `./images/<name>.png`, served from the set's images path. */
+function guideImage(set: GuideSet, href: string, alt: string): Extract<DocInline, { t: 'image' }> {
+  const name = /^\.\/images\/([\w-]+\.png)$/u.exec(href)?.[1];
+  if (name === undefined) {
+    throw new Error(`customer guide image ${href} must be ./images/<name>.png`);
+  }
+  return { t: 'image', src: `${imagesPath(set)}/${name}`, alt, ...pngSize(path.join(guidesDir(set), 'images', name)) };
 }
 
 /** A link in a guide, as the app serves it: `./x.md#a` → `/docs/<same set>/x#a`, and
@@ -98,125 +95,6 @@ function resolveHref(set: GuideSet, href: string): { href: string; external: boo
   throw new Error(`customer guide link ${href} must be ./<page>.md, ../<set>/<page>.md, an anchor or an http(s) URL`);
 }
 
-function plainText(tokens: readonly Token[]): string {
-  return tokens
-    .map(token => {
-      const nested = (token as Tokens.Generic).tokens;
-      return nested === undefined ? (((token as Tokens.Generic).text as string | undefined) ?? '') : plainText(nested);
-    })
-    .join('');
-}
-
-function inline(set: GuideSet, tokens: readonly Token[]): DocInline[] {
-  return tokens.flatMap((token): DocInline[] => {
-    switch (token.type) {
-      case 'strong': {
-        return [{ t: 'strong', c: inline(set, (token as Tokens.Strong).tokens) }];
-      }
-      case 'em': {
-        return [{ t: 'em', c: inline(set, (token as Tokens.Em).tokens) }];
-      }
-      case 'codespan': {
-        return [{ t: 'code', v: (token as Tokens.Codespan).text }];
-      }
-      case 'br': {
-        return [{ t: 'br' }];
-      }
-      case 'link': {
-        const link = token as Tokens.Link;
-        return [{ t: 'link', ...resolveHref(set, link.href), c: inline(set, link.tokens) }];
-      }
-      case 'image': {
-        const image = token as Tokens.Image;
-        const name = /^\.\/images\/([\w-]+\.png)$/u.exec(image.href)?.[1];
-        if (name === undefined) {
-          throw new Error(`customer guide image ${image.href} must be ./images/<name>.png`);
-        }
-        return [
-          {
-            t: 'image',
-            src: `${imagesPath(set)}/${name}`,
-            alt: image.text,
-            ...pngSize(path.join(guidesDir(set), 'images', name)),
-          },
-        ];
-      }
-      case 'text': {
-        const text = token as Tokens.Text;
-        return text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(set, text.tokens);
-      }
-      case 'escape': {
-        return [{ t: 'text', v: (token as Tokens.Escape).text }];
-      }
-      default: {
-        // html and anything else: its raw text, never markup.
-        return [{ t: 'text', v: token.raw }];
-      }
-    }
-  });
-}
-
-function blocks(set: GuideSet, tokens: readonly Token[]): DocBlock[] {
-  return tokens.flatMap((token): DocBlock[] => {
-    switch (token.type) {
-      case 'heading': {
-        const heading = token as Tokens.Heading;
-        return [
-          {
-            t: 'heading',
-            depth: heading.depth,
-            id: slugify(plainText(heading.tokens)),
-            c: inline(set, heading.tokens),
-          },
-        ];
-      }
-      case 'paragraph': {
-        return [{ t: 'p', c: inline(set, (token as Tokens.Paragraph).tokens) }];
-      }
-      case 'text': {
-        // A tight list item's text.
-        const text = token as Tokens.Text;
-        return [{ t: 'p', c: text.tokens === undefined ? [{ t: 'text', v: text.text }] : inline(set, text.tokens) }];
-      }
-      case 'list': {
-        const list = token as Tokens.List;
-        return [
-          {
-            t: 'list',
-            ordered: list.ordered,
-            start: list.start === '' ? 1 : list.start,
-            items: list.items.map(item => blocks(set, item.tokens)),
-          },
-        ];
-      }
-      case 'code': {
-        const code = token as Tokens.Code;
-        return [{ t: 'code', lang: code.lang ?? '', v: code.text }];
-      }
-      case 'blockquote': {
-        return [{ t: 'quote', c: blocks(set, (token as Tokens.Blockquote).tokens) }];
-      }
-      case 'table': {
-        const table = token as Tokens.Table;
-        return [
-          {
-            t: 'table',
-            header: table.header.map(cell => inline(set, cell.tokens)),
-            rows: table.rows.map(row => row.map(cell => inline(set, cell.tokens))),
-          },
-        ];
-      }
-      case 'hr': {
-        return [{ t: 'hr' }];
-      }
-      default: {
-        // space, html, def: nothing to render.
-        return [];
-      }
-    }
-  });
-}
-
 /** Every guide slug of a set, in reading order. */
 export function listGuideSlugs(set: GuideSet): string[] {
   const slugs = readdirSync(guidesDir(set)).flatMap(file => {
@@ -236,5 +114,13 @@ export function readGuidePage(set: GuideSet, slug: string): DocPage {
     throw new Error(`invalid guide slug ${slug}`);
   }
   const { title, description, body } = splitFrontmatter(readGuide(set, slug));
-  return { slug, title, description, blocks: blocks(set, new Lexer({ gfm: true }).lex(body)) };
+  return {
+    slug,
+    title,
+    description,
+    blocks: markdownToBlocks(body, {
+      link: href => resolveHref(set, href),
+      image: (href, alt) => guideImage(set, href, alt),
+    }),
+  };
 }

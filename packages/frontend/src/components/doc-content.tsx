@@ -56,6 +56,18 @@ function Inline({ nodes }: { nodes: DocInline[] }) {
             );
           }
           case 'image': {
+            if (node.width === undefined || node.height === undefined) {
+              return (
+                // eslint-disable-next-line @next/next/no-img-element -- a remote image of unknown size from a help article
+                <img
+                  key={index}
+                  src={node.src}
+                  alt={node.alt}
+                  loading="lazy"
+                  className="my-2 h-auto max-w-full rounded-xl border border-border"
+                />
+              );
+            }
             return (
               <Image
                 key={index}

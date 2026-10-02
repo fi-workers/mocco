@@ -30,6 +30,7 @@ related:
 | [0012](./0012-repository-per-table-for-db-owning-domains.md) | Repository per table for DB-owning domains | accepted | 2026-07-15 |
 | [0013](./0013-mocco-is-a-multi-product-platform.md) | Mocco is a multi-product platform — projects below workspaces, per-workspace product enablement | draft | 2026-09-25 |
 | [0014](./0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md) | Background jobs on a Postgres job table driven by a tick | draft | 2026-09-25 |
+| [0015](./0015-public-sites-use-isr-on-the-pages-router.md) | Public multi-tenant sites use ISR on the Pages Router | draft | 2026-10-02 |
 | [0017](./0017-public-v1-api-keys-and-sdk-licensing.md) | Public /v1 API, publishable and secret keys, and MIT SDKs | draft | 2026-10-01 |
 | [0018](./0018-domain-events-vs-audit-log.md) | Domain events are separate from the audit log | draft | 2026-09-25 |
 | [0019](./0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md) | Inbound webhooks use per-source ingest URLs with mandatory signatures | draft | 2026-09-25 |
