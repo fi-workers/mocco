@@ -1,6 +1,7 @@
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -24,7 +25,7 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { auditLog } from '@backend/infra/db/schema';
+import { auditLog, members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
@@ -222,6 +223,54 @@ describe('flags router on pglite', () => {
         ],
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it("proposes changes to a protected environment and applies them on another member's approval", async () => {
+    const owner = await setup();
+    const { api, scope } = owner;
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    await api.flags.createBoolean({ ...scope, key: 'checkout' });
+    const member = await signedInCaller('member@example.com');
+    await t.db
+      .insert(members)
+      .values({ organizationId: scope.workspaceId, userId: member.userId, role: WorkspaceMemberRoles.member });
+    const { role } = await api.role.create({ workspaceId: scope.workspaceId, name: 'release' });
+    await api.role.addMember({ workspaceId: scope.workspaceId, roleId: role.id, userId: member.userId });
+    const gate = { resume: [{ role: 'release', count: 1 }], prevent_self: true, reason_required: false };
+
+    await expect(api.flags.setChangeGate({ ...scope, environmentId: environment.id, gate })).resolves.toMatchObject({
+      outcome: 'applied',
+    });
+    const proposed = await api.flags.applyChangeset({
+      ...scope,
+      environmentId: environment.id,
+      baseVersion: 1,
+      ops: [{ op: 'set_enabled', flagKey: 'checkout', enabled: true }],
+      reason: 'launch',
+    });
+    const vote = { ...scope, changesetId: proposed.changeset.id, decision: 'approve' as const };
+
+    expect(proposed).toMatchObject({
+      outcome: 'pending_approval',
+      changeset: { state: 'pending', requirements: gate },
+    });
+    await expect(member.api.flags.voteChangeset({ ...vote, contentHash: 'stale' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    const { changeset } = await member.api.flags.voteChangeset({
+      ...vote,
+      contentHash: proposed.changeset.contentHash,
+    });
+    const detail = await api.flags.changeset({ ...scope, changesetId: changeset.id });
+
+    expect(changeset).toMatchObject({ state: 'applied', appliedVersion: 2 });
+    expect(detail.votes).toEqual([expect.objectContaining({ userId: member.userId, decision: 'approve' })]);
+    await expect(
+      api.flags.setChangeGate({ ...scope, environmentId: environment.id, gate: null }),
+    ).resolves.toMatchObject({
+      outcome: 'pending_approval',
+    });
   });
 
   it("never reaches another workspace's environment", async () => {

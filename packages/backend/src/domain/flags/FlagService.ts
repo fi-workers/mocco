@@ -1,12 +1,8 @@
 import { AuditActions } from '@mocco/common/audit';
-import { ChangesetSources, FlagTypes } from '@mocco/common/flags';
+import { ChangeOutcomes, ChangesetSources, FlagTypes } from '@mocco/common/flags';
 import { resolveFlag } from '@mocco/flags-core';
 
-import {
-  FlagEnvironmentNotFoundError,
-  FlagKeyTakenError,
-  ProtectedEnvironmentError,
-} from '@backend/domain/flags/errors';
+import { FlagEnvironmentNotFoundError, FlagKeyTakenError } from '@backend/domain/flags/errors';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
 import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
@@ -17,6 +13,7 @@ import { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagChangesetRow } from '@backend/domain/flags/repos/flag-changeset.repo';
 import type { Db } from '@backend/infra/db/types';
 import type { BooleanFlagCreateInput, ChangeOp, FlagCreateInput } from '@mocco/common/flags';
@@ -26,6 +23,8 @@ export interface FlagServiceDeps {
   db: Db;
   audit: AuditService;
   publisher?: RulesetPublisher;
+  /** Decides changes to protected environments; without it they are refused (fail closed). */
+  governance?: FlagGovernanceService;
 }
 
 /** How many changesets an environment's history returns. */
@@ -94,6 +93,11 @@ export class FlagService {
       throw new FlagEnvironmentNotFoundError(environmentId);
     }
     return environment;
+  }
+
+  /** The publisher this service applies with (shared with the governance service). */
+  get rulesetPublisher(): RulesetPublisher {
+    return this.publisher;
   }
 
   async listEnvironments(workspaceId: string, projectId: string) {
@@ -275,9 +279,10 @@ export class FlagService {
   }
 
   /**
-   * Apply a changeset to an unprotected environment at once. `baseVersion` is the
-   * version the caller saw: if the environment moved since, nothing is applied
-   * (`ChangesetConflictError`).
+   * Change an environment. Unprotected: the changeset applies at once (`applied`).
+   * Protected: it is proposed for approval under the environment's change gate
+   * (`pending_approval`). `baseVersion` is the version the caller saw: if the environment
+   * moved since, nothing is recorded (`ChangesetConflictError`).
    */
   async applyChangeset(
     workspaceId: string,
@@ -286,14 +291,18 @@ export class FlagService {
     input: { environmentId: string; baseVersion: number; ops: ChangeOp[]; reason: string | null },
   ) {
     const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
-    if (environment.changeGate !== null) {
-      throw new ProtectedEnvironmentError(environment.id);
+    const { changeGate } = environment;
+    if (changeGate !== null) {
+      if (this.deps.governance === undefined) {
+        throw new Error('Changes to a protected environment need the governance service');
+      }
+      return await this.deps.governance.propose({ ...environment, changeGate }, actorUserId, input);
     }
     const { changeset } = await this.deps.db.transaction(
       async tx => await this.publisher.apply(tx, workspaceId, { ...input, source: ChangesetSources.ui, actorUserId }),
     );
     await this.auditApplied(workspaceId, actorUserId, changeset);
-    return changeset;
+    return { outcome: ChangeOutcomes.applied, changeset };
   }
 
   /** The environment's changesets, newest first. */

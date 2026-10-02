@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { EventJobKinds } from '@backend/domain/events/EventBus';
 import { createEventBus } from '@backend/domain/events/subscriptions';
+import { FlagJobKinds } from '@backend/domain/flags/jobs';
 import { InboundJobKinds } from '@backend/domain/inbound/jobs';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobKinds } from '@backend/domain/jobs/prune';
@@ -63,7 +64,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 20 });
 
-    expect(report).toMatchObject({ ran: 11, errors: [], outcomes: { succeeded: 11 } });
+    expect(report).toMatchObject({ ran: 12, errors: [], outcomes: { succeeded: 12 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -78,6 +79,7 @@ describe('job runtime composition (pglite)', () => {
         OtaJobKinds.pruneUploadSessions,
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,
+        FlagJobKinds.expireChangesets,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);

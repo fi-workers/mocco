@@ -87,7 +87,11 @@ function SegmentForm({
   environment,
   segment,
   onDone,
-}: Props & { segment: FlagSegmentDto | null; onDone: () => void }) {
+}: Props & {
+  segment: FlagSegmentDto | null;
+  /** Called after a save (with a notice when it waits for approval) or on cancel. */
+  onDone: (notice?: string) => void;
+}) {
   const utils = trpc.useUtils();
   const [key, setKey] = useState(segment?.key ?? '');
   const [name, setName] = useState(segment?.name ?? '');
@@ -106,13 +110,13 @@ function SegmentForm({
       })) ?? [],
   );
   const save = trpc.flags.applyChangeset.useMutation({
-    onSuccess: async () => {
+    onSuccess: async result => {
       await Promise.all([
         utils.flags.segments.invalidate(),
         utils.flags.environments.invalidate(),
         utils.flags.history.invalidate(),
       ]);
-      onDone();
+      onDone(result.outcome === 'pending_approval' ? 'The segment change was sent for approval.' : undefined);
     },
   });
   const setGroup = (id: string, clauses: ClauseDraft[] | null) => {
@@ -230,7 +234,12 @@ function SegmentForm({
         <Button type="submit" pending={save.isPending} disabled={key === '' || name === ''} className="text-sm">
           Save segment
         </Button>
-        <Button variant="ghost" className="text-sm" onClick={onDone}>
+        <Button
+          variant="ghost"
+          className="text-sm"
+          onClick={() => {
+            onDone();
+          }}>
           Cancel
         </Button>
       </div>
@@ -312,6 +321,7 @@ function SegmentRow({ workspaceId, projectId, environment, segment }: Props & { 
 export default function Segments({ workspaceId, projectId, environment }: Props) {
   const segmentsQuery = trpc.flags.segments.useQuery({ workspaceId, projectId, environmentId: environment.id });
   const [isCreating, setIsCreating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const segments = segmentsQuery.data?.segments ?? [];
 
   return (
@@ -342,11 +352,13 @@ export default function Segments({ workspaceId, projectId, environment }: Props)
           projectId={projectId}
           environment={environment}
           segment={null}
-          onDone={() => {
+          onDone={message => {
             setIsCreating(false);
+            setNotice(message ?? null);
           }}
         />
       ) : null}
+      {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {segments.length === 0 && !isCreating ? <p className="text-sm text-muted-foreground">No segments yet.</p> : null}
       <ul className="flex flex-col gap-2">
         {segments.map(segment => (

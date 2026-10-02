@@ -1689,11 +1689,19 @@ export const flagChangesets = pgTable(
     appliedVersion: integer('applied_version'),
     proposedByUserId: uuid('proposed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     reason: text(),
+    // A protected environment's changeset: the approval request deciding it, the gate it
+    // was proposed under (pinned) and when it stops waiting.
+    approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
+    requirements: jsonb().$type<GateRequirements>(),
+    expiresAt: timestamp('expires_at'),
     createdAt,
     resolvedAt: timestamp('resolved_at'),
   },
   t => [
     index('mocco_flag_changesets_environment_idx').on(t.environmentId, t.createdAt),
+    index('mocco_flag_changesets_pending_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.state} = 'pending'`),
     uniqueIndex('mocco_flag_changesets_applied_version_uq').on(t.environmentId, t.appliedVersion),
     foreignKey({
       columns: [t.environmentId, t.workspaceId],

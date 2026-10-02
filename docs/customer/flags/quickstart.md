@@ -41,7 +41,22 @@ Open a flag to decide who gets which variant, per environment:
 
 ![A flag's rules in Staging: the staff segment and pro plans get the new checkout, everyone else is rolled out at 10%, and the preview shows the result for ada](./images/flags-rules.png)
 
-## 4. Create a server key for one environment
+## 4. Protect an environment
+
+On the Feature flags tab, pick an environment and choose **Edit protection**. Choose the role whose members approve changes, how many approvals are needed, and whether the person who proposed a change may approve it. A role is defined on the workspace's **Access** page.
+
+Once an environment is protected, saving a change sends it for approval instead of applying it:
+
+- The change waits in the environment's history with its diff, the reason, and the protection it needs. People with the role get a notification if a workspace notification rule includes flag changes (the **Mocco** preset does).
+- An approver approves or rejects it right there. An approval is tied to the exact change on screen, so a change that was replaced in the meantime can't be approved by mistake.
+- When enough people approve, the change applies. If someone else changed the environment first, it is marked **conflicted** and nothing is applied; the person who proposed it can **rebase** it onto the current version, which sends it for approval again.
+- The proposer can withdraw a waiting change. A change nobody decides on within 7 days expires.
+
+Changing or removing an environment's protection is itself approved under its current protection. A change that is already waiting keeps the protection it was proposed under.
+
+![A protected Staging environment: a ramp to 25% waiting for one mobile-release approval, with its reason, diff and hash](./images/flags-approval.png)
+
+## 5. Create a server key for one environment
 
 On the project's **API keys** tab, create a **Secret** key with the **flags:read** scope and choose the environment it reads. A key reads exactly one environment, so create one key per environment and give each server the key for its own environment. Copy the key from the notice; it is shown only once.
 
@@ -49,7 +64,7 @@ On the project's **API keys** tab, create a **Secret** key with the **flags:read
 
 Keep this key on the server. Mocco refuses secret keys sent from a browser, because the rules can hold user lists and other details your users shouldn't see.
 
-## 5. Evaluate flags from Node
+## 6. Evaluate flags from Node
 
 Install OpenFeature's server SDK and the Mocco provider:
 

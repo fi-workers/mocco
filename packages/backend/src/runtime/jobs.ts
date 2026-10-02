@@ -15,6 +15,12 @@ import { createEventHandlers, pruneEventsSchedule } from '@backend/domain/events
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { createFlagsDomain } from '@backend/domain/flags/compose';
+import { createFlagHandlers, expireFlagChangesetsSchedule } from '@backend/domain/flags/jobs';
+import { ApprovalService } from '@backend/domain/governance/ApprovalService';
+import { ApprovalRequestRepo } from '@backend/domain/governance/repos/approval-request.repo';
+import { ApprovalVoteRepo } from '@backend/domain/governance/repos/approval-vote.repo';
+import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
 import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
@@ -105,6 +111,18 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     audit,
     now: deps.now,
   });
+  // The job's own approval service: expiry resolves requests, it never applies one.
+  const { flagGovernance } = createFlagsDomain(db, {
+    audit,
+    approvals: new ApprovalService({
+      requests: new ApprovalRequestRepo(db),
+      votes: new ApprovalVoteRepo(db),
+      memberships: new RoleMembershipRepo(db),
+      audit,
+    }),
+    events: bus,
+    appOrigin: deps.appOrigin,
+  });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
@@ -119,6 +137,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       connectStates: new DiscordConnectStateRepo(db),
     }),
     ...createStorageHandlers({ storage: deps.storage }),
+    ...createFlagHandlers({ governance: flagGovernance }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createOtaHandlers({
       uploads,
@@ -147,6 +166,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       rateLimitPruneSchedule,
       pruneUploadSessionsSchedule,
       ...otaMetricsSchedules,
+      expireFlagChangesetsSchedule,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });

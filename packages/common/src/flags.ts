@@ -37,8 +37,25 @@ export const ChangesetStates = {
   rejected: 'rejected',
   conflicted: 'conflicted',
   superseded: 'superseded',
+  withdrawn: 'withdrawn',
+  expired: 'expired',
 } as const;
 export type ChangesetState = (typeof ChangesetStates)[keyof typeof ChangesetStates];
+
+/** The `subject_type`s of flag approval requests (ADR 0020). */
+export const FlagApprovalSubjects = {
+  /** A changeset to a protected environment, pinned by its content hash. */
+  changeset: 'flags.changeset',
+  /** Changing (or removing) a protected environment's change gate. */
+  changeGate: 'flags.change_gate',
+} as const;
+
+/** How a proposed change ended up. */
+export const ChangeOutcomes = { applied: 'applied', pendingApproval: 'pending_approval' } as const;
+export type ChangeOutcome = (typeof ChangeOutcomes)[keyof typeof ChangeOutcomes];
+
+/** How long a changeset waits for approval before it expires. */
+export const CHANGESET_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** A variant's value: JSON for `json` flags, otherwise the flag's type. */
 export type VariantValue = boolean | string | number | Record<string, unknown> | unknown[];
@@ -327,13 +344,7 @@ export type BooleanFlagCreateInput = z.infer<typeof booleanFlagCreateInputSchema
 export const changesetSchema = z.object({
   id: z.uuid(),
   environmentId: z.uuid(),
-  state: z.enum([
-    ChangesetStates.pending,
-    ChangesetStates.applied,
-    ChangesetStates.rejected,
-    ChangesetStates.conflicted,
-    ChangesetStates.superseded,
-  ]),
+  state: z.enum(Object.values(ChangesetStates) as [ChangesetState, ...ChangesetState[]]),
   source: z.enum([ChangesetSources.ui, ChangesetSources.repo, ChangesetSources.api, ChangesetSources.kill]),
   ops: z.array(changeOpSchema),
   diff: z.array(changeDiffEntrySchema),
@@ -342,6 +353,11 @@ export const changesetSchema = z.object({
   appliedVersion: z.number().nullable(),
   proposedByUserId: z.uuid().nullable(),
   reason: z.string().nullable(),
+  /** The approval request deciding it (protected environments only). */
+  approvalRequestId: z.uuid().nullable(),
+  /** The gate it was proposed under, pinned: a later gate edit doesn't change it. */
+  requirements: gateRequirementsSchema.nullable(),
+  expiresAt: z.date().nullable(),
   createdAt: z.date(),
   resolvedAt: z.date().nullable(),
 });

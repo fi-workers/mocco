@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import ChangesetRow from '@frontend/components/flags/changeset-row';
+import Protection from '@frontend/components/flags/protection';
 import Segments from '@frontend/components/flags/segments';
 import {
-  Ago,
   errorMessage,
   inputClass,
   labelClass,
@@ -17,14 +18,7 @@ import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type {
-  ChangeDiffEntry,
-  ChangesetDto,
-  FlagConfigDto,
-  FlagDto,
-  FlagEnvironmentDto,
-  FlagType,
-} from '@mocco/common/flags';
+import type { FlagConfigDto, FlagDto, FlagEnvironmentDto, FlagType } from '@mocco/common/flags';
 
 interface Props {
   workspaceId: string;
@@ -66,6 +60,7 @@ function Environments({ workspaceId, projectId, environments }: Props & { enviro
             <span className="font-medium">{environment.name}</span>
             <span className="font-mono text-xs text-muted-foreground">{environment.key}</span>
             <StatusBadge tone={Tones.neutral}>v{environment.currentVersion}</StatusBadge>
+            {environment.changeGate === null ? null : <StatusBadge tone={Tones.warn}>Protected</StatusBadge>}
           </li>
         ))}
       </ul>
@@ -124,7 +119,11 @@ function FlagCell({
 }: Props & { flag: FlagWithConfigs; environment: FlagEnvironmentDto }) {
   const utils = trpc.useUtils();
   const config = flag.configs.find(candidate => candidate.environmentId === environment.id);
+  const [isSentForApproval, setIsSentForApproval] = useState(false);
   const change = trpc.flags.applyChangeset.useMutation({
+    onSuccess: result => {
+      setIsSentForApproval(result.outcome === 'pending_approval');
+    },
     onSettled: async () => {
       await Promise.all([
         utils.flags.environments.invalidate(),
@@ -158,6 +157,7 @@ function FlagCell({
           }}>
           {config.enabled ? 'On' : 'Off'}
         </Button>
+        {isSentForApproval ? <span className="text-xs text-muted-foreground">Sent for approval</span> : null}
         {change.error ? <span className="text-xs text-destructive">{errorMessage(change.error)}</span> : null}
       </div>
     </td>
@@ -351,52 +351,6 @@ function Flags({
   );
 }
 
-const fieldLabels: Record<string, string> = {
-  enabled: 'on',
-  killed: 'killed',
-  defaultVariant: 'default variant',
-  offVariant: 'off variant',
-  rules: 'rules',
-  rollout: 'rollout',
-  includedKeys: 'included keys',
-  excludedKeys: 'excluded keys',
-};
-
-/** A diff value in one line: scalars as-is, lists and rules as a short count. */
-function shortValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `${value.length} item${value.length === 1 ? '' : 's'}`;
-  }
-  return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
-}
-
-function describeDiff(entry: ChangeDiffEntry): string {
-  const field = fieldLabels[entry.field] ?? entry.field;
-  const subject = entry.subject === 'segment' ? `segment ${entry.key}` : entry.key;
-  if (entry.before === null) {
-    return `${subject}: ${field} = ${shortValue(entry.after)}`;
-  }
-  return `${subject}: ${field} ${shortValue(entry.before)} → ${shortValue(entry.after)}`;
-}
-
-function ChangesetRow({ changeset }: { changeset: ChangesetDto }) {
-  return (
-    <li className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={Tones.ok}>v{changeset.appliedVersion}</StatusBadge>
-        <span className="text-xs text-muted-foreground">
-          <Ago date={changeset.createdAt} />
-        </span>
-      </div>
-      <ul className="font-mono text-xs">
-        {changeset.diff.map(entry => (
-          <li key={`${entry.subject}:${entry.key}:${entry.field}`}>{describeDiff(entry)}</li>
-        ))}
-      </ul>
-    </li>
-  );
-}
-
 function History({ workspaceId, projectId, environment }: Props & { environment: FlagEnvironmentDto }) {
   const historyQuery = trpc.flags.history.useQuery({ workspaceId, projectId, environmentId: environment.id });
 
@@ -406,7 +360,7 @@ function History({ workspaceId, projectId, environment }: Props & { environment:
       {historyQuery.isLoading ? <Spinner /> : null}
       <ul className="flex flex-col gap-2">
         {(historyQuery.data?.changesets ?? []).map(changeset => (
-          <ChangesetRow key={changeset.id} changeset={changeset} />
+          <ChangesetRow key={changeset.id} workspaceId={workspaceId} projectId={projectId} changeset={changeset} />
         ))}
       </ul>
     </section>
@@ -439,6 +393,7 @@ function PerEnvironment({ workspaceId, projectId, environments }: Props & { envi
           </Link>
         ))}
       </nav>
+      <Protection workspaceId={workspaceId} projectId={projectId} environment={environment} />
       <Segments workspaceId={workspaceId} projectId={projectId} environment={environment} />
       <History workspaceId={workspaceId} projectId={projectId} environment={environment} />
     </div>

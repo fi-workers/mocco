@@ -4,6 +4,7 @@
 // domain's error family; flag errors extend the same bases.
 import {
   booleanFlagCreateInputSchema,
+  ChangeOutcomes,
   changeOpSchema,
   changesetSchema,
   flagConfigSchema,
@@ -13,6 +14,7 @@ import {
   flagSchema,
   flagSegmentSchema,
 } from '@mocco/common/flags';
+import { ApprovalDecisions, gateRequirementsSchema } from '@mocco/common/governance';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
 
@@ -100,10 +102,109 @@ export const flagsRouter = router({
         reason: z.string().max(500).nullable().default(null),
       }),
     )
-    .output(z.object({ changeset: changesetSchema }))
+    .output(
+      z.object({
+        outcome: z.enum([ChangeOutcomes.applied, ChangeOutcomes.pendingApproval]),
+        changeset: changesetSchema,
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const { workspaceId, projectId, ...change } = input;
-      return { changeset: await ctx.flags.applyChangeset(workspaceId, projectId, ctx.session.user.id, change) };
+      return await ctx.flags.applyChangeset(workspaceId, projectId, ctx.session.user.id, change);
+    }),
+
+  /** A changeset with the votes cast on it so far. */
+  changeset: flagsProcedure
+    .input(projectInput.extend({ changesetId: z.uuid() }))
+    .output(
+      z.object({
+        changeset: changesetSchema,
+        votes: z.array(
+          z.object({
+            userId: z.uuid(),
+            decision: z.enum([ApprovalDecisions.approve, ApprovalDecisions.reject]),
+            reason: z.string().nullable(),
+            createdAt: z.date(),
+          }),
+        ),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { changeset } = await ctx.flagGovernance.requireChangeset(
+        input.workspaceId,
+        input.projectId,
+        input.changesetId,
+      );
+      const request =
+        changeset.approvalRequestId === null
+          ? null
+          : await ctx.approvals.get(input.workspaceId, changeset.approvalRequestId);
+      const votes =
+        request === null
+          ? []
+          : request.votes.map(vote => ({
+              userId: vote.userId,
+              decision: vote.decision,
+              reason: vote.reason,
+              createdAt: vote.createdAt,
+            }));
+      return { changeset, votes };
+    }),
+
+  /** Approve or reject a pending changeset; `contentHash` is the hash the voter reviewed. */
+  voteChangeset: flagsProcedure
+    .input(
+      projectInput.extend({
+        changesetId: z.uuid(),
+        contentHash: z.string(),
+        decision: z.enum([ApprovalDecisions.approve, ApprovalDecisions.reject]),
+        reason: z.string().max(500).optional(),
+      }),
+    )
+    .output(z.object({ changeset: changesetSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...vote } = input;
+      return { changeset: await ctx.flagGovernance.vote(workspaceId, projectId, ctx.session.user.id, vote) };
+    }),
+
+  withdrawChangeset: flagsProcedure
+    .input(projectInput.extend({ changesetId: z.uuid() }))
+    .output(z.object({ changeset: changesetSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      changeset: await ctx.flagGovernance.withdraw(
+        input.workspaceId,
+        input.projectId,
+        ctx.session.user.id,
+        input.changesetId,
+      ),
+    })),
+
+  /** Propose a pending or conflicted changeset's ops again on the current version (votes reset). */
+  rebaseChangeset: flagsProcedure
+    .input(projectInput.extend({ changesetId: z.uuid() }))
+    .output(z.object({ changeset: changesetSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const { changeset } = await ctx.flagGovernance.rebase(
+        input.workspaceId,
+        input.projectId,
+        ctx.session.user.id,
+        input.changesetId,
+      );
+      return { changeset };
+    }),
+
+  /** Protect, re-gate or unprotect an environment. A protected one's gate changes need its current gate. */
+  setChangeGate: flagsProcedure
+    .input(environmentInput.extend({ gate: gateRequirementsSchema.nullable() }))
+    .output(
+      z.object({
+        outcome: z.enum([ChangeOutcomes.applied, ChangeOutcomes.pendingApproval]),
+        requestId: z.uuid().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...change } = input;
+      return await ctx.flagGovernance.setChangeGate(workspaceId, projectId, ctx.session.user.id, change);
     }),
 
   history: flagsProcedure

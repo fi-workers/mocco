@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { GovernanceEventTypes, OtaEventTypes } from './events';
+import { FlagEventTypes, GovernanceEventTypes, OtaEventTypes } from './events';
 import { InboundEventTypes } from './inbound';
 
 import type { RuleFilter } from './notification';
@@ -37,6 +37,9 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: OtaEventTypes.otaPromotionApproved, filter: {} },
     { eventType: OtaEventTypes.otaPromotionRejected, filter: {} },
     { eventType: OtaEventTypes.otaEmergencyLaunchSpike, filter: {} },
+    { eventType: FlagEventTypes.flagChangesetRequested, filter: {} },
+    { eventType: FlagEventTypes.flagChangesetApplied, filter: {} },
+    { eventType: FlagEventTypes.flagChangesetRejected, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [

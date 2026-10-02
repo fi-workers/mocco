@@ -17,6 +17,7 @@ code_refs:
   - packages/common/src/flags.ts
   - packages/backend/src/domain/flags/FlagService.ts
   - packages/backend/src/domain/flags/RulesetPublisher.ts
+  - packages/backend/src/domain/flags/FlagGovernanceService.ts
   - packages/backend/src/domain/flags/apply-ops.ts
   - packages/backend/src/domain/flags/compile-ruleset.ts
   - packages/backend/src/transport/trpc/routers/flags.ts
@@ -27,7 +28,7 @@ code_refs:
 
 # Feature flags
 
-Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: targeting rules in the console, gated changesets, the kill switch and the client SDKs.
+Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: the kill switch, the client SDKs and flags-as-code.
 
 ## Model
 
@@ -72,7 +73,15 @@ After the commit, `FlagService` records `flag.changeset.applied` in the audit lo
 
 Creating a flag adds it, disabled, to every environment in the same transaction, one changeset per environment. The environments are locked in id order, so concurrent creations cannot deadlock. A disabled flag serves the caller's code default, which is what an unknown flag serves, so adding one changes no behavior in any environment. Creating an environment adds every existing flag to it, disabled.
 
-`applyChangeset` refuses changes to an environment that has a change gate (`ProtectedEnvironmentError`). Gated changesets, which become approval requests under that gate, come in #141.
+## Protected environments
+
+An environment with a `change_gate` is protected (ADR 0023). `FlagGovernanceService` decides its changes through ApprovalService (ADR 0020), so flag changes, OTA promotions and version policies share one approval engine, voter rules and audit trail.
+
+- **Propose.** `applyChangeset` on a protected environment validates the ops against `baseVersion` (`RulesetPublisher.dryRun`: the same refusals and size limit as an apply), records a `pending` changeset with the gate pinned in `requirements` and `expires_at` (7 days), and opens a `pre_approval` request (`flags.changeset`) whose action pins `{changesetId, environmentId, contentHash, baseVersion}`. The outcome is `pending_approval`. `flag.changeset.proposed` is audited and `flags.changeset.requested` is published.
+- **Vote.** `flags.voteChangeset` takes the `contentHash` the voter reviewed and refuses a different one (`ChangesetHashMismatchError`). The vote rules are ApprovalService's: N-of-M per role slot, one slot per person (a member of two roles fills one), `prevent_self` on the proposer, `reason_required`.
+- **Apply.** The approval handler applies the changeset through the publisher with its own `baseVersion`, marking the same row `applied`. If the environment moved meanwhile, it becomes `conflicted` and nothing is written.
+- **Reject, withdraw, rebase, expire.** A rejection marks it `rejected`. The proposer can withdraw it (`withdrawn`) or rebase a pending or conflicted one: the same ops proposed on the current version, with a new hash and a new request, so no earlier vote counts. The old pending changeset becomes `superseded` only once the new proposal succeeds. The `flags.changesets.expire` job (every 15 minutes) expires those past `expires_at`. Each transition is audited (`flag.changeset.rejected`, `.conflicted`, `.withdrawn`, `.expired`).
+- **Gates.** `flags.setChangeGate` protects an unprotected environment at once. Changing or removing a protected environment's gate is a `flags.change_gate` request under its current gate. A changeset keeps the requirements it was proposed under (`flag.change_gate.changed` is audited).
 
 ## The compiled ruleset
 
@@ -143,7 +152,9 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | `list`, `create`, `createBoolean` | List flags with their config in every environment; create a typed flag, or a boolean one |
 | `segments` | An environment's segments |
 | `preview` | Evaluate every flag for a context, with unsaved ops applied (nothing is written) |
-| `applyChangeset` | Apply ops to an unprotected environment against `baseVersion` |
+| `applyChangeset` | Apply ops against `baseVersion` (`applied`), or propose them on a protected environment (`pending_approval`) |
+| `changeset`, `voteChangeset`, `withdrawChangeset`, `rebaseChangeset` | A changeset with its votes; vote with the reviewed content hash; withdraw or rebase your own |
+| `setChangeGate` | Protect, re-gate or unprotect an environment |
 | `history` | An environment's last 50 changesets, newest first |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
 
