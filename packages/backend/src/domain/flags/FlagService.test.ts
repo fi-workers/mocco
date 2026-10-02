@@ -6,12 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
-import {
-  ChangesetConflictError,
-  FlagKeyTakenError,
-  ProtectedEnvironmentError,
-  RulesetTooLargeError,
-} from '@backend/domain/flags/errors';
+import { ChangesetConflictError, FlagKeyTakenError, RulesetTooLargeError } from '@backend/domain/flags/errors';
 import { FlagService } from '@backend/domain/flags/FlagService';
 import { flagdValidator } from '@backend/domain/flags/testing/flagd-schema';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -92,7 +87,7 @@ describe('FlagService (pglite)', () => {
       lifecycle: 'temporary',
     });
 
-    const changeset = await service.applyChangeset(workspaceId, projectId, userId, {
+    const { changeset } = await service.applyChangeset(workspaceId, projectId, userId, {
       environmentId: env.id,
       baseVersion: 1,
       ops: [{ op: 'set_enabled', flagKey: 'new-checkout', enabled: true }],
@@ -140,7 +135,7 @@ describe('FlagService (pglite)', () => {
     expect(rows.map(row => row.version)).toEqual([0, 1, 2]);
   });
 
-  it('refuses duplicate keys and ungated changes to a protected environment', async () => {
+  it('refuses duplicate keys, and changes to a protected environment without the governance service', async () => {
     const env = await service.createEnvironment(workspaceId, projectId, userId, { key: 'staging', name: 'Staging' });
     await service.createBooleanFlag(workspaceId, projectId, userId, {
       key: 'a',
@@ -169,7 +164,7 @@ describe('FlagService (pglite)', () => {
         ops: [{ op: 'set_enabled', flagKey: 'a', enabled: true }],
         reason: null,
       }),
-    ).rejects.toThrow(ProtectedEnvironmentError);
+    ).rejects.toThrow(/need the governance service/u);
   });
 
   it('creates typed flags and targets them with rules, segments and a rollout, previewed before saving', async () => {

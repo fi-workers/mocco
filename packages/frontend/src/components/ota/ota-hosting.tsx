@@ -12,6 +12,7 @@ import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { z } from 'zod';
 
+import { GateEditor, PendingGateRequests } from '@frontend/components/governance/gate-editor';
 import {
   Ago,
   CopyField,
@@ -30,7 +31,6 @@ import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
 
-import type { GateRequirements } from '@mocco/common/governance';
 import type {
   OtaAppDto,
   OtaChannelDto,
@@ -215,170 +215,6 @@ function Certificates({ workspaceId, projectId, app, isAdmin }: AppProps) {
         </form>
       ) : null}
     </section>
-  );
-}
-
-function PolicyEditor({
-  workspaceId,
-  channel,
-  onSubmit,
-  isPending,
-}: {
-  workspaceId: string;
-  channel: OtaChannelDto;
-  onSubmit: (policy: GateRequirements | null) => void;
-  isPending: boolean;
-}) {
-  const rolesQuery = trpc.role.list.useQuery({ workspaceId });
-  const roles = rolesQuery.data?.roles ?? [];
-  const current = channel.policy?.resume[0];
-  const [role, setRole] = useState(current?.role ?? '');
-  const [count, setCount] = useState(current?.count ?? 1);
-  const [isSelfPrevented, setIsSelfPrevented] = useState(channel.policy?.prevent_self ?? true);
-  const chosenRole = role === '' ? (roles[0]?.name ?? '') : role;
-
-  if (rolesQuery.isSuccess && roles.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Approvals count per role.{' '}
-        <Link href={Routes.workspaceAccess(workspaceId)} className="underline underline-offset-2">
-          Create one on the Access page
-        </Link>{' '}
-        first.
-      </p>
-    );
-  }
-  return (
-    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-muted/40 p-3">
-      <label className={labelClass}>
-        Approvers&apos; role
-        <select
-          value={chosenRole}
-          onChange={event => {
-            setRole(event.target.value);
-          }}
-          className={inputClass}>
-          {roles.map(entry => (
-            <option key={entry.id} value={entry.name}>
-              {entry.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={labelClass}>
-        Approvals
-        <input
-          type="number"
-          min={1}
-          max={20}
-          value={count}
-          onChange={event => {
-            setCount(Math.max(1, Math.trunc(Number(event.target.value)) || 1));
-          }}
-          className={`${inputClass} w-20`}
-        />
-      </label>
-      <label className="flex items-center gap-2 pb-1.5 text-sm">
-        <input
-          type="checkbox"
-          checked={isSelfPrevented}
-          onChange={event => {
-            setIsSelfPrevented(event.target.checked);
-          }}
-        />
-        Not the requester
-      </label>
-      <Button
-        className="text-sm"
-        pending={isPending}
-        disabled={chosenRole === ''}
-        onClick={() => {
-          onSubmit({ resume: [{ role: chosenRole, count }], prevent_self: isSelfPrevented, reason_required: false });
-        }}>
-        {channel.isProtected ? 'Change protection' : 'Protect channel'}
-      </Button>
-      {channel.isProtected ? (
-        <Button
-          variant="outline"
-          className="text-sm"
-          pending={isPending}
-          onClick={() => {
-            onSubmit(null);
-          }}>
-          Remove protection
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function PendingPolicyRequests({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
-  const utils = trpc.useUtils();
-  const requestsQuery = trpc.approval.list.useQuery({
-    workspaceId,
-    subjectType: OtaHostingApprovalSubjects.channelPolicy,
-    subjectId: channel.id,
-    state: ApprovalStates.pending,
-  });
-  const vote = trpc.approval.vote.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.approval.list.invalidate({ workspaceId }),
-        utils.ota.hosting.channels.list.invalidate({ workspaceId, projectId, appId: app.id }),
-      ]);
-    },
-  });
-  const { data: session } = useSession();
-  const myUserId = session?.user.id ?? null;
-  const requests = requestsQuery.data?.requests ?? [];
-  if (requests.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {requests.map(request => {
-        const pinned = pinnedPolicySchema.safeParse(request.action);
-        const target = pinned.success ? pinned.data.policy : null;
-        return (
-          <div
-            key={request.id}
-            className="flex flex-col gap-2 rounded-lg border border-amber-600/30 bg-amber-500/5 p-3">
-            <p className="text-sm">
-              <StatusBadge tone={Tones.warn}>Waiting for approval</StatusBadge>{' '}
-              <span className="text-muted-foreground">
-                → {target === null ? 'no protection' : describeApprovalPolicy(target)} · requested{' '}
-                <Ago date={request.createdAt} />
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">Needs {describeApprovalPolicy(request.requirements)}.</p>
-            {request.requirements.prevent_self && myUserId !== null && request.requestedByUserId === myUserId ? (
-              <p className="text-xs text-muted-foreground">You requested this change, so someone else has to decide.</p>
-            ) : (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  pending={vote.isPending}
-                  onClick={() => {
-                    vote.mutate({ workspaceId, requestId: request.id, decision: ApprovalDecisions.approve });
-                  }}>
-                  Approve
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  pending={vote.isPending}
-                  onClick={() => {
-                    vote.mutate({ workspaceId, requestId: request.id, decision: ApprovalDecisions.reject });
-                  }}>
-                  Reject
-                </Button>
-              </div>
-            )}
-            {vote.error ? <p className="text-sm text-destructive">{errorMessage(vote.error)}</p> : null}
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
@@ -767,9 +603,10 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
           : 'Promotions apply at once. Protect it to require approval.'}
       </p>
       {isEditing ? (
-        <PolicyEditor
+        <GateEditor
           workspaceId={workspaceId}
-          channel={channel}
+          current={channel.policy}
+          subjectNoun="channel"
           isPending={change.isPending}
           onSubmit={policy => {
             setNotice(null);
@@ -780,7 +617,18 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
       <HeadControls {...props} />
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {change.error ? <p className="text-sm text-destructive">{errorMessage(change.error)}</p> : null}
-      <PendingPolicyRequests {...props} />
+      <PendingGateRequests
+        workspaceId={workspaceId}
+        subjectType={OtaHostingApprovalSubjects.channelPolicy}
+        subjectId={channel.id}
+        gateOf={action => {
+          const pinned = pinnedPolicySchema.safeParse(action);
+          return pinned.success ? pinned.data.policy : undefined;
+        }}
+        onDecided={async () => {
+          await utils.ota.hosting.channels.list.invalidate({ workspaceId, projectId, appId: app.id });
+        }}
+      />
       <PendingPromotionRequests {...props} />
     </li>
   );

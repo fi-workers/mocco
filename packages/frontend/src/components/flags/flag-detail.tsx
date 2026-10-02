@@ -166,8 +166,18 @@ function EnvironmentEditor({
   const segmentKeys = (segmentsQuery.data?.segments ?? []).map(segment => segment.key);
   const variants = Object.keys(flag.variants);
   const ops = opsOf(flag.key, config, draft);
+  const [reason, setReason] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const isProtected = environment.changeGate !== null;
   const save = trpc.flags.applyChangeset.useMutation({
-    onSuccess: async () => {
+    onSuccess: async result => {
+      if (result.outcome === 'pending_approval') {
+        setNotice(
+          "Sent for approval: it applies once the environment's protection is satisfied. Follow it in the History on the Feature flags tab.",
+        );
+        setDraft(draftOf(config));
+        setReason('');
+      }
       await Promise.all([
         utils.flags.list.invalidate(),
         utils.flags.environments.invalidate(),
@@ -235,24 +245,44 @@ function EnvironmentEditor({
         flagKey={flag.key}
         ops={ops}
       />
+      {isProtected ? (
+        <label className={labelClass}>
+          Reason for the approvers (optional)
+          <input
+            value={reason}
+            maxLength={500}
+            className={inputClass}
+            onChange={event => {
+              setReason(event.target.value);
+            }}
+          />
+        </label>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           pending={save.isPending}
           disabled={ops.length === 0}
           className="text-sm"
           onClick={() => {
+            setNotice(null);
             save.mutate({
               workspaceId,
               projectId,
               environmentId: environment.id,
               baseVersion: environment.currentVersion,
               ops,
+              reason: reason === '' ? null : reason,
             });
           }}>
-          Save changes to {environment.name}
+          {isProtected ? `Propose changes to ${environment.name}` : `Save changes to ${environment.name}`}
         </Button>
         <span className="text-xs text-muted-foreground">{pendingText(ops.length)}</span>
       </div>
+      {notice === null ? null : (
+        <Notice tone={Tones.warn} title="Waiting for approval">
+          {notice}
+        </Notice>
+      )}
       {save.error ? <p className="text-sm text-destructive">{errorMessage(save.error)}</p> : null}
     </div>
   );

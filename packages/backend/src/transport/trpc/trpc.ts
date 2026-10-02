@@ -7,6 +7,7 @@ import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
@@ -76,6 +77,8 @@ export interface Context {
   otaMetrics: OtaMetricsService;
   /** Feature flags of a project (#137). */
   flags: FlagService;
+  /** Changesets to protected environments: votes, withdraw, rebase, change gates (#141). */
+  flagGovernance: FlagGovernanceService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

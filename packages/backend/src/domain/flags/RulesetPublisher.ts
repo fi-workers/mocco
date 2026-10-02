@@ -31,6 +31,8 @@ export interface ApplyChangesetInput {
   source: ChangesetSource;
   actorUserId: string | null;
   reason: string | null;
+  /** An approved pending changeset to mark applied, instead of recording a new one. */
+  pendingChangesetId?: string;
 }
 
 /** An environment's head state as the publisher reads it. */
@@ -130,6 +132,26 @@ export class RulesetPublisher {
     });
   }
 
+  /** Validate `ops` against the current head and return their diff, without writing
+   * anything: what a proposal to a protected environment records. */
+  async dryRun(db: Db, environment: FlagEnvironmentRow, ops: readonly ChangeOp[]) {
+    const head = await readHead(db, environment.workspaceId, environment);
+    const applied = applyOps(
+      {
+        configs: head.configs,
+        segments: head.segments,
+        variants: new Map(head.flags.map(flag => [flag.key, Object.keys(flag.variants)])),
+      },
+      ops,
+    );
+    if (applied.diff.length === 0) {
+      throw new InvalidChangeError('This change does nothing');
+    }
+    // Enforce the size limit at proposal too, not only once approved.
+    compileNext(environment, environment.currentVersion + 1, head, applied, this.clock());
+    return applied.diff;
+  }
+
   /** The document `ops` would produce on the current head, without writing anything. */
   async preview(db: Db, environment: FlagEnvironmentRow, ops: readonly ChangeOp[]): Promise<FlagdDocument> {
     const head = await readHead(db, environment.workspaceId, environment);
@@ -202,20 +224,31 @@ export class RulesetPublisher {
       { changed: new Map(), changedSegments: new Map(), deletedSegments: new Set(), diff: [] },
       now,
     );
-    const changeset = await new FlagChangesetRepo(tx).insert({
-      workspaceId,
-      environmentId: environment.id,
-      state: ChangesetStates.applied,
-      source: input.source,
-      ops: [...input.ops],
-      diff: applied.diff,
-      contentHash: changesetContentHash(environment.id, baseVersion, input.ops),
-      baseVersion,
-      appliedVersion: version,
-      proposedByUserId: input.actorUserId,
-      reason: input.reason,
-      resolvedAt: now,
-    });
+    const changesets = new FlagChangesetRepo(tx);
+    const changeset =
+      input.pendingChangesetId === undefined
+        ? await changesets.insert({
+            workspaceId,
+            environmentId: environment.id,
+            state: ChangesetStates.applied,
+            source: input.source,
+            ops: [...input.ops],
+            diff: applied.diff,
+            contentHash: changesetContentHash(environment.id, baseVersion, input.ops),
+            baseVersion,
+            appliedVersion: version,
+            proposedByUserId: input.actorUserId,
+            reason: input.reason,
+            resolvedAt: now,
+          })
+        : await changesets.resolvePending(workspaceId, input.pendingChangesetId, ChangesetStates.applied, {
+            resolvedAt: now,
+            appliedVersion: version,
+          });
+    if (changeset === undefined) {
+      // Another resolver (a withdrawal, a second approval) got there first; roll back.
+      throw new InvalidChangeError('This changeset is no longer pending');
+    }
     await new FlagRulesetSnapshotRepo(tx).insert({
       environmentId: environment.id,
       version,

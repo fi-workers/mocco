@@ -46,6 +46,12 @@ export const AuditActions = {
   flagEnvironmentCreated: 'flag.environment.created',
   flagCreated: 'flag.created',
   flagChangesetApplied: 'flag.changeset.applied',
+  flagChangesetProposed: 'flag.changeset.proposed',
+  flagChangesetRejected: 'flag.changeset.rejected',
+  flagChangesetConflicted: 'flag.changeset.conflicted',
+  flagChangesetWithdrawn: 'flag.changeset.withdrawn',
+  flagChangesetExpired: 'flag.changeset.expired',
+  flagChangeGateChanged: 'flag.change_gate.changed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;
