@@ -27,6 +27,7 @@ import type {
   CommitSource,
   InstallationVerifier,
   OwnershipResult,
+  RepoFileSource,
   RepoLister,
   RepositoryDispatcher,
   SourceCommit,
@@ -196,12 +197,34 @@ async function mintInstallationOctokit(app: App, externalAccountId: string) {
 
 export function createGitHubProvider(
   config: GitHubConfig,
-): RepoLister & InstallationVerifier & CommitSource & RepositoryDispatcher {
+): RepoLister & InstallationVerifier & CommitSource & RepoFileSource & RepositoryDispatcher {
   const app = new App({
     appId: config.appId,
     privateKey: config.privateKey,
     oauth: { clientId: config.clientId, clientSecret: config.clientSecret },
   });
+
+  // Thin wrapper: the network call + 404→null branch live here; the shape
+  // validation/decoding is the pure, unit-tested `decodeGetContent` above.
+  const getFileAtCommit: RepoFileSource['getFileAtCommit'] = async (ref, sha, path) => {
+    const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+    let data: unknown;
+    try {
+      ({ data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+        owner: ref.owner,
+        repo: ref.name,
+        path,
+        ref: sha,
+      }));
+    } catch (error) {
+      // A repo without the file at this SHA is normal, not an error.
+      if (octokitStatus(error) === 404) {
+        return null;
+      }
+      throw new GithubApiError(`failed to fetch ${path}`, octokitStatus(error), { cause: error });
+    }
+    return decodeGetContent(data);
+  };
 
   return {
     async listRepos(externalAccountId) {
@@ -249,26 +272,10 @@ export function createGitHubProvider(
       }
     },
 
-    // Thin wrapper: the network call + 404→null branch live here; the shape
-    // validation/decoding is the pure, unit-tested `decodeGetContent` above.
+    getFileAtCommit,
+
     async getConfigAtCommit(ref, sha) {
-      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
-      let data: unknown;
-      try {
-        ({ data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-          owner: ref.owner,
-          repo: ref.name,
-          path: CONFIG_FILE_PATH,
-          ref: sha,
-        }));
-      } catch (error) {
-        // A repo with no `.mocco.yml` at this SHA is normal, not an error.
-        if (octokitStatus(error) === 404) {
-          return null;
-        }
-        throw new GithubApiError('failed to fetch config file', octokitStatus(error), { cause: error });
-      }
-      return decodeGetContent(data);
+      return await getFileAtCommit(ref, sha, CONFIG_FILE_PATH);
     },
 
     // Thin wrapper: mint the installation octokit and fire a repository_dispatch —

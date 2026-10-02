@@ -204,7 +204,7 @@ Telemetry is advisory: anyone with a key can send counts, so they only raise or 
 
 ## Flags as code (`.mocco/flags.yml`)
 
-Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). So far the file format and the planning exist; reading the file on a push, the changesets it produces and the console's read-only view come in the next slices.
+Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). A push to a connected repo's default branch syncs the file into every project the repo is linked to. The console's read-only view of repo-managed flags comes in the next slice.
 
 ```yaml
 version: 1
@@ -243,6 +243,20 @@ The zod schema is `flagsFileSchema` in `@mocco/common/flags-file`; `yarn schema:
 - **Issues:** an environment the file names that doesn't exist, plus the cases above.
 
 A plan never contains `kill` or `restore`, so a sync never un-kills a flag. Planning the same file again after its changes are applied is empty.
+
+### The push sync
+
+`CommitSyncService.syncPush` hands every push to a repo's **default branch** (watched or not; a deleted branch is skipped) to `FlagFileSyncService.syncPush`. The ext app wires it with `withFlagFiles`. A failure there is logged and never stops the commits from syncing. For each project the repo is linked to (`mocco_project_repos`), the service:
+
+1. Reads `.mocco/flags.yml` at the pushed commit (`RepoFileSource.getFileAtCommit`). A repo without the file is left alone.
+2. Parses and plans it against the project. A refused file changes nothing and is recorded `invalid` with its issues.
+3. Creates new flags (`managed_by = repo`, added off everywhere like any new flag), writes definition updates, and sets `managed_by` to `repo` for adopted flags and back to `ui` for released ones. Each is audited `flag.definition.changed`.
+4. Makes one changeset per environment that changes (`source = repo`, `repo_id` and `commit_sha` pinned) through `FlagService.applyRepoChangeset`:
+   - **Unprotected environment:** applied at once.
+   - **Protected environment:** the repo's previous pending changeset there is superseded (`flag.changeset.superseded`) and the new one is proposed under the gate. A partial unique index keeps at most one pending repo changeset per environment and repo. A push that changes nothing in a protected environment also supersedes what the last push left pending there.
+5. Records the sync in `mocco_flag_file_syncs`: `applied`, `pending_approval`, `unchanged` or `invalid`, with the issues. The record is audited `flag.file.synced` and listed by `flags.fileSyncs`.
+
+**The proposer** of a sync's changesets, and so the person `prevent_self` keeps from approving them, is the workspace member who signed in with the GitHub account that pushed (`sender.id` → `mocco_accounts`). If there is none, it is the member whose **verified** email matches the head commit's author email. A git author email is a claim, so it only attributes when it matches a verified address of a member. A GitHub review never satisfies the gate (ADR 0002). Counting the pusher and the author both as proposers, when they are different people, needs approvals with several proposers and comes next.
 
 ## API
 

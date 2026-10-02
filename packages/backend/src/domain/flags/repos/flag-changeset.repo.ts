@@ -26,6 +26,22 @@ export class FlagChangesetRepo {
     return row;
   }
 
+  /** The pending changeset a repo's last push left on the environment, if any (#145). */
+  async findPendingFromRepo(workspaceId: string, environmentId: string, repoId: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.flagChangesets)
+      .where(
+        and(
+          eq(schema.flagChangesets.workspaceId, workspaceId),
+          eq(schema.flagChangesets.environmentId, environmentId),
+          eq(schema.flagChangesets.repoId, repoId),
+          eq(schema.flagChangesets.state, ChangesetStates.pending),
+        ),
+      );
+    return row;
+  }
+
   /** The proposer's name (or email) for notification messages; null when unknown. */
   async proposerLabel(workspaceId: string, changesetId: string) {
     const [row] = await this.db

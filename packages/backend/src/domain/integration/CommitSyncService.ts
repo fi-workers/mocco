@@ -48,7 +48,26 @@ export interface CommitSyncServiceDeps {
   /** Snapshots `.mocco.yml` for newly-synced commits, in the same deferred pass
    * as the commit rows themselves (see `snapshotSyncedCommits`). */
   configs: CommitConfigService;
+  /** Syncs `.mocco/flags.yml` on default-branch pushes (#145); omitted where flags aren't wired. */
+  flagFiles?: DefaultBranchPushSink;
 }
+
+/** A push to a repo's default branch, for consumers that read repo files (flags-as-code). */
+export interface DefaultBranchPush {
+  workspaceId: string;
+  repoId: string;
+  ref: { externalAccountId: string; owner: string; name: string };
+  commitSha: string;
+  senderGithubId: string | null;
+  authorEmail: string | null;
+}
+
+export interface DefaultBranchPushSink {
+  syncPush(push: DefaultBranchPush): Promise<void>;
+}
+
+/** All zeros: the push deleted the branch. */
+const DELETED_SHA = /^0+$/u;
 
 /**
  * Turns provider webhooks into synced commit rows and applies installation-lifecycle
@@ -132,6 +151,32 @@ export class CommitSyncService {
     });
   }
 
+  /** Hand a default-branch push to the flags-as-code sync. Best-effort: a failure there
+   * must never stop the commits from syncing. */
+  private async notifyDefaultBranchPush(data: PushData, externalAccountId: string, repo: RepoRow): Promise<void> {
+    const commitSha = data.after ?? data.head_commit?.id ?? data.commits.at(-1)?.id;
+    if (this.deps.flagFiles === undefined || commitSha === undefined || DELETED_SHA.test(commitSha)) {
+      return;
+    }
+    try {
+      await this.deps.flagFiles.syncPush({
+        workspaceId: repo.workspaceId,
+        repoId: repo.id,
+        ref: { externalAccountId, owner: repo.owner, name: repo.name },
+        commitSha,
+        senderGithubId: data.sender === undefined ? null : String(data.sender.id),
+        authorEmail: data.head_commit?.author.email ?? data.commits.at(-1)?.author.email ?? null,
+      });
+    } catch (error) {
+      console.error(`[commit-sync] flags file sync failed for repo ${repo.id}`, error);
+    }
+  }
+
+  /** The same service, also handing default-branch pushes to `sink` (flags-as-code, #145). */
+  withFlagFiles(sink: DefaultBranchPushSink): CommitSyncService {
+    return new CommitSyncService({ ...this.deps, flagFiles: sink });
+  }
+
   /** Route a parsed webhook to its handler. The webhook route calls this in `waitUntil`. */
   async handle(parsed: ParsedWebhook): Promise<void> {
     if (parsed.kind === WebhookKinds.push) {
@@ -179,6 +224,10 @@ export class CommitSyncService {
         return;
       }
       throw error;
+    }
+
+    if (branch === repo.defaultBranch) {
+      await this.notifyDefaultBranchPush(data, connection.externalAccountId, repo);
     }
 
     if (repo.watchedBranch !== branch) {

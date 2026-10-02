@@ -35,6 +35,27 @@ export class FlagRepo {
     return row;
   }
 
+  /** Change a flag's definition fields (`.mocco/flags.yml` syncs, #145). */
+  async updateDefinition(
+    workspaceId: string,
+    projectId: string,
+    key: string,
+    values: Partial<Pick<FlagRow, 'description' | 'lifecycle' | 'variants' | 'clientVisible' | 'managedBy'>>,
+  ) {
+    const [row] = await this.db
+      .update(schema.flags)
+      .set(values)
+      .where(
+        and(
+          eq(schema.flags.workspaceId, workspaceId),
+          eq(schema.flags.projectId, projectId),
+          eq(schema.flags.key, key),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   async listByProject(workspaceId: string, projectId: string) {
     return await this.db
       .select()

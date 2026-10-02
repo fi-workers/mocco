@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
-import { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
+import { CommitSyncService, type DefaultBranchPush } from '@backend/domain/integration/CommitSyncService';
 import { ConnectionStatuses, RepoStatuses } from '@backend/domain/integration/constants';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -274,6 +274,41 @@ describe('CommitSyncService (pglite)', () => {
       pushEvent({ installationId: 5000, repoExternalId: 900, ref: 'refs/heads/feature', commits: [srcCommit('c1')] }),
     );
     expect(await commitCount(repo.id)).toBe(0);
+  });
+
+  it('hands default-branch pushes to the flags file sink, even unwatched; a sink failure keeps the commits', async () => {
+    const workspaceId = await seedWorkspace();
+    const conn = await seedConnection(workspaceId, '5000');
+    const repo = await seedRepo(workspaceId, conn.id, { externalRepoId: '900', watchedBranch: 'main' });
+    const other = await seedRepo(workspaceId, conn.id, { externalRepoId: '901', watchedBranch: null });
+    const pushes: DefaultBranchPush[] = [];
+    const svc = service().withFlagFiles({
+      syncPush: async push => {
+        pushes.push(push);
+        if (push.commitSha === 'boom') {
+          throw new Error('sink down');
+        }
+        await Promise.resolve();
+      },
+    });
+    const event = (repoExternalId: number, ref: string, sha: string): PushData => ({
+      ...pushEvent({ installationId: 5000, repoExternalId, ref, commits: [srcCommit(sha)] }),
+      after: sha,
+      sender: { id: 42, login: 'dev' },
+    });
+
+    await svc.syncPush(event(900, 'refs/heads/main', 'c1'));
+    await svc.syncPush(event(900, 'refs/heads/feature', 'c2'));
+    await svc.syncPush(event(901, 'refs/heads/main', 'c3'));
+    await svc.syncPush(event(900, 'refs/heads/main', 'boom'));
+
+    expect(pushes.map(push => [push.repoId, push.commitSha, push.senderGithubId])).toEqual([
+      [repo.id, 'c1', '42'],
+      [other.id, 'c3', '42'],
+      [repo.id, 'boom', '42'],
+    ]);
+    expect(pushes[0]?.authorEmail).toBe(srcCommit('c1').authorEmail);
+    expect(await commitShaSet(repo.id)).toEqual(new Set(['c1', 'boom']));
   });
 
   it('installation.deleted marks the connection deleted and its repos inactive, preserving commits', async () => {

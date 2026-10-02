@@ -7,12 +7,14 @@ import { getAudit } from '@backend/domain/audit/instance';
 import { getEventBus } from '@backend/domain/events/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
+import { FlagFileSyncService } from '@backend/domain/flags/FlagFileSyncService';
 import { StreamTokens } from '@backend/domain/flags/stream-token';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
 import type { FlagsDomain } from '@backend/domain/flags/compose';
+import type { RepoFileSource } from '@backend/domain/integration/ports';
 import type { Env } from '@backend/infra/config/env';
 
 const state: { flags?: FlagsDomain } = {};
@@ -27,6 +29,12 @@ export function getFlagsDomain(): FlagsDomain {
     });
   }
   return state.flags;
+}
+
+/** The `.mocco/flags.yml` sync (#145) over the production flags domain, reading files through `files`. */
+export function getFlagFiles(files: RepoFileSource): FlagFileSyncService {
+  const { flags, flagGovernance } = getFlagsDomain();
+  return new FlagFileSyncService({ db: getDb(), audit: getAudit().audit, flags, governance: flagGovernance, files });
 }
 
 /** Stream tokens signed with a key derived from AUTH_SECRET; undefined without one (OFREP

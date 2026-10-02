@@ -33,7 +33,7 @@ import type { FlagEnvironmentRow } from '@backend/domain/flags/repos/flag-enviro
 import type { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
 import type { ApprovalRequestRow, ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { Db } from '@backend/infra/db/types';
-import type { ChangeOp } from '@mocco/common/flags';
+import type { ChangeOp, ChangesetSource } from '@mocco/common/flags';
 import type { ApprovalDecision, GateRequirements } from '@mocco/common/governance';
 
 export interface FlagGovernanceDeps {
@@ -142,7 +142,7 @@ export class FlagGovernanceService {
     changeset: FlagChangesetRow,
     state: typeof ChangesetStates.withdrawn | typeof ChangesetStates.superseded,
     action: (typeof AuditActions)[keyof typeof AuditActions],
-    actorUserId: string,
+    actorUserId: string | null,
   ) {
     const closed = await new FlagChangesetRepo(this.deps.db).resolvePending(
       changeset.workspaceId,
@@ -202,6 +202,18 @@ export class FlagGovernanceService {
     return { changeset, environment };
   }
 
+  /** A newer push of `.mocco/flags.yml` replaces what the repo's last push left pending (#145). */
+  async supersedeRepoPending(environment: FlagEnvironmentRow, repoId: string, actorUserId: string | null) {
+    const pending = await new FlagChangesetRepo(this.deps.db).findPendingFromRepo(
+      environment.workspaceId,
+      environment.id,
+      repoId,
+    );
+    if (pending !== undefined) {
+      await this.close(pending, ChangesetStates.superseded, AuditActions.flagChangesetSuperseded, actorUserId);
+    }
+  }
+
   /**
    * Propose `ops` to a protected environment: validate them against `baseVersion` now (so
    * a bad change is refused at once), record a pending changeset with the gate pinned,
@@ -209,8 +221,9 @@ export class FlagGovernanceService {
    */
   async propose(
     environment: FlagEnvironmentRow & { changeGate: GateRequirements },
-    actorUserId: string,
+    actorUserId: string | null,
     input: { baseVersion: number; ops: readonly ChangeOp[]; reason: string | null },
+    origin?: { source: ChangesetSource; repoId: string; commitSha: string },
   ) {
     const { workspaceId } = environment;
     if (input.baseVersion !== environment.currentVersion) {
@@ -223,7 +236,9 @@ export class FlagGovernanceService {
       workspaceId,
       environmentId: environment.id,
       state: ChangesetStates.pending,
-      source: ChangesetSources.ui,
+      source: origin?.source ?? ChangesetSources.ui,
+      repoId: origin?.repoId ?? null,
+      commitSha: origin?.commitSha ?? null,
       ops: [...input.ops],
       diff,
       contentHash: changesetContentHash(environment.id, input.baseVersion, input.ops),

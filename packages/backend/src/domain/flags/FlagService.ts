@@ -1,5 +1,5 @@
 import { AuditActions } from '@mocco/common/audit';
-import { ChangeOutcomes, ChangesetSources, FlagTypes } from '@mocco/common/flags';
+import { ChangeOutcomes, ChangesetSources, FlagManagers, FlagTypes } from '@mocco/common/flags';
 import { resolveFlag } from '@mocco/flags-core';
 
 import { auditRestores } from '@backend/domain/flags/audit-restores';
@@ -7,6 +7,7 @@ import { FlagEnvironmentNotFoundError, FlagKeyTakenError, FlagNotFoundError } fr
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
 import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
+import { FlagFileSyncRepo } from '@backend/domain/flags/repos/flag-file-sync.repo';
 import { FlagRulesetSnapshotRepo } from '@backend/domain/flags/repos/flag-ruleset-snapshot.repo';
 import { FlagSegmentRepo } from '@backend/domain/flags/repos/flag-segment.repo';
 import { FlagRepo } from '@backend/domain/flags/repos/flag.repo';
@@ -17,7 +18,13 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagChangesetRow } from '@backend/domain/flags/repos/flag-changeset.repo';
 import type { Db } from '@backend/infra/db/types';
-import type { BooleanFlagCreateInput, ChangeOp, FlagCreateInput } from '@mocco/common/flags';
+import type {
+  BooleanFlagCreateInput,
+  ChangeOp,
+  ChangesetSource,
+  FlagCreateInput,
+  FlagManager,
+} from '@mocco/common/flags';
 import type { EvaluationContext, Ruleset } from '@mocco/flags-core';
 
 export interface FlagServiceDeps {
@@ -30,6 +37,8 @@ export interface FlagServiceDeps {
 
 /** How many changesets an environment's history returns. */
 const HISTORY_LIMIT = 50;
+/** How many `.mocco/flags.yml` syncs the console lists. */
+const FILE_SYNC_LIMIT = 20;
 
 /** Map a key collision to the domain error; re-throw anything else. */
 const rethrowKeyTaken = (error: unknown, kind: 'environment' | 'flag', key: string): never => {
@@ -187,8 +196,20 @@ export class FlagService {
   }
 
   /** Create a flag of any type and add it, disabled, to every environment. One
-   * transaction: the flag exists everywhere or nowhere. */
-  async createFlag(workspaceId: string, projectId: string, actorUserId: string, input: FlagCreateInput) {
+   * transaction: the flag exists everywhere or nowhere. A `.mocco/flags.yml` sync creates
+   * its flags repo-managed. */
+  async createFlag(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string | null,
+    input: FlagCreateInput,
+    origin?: { managedBy: FlagManager; clientVisible: boolean; source: ChangesetSource },
+  ) {
+    const { managedBy, clientVisible, source } = origin ?? {
+      managedBy: FlagManagers.ui,
+      clientVisible: false,
+      source: ChangesetSources.ui,
+    };
     const { flag, changesets } = await this.inTransaction('flag', input.key, async tx => {
       const created = await new FlagRepo(tx).insert({
         workspaceId,
@@ -198,6 +219,8 @@ export class FlagService {
         variants: input.variants,
         description: input.description,
         lifecycle: input.lifecycle,
+        clientVisible,
+        managedBy,
         createdByUserId: actorUserId,
       });
       const environments = await new FlagEnvironmentRepo(tx).listByProjectInLockOrder(workspaceId, projectId);
@@ -214,7 +237,7 @@ export class FlagService {
               offVariant: input.offVariant,
             },
           ],
-          source: ChangesetSources.ui,
+          source,
           actorUserId,
           reason: null,
         });
@@ -305,6 +328,57 @@ export class FlagService {
     );
     await this.auditApplied(workspaceId, actorUserId, changeset);
     return { outcome: ChangeOutcomes.applied, changeset };
+  }
+
+  /**
+   * A `.mocco/flags.yml` change to one environment (#145): applied at once on an
+   * unprotected environment; on a protected one it replaces what the repo's last push
+   * left pending and waits for the gate. Git write is not release (ADR 0002).
+   */
+  async applyRepoChangeset(
+    workspaceId: string,
+    projectId: string,
+    input: {
+      environmentId: string;
+      ops: ChangeOp[];
+      proposerUserId: string | null;
+      repoId: string;
+      commitSha: string;
+      reason: string;
+    },
+  ) {
+    const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
+    const origin = { source: ChangesetSources.repo, repoId: input.repoId, commitSha: input.commitSha };
+    const { changeGate } = environment;
+    if (changeGate !== null) {
+      if (this.deps.governance === undefined) {
+        throw new Error('Changes to a protected environment need the governance service');
+      }
+      await this.deps.governance.supersedeRepoPending(environment, input.repoId, input.proposerUserId);
+      return await this.deps.governance.propose(
+        { ...environment, changeGate },
+        input.proposerUserId,
+        { baseVersion: environment.currentVersion, ops: input.ops, reason: input.reason },
+        origin,
+      );
+    }
+    const { changeset } = await this.deps.db.transaction(
+      async tx =>
+        await this.publisher.apply(tx, workspaceId, {
+          environmentId: environment.id,
+          ops: input.ops,
+          actorUserId: input.proposerUserId,
+          reason: input.reason,
+          ...origin,
+        }),
+    );
+    await this.auditApplied(workspaceId, input.proposerUserId, changeset);
+    return { outcome: ChangeOutcomes.applied, changeset };
+  }
+
+  /** The project's recent `.mocco/flags.yml` syncs, newest first (#145). */
+  async fileSyncs(workspaceId: string, projectId: string) {
+    return await new FlagFileSyncRepo(this.deps.db).listByProject(workspaceId, projectId, FILE_SYNC_LIMIT);
   }
 
   /** The environment's changesets, newest first. */
