@@ -15,6 +15,7 @@ import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
+import type { RunReadDeps } from '@backend/transport/ext/v1/runs';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { Context } from 'hono';
 
@@ -27,6 +28,8 @@ export interface V1Deps {
   flags?: FlagServingDeps;
   /** Conversations for the app's users (#95); undefined leaves /v1/messenger unmounted. */
   messenger?: MessengerServingDeps;
+  /** Run reads for a project's repositories; undefined leaves /v1/runs unmounted. */
+  runs?: RunReadDeps;
 }
 
 export interface V1Env {

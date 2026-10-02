@@ -54,7 +54,7 @@ So the split is:
 
 | | Authenticates as | May do |
 |---|---|---|
-| `/v1` + API key | a **project** | read runs, gates and approval requests |
+| `/v1` + API key | a **project** | read runs and their steps and gates (approvals: see below) |
 | MCP + OAuth | a **person** (their roles) | everything a key may, plus approve, reject and resume |
 | CLI | a person (device login), or a key for CI | both, depending on how it authenticated |
 
@@ -258,10 +258,10 @@ of one contract, not a third contract.
 Each is a PR, in dependency order. The first two are useful on their own: they are the
 public read API for runs, which any dashboard or SDK wants regardless of MCP.
 
-1. **`/v1` governance reads** — `runs:read`, `approvals:read`, the four read endpoints,
-   rate limits, tests. No MCP yet.
-2. **`approvals:write`, refused for keys** — the endpoint and the refusal, so the rule
-   lands in one place before anything calls it.
+1. **`/v1` run reads** — `runs:read`, `GET /v1/runs` and `GET /v1/runs/{id}`, scoped to
+   the repositories the key's project links. No MCP yet. *(Shipped.)*
+2. **Approvals on `/v1`, or not** — see below: approval requests carry no project, so
+   this slice is a decision before it is an endpoint.
 3. **Better Auth 1.6 → 1.7** — on its own, because auth is load-bearing.
 4. **`mcp()` + `cimd()` + the discovery routes** — the authorization server and the
    session a tool will receive. No tools yet.
@@ -280,6 +280,32 @@ real uses ("the staging deploy is stuck, find out why and approve it if the migr
 additive"), and track tool calls per task, tokens consumed, and tool errors. A tool that
 is correct but costs a model forty calls to use is not finished. This belongs with
 slice 5, where there is something to measure.
+
+## Found while building slice 1: approvals have no project
+
+A key authenticates a **project**. Runs reach one through their commit's repository and
+`mocco_project_repos` — the schema even carries an index for that lookup — so `/v1/runs`
+scopes cleanly.
+
+**Approval requests do not.** `mocco_approval_requests` is workspace-scoped with an opaque
+`(subject_type, subject_id)`, and the schema says so deliberately: *"Opaque to
+governance."* There is no generic way to ask which project an approval belongs to without
+governance learning what every product's subjects are, which is the coupling that comment
+exists to prevent.
+
+Two ways out, and the choice is worth making on its own rather than inside an endpoint:
+
+1. **Give approval requests a `project_id`.** Honest — an approval is always *about*
+   something in a project — and it would let the console filter by project too. It touches
+   every requester and is a migration.
+2. **Leave `/v1` without approvals.** The caller who wants them is a person in a
+   workspace, which is exactly what MCP authenticates. `/v1` keeps the project-scoped
+   reads a key can be trusted with, and approvals arrive with the surface that has the
+   right unit of scope.
+
+Option 2 is the smaller claim and loses nothing we have asked for, so the plan assumes it
+until something needs otherwise. Either way the deciding tools are unaffected: those were
+always a person's.
 
 ## Open questions
 

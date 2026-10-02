@@ -21,6 +21,10 @@ export const ApiKeyPrefixes = {
 
 /** What a key may do. Products add their scopes here as their `/v1` routes land. */
 export const ApiScopes = {
+  /** Read runs and their steps and gates. Read-only by design: a key is a project, not a
+   * person, and resuming or approving must name someone who could have been asked
+   * (ADR 0002, ADR 0025). */
+  runsRead: 'runs:read',
   otaRead: 'ota:read',
   otaWrite: 'ota:write',
   flagsRead: 'flags:read',

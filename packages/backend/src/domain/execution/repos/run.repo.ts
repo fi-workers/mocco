@@ -1,9 +1,10 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
 import type { Db } from '@backend/infra/db/types';
+import type { RunState } from '@mocco/common/execution';
 
 /** Data access for mocco_runs. Every read/write is scoped by `workspace_id` —
  * runs carry it directly, so a run is never resolved by id alone. */
@@ -44,6 +45,61 @@ export class RunRepo {
       .leftJoin(schema.users, eq(schema.runs.triggeredByUserId, schema.users.id))
       .where(and(eq(schema.runs.id, runId), eq(schema.runs.workspaceId, workspaceId)));
     return getOrThrow(rows, `Run ${runId} was not found`);
+  }
+
+  /**
+   * Runs of the repositories a project links, newest first — the project-scoped read the
+   * public API serves (`/v1/runs`), where the caller is an API key and so knows a project
+   * rather than a workspace. A run carries no `project_id`: it belongs to a commit, which
+   * belongs to a repo, which a project links through `mocco_project_repos` (whose
+   * `repo_idx` exists for exactly this lookup). `limit` is the page size and `before` the
+   * previous page's last `startedAt`/`createdAt` cursor.
+   */
+  async searchInProject(
+    workspaceId: string,
+    projectId: string,
+    filter: { state?: RunState; repoId?: string; limit: number; before?: Date },
+  ) {
+    const conditions = [
+      eq(schema.runs.workspaceId, workspaceId),
+      eq(schema.projectRepos.projectId, projectId),
+      ...(filter.state === undefined ? [] : [eq(schema.runs.state, filter.state)]),
+      ...(filter.repoId === undefined ? [] : [eq(schema.repos.id, filter.repoId)]),
+      ...(filter.before === undefined ? [] : [lt(schema.runs.createdAt, filter.before)]),
+    ];
+    return await this.db
+      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .innerJoin(schema.projectRepos, eq(schema.projectRepos.repoId, schema.repos.id))
+      .where(and(...conditions))
+      .orderBy(desc(schema.runs.createdAt))
+      .limit(filter.limit);
+  }
+
+  /**
+   * One run, scoped to a project the same way as `searchInProject` — so a key cannot read
+   * a run belonging to a repository its project does not link, even inside its own
+   * workspace. Returns undefined rather than throwing: the route answers 404 either way,
+   * and a key must not learn that an id exists elsewhere.
+   */
+  async findInProject(workspaceId: string, projectId: string, runId: string) {
+    const [row] = await this.db
+      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos, config: schema.commitConfigs })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .innerJoin(schema.projectRepos, eq(schema.projectRepos.repoId, schema.repos.id))
+      .innerJoin(schema.commitConfigs, eq(schema.runs.commitConfigId, schema.commitConfigs.id))
+      .where(
+        and(
+          eq(schema.runs.id, runId),
+          eq(schema.runs.workspaceId, workspaceId),
+          eq(schema.projectRepos.projectId, projectId),
+        ),
+      );
+    return row;
   }
 
   /** A run by its own id, workspace-agnostic — the callback funnel has no workspace
