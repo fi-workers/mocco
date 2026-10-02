@@ -8,8 +8,10 @@ import {
   changesetSchema,
   flagConfigSchema,
   flagEnvironmentCreateInputSchema,
+  flagCreateInputSchema,
   flagEnvironmentSchema,
   flagSchema,
+  flagSegmentSchema,
 } from '@mocco/common/flags';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
@@ -48,6 +50,46 @@ export const flagsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { workspaceId, projectId, ...values } = input;
       return { flag: await ctx.flags.createBooleanFlag(workspaceId, projectId, ctx.session.user.id, values) };
+    }),
+
+  create: flagsProcedure
+    .input(z.object({ workspaceId: z.uuid(), projectId: z.uuid(), flag: flagCreateInputSchema }))
+    .output(z.object({ flag: flagSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      flag: await ctx.flags.createFlag(input.workspaceId, input.projectId, ctx.session.user.id, input.flag),
+    })),
+
+  segments: flagsProcedure
+    .input(environmentInput)
+    .output(z.object({ segments: z.array(flagSegmentSchema) }))
+    .query(async ({ ctx, input }) => ({
+      segments: await ctx.flags.listSegments(input.workspaceId, input.projectId, input.environmentId),
+    })),
+
+  /** Evaluate every flag of the environment for a context, optionally with unsaved ops applied. */
+  preview: flagsProcedure
+    .input(
+      environmentInput.extend({
+        ops: z.array(changeOpSchema).max(100).default([]),
+        context: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .output(
+      z.object({
+        results: z.array(
+          z.object({
+            flagKey: z.string(),
+            value: z.unknown(),
+            variant: z.string().nullable(),
+            reason: z.string(),
+            errorCode: z.string().nullable(),
+          }),
+        ),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...preview } = input;
+      return { results: await ctx.flags.preview(workspaceId, projectId, preview) };
     }),
 
   applyChangeset: flagsProcedure

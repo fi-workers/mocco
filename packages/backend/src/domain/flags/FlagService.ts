@@ -1,5 +1,6 @@
 import { AuditActions } from '@mocco/common/audit';
 import { ChangesetSources, FlagTypes } from '@mocco/common/flags';
+import { resolveFlag } from '@mocco/flags-core';
 
 import {
   FlagEnvironmentNotFoundError,
@@ -10,6 +11,7 @@ import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.re
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
 import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
 import { FlagRulesetSnapshotRepo } from '@backend/domain/flags/repos/flag-ruleset-snapshot.repo';
+import { FlagSegmentRepo } from '@backend/domain/flags/repos/flag-segment.repo';
 import { FlagRepo } from '@backend/domain/flags/repos/flag.repo';
 import { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
@@ -17,7 +19,8 @@ import { UniqueConstraintError } from '@backend/infra/db/errors';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { FlagChangesetRow } from '@backend/domain/flags/repos/flag-changeset.repo';
 import type { Db } from '@backend/infra/db/types';
-import type { BooleanFlagCreateInput, ChangeOp } from '@mocco/common/flags';
+import type { BooleanFlagCreateInput, ChangeOp, FlagCreateInput } from '@mocco/common/flags';
+import type { EvaluationContext, Ruleset } from '@mocco/flags-core';
 
 export interface FlagServiceDeps {
   db: Db;
@@ -159,21 +162,34 @@ export class FlagService {
           killed: config.killed,
           defaultVariant: config.defaultVariant,
           offVariant: config.offVariant,
+          rules: config.rules,
+          rollout: config.rollout,
           version: config.version,
         })),
     }));
   }
 
-  /** Create a boolean flag (`on` / `off`, serving `on` once enabled) and add it,
-   * disabled, to every environment. One transaction: the flag exists everywhere or nowhere. */
+  /** Create a boolean flag (`on` / `off`, serving `on` once enabled and `off` when killed). */
   async createBooleanFlag(workspaceId: string, projectId: string, actorUserId: string, input: BooleanFlagCreateInput) {
+    return await this.createFlag(workspaceId, projectId, actorUserId, {
+      ...input,
+      type: FlagTypes.boolean,
+      variants: { on: true, off: false },
+      defaultVariant: 'on',
+      offVariant: 'off',
+    });
+  }
+
+  /** Create a flag of any type and add it, disabled, to every environment. One
+   * transaction: the flag exists everywhere or nowhere. */
+  async createFlag(workspaceId: string, projectId: string, actorUserId: string, input: FlagCreateInput) {
     const { flag, changesets } = await this.inTransaction('flag', input.key, async tx => {
       const created = await new FlagRepo(tx).insert({
         workspaceId,
         projectId,
         key: input.key,
-        type: FlagTypes.boolean,
-        variants: { on: true, off: false },
+        type: input.type,
+        variants: input.variants,
         description: input.description,
         lifecycle: input.lifecycle,
         createdByUserId: actorUserId,
@@ -184,7 +200,14 @@ export class FlagService {
         const done = await previous;
         const { changeset } = await this.publisher.apply(tx, workspaceId, {
           environmentId: environment.id,
-          ops: [{ op: 'add_flag', flagKey: created.key, defaultVariant: 'on', offVariant: 'off' }],
+          ops: [
+            {
+              op: 'add_flag',
+              flagKey: created.key,
+              defaultVariant: input.defaultVariant,
+              offVariant: input.offVariant,
+            },
+          ],
           source: ChangesetSources.ui,
           actorUserId,
           reason: null,
@@ -198,13 +221,57 @@ export class FlagService {
       action: AuditActions.flagCreated,
       subjectType: 'flag',
       subjectId: flag.id,
-      payload: { key: flag.key, type: flag.type, lifecycle: flag.lifecycle },
+      payload: { key: flag.key, type: flag.type, lifecycle: flag.lifecycle, variants: Object.keys(flag.variants) },
     });
     await changesets.reduce(async (previous, changeset) => {
       await previous;
       await this.auditApplied(workspaceId, actorUserId, changeset);
     }, Promise.resolve());
     return flag;
+  }
+
+  /** The environment's segments. */
+  async listSegments(workspaceId: string, projectId: string, environmentId: string) {
+    await this.requireEnvironment(workspaceId, projectId, environmentId);
+    const rows = await new FlagSegmentRepo(this.deps.db).listForEnvironment(workspaceId, environmentId);
+    return rows.map(row => ({
+      key: row.key,
+      environmentId: row.environmentId,
+      name: row.name,
+      includedKeys: row.includedKeys,
+      excludedKeys: row.excludedKeys,
+      rules: row.rules,
+      version: row.version,
+    }));
+  }
+
+  /**
+   * Evaluate the environment's flags for `context` — on the current ruleset, or on what
+   * `ops` would make it (nothing is saved). The same evaluator as the SDKs (flags-core).
+   */
+  async preview(
+    workspaceId: string,
+    projectId: string,
+    input: { environmentId: string; ops: ChangeOp[]; context: EvaluationContext },
+  ) {
+    const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
+    const document = await this.publisher.preview(this.deps.db, environment, input.ops);
+    const ruleset = document as unknown as Ruleset;
+    return (
+      Object.keys(document.flags)
+        // eslint-disable-next-line sonarjs/null-dereference -- object keys are strings, never null
+        .toSorted((a, b) => a.localeCompare(b))
+        .map(flagKey => {
+          const resolution = resolveFlag(ruleset, flagKey, input.context);
+          return {
+            flagKey,
+            value: resolution.value ?? null,
+            variant: resolution.variant ?? null,
+            reason: resolution.reason,
+            errorCode: resolution.errorCode ?? null,
+          };
+        })
+    );
   }
 
   /**

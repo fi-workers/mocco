@@ -43,12 +43,15 @@ import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type {
+  AttributeClause,
   ChangeDiffEntry,
   ChangeOp,
   ChangesetSource,
   ChangesetState,
   FlagLifecycle,
   FlagType,
+  RolloutEntry,
+  Rule,
 } from '@mocco/common/flags';
 import type {
   ApprovalDecision,
@@ -1610,6 +1613,10 @@ export const flagConfigs = pgTable(
     defaultVariant: text('default_variant').notNull(),
     // What a killed flag serves (ADR 0024).
     offVariant: text('off_variant').notNull(),
+    // Ordered targeting rules; the first whose clauses all match serves.
+    rules: jsonb().$type<Rule[]>().notNull().default([]),
+    // When set, no-rule callers with a targeting key get this percentage rollout.
+    rollout: jsonb().$type<RolloutEntry[]>(),
     // Mixed into percentage bucketing (`mocco-v1`); changed only by a changeset.
     salt: text()
       .notNull()
@@ -1628,6 +1635,38 @@ export const flagConfigs = pgTable(
       columns: [t.flagId, t.workspaceId],
       foreignColumns: [flags.id, flags.workspaceId],
       name: 'mocco_flag_configs_flag_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A named group of targeting keys and attribute rules in one environment, used by flag
+ * rules. Environment-scoped, so editing it is governed by that environment's gate. */
+export const flagSegments = pgTable(
+  'mocco_flag_segments',
+  {
+    environmentId: uuid('environment_id').notNull(),
+    key: text().notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    name: text().notNull(),
+    includedKeys: text('included_keys')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    excludedKeys: text('excluded_keys')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    // OR of AND groups of attribute clauses.
+    rules: jsonb().$type<AttributeClause[][]>().notNull().default([]),
+    // The environment version that last changed this segment.
+    version: integer().notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.environmentId, t.key], name: 'mocco_flag_segments_pk' }),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_segments_environment_fk',
     }).onDelete('cascade'),
   ],
 );

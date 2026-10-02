@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
-import { ChangesetConflictError, FlagKeyTakenError, ProtectedEnvironmentError } from '@backend/domain/flags/errors';
+import {
+  ChangesetConflictError,
+  FlagKeyTakenError,
+  ProtectedEnvironmentError,
+  RulesetTooLargeError,
+} from '@backend/domain/flags/errors';
 import { FlagService } from '@backend/domain/flags/FlagService';
 import { flagdValidator } from '@backend/domain/flags/testing/flagd-schema';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -104,7 +109,7 @@ describe('FlagService (pglite)', () => {
     const applied = entries.findLast(entry => entry.action === AuditActions.flagChangesetApplied);
     expect(applied?.payload).toMatchObject({
       version: 2,
-      diff: [{ flagKey: 'new-checkout', field: 'enabled', before: false, after: true }],
+      diff: [{ subject: 'flag', key: 'new-checkout', field: 'enabled', before: false, after: true }],
     });
     expect(await audit.verify(workspaceId)).toMatchObject({ intact: true });
     const history = await service.history(workspaceId, projectId, env.id);
@@ -165,5 +170,99 @@ describe('FlagService (pglite)', () => {
         reason: null,
       }),
     ).rejects.toThrow(ProtectedEnvironmentError);
+  });
+
+  it('creates typed flags and targets them with rules, segments and a rollout, previewed before saving', async () => {
+    const env = await service.createEnvironment(workspaceId, projectId, userId, {
+      key: 'production',
+      name: 'Production',
+    });
+    await service.createFlag(workspaceId, projectId, userId, {
+      key: 'checkout-copy',
+      type: 'string',
+      variants: { short: 'Pay', long: 'Pay securely' },
+      defaultVariant: 'short',
+      offVariant: 'short',
+      description: null,
+      lifecycle: 'permanent',
+    });
+    const ops = [
+      {
+        op: 'set_segment' as const,
+        segmentKey: 'staff',
+        segment: { name: 'Staff', includedKeys: ['ada'], excludedKeys: [], rules: [] },
+      },
+      {
+        op: 'set_rules' as const,
+        flagKey: 'checkout-copy',
+        rules: [{ clauses: [{ segment: 'staff', negate: false }], serve: { variant: 'long' } }],
+      },
+      { op: 'set_enabled' as const, flagKey: 'checkout-copy', enabled: true },
+    ];
+
+    const before = await service.preview(workspaceId, projectId, {
+      environmentId: env.id,
+      ops,
+      context: { targetingKey: 'ada' },
+    });
+    const unsaved = await service.preview(workspaceId, projectId, {
+      environmentId: env.id,
+      ops: [],
+      context: { targetingKey: 'ada' },
+    });
+    await service.applyChangeset(workspaceId, projectId, userId, {
+      environmentId: env.id,
+      baseVersion: 1,
+      ops,
+      reason: null,
+    });
+    const [segment] = await service.listSegments(workspaceId, projectId, env.id);
+    const ruleset = await service.ruleset(workspaceId, projectId, env.id);
+    const validate = await flagdValidator();
+
+    expect(before).toEqual([
+      { flagKey: 'checkout-copy', value: 'Pay securely', variant: 'long', reason: 'TARGETING_MATCH', errorCode: null },
+    ]);
+    expect(unsaved).toMatchObject([{ flagKey: 'checkout-copy', reason: 'DISABLED', value: null }]);
+    expect(segment).toMatchObject({ key: 'staff', includedKeys: ['ada'], version: 2 });
+    expect(validate(ruleset.document)).toBe(true);
+    expect(ruleset.document).toMatchObject({
+      flags: { 'checkout-copy': { state: 'ENABLED', targeting: { if: expect.any(Array) } } },
+    });
+  });
+
+  it('refuses a change that would make the ruleset larger than its limit', async () => {
+    const env = await service.createEnvironment(workspaceId, projectId, userId, {
+      key: 'production',
+      name: 'Production',
+    });
+    const huge = (index: number) => ({
+      op: 'set_segment' as const,
+      segmentKey: `s${index}`,
+      segment: {
+        name: 'Huge',
+        includedKeys: Array.from({ length: 10_000 }, (_, key) => `customer-${index}-${key}-${'x'.repeat(40)}`),
+        excludedKeys: [],
+        rules: [],
+      },
+    });
+    await service.createBooleanFlag(workspaceId, projectId, userId, {
+      key: 'a',
+      description: null,
+      lifecycle: 'temporary',
+    });
+    const rules = Array.from({ length: 10 }, (_, index) => ({
+      clauses: [{ segment: `s${index}`, negate: false }],
+      serve: { variant: 'on' },
+    }));
+
+    await expect(
+      service.applyChangeset(workspaceId, projectId, userId, {
+        environmentId: env.id,
+        baseVersion: 1,
+        ops: [...Array.from({ length: 10 }, (_, index) => huge(index)), { op: 'set_rules', flagKey: 'a', rules }],
+        reason: null,
+      }),
+    ).rejects.toThrow(RulesetTooLargeError);
   });
 });

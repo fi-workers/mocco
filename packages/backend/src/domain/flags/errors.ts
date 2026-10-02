@@ -54,3 +54,14 @@ export class ProtectedEnvironmentError extends BadRequestError {
     this.name = 'ProtectedEnvironmentError';
   }
 }
+
+/** The compiled ruleset would exceed its size limit — BAD_REQUEST. */
+export class RulesetTooLargeError extends BadRequestError {
+  constructor(bytes: number, limit: number, options?: ErrorOptions) {
+    super(
+      `This change makes the environment's ruleset ${Math.ceil(bytes / 1024)} KB, over the ${limit / 1024 / 1024} MB limit; move large key lists out of segments`,
+      options,
+    );
+    this.name = 'RulesetTooLargeError';
+  }
+}

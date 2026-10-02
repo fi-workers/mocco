@@ -41,6 +41,8 @@ export class FlagConfigRepo {
           killed: sql`excluded.killed`,
           defaultVariant: sql`excluded.default_variant`,
           offVariant: sql`excluded.off_variant`,
+          rules: sql`excluded.rules`,
+          rollout: sql`excluded.rollout`,
           version: sql`excluded.version`,
         },
       });

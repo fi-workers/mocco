@@ -225,6 +225,13 @@
       "when": 1790902509183,
       "tag": "0031_public_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790907037247,
+      "tag": "0032_light_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }
