@@ -90,4 +90,8 @@ Readers who pick a language see its translation, and the article list shows tran
 
 The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change appears on the site within a minute.
 
+Readers can search from the box at the top of every page. Every word they type has to appear in an article's title or text, in the language they're reading (or yours, for articles not translated yet); articles whose title matches come first. The search box and results speak the reader's language.
+
+![Searching the help center: results for a word, with a snippet of each article](./images/search.png)
+
 ![A published article on the public help site, with the article list and the language switcher](./images/public-article.png)
