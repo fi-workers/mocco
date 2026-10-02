@@ -2,22 +2,31 @@
 // import. Binding the version-policy approval handler here keeps the dependency one-way
 // (ota → governance): governance never imports a product domain.
 import { OtaApprovalSubjects } from '@mocco/common/ota';
+import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
 
 import { getAudit } from '@backend/domain/audit/instance';
+import { resolveBaseOrigin, schemeFor } from '@backend/domain/execution/endpoints';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
 import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
+import { OtaChannelRepo } from '@backend/domain/ota/repos/ota-channel.repo';
 import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-external-credential.repo';
+import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
+import { SigningService } from '@backend/domain/ota/SigningService';
 import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import { getProjectDomain } from '@backend/domain/project/instance';
+import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { Env } from '@backend/infra/config/env';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
 
@@ -25,6 +34,17 @@ export interface OtaDomain {
   versionPolicies: VersionPolicyService;
   versionChecks: VersionCheckService;
   externalCredentials: ExternalCredentialService;
+  otaHosting: OtaHostingService;
+  otaSigning: SigningService;
+}
+
+/** Where device-facing OTA URLs live: the public API host when PUBLIC_API_DOMAIN is set
+ * (`https://api.mocco.club/v1`), else the app origin's `/api/ext/v1`. */
+export function publicApiBaseFromEnv(env: Env): string {
+  if (env.PUBLIC_API_DOMAIN !== undefined) {
+    return `${schemeFor(env.PUBLIC_API_DOMAIN)}://${env.PUBLIC_API_DOMAIN}/v1`;
+  }
+  return `${resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL })}/api/ext/v1`;
 }
 
 /** Build the OTA services over a db and register their approval handlers on `approvals`.
@@ -37,10 +57,12 @@ export function createOtaDomain(
     audit: AuditService;
     /** Lazy SecretBox; defaults to the env-configured one. */
     secretBox?: () => SecretBox;
+    /** The base of device-facing URLs (`publicApiBaseFromEnv` in production). */
+    publicApiBase: string;
   },
 ): OtaDomain {
   const policies = new AppVersionPolicyRepo(db);
-  const { secretBox = getSecretBox, ...services } = deps;
+  const { secretBox = getSecretBox, publicApiBase, ...services } = deps;
   const versionPolicies = new VersionPolicyService({
     policies,
     changes: new AppVersionPolicyChangeRepo(db),
@@ -48,6 +70,17 @@ export function createOtaDomain(
   });
   deps.approvals.registerHandler(OtaApprovalSubjects.versionPolicy, async request => {
     await versionPolicies.applyApproved(request);
+  });
+  const hosting = new OtaHostingService({
+    apps: new OtaAppRepo(db),
+    channels: new OtaChannelRepo(db),
+    projects: services.projects,
+    approvals: services.approvals,
+    audit: services.audit,
+    publicApiBase,
+  });
+  deps.approvals.registerHandler(OtaHostingApprovalSubjects.channelPolicy, async request => {
+    await hosting.applyApprovedPolicy(request);
   });
   return {
     versionPolicies,
@@ -58,6 +91,8 @@ export function createOtaDomain(
       audit: services.audit,
       secretBox,
     }),
+    otaHosting: hosting,
+    otaSigning: new SigningService({ certificates: new SigningCertificateRepo(db), audit: services.audit }),
   };
 }
 
@@ -71,6 +106,7 @@ export function getOtaDomain(): OtaDomain {
     projects: getProjectDomain().projects,
     approvals: getGovernance().approvals,
     audit: getAudit().audit,
+    publicApiBase: publicApiBaseFromEnv(getEnv()),
   });
   return state.ota;
 }

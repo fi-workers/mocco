@@ -64,7 +64,12 @@ describe('GET /api/ext/v1/apps/:appId/version-check (pglite)', () => {
     t = await createTestDb();
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
     const project = createProjectDomain(t.db);
-    ota = createOtaDomain(t.db, { projects: project.projects, approvals: createApprovalService(t.db, audit), audit });
+    ota = createOtaDomain(t.db, {
+      publicApiBase: 'https://mocco.test/api/ext/v1',
+      projects: project.projects,
+      approvals: createApprovalService(t.db, audit),
+      audit,
+    });
     app = createExtApp({
       auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
       runs: new RunService({

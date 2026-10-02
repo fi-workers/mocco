@@ -75,6 +75,7 @@ related:
 - [Prototype scope & IA](./specs/2026-06-30-prototype-scope.md) — click-through screen definitions ([prototype itself](./prototype/README.md))
 - [Workspace model](./reference/workspace.md) — tables, invariants, contracts, known gaps
 - [OTA external credentials](./reference/ota-external-credentials.md) — the existing OTA tool's publishing token, released only to a gated step
+- [Mocco-hosted OTA updates](./reference/ota-hosting.md) — OTA apps for React Native, fixed manifest and asset URLs, signing certificates, channels and gated protection
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers

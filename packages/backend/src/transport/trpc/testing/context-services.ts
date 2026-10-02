@@ -20,7 +20,13 @@ export function contextServices(db: Db) {
   const approvals = createApprovalService(db, audit);
   // A random SecretBox key per context — no env, no seam.
   const box = new SecretBox([{ id: 'test', key: randomBytes(32) }]);
-  const ota = createOtaDomain(db, { projects: project.projects, approvals, audit, secretBox: () => box });
+  const ota = createOtaDomain(db, {
+    publicApiBase: 'https://mocco.test/api/ext/v1',
+    projects: project.projects,
+    approvals,
+    audit,
+    secretBox: () => box,
+  });
   return {
     ...project,
     approvals,

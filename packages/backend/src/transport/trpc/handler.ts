@@ -27,6 +27,8 @@ import type { ConnectionService } from '@backend/domain/integration/ConnectionSe
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
+import type { SigningService } from '@backend/domain/ota/SigningService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -49,6 +51,8 @@ export interface TrpcDeps extends Services {
   versionPolicies: VersionPolicyService;
   externalCredentials: ExternalCredentialService;
   apiKeys: ApiKeyService;
+  otaHosting: OtaHostingService;
+  otaSigning: SigningService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -86,6 +90,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         versionPolicies: deps.versionPolicies,
         externalCredentials: deps.externalCredentials,
         apiKeys: deps.apiKeys,
+        otaHosting: deps.otaHosting,
+        otaSigning: deps.otaSigning,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -117,6 +123,8 @@ export function productionServices(): TrpcDeps {
     versionPolicies: getOtaDomain().versionPolicies,
     externalCredentials: getOtaDomain().externalCredentials,
     apiKeys: getApiKeys(),
+    otaHosting: getOtaDomain().otaHosting,
+    otaSigning: getOtaDomain().otaSigning,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

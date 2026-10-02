@@ -22,6 +22,11 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/ota`;
     return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
   },
+  /** Mocco-hosted OTA updates for the project's React Native app; `appId` selects the OTA app. */
+  projectOtaHosting: (id: string, projectId: string, appId?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/ota-hosting`;
+    return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
+  },
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

@@ -8,11 +8,16 @@ const CALLBACK_PATH = '/api/ext/callback';
 const GENERIC_EXECUTOR_PATH = '/api/ext/executor/generic';
 
 /** A bare authority (SERVICE_DOMAIN) carries no scheme — derive it. Loopback hosts
- * (local dev, e2e) are plain http; everything else (real domains, Vercel hosts) is
- * https. Parsed via URL so bracketed IPv6 authorities stay correct. */
-function schemeFor(host: string): 'http' | 'https' {
+ * (local dev, e2e) are plain http — `localhost`, any `*.localhost` (always loopback,
+ * RFC 6761), 127.x and [::1]; everything else (real domains, Vercel hosts) is https.
+ * Parsed via URL so bracketed IPv6 authorities stay correct. */
+export function schemeFor(host: string): 'http' | 'https' {
   const url = new URL(`http://${host}`);
-  const isLoopback = url.hostname === 'localhost' || url.hostname.startsWith('127.') || url.hostname === '[::1]';
+  const isLoopback =
+    url.hostname === 'localhost' ||
+    url.hostname.endsWith('.localhost') ||
+    url.hostname.startsWith('127.') ||
+    url.hostname === '[::1]';
   return isLoopback ? 'http' : 'https';
 }
 

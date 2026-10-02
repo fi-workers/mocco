@@ -14,6 +14,7 @@ import { Products } from '@mocco/common/project';
 import { z } from 'zod';
 
 import { productProcedure } from '@backend/transport/trpc/project-procedures';
+import { otaHostingRouter } from '@backend/transport/trpc/routers/ota-hosting';
 import { router } from '@backend/transport/trpc/trpc';
 
 const projectInput = z.object({ workspaceId: z.uuid(), projectId: z.uuid() });
@@ -21,6 +22,7 @@ const appInput = projectInput.extend({ appId: z.uuid() });
 const otaProcedure = productProcedure(Products.ota);
 
 export const otaRouter = router({
+  hosting: otaHostingRouter,
   versionPolicy: router({
     get: otaProcedure
       .input(appInput)

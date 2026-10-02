@@ -29,6 +29,12 @@ export const AuditActions = {
   otaCredentialCreated: 'ota.credential.created',
   otaCredentialRotated: 'ota.credential.rotated',
   otaCredentialDeleted: 'ota.credential.deleted',
+  otaAppCreated: 'ota.app.created',
+  otaCertAdded: 'ota.cert.added',
+  otaCertRetired: 'ota.cert.retired',
+  otaChannelCreated: 'ota.channel.created',
+  otaChannelPolicyChanged: 'ota.channel.policy_changed',
+  otaChannelPolicyApprovalStale: 'ota.channel.policy_approval_stale',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

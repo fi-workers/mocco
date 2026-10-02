@@ -5,6 +5,15 @@ import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/com
 import { JobStatuses } from '@mocco/common/jobs';
 import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { OtaTools, PolicyDirections } from '@mocco/common/ota';
+import {
+  CertificateStatuses,
+  OtaDeploymentKinds,
+  OtaDirectiveTypes,
+  OtaPlatforms,
+  OtaProtocols,
+  OtaReleaseStatuses,
+  OtaUpdateKinds,
+} from '@mocco/common/ota-hosting';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
@@ -16,6 +25,7 @@ import {
   boolean,
   bigserial,
   bigint,
+  smallint,
   integer,
   jsonb,
   index,
@@ -49,6 +59,15 @@ import type {
   RuleFilter,
 } from '@mocco/common/notification';
 import type { OtaTool, PolicyDirection, VersionMessage, VersionPolicyRules } from '@mocco/common/ota';
+import type {
+  CertificateStatus,
+  OtaDeploymentKind,
+  OtaDirectiveType,
+  OtaPlatform,
+  OtaProtocol,
+  OtaReleaseStatus,
+  OtaUpdateKind,
+} from '@mocco/common/ota-hosting';
 import type { AppPlatform, Product } from '@mocco/common/project';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
@@ -1551,5 +1570,303 @@ export const rateLimitCounters = pgTable(
     primaryKey({ columns: [t.bucket, t.windowStart], name: 'mocco_rate_limit_counters_pk' }),
     // The hourly prune scans by window.
     index('mocco_rate_limit_counters_window_idx').on(t.windowStart),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Mocco-hosted OTA (phase 3 of the OTA release control design; ADRs 0021, 0022). An OTA
+// app is a project's React Native app served over the Expo Updates protocol. Signed
+// bytes (manifests, directives) are stored exactly as uploaded and never rewritten.
+// ─────────────────────────────────────────────────────────────
+
+export const otaApps = pgTable(
+  'mocco_ota_apps',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    // The project's React Native app this OTA app serves (one OTA app per project app).
+    projectAppId: uuid('project_app_id').notNull(),
+    protocol: text().$type<OtaProtocol>().notNull().default(OtaProtocols.expoUpdates),
+    // Fixed at creation: signed manifests carry asset URLs under it.
+    assetBaseUrl: text('asset_base_url').notNull(),
+    signingRequired: boolean('signing_required').notNull().default(true),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_ota_apps_project_app_uq').on(t.projectAppId),
+    unique('mocco_ota_apps_id_workspace_uq').on(t.id, t.workspaceId),
+    index('mocco_ota_apps_project_idx').on(t.workspaceId, t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_ota_apps_project_workspace_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.projectAppId, t.workspaceId],
+      foreignColumns: [projectApps.id, projectApps.workspaceId],
+      name: 'mocco_ota_apps_project_app_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_apps_protocol_check', sql`${t.protocol} IN (${sqlInList(Object.values(OtaProtocols))})`),
+  ],
+);
+
+export const otaSigningCertificates = pgTable(
+  'mocco_ota_signing_certificates',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    // The `keyid` the app's codeSigningMetadata names (expo-updates default "root").
+    // Several active certificates may share it while old binaries are still in use.
+    keyid: text().notNull(),
+    certificatePem: text('certificate_pem').notNull(),
+    spkiSha256: text('spki_sha256').notNull(),
+    subject: text().notNull(),
+    notAfter: timestamp('not_after').notNull(),
+    status: text().$type<CertificateStatus>().notNull().default(CertificateStatuses.active),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_ota_signing_certificates_app_spki_uq').on(t.appId, t.spkiSha256),
+    index('mocco_ota_signing_certificates_app_keyid_idx').on(t.appId, t.keyid),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_signing_certificates_app_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_ota_signing_certificates_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(CertificateStatuses))})`,
+    ),
+  ],
+);
+
+export const otaChannels = pgTable(
+  'mocco_ota_channels',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    name: text().notNull(),
+    isProtected: boolean('is_protected').notNull().default(false),
+    // Who must approve promotions — set exactly when the channel is protected.
+    policy: jsonb().$type<GateRequirements>(),
+    // Optional: devices must send `mocco-channel-key` (pre-release channels).
+    accessKeyHash: text('access_key_hash'),
+    createdAt,
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  t => [
+    uniqueIndex('mocco_ota_channels_app_name_uq').on(t.appId, t.name),
+    unique('mocco_ota_channels_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_channels_app_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_channels_policy_check', sql`(${t.isProtected}) = (${t.policy} IS NOT NULL)`),
+  ],
+);
+
+export const otaReleases = pgTable(
+  'mocco_ota_releases',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    runtimeVersion: text('runtime_version').notNull(),
+    message: text(),
+    gitSha: text('git_sha'),
+    uploadedByUserId: uuid('uploaded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // The machine principal that uploaded it, e.g. `github:repo:123:ref:refs/heads/main`.
+    uploadedByPrincipal: text('uploaded_by_principal'),
+    status: text().$type<OtaReleaseStatus>().notNull().default(OtaReleaseStatuses.uploading),
+    isMandatory: boolean('is_mandatory').notNull().default(false),
+    createdAt,
+  },
+  t => [
+    unique('mocco_ota_releases_id_workspace_uq').on(t.id, t.workspaceId),
+    index('mocco_ota_releases_app_runtime_idx').on(t.appId, t.runtimeVersion, t.createdAt),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_releases_app_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_releases_status_check', sql`${t.status} IN (${sqlInList(Object.values(OtaReleaseStatuses))})`),
+  ],
+);
+
+export const otaUpdates = pgTable(
+  'mocco_ota_updates',
+  {
+    // The Expo update id, generated in CI: it is inside the signed manifest, so it is
+    // not DB-generated (the one exception to DB-generated ids in OTA).
+    id: uuid().primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    releaseId: uuid('release_id').notNull(),
+    platform: text().$type<OtaPlatform>().notNull(),
+    runtimeVersion: text('runtime_version').notNull(),
+    kind: text().$type<OtaUpdateKind>().notNull(),
+    // Self for originals; for a republish, the original whose assets it reuses.
+    contentOfUpdateId: uuid('content_of_update_id').notNull(),
+    // For a republish: the update it is valid to roll back from.
+    supersedesUpdateId: uuid('supersedes_update_id'),
+    // The manifest `createdAt` — devices load only strictly newer ones (ADR 0021).
+    commitTime: timestamp('commit_time', { withTimezone: true }).notNull(),
+    // The exact signed bytes, served byte for byte.
+    manifestBody: text('manifest_body').notNull(),
+    signature: text(),
+    keyid: text(),
+    launchAssetHash: text('launch_asset_hash').notNull(),
+    totalBytes: bigint('total_bytes', { mode: 'number' }).notNull(),
+    createdAt,
+  },
+  t => [
+    unique('mocco_ota_updates_release_platform_kind_uq')
+      .on(t.releaseId, t.platform, t.kind, t.supersedesUpdateId)
+      .nullsNotDistinct(),
+    index('mocco_ota_updates_app_platform_runtime_idx').on(t.appId, t.platform, t.runtimeVersion, t.commitTime),
+    foreignKey({
+      columns: [t.releaseId, t.workspaceId],
+      foreignColumns: [otaReleases.id, otaReleases.workspaceId],
+      name: 'mocco_ota_updates_release_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_updates_platform_check', sql`${t.platform} IN (${sqlInList(Object.values(OtaPlatforms))})`),
+    check('mocco_ota_updates_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(OtaUpdateKinds))})`),
+  ],
+);
+
+export const otaSignedDirectives = pgTable(
+  'mocco_ota_signed_directives',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    releaseId: uuid('release_id'),
+    platform: text().$type<OtaPlatform>().notNull(),
+    runtimeVersion: text('runtime_version').notNull(),
+    type: text().$type<OtaDirectiveType>().notNull(),
+    commitTime: timestamp('commit_time', { withTimezone: true }),
+    supersedesUpdateId: uuid('supersedes_update_id'),
+    body: text().notNull(),
+    signature: text(),
+    keyid: text(),
+    createdAt,
+  },
+  t => [
+    index('mocco_ota_signed_directives_app_idx').on(t.appId, t.platform, t.runtimeVersion, t.type),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_signed_directives_app_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_signed_directives_type_check', sql`${t.type} IN (${sqlInList(Object.values(OtaDirectiveTypes))})`),
+    check(
+      'mocco_ota_signed_directives_platform_check',
+      sql`${t.platform} IN (${sqlInList(Object.values(OtaPlatforms))})`,
+    ),
+  ],
+);
+
+/** Content-addressed assets, deduplicated across an app's releases. */
+export const otaAssets = pgTable(
+  'mocco_ota_assets',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    appId: uuid('app_id').notNull(),
+    // base64url SHA-256 without padding, as expo-updates checks it.
+    hash: text().notNull(),
+    contentType: text('content_type').notNull(),
+    fileExtension: text('file_extension'),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    objectId: uuid('object_id').references(() => objects.id, { onDelete: 'restrict' }),
+    verifiedAt: timestamp('verified_at'),
+    createdAt,
+  },
+  t => [
+    primaryKey({ columns: [t.appId, t.hash], name: 'mocco_ota_assets_pk' }),
+    foreignKey({
+      columns: [t.appId, t.workspaceId],
+      foreignColumns: [otaApps.id, otaApps.workspaceId],
+      name: 'mocco_ota_assets_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+export const otaUpdateAssets = pgTable(
+  'mocco_ota_update_assets',
+  {
+    updateId: uuid('update_id')
+      .notNull()
+      .references(() => otaUpdates.id, { onDelete: 'cascade' }),
+    appId: uuid('app_id').notNull(),
+    assetHash: text('asset_hash').notNull(),
+    key: text().notNull(),
+    isLaunch: boolean('is_launch').notNull().default(false),
+  },
+  t => [primaryKey({ columns: [t.updateId, t.assetHash], name: 'mocco_ota_update_assets_pk' })],
+);
+
+/** The serving state of a channel per platform and runtime version. */
+export const otaChannelHeads = pgTable(
+  'mocco_ota_channel_heads',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    platform: text().$type<OtaPlatform>().notNull(),
+    runtimeVersion: text('runtime_version').notNull(),
+    activeUpdateId: uuid('active_update_id').references(() => otaUpdates.id, { onDelete: 'set null' }),
+    candidateUpdateId: uuid('candidate_update_id').references(() => otaUpdates.id, { onDelete: 'set null' }),
+    // Basis points of devices that get the candidate (0..10000).
+    rolloutBp: smallint('rollout_bp').notNull().default(0),
+    rolloutSalt: text('rollout_salt').notNull(),
+    isPaused: boolean('is_paused').notNull().default(false),
+    // Set while the head serves a roll-back-to-embedded directive.
+    serveDirectiveId: uuid('serve_directive_id').references(() => otaSignedDirectives.id, { onDelete: 'set null' }),
+    // Incremented on every change: the serving cache key.
+    version: bigint({ mode: 'number' }).notNull().default(1),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  t => [
+    primaryKey({ columns: [t.channelId, t.platform, t.runtimeVersion], name: 'mocco_ota_channel_heads_pk' }),
+    foreignKey({
+      columns: [t.channelId, t.workspaceId],
+      foreignColumns: [otaChannels.id, otaChannels.workspaceId],
+      name: 'mocco_ota_channel_heads_channel_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_channel_heads_rollout_check', sql`${t.rolloutBp} BETWEEN 0 AND 10000`),
+    check('mocco_ota_channel_heads_platform_check', sql`${t.platform} IN (${sqlInList(Object.values(OtaPlatforms))})`),
+  ],
+);
+
+/** Append-only history of channel changes. */
+export const otaDeployments = pgTable(
+  'mocco_ota_deployments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    releaseId: uuid('release_id').references(() => otaReleases.id, { onDelete: 'set null' }),
+    kind: text().$type<OtaDeploymentKind>().notNull(),
+    fromBp: smallint('from_bp'),
+    toBp: smallint('to_bp'),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorPrincipal: text('actor_principal'),
+    approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
+    reason: text(),
+    createdAt,
+  },
+  t => [
+    index('mocco_ota_deployments_channel_idx').on(t.channelId, t.createdAt),
+    foreignKey({
+      columns: [t.channelId, t.workspaceId],
+      foreignColumns: [otaChannels.id, otaChannels.workspaceId],
+      name: 'mocco_ota_deployments_channel_fk',
+    }).onDelete('cascade'),
+    check('mocco_ota_deployments_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(OtaDeploymentKinds))})`),
   ],
 );
