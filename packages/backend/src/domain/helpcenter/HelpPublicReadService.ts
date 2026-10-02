@@ -7,6 +7,7 @@ import { articlePath, ArticleStatuses } from '@mocco/common/help';
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
+import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 
 import type { HelpSiteRow } from '@backend/domain/helpcenter/repos/site.repo';
@@ -28,6 +29,28 @@ export class HelpPublicReadService {
       throw new HelpSiteNotFoundError(slug);
     }
     return site;
+  }
+
+  /** Translated titles of these articles in `locale`, by article id. */
+  private async translatedTitles(articleIds: readonly string[], locale: string): Promise<Map<string, string>> {
+    const rows = await new HelpTranslationRepo(this.deps.db).withText(articleIds, locale);
+    const revisions = await new HelpArticleRepo(this.deps.db).revisionsByIds(rows.map(row => row.revisionId ?? ''));
+    const byId = new Map(revisions.map(revision => [revision.id, revision.title]));
+    return new Map(
+      rows.flatMap(row => {
+        const title = byId.get(row.revisionId ?? '');
+        return title === undefined ? [] : [[row.articleId, title] as const];
+      }),
+    );
+  }
+
+  private async translationText(workspaceId: string, articleId: string, locale: string) {
+    const row = await new HelpTranslationRepo(this.deps.db).find(workspaceId, articleId, locale);
+    if (row?.revisionId === null || row === undefined) {
+      return undefined;
+    }
+    const [revision] = await new HelpArticleRepo(this.deps.db).revisionsByIds([row.revisionId]);
+    return revision;
   }
 
   async site(slug: string) {
@@ -55,6 +78,14 @@ export class HelpPublicReadService {
     );
     const published = await articleRepo.revisionsByIds(articles.map(article => article.publishedRevisionId ?? ''));
     const titles = new Map(published.map(revision => [revision.id, revision.title]));
+    // In another language: the translated title where there is a translation, else the source's.
+    const translated =
+      served === site.sourceLocale
+        ? new Map<string, string>()
+        : await this.translatedTitles(
+            articles.map(article => article.id),
+            served,
+          );
     return {
       locale: served,
       collections: collections
@@ -68,12 +99,15 @@ export class HelpPublicReadService {
               title: section.title,
               articles: articles
                 .filter(article => article.sectionId === section.id)
-                .map(article => ({
-                  shortId: article.shortId,
-                  slug: article.slug,
-                  title: titles.get(article.publishedRevisionId ?? '') ?? '',
-                  path: articlePath(served, article.shortId, article.slug),
-                })),
+                .map(article => {
+                  const title = translated.get(article.id);
+                  return {
+                    shortId: article.shortId,
+                    slug: article.slug,
+                    title: title ?? titles.get(article.publishedRevisionId ?? '') ?? '',
+                    path: articlePath(title === undefined ? site.sourceLocale : served, article.shortId, article.slug),
+                  };
+                }),
             }))
             .filter(section => section.articles.length > 0),
         }))
@@ -101,13 +135,17 @@ export class HelpPublicReadService {
     if (revision === undefined) {
       return undefined;
     }
-    const served = localeFor(site, locale);
+    const wanted = localeFor(site, locale);
+    // Another language: its translation, else the source (and the source's address).
+    const translation =
+      wanted === site.sourceLocale ? undefined : await this.translationText(site.workspaceId, article.id, wanted);
+    const served = translation === undefined ? site.sourceLocale : wanted;
     return {
       shortId: article.shortId,
       slug: article.slug,
       locale: served,
-      title: revision.title,
-      body: revision.bodyMd,
+      title: translation?.title ?? revision.title,
+      body: translation?.bodyMd ?? revision.bodyMd,
       publishedAt: article.publishedAt,
       canonicalPath: articlePath(served, article.shortId, article.slug),
     };

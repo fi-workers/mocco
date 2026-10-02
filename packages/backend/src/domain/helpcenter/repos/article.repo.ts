@@ -25,6 +25,16 @@ export class HelpArticleRepo {
     return row;
   }
 
+  async byIds(workspaceId: string, ids: readonly string[]): Promise<HelpArticleRow[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(a)
+      .where(and(eq(a.workspaceId, workspaceId), inArray(a.id, [...ids])));
+  }
+
   async findByShortId(projectId: string, shortId: string): Promise<HelpArticleRow | undefined> {
     const [row] = await this.db
       .select()

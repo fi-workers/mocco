@@ -31,6 +31,7 @@ import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
 import type { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
+import type { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
 import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
@@ -84,6 +85,7 @@ export interface TrpcDeps extends Services {
   helpSites: HelpSiteService;
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
+  helpTranslations: HelpTranslationService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -137,6 +139,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         helpSites: deps.helpSites,
         helpAuthoring: deps.helpAuthoring,
         helpImport: deps.helpImport,
+        helpTranslations: deps.helpTranslations,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -184,6 +187,7 @@ export function productionServices(): TrpcDeps {
     helpSites: getHelpDomain().helpSites,
     helpAuthoring: getHelpDomain().helpAuthoring,
     helpImport: getHelpDomain().helpImport,
+    helpTranslations: getHelpDomain().helpTranslations,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

@@ -21,6 +21,10 @@ import { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import { ApprovalRequestRepo } from '@backend/domain/governance/repos/approval-request.repo';
 import { ApprovalVoteRepo } from '@backend/domain/governance/repos/approval-vote.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
+import { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
+import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
+import { createHelpHandlers } from '@backend/domain/helpcenter/jobs';
+import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
 import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
@@ -60,6 +64,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
 import type { Db } from '@backend/infra/db/types';
@@ -81,6 +86,8 @@ export interface JobRunnerRuntimeDeps {
   storage: StorageService | undefined;
   /** Sends messenger reply pushes (Expo's service by default). */
   push?: PushSender;
+  /** Translates help center articles; undefined without an LLM configured. */
+  translator?: Translator;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -147,6 +154,14 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
     }),
+    ...createHelpHandlers({
+      translations: new HelpTranslationService({
+        db,
+        sites: new HelpSiteService({ db, audit }),
+        queue,
+        ...(deps.translator !== undefined && { translator: deps.translator }),
+      }),
+    }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createOtaHandlers({
       uploads,
@@ -204,6 +219,7 @@ export function getJobRunner(): JobRunner {
       discord: createDiscordApiFromEnv(env, { fetch, now }),
       storage: storageFromEnv(env),
       push: new ExpoPushSender({ accessToken: env.EXPO_ACCESS_TOKEN }),
+      translator: translatorFromEnv(env),
     });
   }
   return state.runner;

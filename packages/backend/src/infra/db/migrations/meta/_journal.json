@@ -302,6 +302,13 @@
       "when": 1790949615123,
       "tag": "0042_thick_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790950370036,
+      "tag": "0043_ordinary_black_cat",
+      "breakpoints": true
     }
   ]
 }

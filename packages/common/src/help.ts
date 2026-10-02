@@ -28,9 +28,37 @@ export const helpLocaleSchema = z.enum(HELP_LOCALES);
 export const ArticleStatuses = { draft: 'draft', published: 'published', archived: 'archived' } as const;
 export type ArticleStatus = (typeof ArticleStatuses)[keyof typeof ArticleStatuses];
 
-/** How a revision came to be. Translations (later) add `machine` and `human_edit`. */
-export const RevisionKinds = { sourceEdit: 'source_edit', restore: 'restore', import: 'import' } as const;
+/** How a revision came to be: the source's edits, restores and imports, and a
+ * translation's machine output or human edit. */
+export const RevisionKinds = {
+  sourceEdit: 'source_edit',
+  restore: 'restore',
+  import: 'import',
+  machine: 'machine',
+  humanEdit: 'human_edit',
+} as const;
 export type RevisionKind = (typeof RevisionKinds)[keyof typeof RevisionKinds];
+
+/**
+ * A translation's state per article and language. `auto` is machine output, `reviewed`
+ * a person's text (never overwritten by the machine). Whether it is stale (made from an
+ * older source) is derived from the source hash it was made from.
+ */
+export const TranslationStates = {
+  pending: 'pending',
+  auto: 'auto',
+  reviewed: 'reviewed',
+  failed: 'failed',
+} as const;
+export type TranslationState = (typeof TranslationStates)[keyof typeof TranslationStates];
+
+export const translationInputSchema = z.object({
+  articleId: z.uuid(),
+  locale: helpLocaleSchema,
+  title: z.string().trim().min(1).max(200),
+  body: z.string().max(200_000),
+});
+export type TranslationInput = z.infer<typeof translationInputSchema>;
 
 export const HelpLimits = {
   titleMax: 200,
