@@ -7,6 +7,9 @@ import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
+import type { FlagService } from '@backend/domain/flags/FlagService';
+import type { KillSwitchService } from '@backend/domain/flags/KillSwitchService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
@@ -73,6 +76,12 @@ export interface Context {
   otaTrustPolicies: TrustPolicyService;
   /** Always present — OTA adoption metrics. */
   otaMetrics: OtaMetricsService;
+  /** Feature flags of a project (#137). */
+  flags: FlagService;
+  /** Changesets to protected environments: votes, withdraw, rebase, change gates (#141). */
+  flagGovernance: FlagGovernanceService;
+  /** The flags kill switch (#142). */
+  flagKillSwitch: KillSwitchService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

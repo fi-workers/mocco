@@ -211,6 +211,48 @@
       "when": 1790869448371,
       "tag": "0029_harsh_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790894326323,
+      "tag": "0030_overconfident_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790902509183,
+      "tag": "0031_public_meltdown",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790907037247,
+      "tag": "0032_light_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790909354693,
+      "tag": "0033_wet_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790911130360,
+      "tag": "0034_ambitious_squadron_supreme",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790914813856,
+      "tag": "0035_public_starjammers",
+      "breakpoints": true
     }
   ]
 }

@@ -26,6 +26,7 @@ export const ProjectSections = {
   ota: 'ota',
   otaTokens: 'otaTokens',
   otaHosting: 'otaHosting',
+  flags: 'flags',
   apiKeys: 'apiKeys',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
@@ -54,6 +55,7 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
   { key: ProjectSections.ota, label: 'Force update', href: Routes.projectOta, product: Products.ota },
   { key: ProjectSections.otaTokens, label: 'OTA tokens', href: Routes.projectOtaTokens, product: Products.ota },
   { key: ProjectSections.otaHosting, label: 'OTA hosting', href: Routes.projectOtaHosting, product: Products.ota },
+  { key: ProjectSections.flags, label: 'Feature flags', href: Routes.projectFlags, product: Products.flags },
   { key: ProjectSections.apiKeys, label: 'API keys', href: Routes.projectApiKeys, product: null },
 ];
 
@@ -72,7 +74,7 @@ export const productCatalog: Readonly<Record<Product, { label: string; descripti
   [Products.flags]: {
     label: 'Feature flags',
     description: 'Governed flag changes with OpenFeature SDKs.',
-    available: false,
+    available: true,
   },
   [Products.status]: {
     label: 'Status page',

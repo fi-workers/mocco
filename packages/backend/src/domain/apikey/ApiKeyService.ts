@@ -1,7 +1,7 @@
 import { ApiKeyKinds, ApiKeyPrefixes } from '@mocco/common/apikey';
 import { AuditActions } from '@mocco/common/audit';
 
-import { ApiKeyNotFoundError } from '@backend/domain/apikey/errors';
+import { ApiKeyNotFoundError, KeyFlagEnvironmentNotFoundError } from '@backend/domain/apikey/errors';
 import { generateToken, hashToken, kindOfToken } from '@backend/domain/apikey/tokens';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
@@ -19,6 +19,8 @@ export interface ApiPrincipal {
   createdByUserId: string | null;
   kind: ApiKeyKind;
   scopes: readonly ApiScope[];
+  /** The flag environment the key reads; set exactly when it holds `flags:read`. */
+  flagEnvironmentId: string | null;
 }
 
 /** Why a key was refused. `invalid` covers unknown, revoked and expired keys alike, so a
@@ -36,6 +38,8 @@ export interface ApiKeyServiceDeps {
   keys: ApiKeyRepo;
   projects: ProjectService;
   audit: AuditService;
+  /** Whether the project has a flag environment, for binding a flags:read key to it. */
+  flagEnvironments: { exists: (workspaceId: string, projectId: string, environmentId: string) => Promise<boolean> };
   now?: () => Date;
 }
 
@@ -51,6 +55,7 @@ export function toApiKeyDto(row: ApiKeyRow): ApiKeyDto {
     name: row.name,
     hint: `${ApiKeyPrefixes[row.kind]}…${row.last4}`,
     scopes: row.scopes,
+    flagEnvironmentId: row.flagEnvironmentId,
     createdByUserId: row.createdByUserId,
     createdAt: row.createdAt,
     lastUsedAt: row.lastUsedAt,
@@ -109,6 +114,13 @@ export class ApiKeyService {
     input: ApiKeyCreateInput,
   ): Promise<{ key: ApiKeyDto; token: string }> {
     await this.deps.projects.requireProject(workspaceId, projectId);
+    const { flagEnvironmentId } = input;
+    if (
+      flagEnvironmentId !== null &&
+      !(await this.deps.flagEnvironments.exists(workspaceId, projectId, flagEnvironmentId))
+    ) {
+      throw new KeyFlagEnvironmentNotFoundError(flagEnvironmentId);
+    }
     const token = generateToken(input.kind);
     const row = await this.deps.keys.insert({
       workspaceId,
@@ -118,6 +130,7 @@ export class ApiKeyService {
       tokenHash: hashToken(token),
       last4: token.slice(-4),
       scopes: [...new Set(input.scopes)],
+      flagEnvironmentId,
       createdByUserId: actorUserId,
       createdAt: this.now(),
       expiresAt: input.expiresAt,
@@ -127,7 +140,7 @@ export class ApiKeyService {
       action: AuditActions.apiKeyCreated,
       subjectType: 'api_key',
       subjectId: row.id,
-      payload: { projectId, kind: row.kind, scopes: row.scopes, name: row.name },
+      payload: { projectId, kind: row.kind, scopes: row.scopes, name: row.name, flagEnvironmentId },
     });
     return { key: toApiKeyDto(row), token };
   }
@@ -189,6 +202,7 @@ export class ApiKeyService {
         createdByUserId: row.createdByUserId,
         kind: row.kind,
         scopes: row.scopes,
+        flagEnvironmentId: row.flagEnvironmentId,
       },
     };
   }

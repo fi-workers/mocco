@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_flag_environments" ADD COLUMN "kill_roles" text[] DEFAULT '{}'::text[] NOT NULL;

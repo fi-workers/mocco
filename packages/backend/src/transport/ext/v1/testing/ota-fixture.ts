@@ -138,6 +138,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
     name: 'CI',
     scopes: [ApiScopes.otaWrite],
     expiresAt: null,
+    flagEnvironmentId: null,
   });
 
   const call = async (method: string, url: string, token: string, body?: unknown) =>

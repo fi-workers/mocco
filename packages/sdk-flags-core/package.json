@@ -1,0 +1,43 @@
+{
+  "name": "@mocco/flags-core",
+  "version": "0.0.0",
+  "description": "Local evaluation of Mocco feature flags: flagd-compatible rulesets, a restricted JsonLogic evaluator and mocco-v1 bucketing.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/flags-core.ts",
+      "types": "./dist/flags-core.d.ts",
+      "import": "./dist/flags-core.js",
+      "require": "./dist/flags-core.cjs"
+    }
+  },
+  "main": "./dist/flags-core.cjs",
+  "module": "./dist/flags-core.js",
+  "types": "./dist/flags-core.d.ts",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

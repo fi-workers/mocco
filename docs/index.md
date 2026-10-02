@@ -80,6 +80,7 @@ related:
 - [SDK packages](./reference/sdk.md) — @mocco/sdk-core, js, node, react-native (ota subpath, Expo config plugin) and ota-cli; tsup builds, the source export condition, the SDK↔/v1 contract test, changesets and npm trusted publishing
 - [Mocco-hosted OTA updates](./reference/ota-hosting.md) — OTA apps for React Native, fixed manifest and asset URLs, signing certificates, channels and gated protection
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
+- [Feature flags](./reference/flags.md) — environments, flags, changesets and the versioned flagd ruleset each applied change compiles to
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Public /v1 API](./reference/public-api.md) — publishable and secret project keys, origin rules, rate limits, problem+json, the API host

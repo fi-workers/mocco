@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createApprovalService } from '@backend/domain/governance/instance';
 import { createOtaDomain } from '@backend/domain/ota/instance';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -31,6 +32,7 @@ export function contextServices(db: Db) {
     ...project,
     approvals,
     ...ota,
+    ...createFlagsDomain(db, { audit, approvals }),
     apiKeys: createApiKeyService(db, { projects: project.projects, audit }),
     // Optional services default to absent; a test that exercises one passes it after the spread.
     connection: undefined,

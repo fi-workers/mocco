@@ -20,6 +20,7 @@ import { errorSummary } from '@backend/domain/errors';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
+import { flagStreamTokensFromEnv, getFlagsDomain } from '@backend/domain/flags/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
 import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/github/constants';
@@ -417,6 +418,7 @@ export async function extHandler(request: Request): Promise<Response> {
         trustPolicies: getOtaDomain().otaTrustPolicies,
         metrics: getOtaDomain().otaMetrics,
       },
+      flags: { flags: getFlagsDomain().flags, streamTokens: flagStreamTokensFromEnv(env) },
     },
     storage:
       storageStore instanceof FilesystemObjectStore

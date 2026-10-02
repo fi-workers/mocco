@@ -51,6 +51,22 @@ describe('MoccoClient', () => {
     });
   });
 
+  it('sends If-None-Match on a conditional GET and resolves a 304 without a body', async () => {
+    const mocco = responses(
+      Response.json({ flags: {} }, { headers: { etag: '"v1"' } }),
+      new Response(null, { status: 304, headers: { etag: '"v1"' } }),
+    );
+    const api = client(mocco.fetch);
+
+    const first = await api.getIfChanged('/flags/ruleset', null);
+    const second = await api.getIfChanged('/flags/ruleset', '"v1"');
+
+    expect(first).toEqual({ modified: true, body: { flags: {} }, etag: '"v1"' });
+    expect(second).toEqual({ modified: false });
+    expect(new Headers(mocco.calls[0]?.init?.headers).has('if-none-match')).toBe(false);
+    expect(new Headers(mocco.calls[1]?.init?.headers).get('if-none-match')).toBe('"v1"');
+  });
+
   it("doesn't retry a POST without an idempotency key", async () => {
     const mocco = responses(problem(503, 'unavailable'), Response.json({ ok: true }));
 

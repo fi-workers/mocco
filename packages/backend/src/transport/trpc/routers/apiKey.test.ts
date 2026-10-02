@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
 import { ExecutorIds } from '@mocco/common/execution';
 import { WorkspaceMemberRoles } from '@mocco/common/workspace';
@@ -147,6 +149,31 @@ describe('apiKey router on pglite', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
+  it('requires a flags:read key to name one environment of the project, and no other key to', async () => {
+    const { owner, workspaceId, projectId } = await setup();
+    const environment = await owner.ctx.flags.createEnvironment(workspaceId, projectId, owner.userId, {
+      key: 'production',
+      name: 'Production',
+    });
+    const base = { workspaceId, projectId, kind: ApiKeyKinds.secret, name: 'server' };
+
+    await expect(owner.api.apiKey.create({ ...base, scopes: [ApiScopes.flagsRead] })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(
+      owner.api.apiKey.create({ ...base, scopes: [ApiScopes.otaRead], flagEnvironmentId: environment.id }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      owner.api.apiKey.create({ ...base, scopes: [ApiScopes.flagsRead], flagEnvironmentId: randomUUID() }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const { key } = await owner.api.apiKey.create({
+      ...base,
+      scopes: [ApiScopes.flagsRead],
+      flagEnvironmentId: environment.id,
+    });
+    expect(key.flagEnvironmentId).toBe(environment.id);
+  });
+
   it('lets a plain member list keys but not create or revoke them', async () => {
     const { owner, workspaceId, projectId } = await setup();
     const created = await owner.api.apiKey.create({
@@ -154,7 +181,7 @@ describe('apiKey router on pglite', () => {
       projectId,
       kind: ApiKeyKinds.publishable,
       name: 'web',
-      scopes: [ApiScopes.flagsRead],
+      scopes: [ApiScopes.otaRead],
     });
     const member = await signedInCaller('member@example.com');
     await t.db
