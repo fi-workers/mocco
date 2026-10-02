@@ -1,6 +1,6 @@
 {
   "name": "@mocco/node",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Mocco for servers: a secret-key client, identity signing and webhook verification.",
   "license": "MIT",
   "type": "module",

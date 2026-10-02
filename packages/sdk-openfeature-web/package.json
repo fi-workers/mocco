@@ -1,6 +1,6 @@
 {
   "name": "@mocco/openfeature-web",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "An OpenFeature web provider for Mocco feature flags: OFREP evaluation with Mocco's change stream and an offline cache.",
   "license": "MIT",
   "type": "module",

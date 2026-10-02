@@ -1,6 +1,6 @@
 {
   "name": "@mocco/openfeature-react-native",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "An OpenFeature provider for Mocco feature flags in React Native: OFREP evaluation, an offline copy in AsyncStorage, foreground refresh and the change stream.",
   "license": "MIT",
   "type": "module",

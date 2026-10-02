@@ -1,6 +1,6 @@
 {
   "name": "@mocco/flags-core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Local evaluation of Mocco feature flags: flagd-compatible rulesets, a restricted JsonLogic evaluator and mocco-v1 bucketing.",
   "license": "MIT",
   "type": "module",
