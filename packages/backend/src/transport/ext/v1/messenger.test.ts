@@ -1,10 +1,14 @@
 // /v1/messenger (#95) end to end on pglite: sessions for server-signed users, starting
 // and continuing conversations, the team's replies, and the isolation between users.
 import { randomUUID } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import nodePath from 'node:path';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
 import { MessengerEventTypes } from '@mocco/common/events';
 import { MessengerClient } from '@mocco/sdk-core';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -15,9 +19,13 @@ import { createMessengerDomain } from '@backend/domain/messenger/compose';
 import { userHashOf } from '@backend/domain/messenger/identity';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
+import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
+import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
+import { StorageUrlSigner } from '@backend/domain/storage/signing';
+import { StorageService } from '@backend/domain/storage/StorageService';
 import { SecretBox } from '@backend/infra/crypto/secret-box';
 import { expectOne } from '@backend/infra/db/rows';
-import { users, workspaces } from '@backend/infra/db/schema';
+import { messengerAttachments, objects, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { MessengerRateLimits } from '@backend/transport/ext/v1/messenger';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
@@ -39,6 +47,7 @@ describe('/v1/messenger (pglite)', () => {
   let operatorId: string;
   let key: string;
   let secret: string;
+  let store: FilesystemObjectStore;
 
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown } = {}) => {
     const response = await app.fetch(
@@ -80,7 +89,19 @@ describe('/v1/messenger (pglite)', () => {
         return await Promise.resolve({ event: {} as never, created: true, subscribers: [] });
       },
     };
-    messenger = createMessengerDomain(t.db, { audit, box: () => box, events, appOrigin: 'https://mocco.test' });
+    store = new FilesystemObjectStore({
+      root: await mkdtemp(nodePath.join(tmpdir(), 'mocco-messenger-')),
+      baseUrl: 'https://mocco.test/api/ext/internal/storage',
+      signer: new StorageUrlSigner('test-signing-key'),
+    });
+    const storage = new StorageService({ objects: new ObjectRepo(t.db), store });
+    messenger = createMessengerDomain(t.db, {
+      audit,
+      box: () => box,
+      storage,
+      events,
+      appOrigin: 'https://mocco.test',
+    });
     const { projects } = createProjectDomain(t.db);
     const apiKeys = createApiKeyService(t.db, { projects, audit });
     app = new Hono<V1Env>().basePath('/api/ext').route(
@@ -300,6 +321,115 @@ describe('/v1/messenger (pglite)', () => {
     });
     const { contact } = await messenger.inbox.get(workspaceId, projectId, conversation.id);
     expect(contact).toMatchObject({ name: 'Jun', lastContext: { appVersion: '3.8.1', platform: 'android' } });
+  });
+
+  it('refuses attachments where object storage is not configured', async () => {
+    const token = await sessionFor('u1');
+    const principal = await messenger.contactMessenger.authenticate(token);
+    if (principal === undefined) {
+      throw new Error('no session');
+    }
+    const withoutStorage = createMessengerDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      box: () => new SecretBox([{ id: 'k1', key: Buffer.alloc(32, 7) }]),
+    });
+
+    await expect(
+      withoutStorage.contactMessenger.createAttachment(principal, { contentType: 'image/png', sizeBytes: 8 }),
+    ).rejects.toThrow(/object storage isn't configured/u);
+  });
+
+  describe('screenshots', () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    /** Reserve an attachment and upload `bytes` the way the client would PUT them. */
+    const attach = async (token: string, bytes = PNG) => {
+      const declared = { contentType: 'image/png', sizeBytes: PNG.length };
+      const reserved = await call('POST', '/attachments', {
+        token,
+        body: { ...declared, filename: 'Screen Shot.png' },
+      });
+      expect(reserved.status).toBe(201);
+      const { attachmentId, upload } = reserved.body as unknown as {
+        attachmentId: string;
+        upload: { url: string; method: string; headers: Record<string, string> };
+      };
+      const [row] = await t.db.select().from(messengerAttachments).where(eq(messengerAttachments.id, attachmentId));
+      const [object] = await t.db
+        .select()
+        .from(objects)
+        .where(eq(objects.id, row?.objectId ?? ''));
+      await store.put(object?.key ?? '', bytes, { contentType: declared.contentType, visibility: 'private' });
+      return { attachmentId, upload };
+    };
+
+    it('uploads a screenshot and serves it with the message that carries it', async () => {
+      const token = await sessionFor('u1');
+      const first = await attach(token);
+      const started = await call('POST', '/conversations', {
+        token,
+        body: { body: 'See the screenshot', clientMessageId: randomUUID(), attachmentIds: [first.attachmentId] },
+      });
+      const conversationId = (started.body as unknown as { conversation: { id: string } }).conversation.id;
+      const second = await attach(token);
+      const clientMessageId = randomUUID();
+      const sent = await call('POST', `/conversations/${conversationId}/messages`, {
+        token,
+        body: { body: 'And another', clientMessageId, attachmentIds: [second.attachmentId] },
+      });
+      const retried = await call('POST', `/conversations/${conversationId}/messages`, {
+        token,
+        body: { body: 'And another', clientMessageId, attachmentIds: [second.attachmentId] },
+      });
+      const listed = await call('GET', `/conversations/${conversationId}/messages`, { token });
+      const team = await messenger.inbox.get(workspaceId, projectId, conversationId);
+
+      expect(first.upload).toMatchObject({ method: 'PUT', headers: { 'content-type': 'image/png' } });
+      expect([started.status, sent.status, retried.status]).toEqual([201, 201, 201]);
+      expect(retried.body).toEqual(sent.body);
+      expect(listed.body).toMatchObject({
+        messages: [
+          {
+            seq: 1,
+            attachments: [{ id: first.attachmentId, contentType: 'image/png', sizeBytes: 8, url: expect.any(String) }],
+          },
+          { seq: 2, attachments: [{ id: second.attachmentId }] },
+        ],
+      });
+      expect(team.messages.map(message => message.attachments.length)).toEqual([1, 1]);
+    });
+
+    it("refuses another user's, an already used, a mis-uploaded or a non-image attachment", async () => {
+      const minji = await sessionFor('minji');
+      const jun = await sessionFor('jun');
+      const { body } = await start(minji);
+      const conversationId = (body as unknown as { conversation: { id: string } }).conversation.id;
+      const juns = await attach(jun);
+      const used = await attach(minji);
+      await call('POST', `/conversations/${conversationId}/messages`, {
+        token: minji,
+        body: { body: 'one', clientMessageId: randomUUID(), attachmentIds: [used.attachmentId] },
+      });
+      const short = await attach(minji, PNG.slice(0, 4));
+      const send = async (attachmentId: string) =>
+        await call('POST', `/conversations/${conversationId}/messages`, {
+          token: minji,
+          body: { body: 'x', clientMessageId: randomUUID(), attachmentIds: [attachmentId] },
+        });
+
+      const answers = await Promise.all([send(juns.attachmentId), send(used.attachmentId), send(short.attachmentId)]);
+      const pdf = await call('POST', '/attachments', {
+        token: minji,
+        body: { contentType: 'application/pdf', sizeBytes: 10 },
+      });
+      const huge = await call('POST', '/attachments', {
+        token: minji,
+        body: { contentType: 'image/png', sizeBytes: 11 * 1024 * 1024 },
+      });
+
+      expect(answers.map(answer => answer.status)).toEqual([400, 400, 400]);
+      expect(answers[2]?.body).toMatchObject({ detail: expect.stringContaining('expected 8 bytes, got 4') });
+      expect([pdf.status, huge.status]).toEqual([400, 400]);
+    });
   });
 
   it('limits how fast one user can write', async () => {

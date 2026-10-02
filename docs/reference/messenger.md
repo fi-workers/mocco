@@ -22,6 +22,7 @@ code_refs:
   - packages/backend/src/domain/messenger/repos/conversation.repo.ts
   - packages/backend/src/transport/ext/v1/messenger.ts
   - packages/sdk-core/src/messenger.ts
+  - packages/backend/src/domain/messenger/attachments.ts
   - packages/sdk-react-native/src/messenger.tsx
   - packages/backend/src/transport/trpc/routers/messenger.ts
   - packages/frontend/src/components/messenger/inbox.tsx
@@ -68,8 +69,19 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | `GET /conversations/{id}/messages?afterSeq=` | Public messages after a seq, oldest first, with the team member's name on replies |
 | `POST /conversations/{id}/messages` | `{ body, clientMessageId, context? }` → `201 { message }` |
 | `POST /conversations/{id}/read` | `{ seq }` → `204`; never moves back or past the last message |
+| `POST /attachments` | Reserve a screenshot upload; see [Attachments](#attachments) |
 
 Another contact's conversation is a 404. Limits per contact, on top of the key's own: 20 messages a minute, 5 new conversations an hour; `POST /sessions` 300 a minute per key.
+
+## Attachments
+
+A contact can attach up to 3 screenshots to a message or to the start of a conversation: PNG, JPEG, WebP or GIF, up to 10 MB each (the `messenger` storage policy; 10 reservations an hour per contact).
+
+1. `POST /v1/messenger/attachments` `{ contentType, sizeBytes, filename? }` reserves a private object (`StorageService.beginUpload`, product `messenger`) and a `mocco_messenger_attachments` row owned by the contact, and answers `201 { attachmentId, upload: { url, method: 'PUT', headers } }`.
+2. The client PUTs the bytes straight to the store.
+3. The message (or start) names it in `attachmentIds`. The service checks each is the contact's own and unclaimed, has storage verify the bytes (`completeUpload`: exact size and type, or the object is deleted and the send refused with 400), and claims them in the message's transaction. A retried send returns the stored message before any of this.
+
+Messages carry `attachments: [{ id, contentType, sizeBytes, url }]`, where `url` is a signed download link valid for 10 minutes. Without object storage configured, reserving an attachment answers 400. Abandoned uploads go with storage's own garbage collection; deleting the object deletes the attachment row.
 
 ## SDK
 

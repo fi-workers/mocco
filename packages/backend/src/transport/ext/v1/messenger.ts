@@ -4,6 +4,7 @@
 // and only ever sees that user's conversations. Internal notes are never served here.
 import { ApiScopes } from '@mocco/common/apikey';
 import {
+  attachmentCreateInputSchema,
   conversationCreateInputSchema,
   markReadInputSchema,
   messageCreateInputSchema,
@@ -13,13 +14,8 @@ import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 
-import {
-  ContactBlockedError,
-  ConversationNotFoundError,
-  IdentityVerificationError,
-  MessengerNotEnabledError,
-  UnknownCategoryError,
-} from '@backend/domain/messenger/errors';
+import { BadRequestError, NotFoundError } from '@backend/domain/errors';
+import { ContactBlockedError, IdentityVerificationError } from '@backend/domain/messenger/errors';
 import { isSessionToken } from '@backend/domain/messenger/identity';
 import { limit, requireKey } from '@backend/transport/ext/v1/middleware';
 import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
@@ -30,7 +26,14 @@ import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 export interface MessengerServingDeps {
   contacts: Pick<
     ContactMessengerService,
-    'createSession' | 'authenticate' | 'listConversations' | 'startConversation' | 'messages' | 'send' | 'markRead'
+    | 'createSession'
+    | 'authenticate'
+    | 'listConversations'
+    | 'startConversation'
+    | 'messages'
+    | 'send'
+    | 'markRead'
+    | 'createAttachment'
   >;
 }
 
@@ -39,6 +42,7 @@ export const MessengerRateLimits = {
   sessions: { limit: 300, windowSeconds: 60 },
   messages: { limit: 20, windowSeconds: 60 },
   conversations: { limit: 5, windowSeconds: 60 * 60 },
+  attachments: { limit: 10, windowSeconds: 60 * 60 },
 } as const;
 
 interface MessengerEnv {
@@ -59,10 +63,10 @@ function problemFor(error: unknown): Response {
       problemOf(403, ProblemCodes.contactBlocked, 'This user is blocked from contacting the team'),
     );
   }
-  if (error instanceof ConversationNotFoundError || error instanceof MessengerNotEnabledError) {
+  if (error instanceof NotFoundError) {
     return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found', error.message));
   }
-  if (error instanceof UnknownCategoryError) {
+  if (error instanceof BadRequestError) {
     return problemResponse(problemOf(400, ProblemCodes.badRequest, 'Invalid request', error.message));
   }
   throw error;
@@ -161,6 +165,21 @@ export function createMessengerRoutes(deps: V1Deps, messenger: MessengerServingD
     return await answer(async () =>
       c.json({ message: await messenger.contacts.send(c.var.contact, c.req.param('id'), body.data) }, 201),
     );
+  });
+
+  // Reserve an upload for a screenshot: PUT the bytes to `upload.url`, then send the id
+  // with the message (or the conversation start) that carries it.
+  session.post('/attachments', async c => {
+    const contactId = c.var.contact.contact.id;
+    const limited = await limit(deps, `messenger:attachments:${contactId}`, MessengerRateLimits.attachments);
+    if (limited.refused !== undefined) {
+      return limited.refused;
+    }
+    const body = await parseJson(c, attachmentCreateInputSchema);
+    if (body.refused !== undefined) {
+      return body.refused;
+    }
+    return await answer(async () => c.json(await messenger.contacts.createAttachment(c.var.contact, body.data), 201));
   });
 
   session.post('/conversations/:id/read', async c => {

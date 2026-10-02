@@ -115,6 +115,25 @@ function Thread({ id }: { id: string }) {
 
 When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
 
+To attach a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB; up to 3 per message), upload it first and send its id:
+
+```tsx
+const messenger = useMessenger();
+const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
+const asset = picked.assets?.[0];
+if (asset !== undefined) {
+  const body = await (await fetch(asset.uri)).blob();
+  const attachmentId = await messenger.attach({
+    body,
+    contentType: 'image/png', // or the picked image's type
+    sizeBytes: body.size,
+  });
+  await send('Here is what I see', [attachmentId]); // from useConversation(id)
+}
+```
+
+Messages come back with `attachments`, each with a `url` that works for a few minutes; show it with `<Image source={{ uri: attachment.url }} />`.
+
 ### Any other client
 
 The SDK calls a small HTTP API you can use from anywhere. The base URL is `https://api.mocco.club/v1/messenger`.
@@ -143,6 +162,7 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 | `GET /conversations/{id}/messages?afterSeq=0` | The messages, oldest first. Each has a `seq`; pass the last one you have as `afterSeq` to get only new ones |
 | `POST /conversations/{id}/messages` | Reply: `{ "body": "…", "clientMessageId": "<uuid>" }` |
 | `POST /conversations/{id}/read` | `{ "seq": 5 }` once the user has seen up to that message |
+| `POST /attachments` | `{ "contentType": "image/png", "sizeBytes": 48213 }` → an `attachmentId` and an `upload` URL to `PUT` the bytes to; then list the id in `attachmentIds` when you start or reply |
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.
 
@@ -161,6 +181,10 @@ Open a conversation to read the thread and answer:
 - **Block user** stops someone from writing. They can still read what they have.
 
 ![A conversation: the user's messages, an internal note, the team's replies, and the user panel](./images/messenger-conversation.png)
+
+Screenshots the user attached show in the thread; select one to open it full size.
+
+![A message with an attached screenshot in the conversation view](./images/messenger-attachment.png)
 
 The categories users pick from are in the inbox settings. Your app gets them with each session; it can show the labels as they are or translate them by key.
 

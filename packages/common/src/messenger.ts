@@ -27,7 +27,32 @@ export const MessengerLimits = {
   traitsMax: 20,
   externalUserIdMax: 255,
   pageSize: 50,
+  attachmentsPerMessage: 3,
+  attachmentMaxBytes: 10 * 1024 * 1024,
 } as const;
+
+/** What a user may attach: screenshots and photos. */
+export const ATTACHMENT_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export type AttachmentContentType = (typeof ATTACHMENT_CONTENT_TYPES)[number];
+
+/** `POST /v1/messenger/attachments`: reserve an upload for a screenshot. */
+export const attachmentCreateInputSchema = z.object({
+  contentType: z.enum(ATTACHMENT_CONTENT_TYPES),
+  sizeBytes: z.int().min(1).max(MessengerLimits.attachmentMaxBytes),
+  filename: z.string().max(120).optional(),
+});
+export type AttachmentCreateInput = z.infer<typeof attachmentCreateInputSchema>;
+
+const attachmentIdsSchema = z.array(z.uuid()).max(MessengerLimits.attachmentsPerMessage).optional();
+
+/** An attachment as served: a short-lived download link. */
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  contentType: z.string(),
+  sizeBytes: z.int(),
+  url: z.string(),
+});
+export type AttachmentDto = z.infer<typeof attachmentSchema>;
 
 /** The categories a new project starts with; the team edits them in settings. */
 export const DEFAULT_MESSENGER_CATEGORIES = [
@@ -96,6 +121,7 @@ export const conversationCreateInputSchema = z.object({
   category: z.string().max(MessengerLimits.categoryKeyMax).optional(),
   body: bodySchema,
   clientMessageId: clientMessageIdSchema,
+  attachmentIds: attachmentIdsSchema,
   context: messengerContextSchema.optional(),
 });
 export type ConversationCreateInput = z.infer<typeof conversationCreateInputSchema>;
@@ -103,6 +129,7 @@ export type ConversationCreateInput = z.infer<typeof conversationCreateInputSche
 export const messageCreateInputSchema = z.object({
   body: bodySchema,
   clientMessageId: clientMessageIdSchema,
+  attachmentIds: attachmentIdsSchema,
   context: messengerContextSchema.optional(),
 });
 export type MessageCreateInput = z.infer<typeof messageCreateInputSchema>;
@@ -131,6 +158,7 @@ export const contactMessageSchema = z.object({
   /** The team member's display name, for operator messages. */
   authorName: z.string().nullable(),
   body: z.string(),
+  attachments: z.array(attachmentSchema),
   createdAt: z.iso.datetime(),
 });
 export type ContactMessageDto = z.infer<typeof contactMessageSchema>;
