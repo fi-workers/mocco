@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-import { RulesEditor, ruleDraftOf, ServeEditor, toRule, toServe } from '@frontend/components/flags/rule-editor';
+import { ruleDraftOf, toRule, toServe } from '@frontend/components/flags/rule-drafts';
+import { RulesEditor, ServeEditor } from '@frontend/components/flags/rule-editor';
 import {
   errorMessage,
   inputClass,
@@ -16,7 +17,7 @@ import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { RuleDraft, ServeDraft } from '@frontend/components/flags/rule-editor';
+import type { RuleDraft, ServeDraft } from '@frontend/components/flags/rule-drafts';
 import type { ChangeOp, FlagConfigDto, FlagDto, FlagEnvironmentDto } from '@mocco/common/flags';
 
 interface Props {
@@ -101,15 +102,17 @@ function Preview({
       return;
     }
     setIsPending(true);
+    let outcome: { text: string; isError: boolean };
     try {
       const { results } = await utils.flags.preview.fetch({ workspaceId, projectId, environmentId, ops, context });
       const mine = results.find(item => item.flagKey === flagKey);
-      setResult({ text: mine === undefined ? 'Not in this environment.' : describeResult(mine), isError: false });
+      outcome = { text: mine === undefined ? 'Not in this environment.' : describeResult(mine), isError: false };
     } catch (error) {
-      setResult({ text: errorMessage(error as { message: string }) ?? 'Preview failed', isError: true });
-    } finally {
-      setIsPending(false);
+      outcome = { text: errorMessage(error as { message: string }) ?? 'Preview failed', isError: true };
     }
+    // Not a `finally`: the React Compiler can't optimize a component with one.
+    setResult(outcome);
+    setIsPending(false);
   };
 
   return (

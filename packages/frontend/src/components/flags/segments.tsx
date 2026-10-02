@@ -3,7 +3,8 @@
 import { SEGMENT_KEY_PATTERN } from '@mocco/common/flags';
 import { useState } from 'react';
 
-import { ClauseRow, draftId, emptyAttributeClause, toAttributeClause } from '@frontend/components/flags/rule-editor';
+import { draftId, emptyAttributeClause, toAttributeClause } from '@frontend/components/flags/rule-drafts';
+import { ClauseRow } from '@frontend/components/flags/rule-editor';
 import {
   errorMessage,
   inputClass,
@@ -14,7 +15,7 @@ import {
 import { Button } from '@frontend/components/ui/button';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { ClauseDraft } from '@frontend/components/flags/rule-editor';
+import type { ClauseDraft } from '@frontend/components/flags/rule-drafts';
 import type { FlagEnvironmentDto, FlagSegmentDto } from '@mocco/common/flags';
 
 interface Props {
