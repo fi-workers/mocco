@@ -9,7 +9,9 @@ import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
+import type { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
 import type { KillSwitchService } from '@backend/domain/flags/KillSwitchService';
+import type { StaleFlagDetector } from '@backend/domain/flags/StaleFlagDetector';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
@@ -82,6 +84,10 @@ export interface Context {
   flagGovernance: FlagGovernanceService;
   /** The flags kill switch (#142). */
   flagKillSwitch: KillSwitchService;
+  /** Evaluation counts from SDK telemetry (#144). */
+  flagTelemetry: FlagTelemetryService;
+  /** Stale-flag findings (#144). */
+  staleFlags: StaleFlagDetector;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

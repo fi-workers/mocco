@@ -6,10 +6,13 @@ import { Severities } from '@mocco/common/notification';
 import type { ChangeDiffEntry } from '@mocco/common/flags';
 import type { NeutralMessage } from '@mocco/common/notification';
 
-/** The changeset events (the kill alert renders its own message). */
-type FlagEventType = Exclude<(typeof FlagEventTypes)[keyof typeof FlagEventTypes], typeof FlagEventTypes.flagKilled>;
+/** The changeset events (the kill alert and the stale digest render their own messages). */
+export type ChangesetEventType = Exclude<
+  (typeof FlagEventTypes)[keyof typeof FlagEventTypes],
+  typeof FlagEventTypes.flagKilled | typeof FlagEventTypes.flagStaleDigest
+>;
 
-const headlines: Record<FlagEventType, { verb: string; severity: NeutralMessage['severity'] }> = {
+const headlines: Record<ChangesetEventType, { verb: string; severity: NeutralMessage['severity'] }> = {
   [FlagEventTypes.flagChangesetRequested]: { verb: 'Approval needed', severity: Severities.warning },
   [FlagEventTypes.flagChangesetApplied]: { verb: 'Applied', severity: Severities.success },
   [FlagEventTypes.flagChangesetRejected]: { verb: 'Rejected', severity: Severities.error },
@@ -27,7 +30,7 @@ export function changesetSubjects(diff: readonly ChangeDiffEntry[]): string {
 }
 
 export function changesetMessage(
-  type: FlagEventType,
+  type: ChangesetEventType,
   subject: {
     workspaceId: string;
     projectId: string;

@@ -27,6 +27,7 @@ import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environmen
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { ChangesetEventType } from '@backend/domain/flags/changeset-message';
 import type { FlagChangesetRow } from '@backend/domain/flags/repos/flag-changeset.repo';
 import type { FlagEnvironmentRow } from '@backend/domain/flags/repos/flag-environment.repo';
 import type { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
@@ -82,7 +83,7 @@ export class FlagGovernanceService {
   }
 
   private async notify(
-    type: Exclude<(typeof FlagEventTypes)[keyof typeof FlagEventTypes], typeof FlagEventTypes.flagKilled>,
+    type: ChangesetEventType,
     environment: FlagEnvironmentRow,
     changeset: FlagChangesetRow,
   ): Promise<void> {

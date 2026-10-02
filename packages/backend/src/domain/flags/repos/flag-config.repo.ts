@@ -26,6 +26,23 @@ export class FlagConfigRepo {
       .where(and(eq(schema.flagConfigs.workspaceId, workspaceId), eq(schema.flagEnvironments.projectId, projectId)));
   }
 
+  /** A project's configs with when each last changed: the time of the snapshot its
+   * `version` produced (null if that snapshot is gone). */
+  async listForProjectWithChangedAt(workspaceId: string, projectId: string) {
+    return await this.db
+      .select({ config: schema.flagConfigs, changedAt: schema.flagRulesetSnapshots.createdAt })
+      .from(schema.flagConfigs)
+      .innerJoin(schema.flagEnvironments, eq(schema.flagConfigs.environmentId, schema.flagEnvironments.id))
+      .leftJoin(
+        schema.flagRulesetSnapshots,
+        and(
+          eq(schema.flagRulesetSnapshots.environmentId, schema.flagConfigs.environmentId),
+          eq(schema.flagRulesetSnapshots.version, schema.flagConfigs.version),
+        ),
+      )
+      .where(and(eq(schema.flagConfigs.workspaceId, workspaceId), eq(schema.flagEnvironments.projectId, projectId)));
+  }
+
   /** Write the changed configs (a new salt only on insert). */
   async upsert(rows: (typeof schema.flagConfigs.$inferInsert)[]) {
     if (rows.length === 0) {

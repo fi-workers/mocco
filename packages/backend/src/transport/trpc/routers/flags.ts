@@ -13,6 +13,7 @@ import {
   flagEnvironmentSchema,
   flagSchema,
   flagSegmentSchema,
+  staleFindingSchema,
 } from '@mocco/common/flags';
 import { ApprovalDecisions, gateRequirementsSchema } from '@mocco/common/governance';
 import { Products } from '@mocco/common/project';
@@ -248,5 +249,40 @@ export const flagsRouter = router({
     .query(async ({ ctx, input }) => {
       const snapshot = await ctx.flags.ruleset(input.workspaceId, input.projectId, input.environmentId);
       return { version: snapshot.version, etag: snapshot.etag, document: snapshot.document };
+    }),
+
+  /** Evaluations per flag over the last `days` (from SDK telemetry), and when last seen. */
+  usage: flagsProcedure
+    .input(projectInput.extend({ days: z.int().min(1).max(90).default(7) }))
+    .output(
+      z.object({
+        usage: z.array(z.object({ flagKey: z.string(), evaluations: z.number(), lastSeenAt: z.date().nullable() })),
+      }),
+    )
+    .query(async ({ ctx, input }) => ({
+      usage: await ctx.flagTelemetry.usage(input.workspaceId, input.projectId, input.days),
+    })),
+
+  /** Flags that look ready for cleanup; dismissed ones only with `includeDismissed`. */
+  stale: flagsProcedure
+    .input(projectInput.extend({ includeDismissed: z.boolean().default(false) }))
+    .output(z.object({ findings: z.array(staleFindingSchema) }))
+    .query(async ({ ctx, input }) => ({
+      findings: await ctx.staleFlags.list(
+        input.workspaceId,
+        input.projectId,
+        input.includeDismissed ? undefined : new Date(),
+      ),
+    })),
+
+  /** Hide a stale finding until a date, or show it again (`until: null`). */
+  dismissStale: flagsProcedure
+    .input(projectInput.extend({ findingId: z.uuid(), until: z.date().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.staleFlags.dismiss(input.workspaceId, input.projectId, ctx.session.user.id, {
+        findingId: input.findingId,
+        until: input.until,
+      });
+      return { ok: true } as const;
     }),
 });

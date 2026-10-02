@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
@@ -308,6 +310,32 @@ describe('flags router on pglite', () => {
       attacker.api.flags.ruleset({ ...attacker.scope, environmentId: environment.id }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(attacker.api.flags.ruleset({ ...owner.scope, environmentId: environment.id })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('lists usage and stale findings, and dismisses one until a date', async () => {
+    const { api, ctx, scope } = await setup();
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    await api.flags.createBoolean({ ...scope, key: 'new-checkout' });
+    await ctx.flagTelemetry.ingest(
+      { workspaceId: scope.workspaceId, environmentId: environment.id, keyKind: 'secret' },
+      { evaluations: [{ flag: 'new-checkout', variant: 'off', count: 9, windowStart: new Date().toISOString() }] },
+    );
+    await ctx.staleFlags.detectAll(new Date(Date.now() + 40 * 24 * 60 * 60 * 1000));
+
+    const { usage } = await api.flags.usage(scope);
+    const { findings } = await api.flags.stale(scope);
+    expect(usage).toEqual([{ flagKey: 'new-checkout', evaluations: 9, lastSeenAt: expect.any(Date) }]);
+    expect(findings).toEqual([expect.objectContaining({ flagKey: 'new-checkout', kind: 'unused' })]);
+
+    await api.flags.dismissStale({ ...scope, findingId: findings[0]?.id ?? '', until: new Date(Date.now() + 60_000) });
+    const active = await api.flags.stale(scope);
+    const all = await api.flags.stale({ ...scope, includeDismissed: true });
+    expect(active.findings).toEqual([]);
+    expect(all.findings).toHaveLength(1);
+    await expect(api.flags.dismissStale({ ...scope, findingId: randomUUID(), until: null })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });

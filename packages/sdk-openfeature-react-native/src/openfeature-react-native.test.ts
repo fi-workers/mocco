@@ -239,6 +239,36 @@ describe('MoccoReactNativeProvider', () => {
     expect(storage.items.size).toBe(2);
   });
 
+  it('counts reads and sends them when the app goes to the background', async () => {
+    const reports: unknown[] = [];
+    const mocco = fakeMocco();
+    mocco.state.next = ok(true, '"e1"');
+    const fetchWithTelemetry = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/flags/telemetry')) {
+        reports.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 202 });
+      }
+      return await mocco.fetch(input, init);
+    };
+    const appState = fakeAppState();
+    const { client } = await start({ fetch: fetchWithTelemetry, appState, pollIntervalMs: 0 });
+    client.getBooleanValue('new-checkout', false);
+    client.getBooleanValue('new-checkout', false);
+    client.getBooleanValue('paused', false);
+    client.getBooleanValue('missing', false);
+
+    appState.set('background');
+    await vi.waitFor(() => {
+      expect(reports).toHaveLength(1);
+    });
+    expect(reports[0]).toEqual({
+      evaluations: [
+        { flag: 'new-checkout', variant: 'on', count: 2, windowStart: expect.any(String) },
+        { flag: 'paused', variant: null, count: 1, windowStart: expect.any(String) },
+      ],
+    });
+  });
+
   it('refuses a secret key', () => {
     expect(() => new MoccoReactNativeProvider({ publishableKey: 'mk_sec_0123456789abcdefghijklmnopqrstuv' })).toThrow(
       /publishable key/u,

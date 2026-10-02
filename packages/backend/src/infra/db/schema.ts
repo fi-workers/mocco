@@ -1,6 +1,6 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
-import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes } from '@mocco/common/flags';
+import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes, StaleKinds } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
@@ -52,6 +52,7 @@ import type {
   FlagType,
   RolloutEntry,
   Rule,
+  StaleKind,
 } from '@mocco/common/flags';
 import type {
   ApprovalDecision,
@@ -1742,6 +1743,64 @@ export const flagRulesetSnapshots = pgTable(
       foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
       name: 'mocco_flag_ruleset_snapshots_environment_fk',
     }).onDelete('cascade'),
+  ],
+);
+
+/** Hourly evaluation counts from SDK telemetry (#144), added to as reports arrive. Old
+ * buckets are pruned except each flag's newest, which keeps "last evaluated" forever. */
+export const flagEvalRollups = pgTable(
+  'mocco_flag_eval_rollups',
+  {
+    environmentId: uuid('environment_id').notNull(),
+    flagKey: text('flag_key').notNull(),
+    // '' when no variant was served (a disabled flag, an error).
+    variant: text().notNull(),
+    bucketHour: timestamp('bucket_hour').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    count: bigint({ mode: 'number' }).notNull(),
+    lastSeenAt: timestamp('last_seen_at').notNull(),
+  },
+  t => [
+    primaryKey({
+      columns: [t.environmentId, t.flagKey, t.variant, t.bucketHour],
+      name: 'mocco_flag_eval_rollups_pk',
+    }),
+    index('mocco_flag_eval_rollups_bucket_idx').on(t.bucketHour),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_eval_rollups_environment_fk',
+    }).onDelete('cascade'),
+    check('mocco_flag_eval_rollups_count_check', sql`${t.count} > 0`),
+  ],
+);
+
+/** Flags that look ready for cleanup, rewritten by the daily `flags.stale.detect` job.
+ * Advisory: no governance decision reads them. */
+export const flagStaleFindings = pgTable(
+  'mocco_flag_stale_findings',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    flagId: uuid('flag_id').notNull(),
+    kind: text().$type<StaleKind>().notNull(),
+    detectedAt: timestamp('detected_at').notNull(),
+    lastEvaluatedAt: timestamp('last_evaluated_at'),
+    servedVariant: text('served_variant'),
+    // Hidden until then; the job keeps it while the finding still holds.
+    dismissedUntil: timestamp('dismissed_until'),
+    dismissedByUserId: uuid('dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  },
+  t => [
+    uniqueIndex('mocco_flag_stale_findings_flag_kind_uq').on(t.flagId, t.kind),
+    index('mocco_flag_stale_findings_project_idx').on(t.workspaceId, t.projectId),
+    foreignKey({
+      columns: [t.flagId, t.workspaceId],
+      foreignColumns: [flags.id, flags.workspaceId],
+      name: 'mocco_flag_stale_findings_flag_fk',
+    }).onDelete('cascade'),
+    check('mocco_flag_stale_findings_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(StaleKinds))})`),
   ],
 );
 

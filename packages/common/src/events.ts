@@ -150,6 +150,8 @@ export const FlagEventTypes = {
   flagChangesetRejected: 'flags.changeset.rejected',
   /** A flag was killed: it serves its off variant everywhere in that environment. */
   flagKilled: 'flags.flag.killed',
+  /** The weekly list of a project's flags that look ready for cleanup. */
+  flagStaleDigest: 'flags.stale.digest',
 } as const;
 
 /** A product event that, like an inbound one, carries its message rendered when it
@@ -171,6 +173,7 @@ export const flagEventPayloadSchemas = {
   [FlagEventTypes.flagChangesetApplied]: renderedEventPayloadSchema,
   [FlagEventTypes.flagChangesetRejected]: renderedEventPayloadSchema,
   [FlagEventTypes.flagKilled]: renderedEventPayloadSchema,
+  [FlagEventTypes.flagStaleDigest]: renderedEventPayloadSchema,
 } as const;
 
 /** Every domain event type. Extension point: spread each area's types here. */

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import KillSwitch from '@frontend/components/flags/kill-switch';
 import { ruleDraftOf, toRule, toServe } from '@frontend/components/flags/rule-drafts';
 import { RulesEditor, ServeEditor } from '@frontend/components/flags/rule-editor';
+import { FlagUsage } from '@frontend/components/flags/stale';
 import {
   errorMessage,
   inputClass,
@@ -381,6 +382,7 @@ export default function FlagDetail({ workspaceId, projectId, flagKey }: Props) {
         {flag.description ? <p className="text-sm text-muted-foreground">{flag.description}</p> : null}
       </div>
       <ClientVisibility workspaceId={workspaceId} projectId={projectId} flag={flag} />
+      <FlagUsage scope={input} flagKey={flag.key} />
       <section className="flex flex-col gap-1">
         <h3 className="text-sm font-medium">Variants</h3>
         <ul className="flex flex-wrap gap-2">

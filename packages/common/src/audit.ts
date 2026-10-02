@@ -56,6 +56,7 @@ export const AuditActions = {
   flagRestored: 'flag.restored',
   flagKillRolesChanged: 'flag.kill_roles.changed',
   flagClientVisibilityChanged: 'flag.client_visible.changed',
+  flagStaleDismissed: 'flag.stale.dismissed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

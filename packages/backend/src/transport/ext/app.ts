@@ -418,7 +418,11 @@ export async function extHandler(request: Request): Promise<Response> {
         trustPolicies: getOtaDomain().otaTrustPolicies,
         metrics: getOtaDomain().otaMetrics,
       },
-      flags: { flags: getFlagsDomain().flags, streamTokens: flagStreamTokensFromEnv(env) },
+      flags: {
+        flags: getFlagsDomain().flags,
+        telemetry: getFlagsDomain().flagTelemetry,
+        streamTokens: flagStreamTokensFromEnv(env),
+      },
     },
     storage:
       storageStore instanceof FilesystemObjectStore

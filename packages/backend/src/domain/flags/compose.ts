@@ -5,8 +5,10 @@ import { FlagApprovalSubjects } from '@mocco/common/flags';
 
 import { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import { FlagService } from '@backend/domain/flags/FlagService';
+import { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
 import { KillSwitchService } from '@backend/domain/flags/KillSwitchService';
 import { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
+import { StaleFlagDetector } from '@backend/domain/flags/StaleFlagDetector';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
@@ -18,6 +20,8 @@ export interface FlagsDomain {
   flags: FlagService;
   flagGovernance: FlagGovernanceService;
   flagKillSwitch: KillSwitchService;
+  flagTelemetry: FlagTelemetryService;
+  staleFlags: StaleFlagDetector;
 }
 
 /** Build the flags services over a db and register their approval handlers on `approvals`.
@@ -39,5 +43,7 @@ export function createFlagsDomain(
   deps.approvals.registerHandler(FlagApprovalSubjects.changeGate, async request => {
     await flagGovernance.applyApprovedGate(request);
   });
-  return { flags, flagGovernance, flagKillSwitch };
+  const flagTelemetry = new FlagTelemetryService({ db });
+  const staleFlags = new StaleFlagDetector({ db, ...deps });
+  return { flags, flagGovernance, flagKillSwitch, flagTelemetry, staleFlags };
 }

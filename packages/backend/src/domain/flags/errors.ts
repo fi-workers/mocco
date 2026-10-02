@@ -97,3 +97,11 @@ export class KillNotAllowedError extends ForbiddenError {
     this.name = 'KillNotAllowedError';
   }
 }
+
+/** A stale finding the project doesn't have — NOT_FOUND. */
+export class StaleFindingNotFoundError extends NotFoundError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`Stale finding ${id} was not found`, options);
+    this.name = 'StaleFindingNotFoundError';
+  }
+}

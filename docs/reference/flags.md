@@ -29,6 +29,10 @@ code_refs:
   - packages/sdk-openfeature-server/src/openfeature-server.ts
   - packages/sdk-openfeature-web/src/openfeature-web.ts
   - packages/sdk-openfeature-react-native/src/openfeature-react-native.ts
+  - packages/backend/src/domain/flags/FlagTelemetryService.ts
+  - packages/backend/src/domain/flags/StaleFlagDetector.ts
+  - packages/backend/src/domain/flags/stale.ts
+  - packages/sdk-core/src/telemetry.ts
 ---
 
 # Feature flags
@@ -184,6 +188,18 @@ Both work with `@openfeature/react-sdk`; the Vercel Flags SDK uses the server pr
 
 A key is bound to one environment when it is created: `flagEnvironmentId` is required with `flags:read` and refused without it ([public API](./public-api.md#keys)).
 
+## Evaluation telemetry and stale flags
+
+SDKs count evaluations per flag and variant in memory (`EvaluationCounter` in `@mocco/sdk-core`) and send them at most once a minute to `POST /v1/flags/telemetry`, plus once on close (server), on going to the background (React Native) or when the page is hidden (web, `keepalive`). Every provider has `telemetry: false` to turn it off. A failed send is dropped. Flags Mocco doesn't know aren't counted.
+
+- **Ingest** (`FlagTelemetryService`): zod-validated (≤ 500 entries, `count` 1–1,000,000, flag keys and variant names by pattern), rate limited per key (300 a minute) on top of the key's own limit. Entries for unknown flags, for flags a publishable key can't see, or with a `windowStart` more than 24 h old or 5 min ahead are ignored and counted in the `202 { accepted, ignored }` answer. Counts are added (one upsert) to `mocco_flag_eval_rollups` per environment, flag, variant (`''` for none) and hour.
+- **Retention**: the daily job prunes buckets older than 90 days, except each flag's newest per environment, so "last evaluated" survives.
+- **Detection** (`flags.stale.detect`, daily; rules in `stale.ts`): for each temporary flag created at least 30 days ago (`STALE_AFTER_DAYS`), **never evaluated** (no rollup at all), **unused** (last evaluated more than 30 days ago), or **fully rolled out** (every environment enabled, not killed, no rules, one variant to everyone (the default, or a rollout with all weight on one variant), unchanged for 30 days by its snapshot's time). Permanent flags are exempt. Findings in `mocco_flag_stale_findings` are rewritten per project: new ones are inserted, ones that still hold keep their detection time and dismissal, the rest are deleted.
+- **Dismiss** (`flags.dismissStale`): hides a finding until a date (`until: null` shows it again); audited as `flag.stale.dismissed`. An expired dismissal reads as none.
+- **Digest** (`flags.stale.digest`, weekly): one `flags.stale.digest` event per project with active findings (deduped per project and week), in the Mocco notification preset.
+
+Telemetry is advisory: anyone with a key can send counts, so they only raise or hide cleanup hints. No governance decision reads them; `flags-telemetry.test.ts` checks that the gate, kill switch, publisher and approval code never import the rollup or finding code.
+
 ## API
 
 The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must be a workspace member, the project must be in the workspace, and the product must be enabled.
@@ -200,6 +216,8 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | `kill`, `setKillRoles` | Kill a flag now (gate bypassed, reason required); choose who may kill |
 | `setClientVisible` | Let publishable keys evaluate a flag over OFREP, or stop them |
 | `history` | An environment's last 50 changesets, newest first |
+| `usage` | Evaluations per flag over the last `days` (default 7), and when each was last seen |
+| `stale`, `dismissStale` | Active stale findings (`includeDismissed` for all); hide one until a date, or show it again |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
 
 The console page is **Feature flags** in the project tabs (`/workspaces/:id/p/:projectId/flags`), with environments, flags, and per environment its segments and history. Each flag has a page (`…/flags/:flagKey?env=`) with its rules, fallthrough and preview.
