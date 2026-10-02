@@ -29,6 +29,8 @@ export const AuditActions = {
   otaCredentialCreated: 'ota.credential.created',
   otaCredentialRotated: 'ota.credential.rotated',
   otaCredentialDeleted: 'ota.credential.deleted',
+  apiKeyCreated: 'apikey.created',
+  apiKeyRevoked: 'apikey.revoked',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);

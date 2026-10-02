@@ -13,6 +13,7 @@ import { Hono } from 'hono';
 import { routePath } from 'hono/route';
 import { z } from 'zod';
 
+import { getApiKeys } from '@backend/domain/apikey/instance';
 import { getServices } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
 import { errorSummary } from '@backend/domain/errors';
@@ -28,6 +29,7 @@ import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
+import { getRateLimiter } from '@backend/domain/ratelimit/instance';
 import { storageSignerFromEnv } from '@backend/domain/storage/config';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
 import { getStorageDomain } from '@backend/domain/storage/instance';
@@ -37,6 +39,7 @@ import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/tr
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 import { createStorageRoutes, type StorageRouteDeps } from '@backend/transport/ext/storage';
+import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -48,6 +51,7 @@ import type { ConnectionService } from '@backend/domain/integration/ConnectionSe
 import type { GitHubProvider } from '@backend/domain/integration/github/provider';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import type { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
+import type { V1Deps } from '@backend/transport/ext/v1/middleware';
 
 export interface ExtDeps {
   auth: AuthService;
@@ -89,6 +93,9 @@ export interface ExtDeps {
   discord?: DiscordInstallDeps;
   /** The filesystem storage driver's signed route; undefined with any other driver (404s). */
   storage?: StorageRouteDeps;
+  /** The public /v1 surface's key authentication and rate limiter (ADR 0017); tests that
+   * don't exercise it leave it out and /v1/ping, /v1/whoami are not mounted. */
+  v1?: V1Deps;
 }
 
 const WORKSPACES = '/workspaces';
@@ -327,6 +334,11 @@ export function createExtApp(deps: ExtDeps): Hono {
   // Job tick (ADR 0014): Vercel Cron (GET), a self-host cron or curl drives JobRunner.tick.
   app.route('/', createJobTickRoutes(deps.jobTick));
 
+  // Public /v1 API (ADR 0017): key-authenticated, rate-limited, problem+json errors.
+  if (deps.v1 !== undefined) {
+    app.route('/v1', createV1Routes(deps.v1));
+  }
+
   // Signed reads and uploads for the filesystem storage driver (platform foundations §10).
   app.route('/', createStorageRoutes(deps.storage));
 
@@ -341,6 +353,20 @@ export function createExtApp(deps: ExtDeps): Hono {
   });
 
   return app;
+}
+
+const EXT_BASE = '/api/ext';
+
+/** A request that reached the ext surface through the public API host's rewrite
+ * (`https://<PUBLIC_API_DOMAIN>/v1/*`, next.config.ts) still carries its original path;
+ * put it under the ext base path so the app's routes match. */
+function onExtPath(request: Request): Request {
+  const url = new URL(request.url);
+  if (url.pathname === EXT_BASE || url.pathname.startsWith(`${EXT_BASE}/`)) {
+    return request;
+  }
+  url.pathname = `${EXT_BASE}${url.pathname}`;
+  return new Request(url, request);
 }
 
 /** Production fetch handler — mounted by the App Router at app/api/ext/[[...route]]/route.ts. */
@@ -381,10 +407,11 @@ export async function extHandler(request: Request): Promise<Response> {
         : undefined,
     inbound: getInbound()?.inbound,
     discord: discordInstall === undefined ? undefined : { install: discordInstall, workspace: services.workspace },
+    v1: { apiKeys: getApiKeys(), limiter: getRateLimiter() },
     storage:
       storageStore instanceof FilesystemObjectStore
         ? { store: storageStore, signer: storageSignerFromEnv(env) }
         : undefined,
   });
-  return await app.fetch(request);
+  return await app.fetch(onExtPath(request));
 }

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./apikey": "./src/apikey.ts",
     "./audit": "./src/audit.ts",
     "./auth": "./src/auth.ts",
     "./credential": "./src/credential.ts",

@@ -1,5 +1,6 @@
 // The single composition point: domain routers merge here (composition, not a
 // barrel — nothing is re-exported, a new router value is built).
+import { apiKeyRouter } from '@backend/transport/trpc/routers/apiKey';
 import { approvalRouter } from '@backend/transport/trpc/routers/approval';
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
@@ -29,6 +30,7 @@ export const appRouter = router({
   project: projectRouter,
   product: productRouter,
   ota: otaRouter,
+  apiKey: apiKeyRouter,
   inbound: inboundRouter,
   notification: notificationRouter,
 });

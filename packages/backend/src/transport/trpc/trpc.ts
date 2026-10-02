@@ -1,6 +1,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 
+import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
@@ -54,6 +55,8 @@ export interface Context {
   versionPolicies: VersionPolicyService;
   /** Always present — sealed publishing tokens of the team's existing OTA tools. */
   externalCredentials: ExternalCredentialService;
+  /** Always present — API keys for the public /v1 surface (ADR 0017). */
+  apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
   inbound: InboundDomain | undefined;

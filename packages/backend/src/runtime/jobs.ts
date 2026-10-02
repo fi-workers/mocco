@@ -29,6 +29,8 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
+import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
+import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
 import { createStorageHandlers, storageGcSchedule } from '@backend/domain/storage/jobs';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
@@ -93,6 +95,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       connectStates: new DiscordConnectStateRepo(db),
     }),
     ...createStorageHandlers({ storage: deps.storage }),
+    ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
   ];
   self.runner = new JobRunner({
     jobs,
@@ -106,6 +109,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       pruneEventsSchedule,
       ...notificationSchedules,
       ...inboundSchedules,
+      rateLimitPruneSchedule,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });

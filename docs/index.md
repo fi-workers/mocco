@@ -40,6 +40,7 @@ related:
 - [0012 — Repository per table for DB-owning domains](./adr/0012-repository-per-table-for-db-owning-domains.md)
 - [0013 — Mocco is a multi-product platform (draft)](./adr/0013-mocco-is-a-multi-product-platform.md)
 - [0014 — Background jobs on a Postgres job table driven by a tick (draft)](./adr/0014-background-jobs-on-a-postgres-job-table-driven-by-a-tick.md)
+- [0017 — Public /v1 API, publishable and secret keys, and MIT SDKs (draft)](./adr/0017-public-v1-api-keys-and-sdk-licensing.md)
 - [0018 — Domain events are separate from the audit log (draft)](./adr/0018-domain-events-vs-audit-log.md)
 - [0019 — Inbound webhooks use per-source ingest URLs with mandatory signatures (draft)](./adr/0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md)
 
@@ -74,6 +75,7 @@ related:
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
+- [Public /v1 API](./reference/public-api.md) — publishable and secret project keys, origin rules, rate limits, problem+json, the API host
 - [Object storage](./reference/storage.md) — the store port and its S3/R2 and filesystem drivers, two-phase uploads, quotas, signed URLs, storage.gc
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
 - [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
