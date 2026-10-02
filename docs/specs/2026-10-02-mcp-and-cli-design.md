@@ -264,7 +264,8 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    this slice is a decision before it is an endpoint.
 3. **Better Auth 1.6 → 1.7** — on its own, because auth is load-bearing.
 4. **`mcp()` + `cimd()` + the discovery routes** — the authorization server and the
-   session a tool will receive. No tools yet.
+   session a tool will receive. No tools yet. **Bigger than it reads, and currently
+   blocked — see below.**
 5. **The MCP server with the read tools** — `transport/mcp`, `runtime/mcp.ts`, the App
    Router route, read-only by default. Proves the shape against a real client.
 6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
@@ -306,6 +307,46 @@ Two ways out, and the choice is worth making on its own rather than inside an en
 Option 2 is the smaller claim and loses nothing we have asked for, so the plan assumes it
 until something needs otherwise. Either way the deciding tools are unaffected: those were
 always a person's.
+
+## Found while attempting slice 4
+
+Two things the plan did not account for. Neither changes the design; both change what
+slice 4 costs.
+
+### The authorization server brings eight tables
+
+`mcp()` is `@better-auth/oauth-provider` underneath, and it owns its own models: `jwks`,
+`oauthClient` (31 columns), `oauthResource`, `oauthClientResource`, `oauthRefreshToken`,
+`oauthAccessToken`, `oauthConsent` and `oauthClientAssertion`. We map the drizzle adapter's
+schema explicitly, so every one has to exist in `schema.ts` with a migration; a missing
+model fails at adapter start with *"model X was not found in the schema object"*.
+
+**Generate them, never transcribe them.** The authoritative source is
+`npx auth@<version> generate --adapter drizzle --dialect postgresql` — note the CLI moved
+from `@better-auth/cli`, now deprecated at 1.5, to the `auth` package. Reading the
+minified plugin source by hand missed `oauthRefreshToken` entirely and mangled the join
+table's references, and these are the tables that hold tokens and consent records.
+
+### The plugin does not typecheck against better-auth 1.7.7
+
+`@better-auth/oauth-provider`'s plugin is not assignable to `better-auth`'s
+`BetterAuthPlugin`: the `init()` return types disagree. The cause is that `better-auth`
+ships its own nested `@better-auth/core` while the plugin is built against the hoisted
+one, so the two see different definitions of the same type. It is a
+[known upstream shape](https://github.com/better-auth/better-auth/issues/8855), and the
+documented remedy — move `better-auth` and every `@better-auth/*` together on one pinned
+version — does not flatten the nested copies under yarn's node-modules linker here.
+
+Until that resolves, slice 4 cannot land. The schema work is done and saved on
+`feat/mcp-auth-server`.
+
+### A related duplicate, now fixed
+
+The same class of problem was already in the tree with zod: we pinned `4.1.13` while
+better-auth asked for a range that did not include it, so a second copy lived nested.
+That one is resolved (one zod, deduped), and it is worth keeping in mind as a pattern —
+a duplicated transitive dependency shows up first as a type that "cannot be named", long
+before it shows up as behaviour.
 
 ## Open questions
 
