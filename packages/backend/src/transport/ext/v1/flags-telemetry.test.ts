@@ -64,7 +64,8 @@ describe('POST /v1/flags/telemetry (pglite)', () => {
       '/v1',
       createV1Routes({
         apiKeys,
-        limiter: new MemoryRateLimiter(),
+        // A fixed clock: a run that crosses a window boundary would reset the count.
+        limiter: new MemoryRateLimiter(() => new Date('2026-10-02T10:00:30Z')),
         flags: { flags, telemetry: new FlagTelemetryService({ db: t.db }) },
       }),
     );
