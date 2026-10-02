@@ -59,3 +59,74 @@ export interface OtaPromotionResult {
   outcome: 'applied' | 'pending_approval';
   requestId: string | null;
 }
+
+/** What the SDK attaches about the device and app to messenger calls. */
+export interface MessengerContext {
+  appVersion?: string;
+  build?: string;
+  platform?: 'ios' | 'android' | 'web';
+  os?: string;
+  device?: string;
+  locale?: string;
+  timezone?: string;
+  screen?: string;
+  sdkVersion?: string;
+}
+
+/** `POST /v1/messenger/sessions`: the app's user, signed by the app's server. */
+export interface MessengerSessionRequest {
+  userId: string;
+  userHash: string;
+  name?: string;
+  email?: string;
+  traits?: Record<string, string | number | boolean>;
+  context?: MessengerContext;
+}
+
+export interface MessengerCategory {
+  key: string;
+  label: string;
+}
+
+export interface MessengerSessionResponse {
+  sessionToken: string;
+  expiresAt: string;
+  contactId: string;
+  categories: MessengerCategory[];
+}
+
+/** A conversation as its user sees it. */
+export interface MessengerConversation {
+  id: string;
+  status: 'open' | 'closed';
+  category: string | null;
+  preview: string;
+  lastMessageSeq: number;
+  lastMessageAt: string;
+  /** The team replied after the user last read. */
+  hasUnread: boolean;
+  createdAt: string;
+}
+
+/** A message as its user sees it (the team's internal notes never appear). */
+export interface MessengerMessage {
+  id: string;
+  seq: number;
+  author: 'contact' | 'operator' | 'system';
+  authorName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface MessengerConversationRequest {
+  category?: string;
+  body: string;
+  clientMessageId: string;
+  context?: MessengerContext;
+}
+
+export interface MessengerMessageRequest {
+  body: string;
+  clientMessageId: string;
+  context?: MessengerContext;
+}

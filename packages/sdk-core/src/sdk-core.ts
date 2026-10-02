@@ -8,6 +8,16 @@ export { backoffMs, isRetryableStatus } from './retry';
 export { readServerSentEvents } from './sse';
 export type { ServerSentEvent } from './sse';
 export type {
+  MessengerCategory,
+  MessengerContext,
+  MessengerConversation,
+  MessengerConversationRequest,
+  MessengerMessage,
+  MessengerMessageRequest,
+  MessengerSessionRequest,
+  MessengerSessionResponse,
+} from './wire';
+export type {
   OtaEvent,
   OtaEventsRequest,
   OtaEventType,
@@ -19,3 +29,5 @@ export type {
 } from './wire';
 export { DEFAULT_TELEMETRY_INTERVAL_MS, EvaluationCounter, TELEMETRY_PATH } from './telemetry';
 export type { EvaluationCount, EvaluationCounterOptions } from './telemetry';
+export { DEFAULT_MESSENGER_POLL_MS, MessengerClient } from './messenger';
+export type { MessengerClientOptions, MessengerIdentity, MessengerState, MessengerStorage } from './messenger';

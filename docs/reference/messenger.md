@@ -21,6 +21,8 @@ code_refs:
   - packages/backend/src/domain/messenger/identity.ts
   - packages/backend/src/domain/messenger/repos/conversation.repo.ts
   - packages/backend/src/transport/ext/v1/messenger.ts
+  - packages/sdk-core/src/messenger.ts
+  - packages/sdk-react-native/src/messenger.tsx
   - packages/backend/src/transport/trpc/routers/messenger.ts
   - packages/frontend/src/components/messenger/inbox.tsx
   - packages/frontend/src/components/messenger/conversation.tsx
@@ -68,6 +70,10 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | `POST /conversations/{id}/read` | `{ seq }` → `204`; never moves back or past the last message |
 
 Another contact's conversation is a 404. Limits per contact, on top of the key's own: 20 messages a minute, 5 new conversations an hour; `POST /sessions` 300 a minute per key.
+
+## SDK
+
+`MessengerClient` in `@mocco/sdk-core` and the hooks in `@mocco/react-native/messenger` ([SDK packages](./sdk.md)) wrap these routes. The client asks the app for the signed identity (`identity()`, null while signed out), keeps the session in the app's storage under `mocco-messenger:session:v1` and reopens it on a 401, fetches threads incrementally by seq, and retries a send once on a network failure with the same `clientMessageId`. `transport/ext/v1/messenger.test.ts` runs it against the real routes.
 
 ## Inbox (tRPC)
 

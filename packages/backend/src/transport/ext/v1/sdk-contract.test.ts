@@ -2,6 +2,14 @@
 // against the route schemas (platform foundations §11).
 import { type whoamiResponseSchema } from '@mocco/common/apikey';
 import {
+  type contactConversationSchema,
+  type contactMessageSchema,
+  type conversationCreateInputSchema,
+  type messageCreateInputSchema,
+  type messengerSessionInputSchema,
+  type messengerSessionSchema,
+} from '@mocco/common/messenger';
+import {
   type clientEventsRequestSchema,
   type finalizeRequestSchema,
   type promotionResultSchema,
@@ -11,6 +19,12 @@ import {
 import { describe, expectTypeOf, it } from 'vitest';
 
 import type {
+  MessengerConversation,
+  MessengerConversationRequest,
+  MessengerMessage,
+  MessengerMessageRequest,
+  MessengerSessionRequest,
+  MessengerSessionResponse,
   OtaEventsRequest,
   OtaFinalizeRequest,
   OtaPromotionResult,
@@ -34,5 +48,14 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<OtaFinalizeRequest>().toExtend<z.input<typeof finalizeRequestSchema>>();
     expectTypeOf<UploadResponse>().toExtend<OtaUploadResponse>();
     expectTypeOf<z.output<typeof promotionResultSchema>>().toExtend<OtaPromotionResult>();
+  });
+
+  it('messenger: what the SDK sends is accepted, and what the routes answer is what it types', () => {
+    expectTypeOf<MessengerSessionRequest>().toExtend<z.input<typeof messengerSessionInputSchema>>();
+    expectTypeOf<MessengerConversationRequest>().toExtend<z.input<typeof conversationCreateInputSchema>>();
+    expectTypeOf<MessengerMessageRequest>().toExtend<z.input<typeof messageCreateInputSchema>>();
+    expectTypeOf<z.output<typeof messengerSessionSchema>>().toExtend<MessengerSessionResponse>();
+    expectTypeOf<z.output<typeof contactConversationSchema>>().toExtend<MessengerConversation>();
+    expectTypeOf<z.output<typeof contactMessageSchema>>().toExtend<MessengerMessage>();
   });
 });
