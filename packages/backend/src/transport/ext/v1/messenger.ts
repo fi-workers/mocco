@@ -17,9 +17,13 @@ import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 
 import { BadRequestError, NotFoundError } from '@backend/domain/errors';
-import { ContactBlockedError, IdentityVerificationError } from '@backend/domain/messenger/errors';
+import {
+  ContactBlockedError,
+  GuestsNotAllowedError,
+  IdentityVerificationError,
+} from '@backend/domain/messenger/errors';
 import { isSessionToken } from '@backend/domain/messenger/identity';
-import { limit, requireKey } from '@backend/transport/ext/v1/middleware';
+import { ipBucketOf, limit, requireKey } from '@backend/transport/ext/v1/middleware';
 import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { ContactMessengerService, ContactPrincipal } from '@backend/domain/messenger/ContactMessengerService';
@@ -47,6 +51,8 @@ export const MessengerRateLimits = {
   messages: { limit: 20, windowSeconds: 60 },
   conversations: { limit: 5, windowSeconds: 60 * 60 },
   attachments: { limit: 10, windowSeconds: 60 * 60 },
+  /** Guest sessions need no signature, so they are also limited per client IP. */
+  guestSessions: { limit: 20, windowSeconds: 60 * 60 },
 } as const;
 
 interface MessengerEnv {
@@ -60,6 +66,11 @@ function problemFor(error: unknown): Response {
   if (error instanceof IdentityVerificationError) {
     return problemResponse(
       problemOf(401, ProblemCodes.identityNotVerified, 'The user hash does not match the user id'),
+    );
+  }
+  if (error instanceof GuestsNotAllowedError) {
+    return problemResponse(
+      problemOf(403, ProblemCodes.guestsNotAllowed, 'This app only takes messages from signed-in users'),
     );
   }
   if (error instanceof ContactBlockedError) {
@@ -100,6 +111,12 @@ export function createMessengerRoutes(deps: V1Deps, messenger: MessengerServingD
       const body = await parseJson(c, messengerSessionInputSchema);
       if (body.refused !== undefined) {
         return body.refused;
+      }
+      if ('guest' in body.data) {
+        const limited = await limit(deps, `messenger:guest:${ipBucketOf(c)}`, MessengerRateLimits.guestSessions);
+        if (limited.refused !== undefined) {
+          return limited.refused;
+        }
       }
       const { workspaceId, projectId } = c.var.principal;
       return await answer(async () =>

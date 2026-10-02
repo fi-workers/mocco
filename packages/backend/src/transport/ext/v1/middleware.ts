@@ -56,7 +56,7 @@ function presentedKey(c: Context): string | undefined {
 }
 
 /** The client IP (the first forwarded hop), hashed: buckets never store raw addresses. */
-function ipBucketOf(c: Context): string {
+export function ipBucketOf(c: Context): string {
   const forwarded = c.req.header('x-forwarded-for')?.split(',', 1)[0]?.trim();
   const ip = forwarded ?? c.req.header('x-real-ip') ?? 'unknown';
   return createHash('sha256').update(ip).digest('hex').slice(0, 16);

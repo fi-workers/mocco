@@ -40,12 +40,20 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 - **The identity secret** is minted when the team sets the messenger up (`messenger.enable`) and on `messenger.rotateSecret`, returned only then, and stored SecretBox-sealed (AAD `messenger-identity:<projectId>`). Rotation takes effect at once: hashes signed with the old secret stop opening sessions. Both are audited (`messenger.enabled`, `messenger.secret.rotated`).
 - **Sessions** are opaque `mms_` tokens (32 random bytes) stored as SHA-256 hashes, valid 30 days. The app opens a new one whenever it has a fresh hash.
 
+## Guests
+
+With **Let people who aren't signed in write** on (`messenger.setAllowGuests`, off by default, audited as `messenger.guests.changed`), `POST /v1/messenger/sessions` also takes `{ guest: true, email, name?, guestToken?, context? }`: someone not signed in, known by the email they leave. The first guest session returns a `guestToken` (`mmg_` + 32 random bytes, stored hashed on the contact); the device keeps it and sends it back, so a returning guest is found again (their email and name are refreshed) and sees their conversations. A contact is either signed in (`external_user_id`) or a guest (email and guest token), a CHECK enforces it.
+
+When a signed-in session request carries the device's `guestToken`, the guest's conversations, attachments and push devices move to the signed-in contact in one transaction and the guest is deleted (with its sessions). Merging happens only through that token, never by matching emails.
+
+Guest sessions need no signature, so they are also limited to 20 an hour per client IP. With guests off, a guest session answers `403 guests_not_allowed`.
+
 ## Model
 
 | Table | Holds |
 |---|---|
 | `mocco_messenger_settings` | Per project: the sealed identity secret, the categories users pick from (default: bug, billing, how-to, idea, other) |
-| `mocco_messenger_contacts` | A user who has written: the app's user id (unique per project), name, email and traits as the app last sent them, the last device context, `blocked_at` |
+| `mocco_messenger_contacts` | A user who has written: the app's user id (unique per project; null for a guest), name, email and traits as the app last sent them, a guest's device token hash, the last device context, `blocked_at` |
 | `mocco_messenger_sessions` | A contact's session token hash, expiry, revocation |
 | `mocco_messenger_conversations` | Status (open, closed), category, `last_message_seq`, `last_operator_seq` (the team's newest public message), `contact_last_read_seq`, preview, the device context when it opened |
 | `mocco_messenger_messages` | `seq` (unique per conversation), author (contact, operator, system), visibility (public, internal), body (≤ 8,000 characters), `client_message_id` (unique per conversation) |

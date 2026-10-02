@@ -17,7 +17,7 @@ const clip = (value: string, max: number) => (value.length > max ? `${value.slic
 
 /** Who the contact is, for a title: name, then email, then the app's user id. */
 export const contactLabel = (contact: Pick<ContactRow, 'name' | 'email' | 'externalUserId'>): string =>
-  contact.name ?? contact.email ?? contact.externalUserId;
+  contact.name ?? contact.email ?? contact.externalUserId ?? 'A guest';
 
 export function contactMessageEvent(
   type: MessengerEventType,

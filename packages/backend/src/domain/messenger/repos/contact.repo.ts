@@ -44,6 +44,60 @@ export class MessengerContactRepo {
     );
   }
 
+  async insertGuest(row: {
+    workspaceId: string;
+    projectId: string;
+    email: string;
+    name: string | null;
+    guestTokenHash: string;
+    lastContext: MessengerContext;
+    lastSeenAt: Date;
+  }): Promise<ContactRow> {
+    return expectOne(
+      await this.db
+        .insert(c)
+        .values({ ...row, externalUserId: null, traits: {} })
+        .returning(),
+    );
+  }
+
+  /** The project's guest with this device token hash. */
+  async findGuest(projectId: string, guestTokenHash: string) {
+    const [row] = await this.db
+      .select()
+      .from(c)
+      .where(and(eq(c.projectId, projectId), eq(c.guestTokenHash, guestTokenHash), isNull(c.externalUserId)));
+    return row;
+  }
+
+  /** A returning guest: what they said about themselves now wins. */
+  async refreshGuest(
+    contactId: string,
+    values: { email: string; name: string | null; lastContext: MessengerContext; lastSeenAt: Date },
+  ) {
+    return expectOne(await this.db.update(c).set(values).where(eq(c.id, contactId)).returning());
+  }
+
+  /**
+   * Move a guest's conversations, attachments and devices to a signed-in contact, then
+   * delete the guest (its sessions go with it). Call in a transaction.
+   */
+  async mergeGuest(guestId: string, contactId: string): Promise<void> {
+    await this.db
+      .update(schema.messengerConversations)
+      .set({ contactId })
+      .where(eq(schema.messengerConversations.contactId, guestId));
+    await this.db
+      .update(schema.messengerAttachments)
+      .set({ contactId })
+      .where(eq(schema.messengerAttachments.contactId, guestId));
+    await this.db
+      .update(schema.messengerPushTokens)
+      .set({ contactId })
+      .where(eq(schema.messengerPushTokens.contactId, guestId));
+    await this.db.delete(c).where(eq(c.id, guestId));
+  }
+
   async find(workspaceId: string, projectId: string, contactId: string) {
     const [row] = await this.db
       .select()

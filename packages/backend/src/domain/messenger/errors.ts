@@ -71,3 +71,11 @@ export class AttachmentNotFoundError extends BadRequestError {
     this.name = 'AttachmentNotFoundError';
   }
 }
+
+/** The project doesn't take messages from people who aren't signed in — FORBIDDEN. */
+export class GuestsNotAllowedError extends ForbiddenError {
+  constructor(options?: ErrorOptions) {
+    super('This app only takes messages from signed-in users', options);
+    this.name = 'GuestsNotAllowedError';
+  }
+}

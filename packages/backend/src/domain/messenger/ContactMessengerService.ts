@@ -14,10 +14,11 @@ import {
   AttachmentsUnavailableError,
   ContactBlockedError,
   ConversationNotFoundError,
+  GuestsNotAllowedError,
   IdentityVerificationError,
   UnknownCategoryError,
 } from '@backend/domain/messenger/errors';
-import { isUserHashValid, newSessionToken, sessionTokenHash } from '@backend/domain/messenger/identity';
+import { isUserHashValid, newGuestToken, newSessionToken, sessionTokenHash } from '@backend/domain/messenger/identity';
 import { contactMessageEvent } from '@backend/domain/messenger/messages';
 import { MessengerAttachmentRepo } from '@backend/domain/messenger/repos/attachment.repo';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
@@ -37,6 +38,8 @@ import type {
   ConversationCreateInput,
   MessageCreateInput,
   MessengerSessionDto,
+  GuestSessionInput,
+  IdentifiedSessionInput,
   MessengerSessionInput,
 } from '@mocco/common/messenger';
 
@@ -152,38 +155,93 @@ export class ContactMessengerService {
     return wanted;
   }
 
+  /** A signed-in user, verified by the app's server signature. A guest token from the same
+   * device moves what they wrote as a guest to their account. */
+  private async identifiedContact(
+    project: { workspaceId: string; projectId: string },
+    input: IdentifiedSessionInput,
+    identitySecret: string,
+    now: Date,
+  ): Promise<{ contact: ContactRow; guestToken?: undefined }> {
+    if (!isUserHashValid(identitySecret, input.userId, input.userHash)) {
+      throw new IdentityVerificationError();
+    }
+    const contact = await this.deps.db.transaction(async tx => {
+      const contacts = new MessengerContactRepo(tx);
+      const signedIn = await contacts.upsert({
+        ...project,
+        externalUserId: input.userId,
+        name: input.name ?? null,
+        email: input.email ?? null,
+        traits: input.traits ?? {},
+        lastContext: input.context ?? {},
+        lastSeenAt: now,
+      });
+      const guest =
+        input.guestToken === undefined
+          ? undefined
+          : await contacts.findGuest(project.projectId, sessionTokenHash(input.guestToken));
+      if (guest !== undefined && guest.blockedAt === null) {
+        await contacts.mergeGuest(guest.id, signedIn.id);
+      }
+      return signedIn;
+    });
+    return { contact };
+  }
+
+  /** Someone not signed in, known by the email they left and their device's guest token. */
+  private async guestContact(
+    project: { workspaceId: string; projectId: string },
+    input: GuestSessionInput,
+    areGuestsAllowed: boolean,
+    now: Date,
+  ): Promise<{ contact: ContactRow; guestToken?: string }> {
+    if (!areGuestsAllowed) {
+      throw new GuestsNotAllowedError();
+    }
+    const contacts = new MessengerContactRepo(this.deps.db);
+    const returning =
+      input.guestToken === undefined
+        ? undefined
+        : await contacts.findGuest(project.projectId, sessionTokenHash(input.guestToken));
+    const details = { email: input.email, name: input.name ?? null, lastContext: input.context ?? {}, lastSeenAt: now };
+    if (returning !== undefined) {
+      return { contact: await contacts.refreshGuest(returning.id, details) };
+    }
+    const { token, hash } = newGuestToken();
+    const contact = await contacts.insertGuest({ ...project, ...details, guestTokenHash: hash });
+    return { contact, guestToken: token };
+  }
+
   /** Verify the app's signature on the user id, refresh the contact, and issue a session. */
   async createSession(
     project: { workspaceId: string; projectId: string },
     input: MessengerSessionInput,
   ): Promise<MessengerSessionDto> {
-    const { identitySecret, categories } = await this.deps.settings.withSecret(project.workspaceId, project.projectId);
-    if (!isUserHashValid(identitySecret, input.userId, input.userHash)) {
-      throw new IdentityVerificationError();
-    }
+    const settings = await this.deps.settings.withSecret(project.workspaceId, project.projectId);
     const now = this.now();
-    const contacts = new MessengerContactRepo(this.deps.db);
-    const contact = await contacts.upsert({
-      ...project,
-      externalUserId: input.userId,
-      name: input.name ?? null,
-      email: input.email ?? null,
-      traits: input.traits ?? {},
-      lastContext: input.context ?? {},
-      lastSeenAt: now,
-    });
+    const { contact, guestToken } =
+      'guest' in input
+        ? await this.guestContact(project, input, settings.allowGuests, now)
+        : await this.identifiedContact(project, input, settings.identitySecret, now);
     if (contact.blockedAt !== null) {
       throw new ContactBlockedError();
     }
     const { token, hash } = newSessionToken();
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
-    await contacts.insertSession({
+    await new MessengerContactRepo(this.deps.db).insertSession({
       workspaceId: project.workspaceId,
       contactId: contact.id,
       tokenHash: hash,
       expiresAt,
     });
-    return { sessionToken: token, expiresAt: expiresAt.toISOString(), contactId: contact.id, categories };
+    return {
+      sessionToken: token,
+      expiresAt: expiresAt.toISOString(),
+      contactId: contact.id,
+      categories: settings.categories,
+      ...(guestToken !== undefined && { guestToken }),
+    };
   }
 
   /** The contact a session token speaks for, or undefined (unknown, revoked or expired). */

@@ -5,6 +5,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const SESSION_PREFIX = 'mms_';
+const GUEST_PREFIX = 'mmg_';
 
 /** A new identity secret: 32 random bytes, hex. */
 export const newIdentitySecret = (): string => randomBytes(32).toString('hex');
@@ -33,3 +34,11 @@ export const isSessionToken = (token: string): boolean => token.startsWith(SESSI
 
 /** The SecretBox AAD binding a sealed identity secret to its project. */
 export const identitySecretAad = (projectId: string): string => `messenger-identity:${projectId}`;
+
+/** A guest's device token (`mmg_` + 32 random bytes) and the hash to store. It finds the
+ * same guest again on that device; it is the guest's only credential. */
+export function newGuestToken(): { token: string; hash: string } {
+  // eslint-disable-next-line unicorn/prefer-uint8array-base64 -- Node 22 has no Uint8Array#toBase64
+  const token = `${GUEST_PREFIX}${randomBytes(32).toString('base64url')}`;
+  return { token, hash: sessionTokenHash(token) };
+}

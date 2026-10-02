@@ -34,7 +34,9 @@ export class MessengerSettingsService {
   /** The settings without the secret, or undefined when the messenger is off. */
   async get(workspaceId: string, projectId: string) {
     const row = await new MessengerSettingsRepo(this.deps.db).find(workspaceId, projectId);
-    return row === undefined ? undefined : { categories: row.categories, updatedAt: row.updatedAt };
+    return row === undefined
+      ? undefined
+      : { categories: row.categories, allowGuests: row.allowGuests, updatedAt: row.updatedAt };
   }
 
   /** Turn the messenger on. Returns the identity secret, the only time it is shown. */
@@ -89,11 +91,28 @@ export class MessengerSettingsService {
     return { categories: row.categories };
   }
 
+  /** Let people who aren't signed in write (they leave an email), or stop them. Audited. */
+  async setAllowGuests(workspaceId: string, projectId: string, actorUserId: string, areGuestsAllowed: boolean) {
+    await this.require(workspaceId, projectId);
+    const row = await new MessengerSettingsRepo(this.deps.db).update(workspaceId, projectId, {
+      allowGuests: areGuestsAllowed,
+    });
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.messengerGuestsChanged,
+      subjectType: 'project',
+      subjectId: projectId,
+      payload: { allowGuests: areGuestsAllowed },
+    });
+    return { allowGuests: row.allowGuests };
+  }
+
   /** The settings with the identity secret opened (for verifying user hashes). */
   async withSecret(workspaceId: string, projectId: string) {
     const row = await this.require(workspaceId, projectId);
     return {
       categories: row.categories,
+      allowGuests: row.allowGuests,
       identitySecret: this.deps.box().open(row.identitySecretSealed, identitySecretAad(projectId)),
     };
   }

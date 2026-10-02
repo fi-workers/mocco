@@ -161,6 +161,9 @@ function Conversations({ workspaceId, projectId, categories }: Props & { categor
                   {conversation.category === null ? null : (
                     <StatusBadge tone={Tones.neutral}>{labelOf(conversation.category)}</StatusBadge>
                   )}
+                  {conversation.contact.externalUserId === null ? (
+                    <StatusBadge tone={Tones.neutral}>Guest</StatusBadge>
+                  ) : null}
                 </span>
                 <span className="truncate text-sm text-muted-foreground">{conversation.preview}</span>
               </span>
@@ -175,7 +178,41 @@ function Conversations({ workspaceId, projectId, categories }: Props & { categor
   );
 }
 
-function Settings({ workspaceId, projectId, categories }: Props & { categories: readonly MessengerCategory[] }) {
+function GuestToggle({ workspaceId, projectId, isAllowed }: Props & { isAllowed: boolean }) {
+  const utils = trpc.useUtils();
+  const change = trpc.messenger.setAllowGuests.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.settings.invalidate();
+    },
+  });
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isAllowed}
+          disabled={change.isPending}
+          onChange={event => {
+            change.mutate({ workspaceId, projectId, allowGuests: event.target.checked });
+          }}
+        />
+        Let people who aren&apos;t signed in write
+      </label>
+      <p className="max-w-prose text-xs text-muted-foreground">
+        They leave an email so you can reach them, and see your replies on the same device. If they sign in later on it,
+        what they wrote moves to their account.
+      </p>
+      {change.error ? <p className="text-xs text-destructive">{errorMessage(change.error)}</p> : null}
+    </div>
+  );
+}
+
+function Settings({
+  workspaceId,
+  projectId,
+  categories,
+  areGuestsAllowed,
+}: Props & { categories: readonly MessengerCategory[]; areGuestsAllowed: boolean }) {
   const utils = trpc.useUtils();
   const [drafts, setDrafts] = useState(categories.map(category => category.label));
   const [newLabel, setNewLabel] = useState('');
@@ -200,6 +237,7 @@ function Settings({ workspaceId, projectId, categories }: Props & { categories: 
   return (
     <section className="flex flex-col gap-4">
       <h2 className="text-sm font-medium">Settings</h2>
+      <GuestToggle workspaceId={workspaceId} projectId={projectId} isAllowed={areGuestsAllowed} />
       <form
         aria-label="Categories"
         className="flex flex-col gap-2"
@@ -313,6 +351,7 @@ export default function Inbox({ workspaceId, projectId }: Props) {
         workspaceId={workspaceId}
         projectId={projectId}
         categories={settings.categories}
+        areGuestsAllowed={settings.allowGuests}
       />
     </div>
   );

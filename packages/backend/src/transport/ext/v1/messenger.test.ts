@@ -37,6 +37,8 @@ import type { V1Env } from '@backend/transport/ext/v1/middleware';
 
 const BASE = 'https://www.mocco.test/api/ext/v1/messenger';
 
+const jsonOf = async (response: Response) => (await response.json()) as Record<string, string>;
+
 describe('/v1/messenger (pglite)', () => {
   let t: TestDb;
   let app: Hono<V1Env>;
@@ -78,6 +80,15 @@ describe('/v1/messenger (pglite)', () => {
       body: { category: 'bug', body, clientMessageId, context: { appVersion: '3.8.0', build: '412', platform: 'ios' } },
     });
 
+  const guestSession = async (body: Record<string, unknown>, ip = '203.0.113.7') =>
+    await app.fetch(
+      new Request(`${BASE}/sessions`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ guest: true, ...body }),
+      }),
+    );
+
   beforeEach(async () => {
     t = await createTestDb();
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
@@ -108,7 +119,8 @@ describe('/v1/messenger (pglite)', () => {
       '/v1',
       createV1Routes({
         apiKeys,
-        limiter: new MemoryRateLimiter(),
+        // A fixed clock: a run that crosses a window boundary would reset the counts.
+        limiter: new MemoryRateLimiter(() => new Date('2026-10-02T10:00:30Z')),
         messenger: { contacts: messenger.contactMessenger, push: messenger.messengerPush },
       }),
     );
@@ -337,6 +349,80 @@ describe('/v1/messenger (pglite)', () => {
     await expect(
       withoutStorage.contactMessenger.createAttachment(principal, { contentType: 'image/png', sizeBytes: 8 }),
     ).rejects.toThrow(/object storage isn't configured/u);
+  });
+
+  describe('guests', () => {
+    it('takes guests only when the project allows them, and an email is required', async () => {
+      const refused = await guestSession({ email: 'guest@example.com' });
+      await messenger.messengerSettings.setAllowGuests(workspaceId, projectId, operatorId, true);
+      const noEmail = await guestSession({});
+      const opened = await guestSession({ email: 'guest@example.com', name: 'Guest' });
+      const session = await jsonOf(opened);
+      const started = await start(session.sessionToken ?? '');
+
+      expect([refused.status, noEmail.status, opened.status, started.status]).toEqual([403, 400, 201, 201]);
+      expect(session.guestToken).toMatch(/^mmg_/u);
+      const conversationId = (started.body as unknown as { conversation: { id: string } }).conversation.id;
+      const { contact } = await messenger.inbox.get(workspaceId, projectId, conversationId);
+      expect(contact).toMatchObject({ externalUserId: null, email: 'guest@example.com', name: 'Guest' });
+      expect(published.at(-1)).toMatchObject({ payload: { message: { title: 'New message from Guest' } } });
+    });
+
+    it('finds a returning guest by their device token, and keeps devices apart', async () => {
+      await messenger.messengerSettings.setAllowGuests(workspaceId, projectId, operatorId, true);
+      const first = await jsonOf(await guestSession({ email: 'guest@example.com' }));
+      await start(first.sessionToken ?? '');
+      const again = await jsonOf(await guestSession({ email: 'new@example.com', guestToken: first.guestToken }));
+      const otherDevice = await jsonOf(await guestSession({ email: 'guest@example.com' }));
+      const listed = await call('GET', '/conversations', { token: again.sessionToken });
+      const otherList = await call('GET', '/conversations', { token: otherDevice.sessionToken });
+
+      expect(again.contactId).toBe(first.contactId);
+      expect(again.guestToken).toBeUndefined();
+      expect(otherDevice.contactId).not.toBe(first.contactId);
+      expect((listed.body as unknown as { conversations: unknown[] }).conversations).toHaveLength(1);
+      expect(otherList.body).toEqual({ conversations: [] });
+      const { contact } = await messenger.inbox.get(
+        workspaceId,
+        projectId,
+        (listed.body as unknown as { conversations: { id: string }[] }).conversations[0]?.id ?? '',
+      );
+      expect(contact.email).toBe('new@example.com');
+    });
+
+    it('moves what a guest wrote to their account when they sign in on that device', async () => {
+      await messenger.messengerSettings.setAllowGuests(workspaceId, projectId, operatorId, true);
+      const guest = await jsonOf(await guestSession({ email: 'guest@example.com' }));
+      await start(guest.sessionToken ?? '', 'Asked before signing in');
+      const signedIn = await call('POST', '/sessions', {
+        token: key,
+        body: { userId: 'u9', userHash: userHashOf(secret, 'u9'), guestToken: guest.guestToken },
+      });
+      const signedInToken = (signedIn.body as unknown as { sessionToken: string }).sessionToken;
+      const listed = await call('GET', '/conversations', { token: signedInToken });
+      const oldGuest = await call('GET', '/conversations', { token: guest.sessionToken });
+      const reused = await guestSession({ email: 'guest@example.com', guestToken: guest.guestToken });
+
+      expect(signedIn.status).toBe(201);
+      expect(listed.body).toMatchObject({ conversations: [{ preview: 'Asked before signing in' }] });
+      expect(oldGuest.status).toBe(401);
+      const reusedSession = await jsonOf(reused);
+      expect(reusedSession.contactId).not.toBe(guest.contactId);
+    });
+
+    it('limits guest sessions per client IP', async () => {
+      await messenger.messengerSettings.setAllowGuests(workspaceId, projectId, operatorId, true);
+      const { limit } = MessengerRateLimits.guestSessions;
+      const statuses = await Array.from({ length: limit + 1 }).reduce<Promise<number[]>>(async (previous, _, index) => {
+        const done = await previous;
+        const answer = await guestSession({ email: `g${index}@example.com` }, '198.51.100.4');
+        return [...done, answer.status];
+      }, Promise.resolve([]));
+      const otherIp = await guestSession({ email: 'other@example.com' }, '198.51.100.5');
+
+      expect(statuses.slice(0, limit).every(status => status === 201)).toBe(true);
+      expect([statuses.at(-1), otherIp.status]).toEqual([429, 201]);
+    });
   });
 
   describe('reply push', () => {

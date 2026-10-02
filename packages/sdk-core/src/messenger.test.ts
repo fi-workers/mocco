@@ -39,6 +39,7 @@ function fakeMessenger() {
           expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
           contactId: 'c1',
           categories: [{ key: 'bug', label: 'Bug report' }],
+          ...(body?.guest === true && body.guestToken === undefined && { guestToken: 'mmg_device-token-0123456789' }),
         },
         201,
       );
@@ -315,6 +316,41 @@ describe('MessengerClient', () => {
     expect(messengerConversationIdOf({ mocco: 'messenger', conversationId: 'c1' })).toBe('c1');
     expect(messengerConversationIdOf({ type: 'promo' })).toBeUndefined();
     expect(messengerConversationIdOf(null)).toBeUndefined();
+  });
+
+  it('writes as a guest, keeps the guest on the device, and hands it over on sign-in', async () => {
+    const server = fakeMessenger();
+    const storage = memoryStorage();
+    const user: { current: typeof identity | null } = { current: null };
+    const options = { storage, identity: async () => await Promise.resolve(user.current) };
+    const client = clientFor(server, options);
+
+    await client.refresh();
+    expect(client.getState()).toMatchObject({ status: 'signed_out', isGuest: false });
+    await client.continueAsGuest({ email: 'guest@example.com' });
+    expect(client.getState()).toMatchObject({ status: 'ready', isGuest: true });
+
+    // The session expired: a new launch reopens the same guest with the device token.
+    const stored = JSON.parse(storage.items.values().next().value ?? '{}') as Record<string, unknown>;
+    storage.items.set(
+      storage.items.keys().next().value ?? '',
+      JSON.stringify({ ...stored, expiresAt: '2000-01-01T00:00:00Z' }),
+    );
+    await clientFor(server, options).refresh();
+    user.current = identity;
+    await clientFor(server, options).refresh();
+
+    const sessions = server.calls.filter(call => call.path === '/sessions').map(call => call.body);
+    expect(sessions).toEqual([
+      { guest: true, email: 'guest@example.com', context: expect.any(Object) },
+      {
+        guest: true,
+        email: 'guest@example.com',
+        guestToken: 'mmg_device-token-0123456789',
+        context: expect.any(Object),
+      },
+      { ...identity, guestToken: 'mmg_device-token-0123456789', context: expect.any(Object) },
+    ]);
   });
 
   it('refuses a secret key', () => {

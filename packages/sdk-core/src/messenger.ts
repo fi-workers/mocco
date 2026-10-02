@@ -21,7 +21,13 @@ import type {
 } from './wire';
 
 /** Who the user is, as the app's server signed them (`signIdentity` in @mocco/node). */
-export type MessengerIdentity = Omit<MessengerSessionRequest, 'context'>;
+export interface MessengerIdentity {
+  userId: string;
+  userHash: string;
+  name?: string;
+  email?: string;
+  traits?: Record<string, string | number | boolean>;
+}
 
 /** The part of AsyncStorage (or localStorage) the client uses to keep its session. */
 export interface MessengerStorage {
@@ -49,8 +55,10 @@ export interface MessengerClientOptions {
 }
 
 export interface MessengerState {
-  /** `signed_out` until `identity` returns a user. */
+  /** `signed_out` until `identity` returns a user or `continueAsGuest` is called. */
   status: 'idle' | 'loading' | 'ready' | 'signed_out' | 'error';
+  /** Writing as a guest (not signed in), known by the email they left. */
+  isGuest: boolean;
   conversations: MessengerConversation[];
   categories: MessengerCategory[];
   /** Conversations where the team has replied since the user last read. */
@@ -61,11 +69,16 @@ export interface MessengerState {
 }
 
 interface StoredSession {
-  userId: string;
+  /** null for a guest. */
+  userId: string | null;
   token: string;
   expiresAt: string;
   categories: MessengerCategory[];
+  /** A guest's device token and the details they left, to reopen their session. */
+  guest?: { token: string; email: string; name?: string };
 }
+
+const isFresh = (session: StoredSession) => Date.parse(session.expiresAt) > Date.now() + 60_000;
 
 const MESSENGER_PATH = '/messenger';
 const STORAGE_KEY = 'mocco-messenger:session:v1';
@@ -105,6 +118,7 @@ export function messengerConversationIdOf(data: unknown): string | undefined {
 
 const initialState: MessengerState = {
   status: 'idle',
+  isGuest: false,
   conversations: [],
   categories: [],
   unreadCount: 0,
@@ -182,37 +196,72 @@ export class MessengerClient {
   }
 
   /** A fresh session from the app's signed identity, or null when signed out. */
-  private async openSession(): Promise<StoredSession | null> {
-    const identity = await this.options.identity();
-    if (identity === null) {
-      this.session = null;
-      await this.writeStored(null);
-      this.setState({ ...initialState, status: 'signed_out' });
-      return null;
-    }
-    const stored = await this.readStored();
-    if (stored !== null && stored.userId === identity.userId && Date.parse(stored.expiresAt) > Date.now() + 60_000) {
-      this.session = stored;
-      return stored;
-    }
-    const body: MessengerSessionRequest = {
-      ...identity,
-      ...(this.options.context !== undefined && { context: this.options.context() }),
-    };
-    const created = await this.send<MessengerSessionResponse>('POST', '/sessions', {
-      body,
+  private async createSession(body: MessengerSessionRequest): Promise<MessengerSessionResponse> {
+    return await this.send<MessengerSessionResponse>('POST', '/sessions', {
+      body: { ...body, ...(this.options.context !== undefined && { context: this.options.context() }) },
       authorization: this.options.publishableKey,
     });
-    const session: StoredSession = {
-      userId: identity.userId,
+  }
+
+  private async keep(session: StoredSession): Promise<StoredSession> {
+    this.session = session;
+    await this.writeStored(session);
+    this.setState({ categories: session.categories, isGuest: session.userId === null });
+    return session;
+  }
+
+  /**
+   * A session for the signed-in user (moving what this device wrote as a guest to them),
+   * else the device's guest session, else none (`signed_out`).
+   */
+  private async openSession(): Promise<StoredSession | null> {
+    const identity = await this.options.identity();
+    const stored = await this.readStored();
+    if (identity !== null) {
+      if (stored !== null && stored.userId === identity.userId && isFresh(stored)) {
+        return await this.keep(stored);
+      }
+      const created = await this.createSession({
+        ...identity,
+        ...(stored?.guest !== undefined && { guestToken: stored.guest.token }),
+      });
+      return await this.keep({
+        userId: identity.userId,
+        token: created.sessionToken,
+        expiresAt: created.expiresAt,
+        categories: created.categories,
+      });
+    }
+    if (stored?.guest !== undefined) {
+      if (isFresh(stored)) {
+        return await this.keep(stored);
+      }
+      return await this.openGuest(stored.guest);
+    }
+    this.session = null;
+    await this.writeStored(null);
+    this.setState({ ...initialState, status: 'signed_out' });
+    return null;
+  }
+
+  private async openGuest(guest: { token?: string; email: string; name?: string }): Promise<StoredSession> {
+    const created = await this.createSession({
+      guest: true,
+      email: guest.email,
+      ...(guest.name !== undefined && { name: guest.name }),
+      ...(guest.token !== undefined && { guestToken: guest.token }),
+    });
+    return await this.keep({
+      userId: null,
       token: created.sessionToken,
       expiresAt: created.expiresAt,
       categories: created.categories,
-    };
-    this.session = session;
-    await this.writeStored(session);
-    this.setState({ categories: created.categories });
-    return session;
+      guest: {
+        token: created.guestToken ?? guest.token ?? '',
+        email: guest.email,
+        ...(guest.name !== undefined && { name: guest.name }),
+      },
+    });
   }
 
   /** The session, opening one at most once at a time. */
@@ -501,6 +550,17 @@ export class MessengerClient {
       // eslint-disable-next-line no-void -- runs in the background; tick() never rejects
       void this.tick();
     }
+  }
+
+  /**
+   * Write without signing in (when the app allows guests): `email` is where the team can
+   * reach them. The device keeps the guest, and signing in later moves what they wrote
+   * to their account.
+   */
+  async continueAsGuest(input: { email: string; name?: string }): Promise<void> {
+    const stored = await this.readStored();
+    await this.openGuest({ ...input, ...(stored?.guest !== undefined && { token: stored.guest.token }) });
+    await this.refresh();
   }
 
   /**

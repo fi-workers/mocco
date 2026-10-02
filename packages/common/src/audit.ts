@@ -61,6 +61,7 @@ export const AuditActions = {
   messengerSecretRotated: 'messenger.secret.rotated',
   messengerCategoriesChanged: 'messenger.categories.changed',
   messengerContactBlocked: 'messenger.contact.blocked',
+  messengerGuestsChanged: 'messenger.guests.changed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

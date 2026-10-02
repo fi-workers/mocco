@@ -73,15 +73,19 @@ export interface MessengerContext {
   sdkVersion?: string;
 }
 
-/** `POST /v1/messenger/sessions`: the app's user, signed by the app's server. */
-export interface MessengerSessionRequest {
-  userId: string;
-  userHash: string;
-  name?: string;
-  email?: string;
-  traits?: Record<string, string | number | boolean>;
-  context?: MessengerContext;
-}
+/** `POST /v1/messenger/sessions`: the app's user, signed by the app's server, or a guest. */
+export type MessengerSessionRequest =
+  | {
+      userId: string;
+      userHash: string;
+      name?: string;
+      email?: string;
+      traits?: Record<string, string | number | boolean>;
+      /** This device's guest token: what they wrote as a guest moves to them. */
+      guestToken?: string;
+      context?: MessengerContext;
+    }
+  | { guest: true; email: string; name?: string; guestToken?: string; context?: MessengerContext };
 
 export interface MessengerCategory {
   key: string;
@@ -93,6 +97,8 @@ export interface MessengerSessionResponse {
   expiresAt: string;
   contactId: string;
   categories: MessengerCategory[];
+  /** For a guest: the device token to keep. */
+  guestToken?: string;
 }
 
 /** A conversation as its user sees it. */

@@ -185,6 +185,24 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.
 
+### People who aren't signed in
+
+To let anyone contact you, including people who haven't signed in, turn on **Let people who aren't signed in write** in the inbox settings. They leave an email so you can reach them. In the app, when the messenger's state is `signed_out`, ask for an email and call `continueAsGuest`:
+
+```tsx
+const { status } = useMessengerState();
+const messenger = useMessenger();
+
+if (status === 'signed_out') {
+  // show an email field, then:
+  await messenger.continueAsGuest({ email, name });
+}
+```
+
+The device remembers the guest, so they see your replies the next time they open the app. If they sign in later on the same device, what they wrote moves to their account. In the inbox a guest's conversation is marked **Guest**, with **Not signed in** and their email beside it. Mocco doesn't email them for you yet; reply in the app, or write to the email they left.
+
+![A guest's conversation: the "Not signed in" badge and the email they left](./images/messenger-guest.png)
+
 ## 6. Answer from the inbox
 
 The **Inbox** tab lists open conversations, newest activity first, with unread ones marked. **Closed** lists the rest. The inbox checks for new messages every few seconds while it is open.

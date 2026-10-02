@@ -101,16 +101,35 @@ export const contactTraitsSchema = z
     message: `At most ${MessengerLimits.traitsMax} traits`,
   });
 
-/** `POST /v1/messenger/sessions`: the app's user, signed by the app's server. */
-export const messengerSessionInputSchema = z.object({
+/** A guest's device token, returned when a guest first writes; send it back to be found again. */
+const guestTokenSchema = z.string().regex(/^mmg_[A-Za-z0-9_-]{20,}$/u);
+
+/** `POST /v1/messenger/sessions` for a signed-in user, signed by the app's server. With
+ * the device's `guestToken`, what they wrote as a guest moves to their account. */
+export const identifiedSessionInputSchema = z.object({
   userId: z.string().min(1).max(MessengerLimits.externalUserIdMax),
   /** Hex HMAC-SHA256 of `userId` with the project's messenger identity secret. */
   userHash: z.string().regex(/^[0-9a-f]{64}$/u),
   name: z.string().trim().max(120).optional(),
   email: z.email().max(320).optional(),
   traits: contactTraitsSchema.optional(),
+  guestToken: guestTokenSchema.optional(),
   context: messengerContextSchema.optional(),
 });
+
+/** `POST /v1/messenger/sessions` for someone not signed in (when the project allows
+ * guests): an email to be reached at is required. */
+export const guestSessionInputSchema = z.object({
+  guest: z.literal(true),
+  email: z.email().max(320),
+  name: z.string().trim().max(120).optional(),
+  guestToken: guestTokenSchema.optional(),
+  context: messengerContextSchema.optional(),
+});
+
+export const messengerSessionInputSchema = z.union([identifiedSessionInputSchema, guestSessionInputSchema]);
+export type IdentifiedSessionInput = z.infer<typeof identifiedSessionInputSchema>;
+export type GuestSessionInput = z.infer<typeof guestSessionInputSchema>;
 export type MessengerSessionInput = z.infer<typeof messengerSessionInputSchema>;
 
 const bodySchema = z.string().trim().min(1).max(MessengerLimits.bodyMax);
@@ -168,6 +187,8 @@ export const messengerSessionSchema = z.object({
   expiresAt: z.iso.datetime(),
   contactId: z.uuid(),
   categories: z.array(messengerCategorySchema),
+  /** For a guest: the device token to keep and send back next time. */
+  guestToken: z.string().optional(),
 });
 export type MessengerSessionDto = z.infer<typeof messengerSessionSchema>;
 

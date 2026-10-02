@@ -20,6 +20,7 @@ export const ProblemCodes = {
   uploadRejected: 'upload_rejected',
   identityNotVerified: 'identity_not_verified',
   contactBlocked: 'contact_blocked',
+  guestsNotAllowed: 'guests_not_allowed',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

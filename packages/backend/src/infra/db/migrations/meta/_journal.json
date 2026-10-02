@@ -281,6 +281,13 @@
       "when": 1790926126744,
       "tag": "0039_legal_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790929164574,
+      "tag": "0040_sour_blackheart",
+      "breakpoints": true
     }
   ]
 }
