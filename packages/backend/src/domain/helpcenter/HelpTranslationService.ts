@@ -9,13 +9,16 @@ import { contentHashOf } from '@backend/domain/helpcenter/content';
 import { HelpNodeNotFoundError, HelpNothingToPublishError } from '@backend/domain/helpcenter/errors';
 import { translateHelpArticle } from '@backend/domain/helpcenter/jobs';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
+import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
+import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { TranslationRejectedError } from '@backend/domain/helpcenter/translate/Translator';
 import { structureProblem } from '@backend/domain/helpcenter/translate/validate';
 
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { HelpArticleRow } from '@backend/domain/helpcenter/repos/article.repo';
+import type { HelpNode } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -58,6 +61,57 @@ export class HelpTranslationService {
       { dedupeKey: `${articleId}:${locale}`, workspaceId },
     );
     queue.kick(job.id);
+  }
+
+  /**
+   * Translate the titles of an article's section and collection into `locale`, when they
+   * have none yet or were renamed since. Titles are short, so they skip the structure
+   * check; a failure leaves the source title showing.
+   */
+  private async translateNodeTitles(
+    translator: Translator,
+    target: { workspaceId: string; projectId: string; sectionId: string; sourceLocale: string; locale: string },
+  ): Promise<void> {
+    const { workspaceId, locale } = target;
+    const found = await new HelpTreeRepo(this.deps.db).findSection(workspaceId, target.projectId, target.sectionId);
+    if (found === undefined) {
+      return;
+    }
+    const repo = new HelpNodeTranslationRepo(this.deps.db);
+    const existing = await repo.inLocale(workspaceId, locale, {
+      collectionIds: [found.collection.id],
+      sectionIds: [found.section.id],
+    });
+    const nodes: { node: HelpNode; title: string; current: string | undefined }[] = [
+      {
+        node: { collectionId: found.collection.id },
+        title: found.collection.title,
+        current: existing.find(row => row.collectionId === found.collection.id)?.sourceTitle,
+      },
+      {
+        node: { sectionId: found.section.id },
+        title: found.section.title,
+        current: existing.find(row => row.sectionId === found.section.id)?.sourceTitle,
+      },
+    ];
+    await Promise.all(
+      nodes.map(async ({ node, title, current }) => {
+        if (current === title) {
+          return;
+        }
+        try {
+          const translated = await translator.translate({
+            sourceLocale: target.sourceLocale,
+            targetLocale: locale,
+            title,
+            body: '',
+          });
+          await repo.upsert({ workspaceId, locale, title: translated.title, sourceTitle: title, ...node });
+        } catch {
+          // The source title keeps showing; the next article translated here tries again.
+        }
+      }),
+    );
   }
 
   /** Whether this deployment translates (an LLM is configured). */
@@ -129,6 +183,13 @@ export class HelpTranslationService {
         revisionId: revision.id,
         sourceHash: source.contentHash,
         lastError: null,
+      });
+      await this.translateNodeTitles(translator, {
+        workspaceId,
+        projectId: article.projectId,
+        sectionId: article.sectionId,
+        sourceLocale: site.sourceLocale,
+        locale,
       });
     } catch (error) {
       if (!(error instanceof TranslationRejectedError)) {
