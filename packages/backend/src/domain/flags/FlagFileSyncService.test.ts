@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
+import { RepoManagedFlagError } from '@backend/domain/flags/errors';
 import { FlagFileSyncService } from '@backend/domain/flags/FlagFileSyncService';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
@@ -69,6 +70,10 @@ describe('FlagFileSyncService (pglite)', () => {
   const syncStates = async () => {
     const rows = await domain.flags.fileSyncs(workspaceId, projectId);
     return rows.map(row => row.state);
+  };
+  const versionOf = async (environmentId: string) => {
+    const environments = await domain.flags.listEnvironments(workspaceId, projectId);
+    return environments.find(environment => environment.id === environmentId)?.currentVersion ?? 0;
   };
   const pendingOf = async (environmentId: string) =>
     await new FlagChangesetRepo(t.db).findPendingFromRepo(workspaceId, environmentId, repoId);
@@ -220,6 +225,36 @@ describe('FlagFileSyncService (pglite)', () => {
     await sync.syncPush(push('d2'));
 
     expect(await configOf(staging)).toMatchObject({ killed: true, defaultVariant: 'off' });
+  });
+
+  it('makes repo-managed flags read-only in the console, except the kill switch', async () => {
+    files.set('f1', FILE('on'));
+    await sync.syncPush(push('f1'));
+    const currentVersion = await versionOf(staging);
+    const edit = async () =>
+      await domain.flags.applyChangeset(workspaceId, projectId, releaser, {
+        environmentId: staging,
+        baseVersion: currentVersion,
+        ops: [{ op: 'set_enabled', flagKey: 'checkout', enabled: false }],
+        reason: null,
+      });
+
+    await expect(edit()).rejects.toBeInstanceOf(RepoManagedFlagError);
+    await expect(
+      domain.flags.setClientVisible(workspaceId, projectId, releaser, { flagKey: 'checkout', clientVisible: true }),
+    ).rejects.toBeInstanceOf(RepoManagedFlagError);
+    await domain.flagKillSwitch.kill(workspaceId, projectId, releaser, {
+      environmentId: staging,
+      flagKey: 'checkout',
+      reason: 'incident',
+    });
+    await domain.flags.applyChangeset(workspaceId, projectId, releaser, {
+      environmentId: staging,
+      baseVersion: await versionOf(staging),
+      ops: [{ op: 'restore', flagKey: 'checkout' }],
+      reason: null,
+    });
+    expect(await configOf(staging)).toMatchObject({ killed: false });
   });
 
   it('leaves a repo without the file, or not linked to the project, alone', async () => {

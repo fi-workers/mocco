@@ -32,7 +32,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
     'troubleshooting',
   ],
   [GuideSets.ota]: ['overview', 'force-update', 'pipeline', 'gate-eas-update', 'gate-codepush', 'gate-hot-updater'],
-  [GuideSets.flags]: ['quickstart'],
+  [GuideSets.flags]: ['quickstart', 'browsers-and-apps', 'flags-as-code', 'stale-flags'],
   [GuideSets.messenger]: ['contact-us'],
   [GuideSets.help]: ['help-center'],
 };

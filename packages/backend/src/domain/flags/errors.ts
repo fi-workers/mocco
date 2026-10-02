@@ -105,3 +105,11 @@ export class StaleFindingNotFoundError extends NotFoundError {
     this.name = 'StaleFindingNotFoundError';
   }
 }
+
+/** A console change to a flag `.mocco/flags.yml` manages (#145) — FORBIDDEN. Its kill switch stays available. */
+export class RepoManagedFlagError extends ForbiddenError {
+  constructor(flagKey: string, options?: ErrorOptions) {
+    super(`"${flagKey}" is managed by .mocco/flags.yml; change it in the repository`, options);
+    this.name = 'RepoManagedFlagError';
+  }
+}
