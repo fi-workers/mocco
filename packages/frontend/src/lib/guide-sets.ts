@@ -9,6 +9,7 @@ export const GuideSets = {
   ota: 'ota',
   flags: 'flags',
   messenger: 'messenger',
+  help: 'help',
 } as const;
 export type GuideSet = (typeof GuideSets)[keyof typeof GuideSets];
 export const guideSetSchema = z.enum([
@@ -18,6 +19,7 @@ export const guideSetSchema = z.enum([
   GuideSets.ota,
   GuideSets.flags,
   GuideSets.messenger,
+  GuideSets.help,
 ]);
 
 /** The side-nav heading of each set. */
@@ -28,4 +30,5 @@ export const guideSetLabels: Record<GuideSet, string> = {
   [GuideSets.ota]: 'OTA and force update',
   [GuideSets.flags]: 'Feature flags',
   [GuideSets.messenger]: 'Messenger',
+  [GuideSets.help]: 'Help center',
 };
