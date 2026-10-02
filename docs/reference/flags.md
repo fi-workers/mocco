@@ -27,6 +27,8 @@ code_refs:
   - packages/backend/src/domain/flags/ofrep.ts
   - packages/sdk-flags-core/src/evaluate.ts
   - packages/sdk-openfeature-server/src/openfeature-server.ts
+  - packages/sdk-openfeature-web/src/openfeature-web.ts
+  - packages/sdk-openfeature-react-native/src/openfeature-react-native.ts
 ---
 
 # Feature flags
@@ -131,7 +133,7 @@ A disabled flag is emitted as `state: DISABLED`. A killed flag is emitted as `EN
 
 ## Serving server SDKs
 
-`GET /v1/flags/ruleset` returns the current snapshot of the environment the key is bound to. It needs a secret key with `flags:read`. A ruleset holds every targeting rule, so publishable keys (403) and secret keys sent from a browser (401) are refused; browsers and apps will use OFREP (#143).
+`GET /v1/flags/ruleset` returns the current snapshot of the environment the key is bound to. It needs a secret key with `flags:read`. A ruleset holds every targeting rule, so publishable keys (403) and secret keys sent from a browser (401) are refused; browsers and apps use [OFREP](#ofrep-browsers-and-apps).
 
 ```http
 GET /v1/flags/ruleset
@@ -169,7 +171,16 @@ Until the realtime foundation (#123) exists, each connection checks the environm
 - **Errors.** `PARSE_ERROR` or `GENERAL` per flag. A body without an object `context` is `400 INVALID_CONTEXT`.
 - **Caching.** The bulk response's `ETag` hashes the snapshot ETag, the key's audience and the context, so `If-None-Match` with the same context answers `304`. The response also lists `eventStreams` (the tokenized stream URL).
 
-`transport/ext/v1/ofrep.test.ts` validates responses against OFREP's OpenAPI schemas (vendored in `domain/flags/testing/ofrep-openapi-schemas.json`, with one documented fix: the published `oneOf` for a value accepts no value at all). It also checks that segment keys and rules never appear, and runs the generic `@openfeature/ofrep-web-provider` against the routes.
+`transport/ext/v1/ofrep.test.ts` validates responses against OFREP's OpenAPI schemas (vendored in `domain/flags/testing/ofrep-openapi-schemas.json`, with one documented fix: the published `oneOf` for a value accepts no value at all). It also checks that segment keys and rules never appear, and runs the generic `@openfeature/ofrep-web-provider` and both Mocco client providers against the routes.
+
+From a web page, a publishable key also needs the page's origin among the project's Web apps' origins (`project.setAppWebOrigins`, **Edit origins** on the project overview); the ext route handler passes CORS preflights (`OPTIONS`) to the Hono app, which answers them for any origin and checks the origin on the real request.
+
+### Client providers
+
+- **`@mocco/openfeature-web`**: `MoccoWebProvider({ publishableKey, baseUrl? })` is OpenFeature's `OFREPWebProvider` with Mocco's base URL and key header, a 60 s polling fallback, and the upstream defaults: the advertised SSE stream, a refresh when the tab becomes visible, and the last evaluation in `localStorage` (`local-cache-first`). Any other `OFREPWebProvider` option passes through. It refuses a key that isn't publishable.
+- **`@mocco/openfeature-react-native`**: `MoccoReactNativeProvider({ publishableKey, storage?, appState?, EventSource?, pollIntervalMs?, cacheTtlMs? })` is Mocco's own client provider, because the upstream one needs `localStorage` and page visibility. It keeps the last bulk evaluation per context in `storage` (AsyncStorage; key `mocco-flags:v1:<hash of base URL, key and context>`, 30-day TTL) and initializes from it at once when present, then refreshes in the background (`PROVIDER_STALE` while Mocco is unreachable). It refreshes when `appState` turns `active`, polls only while active (default 60 s, ETag), and with an `EventSource` (`react-native-sse`) connects to the advertised stream; on a stream error it re-fetches without `If-None-Match` after a backoff (1 s doubling to 30 s), since only a full answer carries a fresh stream URL. A disabled flag resolves to the caller's default with `DISABLED`.
+
+Both work with `@openfeature/react-sdk`; the Vercel Flags SDK uses the server provider through `@flags-sdk/openfeature` ([customer guide](../customer/flags/browsers-and-apps.md)).
 
 A key is bound to one environment when it is created: `flagEnvironmentId` is required with `flags:read` and refused without it ([public API](./public-api.md#keys)).
 

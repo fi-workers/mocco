@@ -43,7 +43,9 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
+    "@mocco/openfeature-react-native": "workspace:*",
     "@mocco/openfeature-server": "workspace:*",
+    "@mocco/openfeature-web": "workspace:*",
     "@mocco/sdk-core": "workspace:*",
     "@openfeature/core": "1.12.0",
     "@openfeature/flagd-core": "4.0.1",

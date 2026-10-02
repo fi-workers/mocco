@@ -54,7 +54,8 @@ Unique violations reach the service as the DB-layer `UniqueConstraintError` (`in
 
 ## tRPC surface
 
-- `project.create | list | get | update | setArchived | addApp | listApps | removeApp | linkRepo | unlinkRepo | listRepos` — every procedure takes `workspaceId`; project procedures also take `projectId`.
+- `project.create | list | get | update | setArchived | addApp | listApps | setAppWebOrigins | removeApp | linkRepo | unlinkRepo | listRepos` — every procedure takes `workspaceId`; project procedures also take `projectId`.
+- A Web app's `webOrigins` decide which pages may use the project's publishable keys ([public API](./public-api.md)). Each is a bare origin (`webOriginSchema`: `http(s)://host[:port]`, no path, normalized), set by `addApp` or replaced, deduplicated, by `setAppWebOrigins`; the console edits them under **Edit origins**.
 - `product.list | enable | disable` — workspace-level.
 
 ### Procedures for product routers

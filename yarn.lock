@@ -2477,7 +2477,9 @@ __metadata:
     "@electric-sql/pglite": "npm:0.5.4"
     "@mocco/common": "workspace:*"
     "@mocco/flags-core": "workspace:*"
+    "@mocco/openfeature-react-native": "workspace:*"
     "@mocco/openfeature-server": "workspace:*"
+    "@mocco/openfeature-web": "workspace:*"
     "@mocco/sdk-core": "workspace:*"
     "@octokit/app": "npm:16.1.2"
     "@octokit/plugin-retry": "npm:8.1.0"
@@ -2607,6 +2609,22 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@mocco/openfeature-react-native@workspace:*, @mocco/openfeature-react-native@workspace:packages/sdk-openfeature-react-native":
+  version: 0.0.0-use.local
+  resolution: "@mocco/openfeature-react-native@workspace:packages/sdk-openfeature-react-native"
+  dependencies:
+    "@mocco/sdk-core": "workspace:*"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/web-sdk": "npm:1.10.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+  peerDependencies:
+    "@openfeature/web-sdk": ^1.10.0
+  languageName: unknown
+  linkType: soft
+
 "@mocco/openfeature-server@workspace:*, @mocco/openfeature-server@workspace:packages/sdk-openfeature-server":
   version: 0.0.0-use.local
   resolution: "@mocco/openfeature-server@workspace:packages/sdk-openfeature-server"
@@ -2622,6 +2640,23 @@ __metadata:
     vitest: "npm:4.1.9"
   peerDependencies:
     "@openfeature/server-sdk": ^1.23.0
+  languageName: unknown
+  linkType: soft
+
+"@mocco/openfeature-web@workspace:*, @mocco/openfeature-web@workspace:packages/sdk-openfeature-web":
+  version: 0.0.0-use.local
+  resolution: "@mocco/openfeature-web@workspace:packages/sdk-openfeature-web"
+  dependencies:
+    "@mocco/sdk-core": "workspace:*"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/ofrep-web-provider": "npm:^0.4.3"
+    "@openfeature/web-sdk": "npm:1.10.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+  peerDependencies:
+    "@openfeature/web-sdk": ^1.10.0
   languageName: unknown
   linkType: soft
 
@@ -3124,7 +3159,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openfeature/ofrep-web-provider@npm:0.4.3":
+"@openfeature/ofrep-web-provider@npm:0.4.3, @openfeature/ofrep-web-provider@npm:^0.4.3":
   version: 0.4.3
   resolution: "@openfeature/ofrep-web-provider@npm:0.4.3"
   dependencies:

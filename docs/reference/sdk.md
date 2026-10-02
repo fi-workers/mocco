@@ -20,6 +20,8 @@ code_refs:
   - packages/backend/src/transport/ext/v1/sdk-contract.test.ts
   - packages/sdk-flags-core/src/flags-core.ts
   - packages/sdk-openfeature-server/src/openfeature-server.ts
+  - packages/sdk-openfeature-web/src/openfeature-web.ts
+  - packages/sdk-openfeature-react-native/src/openfeature-react-native.ts
   - .github/workflows/publish.yml
 ---
 
@@ -35,11 +37,13 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 | `@mocco/react-native` | React Native apps | `createMoccoNative`; **`/ota`**: `<MoccoOta appId clientId />` (reports `launched` / `emergency_launch`), `reportOtaError()`, `useMoccoUpdate()` (status, `isMandatory`, `applyNow`; downloads in the background and applies a mandatory update when the app returns to the foreground); the Expo config plugin (`"plugins": [["@mocco/react-native", { "manifestUrl", "channel" }]]`). Peers: `expo-updates`, `react`, `react-native` (no native code) |
 | `@mocco/flags-core` | servers, flagd-compatible tooling | Local evaluation of a flags ruleset: `parseRuleset`, `resolveFlag` / `resolveTyped`, the restricted JsonLogic subset, `fractional` bucketing (`murmur3`), `sem_ver`. No dependencies, ~4.7 KB gzipped; see [Feature flags](./flags.md#sdks) |
 | `@mocco/openfeature-server` | Node servers | `MoccoProvider({ secretKey, changeDetection?, pollIntervalMs?, bootstrap? })`, an OpenFeature server provider over flags-core. It listens to `GET /v1/flags/stream` and fetches `GET /v1/flags/ruleset` (ETag) on each change, polling as a fallback (`changeDetection: 'poll'` polls only), and serves the last good ruleset as STALE when Mocco is down. Peer: `@openfeature/server-sdk` |
+| `@mocco/openfeature-web` | browsers | `MoccoWebProvider({ publishableKey })`: OpenFeature's OFREP web provider with Mocco's defaults (Mocco evaluates; the change stream, a 60 s polling fallback, a refresh on tab focus, the last evaluation in `localStorage`). Dependency: `@openfeature/ofrep-web-provider`; peer: `@openfeature/web-sdk` |
+| `@mocco/openfeature-react-native` | React Native apps | `MoccoReactNativeProvider({ publishableKey, storage, appState, EventSource })`: OFREP evaluation with the last answers kept in AsyncStorage (served at launch and offline), a refresh on returning to the foreground, polling while active, and the change stream through `react-native-sse`. The app passes those in, so the package has no native or React Native dependency. Peer: `@openfeature/web-sdk` |
 | `@mocco/ota-cli` | CI | the `mocco-ota` bin (`init`, `publish`, `promote`, `pause`, `rollback`); `@mocco/common` is bundled in |
 
 ## Building and developing
 
-- `yarn sdk:build` builds them in dependency order with tsup: ESM + CJS + `.d.ts` for sdk-core, node, react-native, flags-core and openfeature-server; ESM for js; an ESM bin for the CLI. `dist/` is git-ignored; `verify` builds before linting.
+- `yarn sdk:build` builds them in dependency order with tsup: ESM + CJS + `.d.ts` for sdk-core, node, react-native, flags-core and the three OpenFeature providers; ESM for js; an ESM bin for the CLI. `dist/` is git-ignored; `verify` builds before linting.
 - Development needs no build: each package's `exports` start with an `@mocco/source` condition pointing at `src/`. TypeScript resolves it through `customConditions` in `tsconfig.base.json`, and each package's `vitest.config.ts` through `resolve.conditions` (the backend's too, for its end-to-end SDK tests such as `flags-sdk.test.ts`). Published consumers never use that condition.
 - The SDKs ship **types only** for the wire format (`packages/sdk-core/src/wire.ts`): no zod in a bundle. `transport/ext/v1/sdk-contract.test.ts` asserts with `expectTypeOf` that they match the route schemas in `@mocco/common` (what the SDK sends is what the route accepts; what the route answers is what the SDK types). Add an assertion whenever an SDK calls a new route.
 - `@mocco/react-native` declares the slice of its peers' types it uses (`src/types/peer-modules.d.ts`) so `react-native`'s type tree stays out of the repo.

@@ -72,12 +72,34 @@ export const projectAppSchema = z.object({
 });
 export type ProjectAppDto = z.infer<typeof projectAppSchema>;
 
+/** The origin of a URL that is only a scheme and host (and port), else null. */
+function originOf(value: string): string | null {
+  try {
+    const url = new URL(value);
+    const isBare = url.pathname === '/' && url.search === '' && url.hash === '' && url.username === '';
+    return isBare ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A web origin: `https://host[:port]` (or `http://` for local development), no path. */
+export const webOriginSchema = z
+  .url({ protocol: /^https?$/u })
+  .refine(value => originOf(value) !== null, {
+    message: 'An origin is a scheme and host only, like https://app.acme.com',
+  })
+  .transform(value => originOf(value) ?? value);
+
+/** The sites whose pages may use the project's publishable keys. */
+export const webOriginsSchema = z.array(webOriginSchema).max(20);
+
 export const projectAppCreateInputSchema = z.object({
   platform: appPlatformSchema,
   name: z.string().min(1).max(80),
   bundleId: z.string().min(1).max(255).optional(),
   storeAppId: z.string().min(1).max(255).optional(),
-  webOrigins: z.array(z.url()).max(20).optional(),
+  webOrigins: webOriginsSchema.optional(),
 });
 export type ProjectAppCreateInput = z.infer<typeof projectAppCreateInputSchema>;
 

@@ -5,6 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
+import { MoccoReactNativeProvider } from '@mocco/openfeature-react-native';
+import { MoccoWebProvider } from '@mocco/openfeature-web';
 import { OFREPWebProvider } from '@openfeature/ofrep-web-provider';
 import { OpenFeature } from '@openfeature/web-sdk';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -60,6 +62,9 @@ describe('OFREP /v1/ofrep/v1/evaluate (pglite)', () => {
         body: JSON.stringify(body),
       }),
     );
+
+  /** The routes as a `fetch`, for SDK providers. */
+  const appFetch = async (input: RequestInfo | URL, init?: RequestInit) => await app.fetch(new Request(input, init));
 
   beforeEach(async () => {
     t = await createTestDb();
@@ -254,5 +259,59 @@ describe('OFREP /v1/ofrep/v1/evaluate (pglite)', () => {
       value: false,
       errorCode: 'FLAG_NOT_FOUND',
     });
+  });
+
+  it('works with the Mocco web and React Native providers; the stored copy holds resolved values only', async () => {
+    const stored = new Map<string, string>();
+    const providers = {
+      web: new MoccoWebProvider({
+        publishableKey: publishable,
+        baseUrl: BASE,
+        fetchImplementation: appFetch,
+        cacheMode: 'disabled',
+        changeDetection: 'none',
+        disableVisibilityRefresh: true,
+      }),
+      app: new MoccoReactNativeProvider({
+        publishableKey: publishable,
+        baseUrl: BASE,
+        fetch: appFetch,
+        pollIntervalMs: 0,
+        storage: {
+          getItem: async key => await Promise.resolve(stored.get(key) ?? null),
+          setItem: async (key, value) => {
+            stored.set(key, value);
+            await Promise.resolve();
+          },
+        },
+      }),
+    };
+    const results = await Promise.all(
+      Object.entries(providers).map(async ([name, provider]) => {
+        const domain = `${name}-${randomUUID()}`;
+        await OpenFeature.setContext(domain, { targetingKey: 'u1', plan: 'pro' });
+        await OpenFeature.setProviderAndWait(domain, provider);
+        const client = OpenFeature.getClient(domain);
+        return [
+          client.getBooleanDetails('new-checkout', false),
+          client.getStringValue('checkout-copy', 'fallback'),
+          client.getBooleanDetails('internal-ops', false).errorCode,
+        ];
+      }),
+    );
+
+    const expected = [
+      expect.objectContaining({ value: true, variant: 'on', reason: 'TARGETING_MATCH' }),
+      'Pay',
+      'FLAG_NOT_FOUND',
+    ];
+    expect(results).toEqual([expected, expected]);
+    const [copy = ''] = stored.values();
+    expect(stored.size).toBe(1);
+    expect(copy).toContain('new-checkout');
+    const leaked = [SECRET_SEGMENT_KEY, 'targeting', 'fractional', 'internal-ops', 'mocco.offVariant'].filter(text =>
+      copy.includes(text),
+    );
+    expect(leaked).toEqual([]);
   });
 });

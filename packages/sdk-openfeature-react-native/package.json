@@ -1,0 +1,50 @@
+{
+  "name": "@mocco/openfeature-react-native",
+  "version": "0.0.0",
+  "description": "An OpenFeature provider for Mocco feature flags in React Native: OFREP evaluation, an offline copy in AsyncStorage, foreground refresh and the change stream.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/openfeature-react-native.ts",
+      "types": "./dist/openfeature-react-native.d.ts",
+      "import": "./dist/openfeature-react-native.js",
+      "require": "./dist/openfeature-react-native.cjs"
+    }
+  },
+  "main": "./dist/openfeature-react-native.cjs",
+  "module": "./dist/openfeature-react-native.js",
+  "types": "./dist/openfeature-react-native.d.ts",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mocco/sdk-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@openfeature/web-sdk": "^1.10.0"
+  },
+  "devDependencies": {
+    "@openfeature/core": "1.12.0",
+    "@openfeature/web-sdk": "1.10.0",
+    "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
