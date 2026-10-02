@@ -41,6 +41,8 @@ export const apiKeySchema = z.object({
   /** `mk_pub_…abcd`: the prefix and the last four characters, for recognising a key. */
   hint: z.string(),
   scopes: z.array(apiScopeSchema),
+  /** The flag environment a `flags:read` key reads (ADR 0024: one key, one ruleset). */
+  flagEnvironmentId: z.uuid().nullable(),
   createdByUserId: z.uuid().nullable(),
   createdAt: z.date(),
   lastUsedAt: z.date().nullable(),
@@ -55,6 +57,8 @@ export const apiKeyCreateInputSchema = z
     name: z.string().min(1).max(80),
     scopes: z.array(apiScopeSchema).min(1).max(20),
     expiresAt: z.date().nullable().default(null),
+    /** Required with `flags:read`, refused without it. */
+    flagEnvironmentId: z.uuid().nullable().default(null),
   })
   .refine(
     input => input.kind === ApiKeyKinds.secret || input.scopes.every(scope => PUBLISHABLE_SCOPES.includes(scope)),
@@ -62,7 +66,11 @@ export const apiKeyCreateInputSchema = z
       message: 'A publishable key can only hold client scopes',
       path: ['scopes'],
     },
-  );
+  )
+  .refine(input => input.scopes.includes(ApiScopes.flagsRead) === (input.flagEnvironmentId !== null), {
+    message: 'A key with flags:read reads exactly one flag environment; other keys name none',
+    path: ['flagEnvironmentId'],
+  });
 export type ApiKeyCreateInput = z.infer<typeof apiKeyCreateInputSchema>;
 
 /** `GET /v1/whoami`: the project and scopes a key speaks for. */

@@ -2,6 +2,7 @@
 import { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import { ApiKeyRepo } from '@backend/domain/apikey/repos/api-key.repo';
 import { getAudit } from '@backend/domain/audit/instance';
+import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { getDb } from '@backend/infra/db/client';
 
@@ -10,7 +11,15 @@ import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { Db } from '@backend/infra/db/types';
 
 export function createApiKeyService(db: Db, deps: { projects: ProjectService; audit: AuditService }): ApiKeyService {
-  return new ApiKeyService({ keys: new ApiKeyRepo(db), ...deps });
+  const environments = new FlagEnvironmentRepo(db);
+  return new ApiKeyService({
+    keys: new ApiKeyRepo(db),
+    flagEnvironments: {
+      exists: async (workspaceId, projectId, environmentId) =>
+        (await environments.find(workspaceId, projectId, environmentId)) !== undefined,
+    },
+    ...deps,
+  });
 }
 
 const state: { apiKeys?: ApiKeyService } = {};

@@ -3,7 +3,9 @@
 // their slices land; each takes a key with `requireKey` and scopes by `c.var.principal`.
 import { Hono } from 'hono';
 
+import { createFlagServingRoutes } from '@backend/transport/ext/v1/flags';
 import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
+import { createOfrepRoutes } from '@backend/transport/ext/v1/ofrep';
 import { createOtaServingRoutes } from '@backend/transport/ext/v1/ota-manifest';
 import { createOtaUploadRoutes } from '@backend/transport/ext/v1/ota-uploads';
 
@@ -23,6 +25,11 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   if (deps.ota !== undefined) {
     app.route('/ota', createOtaServingRoutes(deps, deps.ota));
     app.route('/ota', createOtaUploadRoutes(deps, deps.ota));
+  }
+
+  if (deps.flags !== undefined) {
+    app.route('/flags', createFlagServingRoutes(deps, deps.flags));
+    app.route('/ofrep/v1', createOfrepRoutes(deps, deps.flags));
   }
 
   return app;

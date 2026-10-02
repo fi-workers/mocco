@@ -11,6 +11,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
+import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
@@ -21,6 +22,8 @@ export interface V1Deps {
   limiter: RateLimiter;
   /** OTA from CI and for devices; undefined leaves /v1/ota unmounted. */
   ota?: OtaUploadDeps & OtaServingDeps;
+  /** The flags ruleset for server SDKs; undefined leaves /v1/flags unmounted. */
+  flags?: FlagServingDeps;
 }
 
 export interface V1Env {
@@ -29,7 +32,7 @@ export interface V1Env {
 
 const BEARER = 'Bearer ';
 const KEY_HEADER = 'x-mocco-key';
-const ALLOWED_HEADERS = 'authorization, content-type, x-mocco-key, idempotency-key';
+const ALLOWED_HEADERS = 'authorization, content-type, x-mocco-key, idempotency-key, if-none-match, last-event-id';
 const EXPOSED_HEADERS = 'ratelimit-limit, ratelimit-remaining, ratelimit-reset, etag';
 
 /** Per-key limits by kind; per-IP limits for routes without a key. */

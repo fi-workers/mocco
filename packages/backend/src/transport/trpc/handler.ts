@@ -18,7 +18,9 @@ import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
+import type { KillSwitchService } from '@backend/domain/flags/KillSwitchService';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
@@ -64,6 +66,8 @@ export interface TrpcDeps extends Services {
   otaTrustPolicies: TrustPolicyService;
   otaMetrics: OtaMetricsService;
   flags: FlagService;
+  flagGovernance: FlagGovernanceService;
+  flagKillSwitch: KillSwitchService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -108,6 +112,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         otaTrustPolicies: deps.otaTrustPolicies,
         otaMetrics: deps.otaMetrics,
         flags: deps.flags,
+        flagGovernance: deps.flagGovernance,
+        flagKillSwitch: deps.flagKillSwitch,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -146,6 +152,8 @@ export function productionServices(): TrpcDeps {
     otaTrustPolicies: getOtaDomain().otaTrustPolicies,
     otaMetrics: getOtaDomain().otaMetrics,
     flags: getFlagsDomain().flags,
+    flagGovernance: getFlagsDomain().flagGovernance,
+    flagKillSwitch: getFlagsDomain().flagKillSwitch,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

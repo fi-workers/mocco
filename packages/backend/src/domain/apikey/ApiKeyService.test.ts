@@ -52,8 +52,9 @@ describe('ApiKeyService (pglite)', () => {
     await service.create(workspaceId, projectId, userId, {
       kind,
       name: `${kind} key`,
-      scopes: [ApiScopes.flagsRead],
+      scopes: [ApiScopes.otaRead],
       expiresAt,
+      flagEnvironmentId: null,
     });
 
   it('returns the token once, stores only its hash, and audits the creation', async () => {
@@ -76,7 +77,7 @@ describe('ApiKeyService (pglite)', () => {
 
     expect(check).toMatchObject({
       ok: true,
-      principal: { workspaceId, projectId, kind: ApiKeyKinds.secret, scopes: [ApiScopes.flagsRead] },
+      principal: { workspaceId, projectId, kind: ApiKeyKinds.secret, scopes: [ApiScopes.otaRead] },
     });
     const [row] = await t.db.select().from(apiKeys);
     expect(row?.lastUsedAt).not.toBeNull();

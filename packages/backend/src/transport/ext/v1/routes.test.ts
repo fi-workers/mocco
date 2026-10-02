@@ -45,13 +45,14 @@ describe('/v1 routes (pglite)', () => {
 
   const keyOf = async (
     kind: (typeof ApiKeyKinds)[keyof typeof ApiKeyKinds],
-    scopes: ApiScope[] = [ApiScopes.flagsRead],
+    scopes: ApiScope[] = [ApiScopes.otaRead],
   ) => {
     const { token } = await apiKeys.create(workspaceId, projectId, userId, {
       kind,
       name: kind,
       scopes,
       expiresAt: null,
+      flagEnvironmentId: null,
     });
     return token;
   };
@@ -93,7 +94,7 @@ describe('/v1 routes (pglite)', () => {
     const response = await call('/whoami', { authorization: `Bearer ${await keyOf(ApiKeyKinds.secret)}` });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ projectId, kind: ApiKeyKinds.secret, scopes: [ApiScopes.flagsRead] });
+    expect(await response.json()).toEqual({ projectId, kind: ApiKeyKinds.secret, scopes: [ApiScopes.otaRead] });
     expect(response.headers.get('ratelimit-limit')).toBe('1200');
   });
 
@@ -120,7 +121,7 @@ describe('/v1 routes (pglite)', () => {
   });
 
   it('enforces scopes and key kinds per route', async () => {
-    const readOnly = await keyOf(ApiKeyKinds.secret, [ApiScopes.flagsRead]);
+    const readOnly = await keyOf(ApiKeyKinds.secret, [ApiScopes.otaRead]);
     const writer = await keyOf(ApiKeyKinds.secret, [ApiScopes.otaWrite]);
     const publishable = await keyOf(ApiKeyKinds.publishable);
 

@@ -5,7 +5,7 @@ import { apiKeyCreateInputSchema, apiKeySchema } from '@mocco/common/apikey';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { ForbiddenError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ForbiddenError, NotFoundError } from '@backend/domain/errors';
 import { protectedProjectProcedure } from '@backend/transport/trpc/project-procedures';
 import { router } from '@backend/transport/trpc/trpc';
 
@@ -17,6 +17,9 @@ const rethrowKeyError = (cause: unknown): void => {
   }
   if (cause instanceof ForbiddenError) {
     throw new TRPCError({ code: 'FORBIDDEN', message: cause.message, cause });
+  }
+  if (cause instanceof BadRequestError) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: cause.message, cause });
   }
 };
 

@@ -20,6 +20,21 @@ export class FlagRepo {
     }
   }
 
+  async setClientVisible(workspaceId: string, projectId: string, key: string, isClientVisible: boolean) {
+    const [row] = await this.db
+      .update(schema.flags)
+      .set({ clientVisible: isClientVisible })
+      .where(
+        and(
+          eq(schema.flags.workspaceId, workspaceId),
+          eq(schema.flags.projectId, projectId),
+          eq(schema.flags.key, key),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
   async listByProject(workspaceId: string, projectId: string) {
     return await this.db
       .select()

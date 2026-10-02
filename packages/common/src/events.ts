@@ -143,6 +143,15 @@ export const OtaEventTypes = {
   otaEmergencyLaunchSpike: 'ota.emergency_launch.spike',
 } as const;
 
+/** Feature flags: changesets to protected environments waiting for or decided by approval. */
+export const FlagEventTypes = {
+  flagChangesetRequested: 'flags.changeset.requested',
+  flagChangesetApplied: 'flags.changeset.applied',
+  flagChangesetRejected: 'flags.changeset.rejected',
+  /** A flag was killed: it serves its off variant everywhere in that environment. */
+  flagKilled: 'flags.flag.killed',
+} as const;
+
 /** A product event that, like an inbound one, carries its message rendered when it
  * happened, plus the flat facts rules filter on (`app`, `channel`, `release`). */
 export const renderedEventPayloadSchema = z.object({
@@ -157,11 +166,19 @@ export const otaEventPayloadSchemas = {
   [OtaEventTypes.otaEmergencyLaunchSpike]: renderedEventPayloadSchema,
 } as const;
 
+export const flagEventPayloadSchemas = {
+  [FlagEventTypes.flagChangesetRequested]: renderedEventPayloadSchema,
+  [FlagEventTypes.flagChangesetApplied]: renderedEventPayloadSchema,
+  [FlagEventTypes.flagChangesetRejected]: renderedEventPayloadSchema,
+  [FlagEventTypes.flagKilled]: renderedEventPayloadSchema,
+} as const;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
   ...InboundEventTypes,
   ...OtaEventTypes,
+  ...FlagEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
@@ -170,6 +187,7 @@ export const domainEventPayloadSchemas = {
   ...governanceEventPayloadSchemas,
   ...inboundEventPayloadSchemas,
   ...otaEventPayloadSchemas,
+  ...flagEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;
