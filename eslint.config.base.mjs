@@ -64,7 +64,25 @@ export function createBaseConfig({ tsconfigRootDir }) {
     {
       settings: {
         'import-x/resolver-next': [
-          createTypeScriptImportResolver({ alwaysTryTypes: true, project: ['packages/*/tsconfig.json'] }),
+          createTypeScriptImportResolver({
+            alwaysTryTypes: true,
+            project: ['packages/*/tsconfig.json'],
+            // Workspace SDKs resolve to their sources (their `@mocco/source` export
+            // condition), as in tsconfig's customConditions — no build needed to lint.
+            conditionNames: [
+              '@mocco/source',
+              'types',
+              'import',
+              'esm2020',
+              'es2020',
+              'es2015',
+              'require',
+              'node',
+              'node-addons',
+              'browser',
+              'default',
+            ],
+          }),
         ],
       },
     },
