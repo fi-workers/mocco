@@ -7,6 +7,7 @@ import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentia
 import { flagsRouter } from '@backend/transport/trpc/routers/flags';
 import { inboundRouter } from '@backend/transport/trpc/routers/inbound';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
+import { messengerRouter } from '@backend/transport/trpc/routers/messenger';
 import { notificationRouter } from '@backend/transport/trpc/routers/notification';
 import { otaRouter } from '@backend/transport/trpc/routers/ota';
 import { pipelineRouter } from '@backend/transport/trpc/routers/pipeline';
@@ -32,6 +33,7 @@ export const appRouter = router({
   product: productRouter,
   ota: otaRouter,
   flags: flagsRouter,
+  messenger: messengerRouter,
   apiKey: apiKeyRouter,
   inbound: inboundRouter,
   notification: notificationRouter,

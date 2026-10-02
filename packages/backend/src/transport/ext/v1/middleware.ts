@@ -12,6 +12,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
 import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
+import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
@@ -24,6 +25,8 @@ export interface V1Deps {
   ota?: OtaUploadDeps & OtaServingDeps;
   /** The flags ruleset for server SDKs; undefined leaves /v1/flags unmounted. */
   flags?: FlagServingDeps;
+  /** Conversations for the app's users (#95); undefined leaves /v1/messenger unmounted. */
+  messenger?: MessengerServingDeps;
 }
 
 export interface V1Env {
@@ -80,7 +83,8 @@ function rateLimitHeaders(rule: RateLimitRule, result: RateLimitResult, now: Dat
 }
 
 /** Consume one unit from `bucket`; a 429 problem when it's used up, else the headers to add. */
-async function limit(deps: V1Deps, bucket: string, rule: RateLimitRule) {
+/** Consume one request from `bucket`; `refused` is the 429 to answer when over the limit. */
+export async function limit(deps: V1Deps, bucket: string, rule: RateLimitRule) {
   const result = await deps.limiter.consume(bucket, rule);
   const headers = rateLimitHeaders(rule, result, new Date());
   if (!result.allowed) {

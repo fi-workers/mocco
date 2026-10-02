@@ -4,6 +4,7 @@ import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes, StaleKind
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
+import { AuthorKinds, ConversationStatuses, MessageVisibilities } from '@mocco/common/messenger';
 import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { OtaTools, PolicyDirections } from '@mocco/common/ota';
 import {
@@ -65,6 +66,13 @@ import type {
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
+import type {
+  AuthorKind,
+  ConversationStatus,
+  MessageVisibility,
+  MessengerCategory,
+  MessengerContext,
+} from '@mocco/common/messenger';
 import type {
   ChannelKind,
   ChannelStatus,
@@ -1801,6 +1809,174 @@ export const flagStaleFindings = pgTable(
       name: 'mocco_flag_stale_findings_flag_fk',
     }).onDelete('cascade'),
     check('mocco_flag_stale_findings_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(StaleKinds))})`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Messenger (#95): conversations between a project's signed-in users ("contacts") and
+// its team. One inbox per project: the same user on iOS, Android and web is one contact.
+// ─────────────────────────────────────────────────────────────
+
+/** A project's messenger: the identity secret its server signs user ids with, and the
+ * categories users pick from. */
+export const messengerSettings = pgTable(
+  'mocco_messenger_settings',
+  {
+    projectId: uuid('project_id').primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    // HMAC key for `userHash`; SecretBox-sealed (AAD = project id), never returned.
+    identitySecretSealed: text('identity_secret_sealed').notNull(),
+    categories: jsonb().$type<MessengerCategory[]>().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_messenger_settings_project_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A user of the project who has contacted the team, keyed by the app's own user id. */
+export const messengerContacts = pgTable(
+  'mocco_messenger_contacts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    externalUserId: text('external_user_id').notNull(),
+    name: text(),
+    email: text(),
+    traits: jsonb().$type<Record<string, string | number | boolean>>().notNull().default({}),
+    lastContext: jsonb('last_context').$type<MessengerContext>().notNull().default({}),
+    lastSeenAt: timestamp('last_seen_at').notNull(),
+    blockedAt: timestamp('blocked_at'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_messenger_contacts_project_user_uq').on(t.projectId, t.externalUserId),
+    unique('mocco_messenger_contacts_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_messenger_contacts_project_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A contact's session on one device: an opaque token, stored hashed. */
+export const messengerSessions = pgTable(
+  'mocco_messenger_sessions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    revokedAt: timestamp('revoked_at'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_messenger_sessions_token_uq').on(t.tokenHash),
+    foreignKey({
+      columns: [t.contactId, t.workspaceId],
+      foreignColumns: [messengerContacts.id, messengerContacts.workspaceId],
+      name: 'mocco_messenger_sessions_contact_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One conversation (a "contact us" request is one). `last_message_seq` allocates each
+ * message's number; the contact's and each operator's read position are seqs. */
+export const messengerConversations = pgTable(
+  'mocco_messenger_conversations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    status: text().$type<ConversationStatus>().notNull(),
+    category: text(),
+    lastMessageSeq: integer('last_message_seq').notNull().default(0),
+    lastMessageAt: timestamp('last_message_at').notNull(),
+    // The newest seq the team wrote publicly; drives the contact's unread state.
+    lastOperatorSeq: integer('last_operator_seq').notNull().default(0),
+    contactLastReadSeq: integer('contact_last_read_seq').notNull().default(0),
+    preview: text().notNull(),
+    contextAtOpen: jsonb('context_at_open').$type<MessengerContext>().notNull().default({}),
+    closedAt: timestamp('closed_at'),
+    createdAt,
+  },
+  t => [
+    unique('mocco_messenger_conversations_id_workspace_uq').on(t.id, t.workspaceId),
+    index('mocco_messenger_conversations_inbox_idx').on(t.workspaceId, t.projectId, t.status, t.lastMessageAt),
+    index('mocco_messenger_conversations_contact_idx').on(t.contactId, t.lastMessageAt),
+    foreignKey({
+      columns: [t.contactId, t.workspaceId],
+      foreignColumns: [messengerContacts.id, messengerContacts.workspaceId],
+      name: 'mocco_messenger_conversations_contact_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_messenger_conversations_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(ConversationStatuses))})`,
+    ),
+  ],
+);
+
+/** A message in a conversation, numbered by `seq`. Internal notes are never served to the contact. */
+export const messengerMessages = pgTable(
+  'mocco_messenger_messages',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    conversationId: uuid('conversation_id').notNull(),
+    seq: integer().notNull(),
+    authorKind: text('author_kind').$type<AuthorKind>().notNull(),
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    visibility: text().$type<MessageVisibility>().notNull(),
+    body: text().notNull(),
+    clientMessageId: text('client_message_id'),
+    context: jsonb().$type<MessengerContext>(),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_messenger_messages_conversation_seq_uq').on(t.conversationId, t.seq),
+    uniqueIndex('mocco_messenger_messages_conversation_client_uq').on(t.conversationId, t.clientMessageId),
+    foreignKey({
+      columns: [t.conversationId, t.workspaceId],
+      foreignColumns: [messengerConversations.id, messengerConversations.workspaceId],
+      name: 'mocco_messenger_messages_conversation_fk',
+    }).onDelete('cascade'),
+    check('mocco_messenger_messages_author_check', sql`${t.authorKind} IN (${sqlInList(Object.values(AuthorKinds))})`),
+    check(
+      'mocco_messenger_messages_visibility_check',
+      sql`${t.visibility} IN (${sqlInList(Object.values(MessageVisibilities))})`,
+    ),
+    // Internal notes come from the team only.
+    check('mocco_messenger_messages_internal_check', sql`${t.visibility} = 'public' OR ${t.authorKind} = 'operator'`),
+  ],
+);
+
+/** How far each team member has read a conversation. */
+export const messengerOperatorReads = pgTable(
+  'mocco_messenger_operator_reads',
+  {
+    conversationId: uuid('conversation_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull(),
+    lastReadSeq: integer('last_read_seq').notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.conversationId, t.userId], name: 'mocco_messenger_operator_reads_pk' }),
+    foreignKey({
+      columns: [t.conversationId, t.workspaceId],
+      foreignColumns: [messengerConversations.id, messengerConversations.workspaceId],
+      name: 'mocco_messenger_operator_reads_conversation_fk',
+    }).onDelete('cascade'),
   ],
 );
 

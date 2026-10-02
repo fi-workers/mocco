@@ -15,6 +15,7 @@
     "./inbound": "./src/inbound.ts",
     "./integration": "./src/integration.ts",
     "./jobs": "./src/jobs.ts",
+    "./messenger": "./src/messenger.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./notification": "./src/notification.ts",
     "./notification-activity": "./src/notification-activity.ts",

@@ -29,7 +29,7 @@ A key belongs to one project and has a kind:
 
 | Kind | Token | Where it lives | Scopes |
 |---|---|---|---|
-| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read` |
+| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed) |
 | Secret | `mk_sec_` + 32 base62 characters | Servers and CI | Any scope |
 
 The token is returned once, by `apiKey.create`, and only its SHA-256 is stored; the console shows `mk_sec_…abcd`. Keys are managed on the project's **API keys** tab (`/workspaces/{id}/p/{projectId}/api-keys`): pick the kind (publishable keys offer only client scopes), name it and choose scopes, copy the token from the one-time notice, and revoke with an inline confirmation. Owners and admins create and revoke keys (`apikey.created`, `apikey.revoked` in the audit log); members can list them. A key may expire (`expiresAt`), and its `lastUsedAt` is updated at most once a minute.
@@ -71,6 +71,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ping` | none | `{ "ok": true, "api": "v1" }` |
 | `GET /v1/whoami` | any | `{ projectId, kind, scopes }` |
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
+| `POST /v1/messenger/sessions` | `messenger:chat` | A session for a user the app's server signed (`userHash`); then `/v1/messenger/conversations…` with the `mms_` session token; see [Messenger](./messenger.md) |
 | `GET /v1/flags/stream` | `flags:read` key, or `?token=` from an OFREP response | OFREP event stream: `refetchEvaluation` events (`id` = version, `Last-Event-ID` resumes), pings every 25 s, closes after 240 s; see [Feature flags](./flags.md#change-stream) |
 | `POST /v1/flags/telemetry` | `flags:read` (publishable: client-visible flags only) | Aggregated evaluation counts `{ evaluations: [{ flag, variant, count, windowStart }] }` (≤ 500 entries); `202 { accepted, ignored }`; 300 a minute per key on top of the key's limit; see [Feature flags](./flags.md#evaluation-telemetry-and-stale-flags) |
 | `POST /v1/ofrep/v1/evaluate/flags` · `…/flags/{key}` | `flags:read` (publishable: client-visible flags only) | OFREP bulk / single evaluation for `{ context }`; bulk has an `ETag` (`If-None-Match` → `304`) and `eventStreams`; see [Feature flags](./flags.md#ofrep-browsers-and-apps) |

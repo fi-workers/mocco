@@ -154,6 +154,12 @@ export const FlagEventTypes = {
   flagStaleDigest: 'flags.stale.digest',
 } as const;
 
+/** Messenger (#95): a user started a conversation, or wrote again in one. */
+export const MessengerEventTypes = {
+  messengerConversationCreated: 'messenger.conversation.created',
+  messengerMessageReceived: 'messenger.message.received',
+} as const;
+
 /** A product event that, like an inbound one, carries its message rendered when it
  * happened, plus the flat facts rules filter on (`app`, `channel`, `release`). */
 export const renderedEventPayloadSchema = z.object({
@@ -176,12 +182,18 @@ export const flagEventPayloadSchemas = {
   [FlagEventTypes.flagStaleDigest]: renderedEventPayloadSchema,
 } as const;
 
+export const messengerEventPayloadSchemas = {
+  [MessengerEventTypes.messengerConversationCreated]: renderedEventPayloadSchema,
+  [MessengerEventTypes.messengerMessageReceived]: renderedEventPayloadSchema,
+} as const;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
   ...InboundEventTypes,
   ...OtaEventTypes,
   ...FlagEventTypes,
+  ...MessengerEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
@@ -191,6 +203,7 @@ export const domainEventPayloadSchemas = {
   ...inboundEventPayloadSchemas,
   ...otaEventPayloadSchemas,
   ...flagEventPayloadSchemas,
+  ...messengerEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;
