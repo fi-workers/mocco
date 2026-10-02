@@ -45,11 +45,17 @@ export const AuditActions = {
   otaChannelChangeFailed: 'ota.channel.change_failed',
   flagEnvironmentCreated: 'flag.environment.created',
   flagCreated: 'flag.created',
+  /** A flag's description, lifecycle, variants or owner changed by a `.mocco/flags.yml` sync (#145). */
+  flagDefinitionChanged: 'flag.definition.changed',
+  /** A `.mocco/flags.yml` sync ran on a commit (#145). */
+  flagFileSynced: 'flag.file.synced',
   flagChangesetApplied: 'flag.changeset.applied',
   flagChangesetProposed: 'flag.changeset.proposed',
   flagChangesetRejected: 'flag.changeset.rejected',
   flagChangesetConflicted: 'flag.changeset.conflicted',
   flagChangesetWithdrawn: 'flag.changeset.withdrawn',
+  /** A newer push of `.mocco/flags.yml` replaced a pending repo changeset (#145). */
+  flagChangesetSuperseded: 'flag.changeset.superseded',
   flagChangesetExpired: 'flag.changeset.expired',
   flagChangeGateChanged: 'flag.change_gate.changed',
   flagKilled: 'flag.killed',

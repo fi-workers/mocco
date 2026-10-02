@@ -16,8 +16,14 @@ const repoRef = z.object({ id: z.number(), name: z.string(), owner: z.object({ l
 
 export const pushEventSchema = z.object({
   ref: z.string(), // refs/heads/<branch>
+  /** The branch head after the push (all zeros when the branch was deleted). */
+  after: z.string().optional(),
   installation: z.object({ id: z.number() }),
   repository: repoRef,
+  /** Who pushed (git identity) and the GitHub account that did: proposers for a gate (#145). */
+  pusher: z.object({ name: z.string(), email: z.string().nullish() }).optional(),
+  sender: z.object({ id: z.number(), login: z.string() }).optional(),
+  head_commit: z.object({ id: z.string(), author: z.object({ name: z.string(), email: z.string() }) }).nullish(),
   commits: z.array(
     z.object({
       id: z.string(), // sha

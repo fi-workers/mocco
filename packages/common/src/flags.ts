@@ -27,6 +27,11 @@ export type FlagType = (typeof FlagTypes)[keyof typeof FlagTypes];
 export const FlagLifecycles = { temporary: 'temporary', permanent: 'permanent' } as const;
 export type FlagLifecycle = (typeof FlagLifecycles)[keyof typeof FlagLifecycles];
 
+/** Who owns a flag's definition and rules: the console, or `.mocco/flags.yml` (#145).
+ * A repo-managed flag is read-only in the console, except its kill switch. */
+export const FlagManagers = { ui: 'ui', repo: 'repo' } as const;
+export type FlagManager = (typeof FlagManagers)[keyof typeof FlagManagers];
+
 /** Where a changeset came from. */
 export const ChangesetSources = { ui: 'ui', repo: 'repo', api: 'api', kill: 'kill' } as const;
 export type ChangesetSource = (typeof ChangesetSources)[keyof typeof ChangesetSources];
@@ -283,6 +288,7 @@ export const flagSchema = z.object({
   lifecycle: z.enum([FlagLifecycles.temporary, FlagLifecycles.permanent]),
   /** Evaluated for publishable (browser and app) keys over OFREP; server keys see every flag. */
   clientVisible: z.boolean(),
+  managedBy: z.enum([FlagManagers.ui, FlagManagers.repo]),
   createdAt: z.date(),
 });
 export type FlagDto = z.infer<typeof flagSchema>;
@@ -369,6 +375,8 @@ export const changesetSchema = z.object({
   appliedVersion: z.number().nullable(),
   proposedByUserId: z.uuid().nullable(),
   reason: z.string().nullable(),
+  /** For a repo changeset: the commit of `.mocco/flags.yml` it came from. */
+  commitSha: z.string().nullable(),
   /** The approval request deciding it (protected environments only). */
   approvalRequestId: z.uuid().nullable(),
   /** The gate it was proposed under, pinned: a later gate edit doesn't change it. */
@@ -438,3 +446,26 @@ export const staleFindingSchema = z.object({
   dismissedUntil: z.date().nullable(),
 });
 export type StaleFindingDto = z.infer<typeof staleFindingSchema>;
+
+/** How a `.mocco/flags.yml` sync ended (#145). */
+export const FlagFileSyncStates = {
+  /** Every change applied (no environment it changed is protected). */
+  applied: 'applied',
+  /** Applied where unprotected; protected environments wait for approval. */
+  pending: 'pending_approval',
+  /** The file already matched the project. */
+  unchanged: 'unchanged',
+  /** The file was refused: nothing changed (see the issues). */
+  invalid: 'invalid',
+} as const;
+export type FlagFileSyncState = (typeof FlagFileSyncStates)[keyof typeof FlagFileSyncStates];
+
+/** One sync of a project's `.mocco/flags.yml` from a commit, as the console lists it. */
+export const flagFileSyncSchema = z.object({
+  id: z.uuid(),
+  commitSha: z.string(),
+  state: z.enum(Object.values(FlagFileSyncStates) as [FlagFileSyncState, ...FlagFileSyncState[]]),
+  issues: z.array(z.object({ path: z.string(), message: z.string(), line: z.number().optional() })),
+  createdAt: z.date(),
+});
+export type FlagFileSyncDto = z.infer<typeof flagFileSyncSchema>;

@@ -1,6 +1,14 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
-import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes, StaleKinds } from '@mocco/common/flags';
+import {
+  ChangesetSources,
+  ChangesetStates,
+  FlagFileSyncStates,
+  FlagLifecycles,
+  FlagManagers,
+  FlagTypes,
+  StaleKinds,
+} from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
 import { ArticleStatuses, RevisionKinds, TranslationStates } from '@mocco/common/help';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
@@ -50,7 +58,9 @@ import type {
   ChangeOp,
   ChangesetSource,
   ChangesetState,
+  FlagFileSyncState,
   FlagLifecycle,
+  FlagManager,
   FlagType,
   RolloutEntry,
   Rule,
@@ -1605,6 +1615,8 @@ export const flags = pgTable(
     // Whether publishable keys (browsers, apps) get this flag over OFREP; off by default so
     // internal flags can't be enumerated from a client.
     clientVisible: boolean('client_visible').notNull().default(false),
+    // `repo`: defined by `.mocco/flags.yml` (#145) and read-only in the console, except a kill.
+    managedBy: text('managed_by').$type<FlagManager>().notNull().default(FlagManagers.ui),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
   },
@@ -1618,6 +1630,7 @@ export const flags = pgTable(
     }).onDelete('cascade'),
     check('mocco_flags_type_check', sql`${t.type} IN (${sqlInList(Object.values(FlagTypes))})`),
     check('mocco_flags_lifecycle_check', sql`${t.lifecycle} IN (${sqlInList(Object.values(FlagLifecycles))})`),
+    check('mocco_flags_managed_by_check', sql`${t.managedBy} IN (${sqlInList(Object.values(FlagManagers))})`),
   ],
 );
 
@@ -1709,6 +1722,9 @@ export const flagChangesets = pgTable(
     appliedVersion: integer('applied_version'),
     proposedByUserId: uuid('proposed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     reason: text(),
+    // A repo changeset (#145): the repo and the commit of `.mocco/flags.yml` it came from.
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    commitSha: text('commit_sha'),
     // A protected environment's changeset: the approval request deciding it, the gate it
     // was proposed under (pinned) and when it stops waiting.
     approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
@@ -1723,6 +1739,10 @@ export const flagChangesets = pgTable(
       .on(t.expiresAt)
       .where(sql`${t.state} = 'pending'`),
     uniqueIndex('mocco_flag_changesets_applied_version_uq').on(t.environmentId, t.appliedVersion),
+    // A newer push supersedes the older one: at most one pending repo changeset per environment and repo.
+    uniqueIndex('mocco_flag_changesets_repo_pending_uq')
+      .on(t.environmentId, t.repoId)
+      .where(sql`${t.state} = 'pending' AND ${t.repoId} IS NOT NULL`),
     foreignKey({
       columns: [t.environmentId, t.workspaceId],
       foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
@@ -1731,6 +1751,31 @@ export const flagChangesets = pgTable(
     check('mocco_flag_changesets_state_check', sql`${t.state} IN (${sqlInList(Object.values(ChangesetStates))})`),
     check('mocco_flag_changesets_source_check', sql`${t.source} IN (${sqlInList(Object.values(ChangesetSources))})`),
     check('mocco_flag_changesets_applied_check', sql`(${t.state} = 'applied') = (${t.appliedVersion} IS NOT NULL)`),
+  ],
+);
+
+/** Each sync of a project's `.mocco/flags.yml` from a default-branch commit (#145): how
+ * it ended, and why a refused file was refused. */
+export const flagFileSyncs = pgTable(
+  'mocco_flag_file_syncs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    commitSha: text('commit_sha').notNull(),
+    state: text().$type<FlagFileSyncState>().notNull(),
+    issues: jsonb().$type<{ path: string; message: string; line?: number }[]>().notNull().default([]),
+    createdAt,
+  },
+  t => [
+    index('mocco_flag_file_syncs_project_idx').on(t.projectId, t.createdAt),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_flag_file_syncs_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_flag_file_syncs_state_check', sql`${t.state} IN (${sqlInList(Object.values(FlagFileSyncStates))})`),
   ],
 );
 

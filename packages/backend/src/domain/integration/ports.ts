@@ -48,6 +48,15 @@ export interface CommitSource {
   ): Promise<string | null>;
 }
 
+/** Any file of a repo at a commit (`.mocco/flags.yml`, #145), or null when it has none there. */
+export interface RepoFileSource {
+  getFileAtCommit(
+    ref: { externalAccountId: string; owner: string; name: string },
+    sha: string,
+    path: string,
+  ): Promise<string | null>;
+}
+
 /** Fires an out-of-band event at a provider repo to kick off external execution
  * (github: a `repository_dispatch`). The neutral seam the GitHub executor adapter
  * (domain/execution/executors/github) triggers through — so the executor never

@@ -20,7 +20,7 @@ import { errorSummary } from '@backend/domain/errors';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
-import { flagStreamTokensFromEnv, getFlagsDomain } from '@backend/domain/flags/instance';
+import { flagStreamTokensFromEnv, getFlagFiles, getFlagsDomain } from '@backend/domain/flags/instance';
 import { getHelpDomain } from '@backend/domain/helpcenter/instance';
 import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { getInbound } from '@backend/domain/inbound/instance';
@@ -389,7 +389,9 @@ export async function extHandler(request: Request): Promise<Response> {
     auth: services.auth,
     connection: integration?.connection,
     provider: integration?.provider,
-    commitSync: integration?.commitSync,
+    // Default-branch pushes also sync `.mocco/flags.yml` (#145).
+    // eslint-disable-next-line n/no-sync -- a false positive on the `commitSync` identifier
+    commitSync: integration?.commitSync.withFlagFiles(getFlagFiles(integration.provider)),
     deliveries: integration?.deliveries,
     runs: execution.runs,
     broker: getCredential().broker,

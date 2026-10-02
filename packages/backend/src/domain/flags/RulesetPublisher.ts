@@ -33,10 +33,13 @@ export interface ApplyChangesetInput {
   reason: string | null;
   /** An approved pending changeset to mark applied, instead of recording a new one. */
   pendingChangesetId?: string;
+  /** A repo changeset (#145): the repo and the commit of `.mocco/flags.yml`. */
+  repoId?: string;
+  commitSha?: string;
 }
 
 /** An environment's head state as the publisher reads it. */
-interface HeadState {
+export interface HeadState {
   flags: FlagRow[];
   configs: Map<string, FlagConfigState & { salt: string }>;
   segments: Map<string, SegmentDefinition>;
@@ -51,7 +54,8 @@ const configStateOf = (config: FlagConfigState): FlagConfigState => ({
   rollout: config.rollout,
 });
 
-async function readHead(db: Db, workspaceId: string, environment: FlagEnvironmentRow): Promise<HeadState> {
+/** An environment's flags, configs and segments as they are now. */
+export async function readHead(db: Db, workspaceId: string, environment: FlagEnvironmentRow): Promise<HeadState> {
   const [flags, rows, segments] = await Promise.all([
     new FlagRepo(db).listByProject(workspaceId, environment.projectId),
     new FlagConfigRepo(db).listForEnvironment(workspaceId, environment.id),
@@ -239,6 +243,8 @@ export class RulesetPublisher {
             appliedVersion: version,
             proposedByUserId: input.actorUserId,
             reason: input.reason,
+            repoId: input.repoId ?? null,
+            commitSha: input.commitSha ?? null,
             resolvedAt: now,
           })
         : await changesets.resolvePending(workspaceId, input.pendingChangesetId, ChangesetStates.applied, {

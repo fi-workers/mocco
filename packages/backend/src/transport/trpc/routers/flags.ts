@@ -7,6 +7,7 @@ import {
   ChangeOutcomes,
   changeOpSchema,
   changesetSchema,
+  flagFileSyncSchema,
   flagConfigSchema,
   flagEnvironmentCreateInputSchema,
   flagCreateInputSchema,
@@ -235,6 +236,12 @@ export const flagsRouter = router({
       const { workspaceId, projectId, ...change } = input;
       return await ctx.flagGovernance.setChangeGate(workspaceId, projectId, ctx.session.user.id, change);
     }),
+
+  /** The project's recent `.mocco/flags.yml` syncs, newest first: how each ended and why a file was refused. */
+  fileSyncs: flagsProcedure
+    .input(projectInput)
+    .output(z.object({ syncs: z.array(flagFileSyncSchema) }))
+    .query(async ({ ctx, input }) => ({ syncs: await ctx.flags.fileSyncs(input.workspaceId, input.projectId) })),
 
   history: flagsProcedure
     .input(environmentInput)

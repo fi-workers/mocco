@@ -4,6 +4,7 @@
 // can't change from the file, segments the rules name) and answers either a whole plan
 // or the issues, never a partial plan. A kill is not part of the desired state, so a
 // plan never kills or restores a flag.
+import { FlagManagers } from '@mocco/common/flags';
 import { offVariantOfFileFlag, variantsOfFileFlag, flagsFileSchema } from '@mocco/common/flags-file';
 
 import { canonicalize } from '@backend/domain/audit/chain';
@@ -13,7 +14,16 @@ import { MoccoConfigYamlError } from '@backend/domain/pipeline/errors';
 
 import type { EnvironmentState, FlagConfigState } from '@backend/domain/flags/apply-ops';
 import type { YamlDecoder } from '@backend/domain/pipeline/yaml/decode';
-import type { ChangeOp, Clause, FlagLifecycle, FlagType, RolloutEntry, Rule, Serve } from '@mocco/common/flags';
+import type {
+  ChangeOp,
+  Clause,
+  FlagLifecycle,
+  FlagManager,
+  FlagType,
+  RolloutEntry,
+  Rule,
+  Serve,
+} from '@mocco/common/flags';
 import type { FlagsFile, FlagsFileFlag } from '@mocco/common/flags-file';
 
 export interface FlagsFileIssue {
@@ -51,9 +61,6 @@ export function parseFlagsFile(source: string, decode: YamlDecoder): FlagsFilePa
         issues: parsed.error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message })),
       };
 }
-
-export const FlagManagers = { ui: 'ui', repo: 'repo' } as const;
-export type FlagManager = (typeof FlagManagers)[keyof typeof FlagManagers];
 
 /** A flag's project-level definition as it is now. */
 export interface HeadFlag {
