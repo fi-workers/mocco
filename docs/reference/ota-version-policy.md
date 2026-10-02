@@ -4,7 +4,7 @@ description: Per-store-app minimum, recommended and blocked versions; how each c
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-27
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [reference, ota, version-policy, force-update, approvals]
@@ -58,7 +58,7 @@ A policy belongs to one project app whose platform is `ios` or `android` (a stor
 
 - **Store-live attestation.** Raising a version floor requires `storeLiveAttested: true` (`StoreLiveAttestationRequiredError` otherwise). It is recorded with the change. The automatic check against the store replaces it once store sync exists.
 - **Optimistic concurrency.** Every apply writes `revision + 1` only if `revision` is unchanged. A direct change that loses the race gets `VersionPolicyConflictError`. An approval that finds the policy moved since the request is **not** applied; it is audited as `ota.version_policy.approval_stale`.
-- **History.** Every applied change is a row in `mocco_app_version_policy_changes` with `before`, `after`, `direction`, the actor, the reason, and the approval that applied it (if any). Each one also appends `ota.version_policy.changed` to the audit chain.
+- **History.** Every applied change is a row in `mocco_ota_version_policy_changes` with `before`, `after`, `direction`, the actor, the reason, and the approval that applied it (if any). Each one also appends `ota.version_policy.changed` to the audit chain.
 
 ## tRPC surface
 

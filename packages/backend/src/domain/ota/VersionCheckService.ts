@@ -1,11 +1,11 @@
 import { evaluateVersionPolicy, pickVersionMessage, VersionStatuses } from '@mocco/common/ota';
 import { AppPlatforms } from '@mocco/common/project';
 
-import type { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import type { VersionPolicyRepo } from '@backend/domain/ota/repos/version-policy.repo';
 import type { VersionCheckResponse } from '@mocco/common/ota';
 
 export interface VersionCheckServiceDeps {
-  policies: AppVersionPolicyRepo;
+  policies: VersionPolicyRepo;
 }
 
 /** The answer for an app with no policy (or an unknown app id). */

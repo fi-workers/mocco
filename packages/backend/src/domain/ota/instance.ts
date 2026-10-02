@@ -15,8 +15,6 @@ import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentia
 import { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
-import { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
-import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
 import { ChannelHeadRepo } from '@backend/domain/ota/repos/channel-head.repo';
 import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
 import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
@@ -27,6 +25,8 @@ import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
 import { TrustPolicyRepo } from '@backend/domain/ota/repos/trust-policy.repo';
 import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
+import { VersionPolicyChangeRepo } from '@backend/domain/ota/repos/version-policy-change.repo';
+import { VersionPolicyRepo } from '@backend/domain/ota/repos/version-policy.repo';
 import { ChannelStateCache } from '@backend/domain/ota/serving/state-cache';
 import { SigningService } from '@backend/domain/ota/SigningService';
 import { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
@@ -106,7 +106,7 @@ export function createOtaDomain(
     waitUntil?: (promise: Promise<unknown>) => void;
   },
 ): OtaDomain {
-  const policies = new AppVersionPolicyRepo(db);
+  const policies = new VersionPolicyRepo(db);
   const {
     secretBox = getSecretBox,
     publicApiBase,
@@ -120,7 +120,7 @@ export function createOtaDomain(
   } = deps;
   const versionPolicies = new VersionPolicyService({
     policies,
-    changes: new AppVersionPolicyChangeRepo(db),
+    changes: new VersionPolicyChangeRepo(db),
     ...services,
   });
   deps.approvals.registerHandler(OtaApprovalSubjects.versionPolicy, async request => {

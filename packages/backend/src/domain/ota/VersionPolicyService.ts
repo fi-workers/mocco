@@ -19,14 +19,14 @@ import {
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ApprovalRequestRow, ApprovalService } from '@backend/domain/governance/ApprovalService';
-import type { AppVersionPolicyChangeRepo } from '@backend/domain/ota/repos/app-version-policy-change.repo';
-import type { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import type { VersionPolicyChangeRepo } from '@backend/domain/ota/repos/version-policy-change.repo';
+import type { VersionPolicyRepo } from '@backend/domain/ota/repos/version-policy.repo';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { PolicyDirection, VersionPolicyChangeInput, VersionPolicyRules } from '@mocco/common/ota';
 
 export interface VersionPolicyServiceDeps {
-  policies: AppVersionPolicyRepo;
-  changes: AppVersionPolicyChangeRepo;
+  policies: VersionPolicyRepo;
+  changes: VersionPolicyChangeRepo;
   projects: ProjectService;
   approvals: ApprovalService;
   audit: AuditService;
@@ -45,7 +45,7 @@ const pinnedChangeSchema = z.object({
 });
 type PinnedChange = z.infer<typeof pinnedChangeSchema>;
 
-type PolicyRow = NonNullable<Awaited<ReturnType<AppVersionPolicyRepo['find']>>>;
+type PolicyRow = NonNullable<Awaited<ReturnType<VersionPolicyRepo['find']>>>;
 
 /** The editable rules of a stored policy. */
 function rulesOf(row: PolicyRow): VersionPolicyRules {

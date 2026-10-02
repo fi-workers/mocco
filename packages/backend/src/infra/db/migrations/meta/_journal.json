@@ -288,6 +288,13 @@
       "when": 1790929164574,
       "tag": "0040_sour_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790940342766,
+      "tag": "0041_wide_toxin",
+      "breakpoints": true
     }
   ]
 }
