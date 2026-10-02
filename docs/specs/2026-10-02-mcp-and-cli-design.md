@@ -1,0 +1,293 @@
+---
+title: Mocco MCP server and CLI — scope and design
+description: How agents and terminals reach Mocco — a stateless remote MCP server on the 2026-07-28 revision, authenticated as a person through Better Auth's OAuth, a /v1 read surface for keys, and one npx-able mocco CLI that absorbs mocco-ota — starting with governance, where an approval must be attributable to a human.
+type: spec
+status: draft
+created: 2026-10-02
+updated: 2026-10-02
+confidence: medium
+owner: andrea
+tags: [spec, design, mcp, cli, governance, api, oauth, security]
+phase: design
+implements: ../adr/0002-mocco-is-an-independent-authorization-layer.md
+related:
+  - ../adr/0003-core-model-is-pause-resume-gates-no-env.md
+  - ../adr/0011-external-api-surface-architecture.md
+  - ../adr/0017-public-v1-api-keys-and-sdk-licensing.md
+  - ../adr/0020-approvals-outside-pipeline-runs.md
+  - ../reference/public-api.md
+  - ../reference/approvals.md
+---
+
+# Mocco MCP server and CLI
+
+An agent writing code is already the thing that opens the pull request, watches CI and
+asks to deploy. Today it cannot see any of that in Mocco: the console is tRPC-only, and
+`/v1` carries flags, messenger and OTA but nothing about runs or gates. So the one
+question a developer actually asks an assistant — *"is the deploy stuck, and on what?"* —
+has no answer, and the one action that matters — *"approve it"* — has no surface.
+
+This is the design for both surfaces. It starts with governance because that is the
+product, and because governance is where the hard constraint lives.
+
+## The constraint that shapes everything
+
+**An approval cannot be made by an API key.**
+
+[ADR 0002](../adr/0002-mocco-is-an-independent-authorization-layer.md) makes Mocco an
+authorization layer in its own right: who may resume a run is a Mocco role, not a GitHub
+permission. `ApprovalService.vote` takes a `userId` and checks that person's role
+memberships; the audit chain records them. A key has no person behind it — our
+`ApiKeyPrincipal` carries a project and scopes, nothing more — so letting a key approve
+would turn "write ≠ deploy" into "whoever holds this string may deploy", which is the
+failure the product exists to prevent.
+
+This is also the **confused deputy** problem, which the MCP security literature names as
+the central risk of the whole protocol: a server that acts with its own broad privileges
+on behalf of a user who lacks them lets a low-privilege caller — or a model that has been
+talked into it — reach actions they were never entitled to. The mitigation is not a
+filter in the MCP layer. It is that every tool calls the same service the console calls,
+with the caller's own `userId`, and that service's role check is the only authority. The
+MCP server holds no privilege of its own to be confused about.
+
+So the split is:
+
+| | Authenticates as | May do |
+|---|---|---|
+| `/v1` + API key | a **project** | read runs, gates and approval requests |
+| MCP + OAuth | a **person** (their roles) | everything a key may, plus approve, reject and resume |
+| CLI | a person (device login), or a key for CI | both, depending on how it authenticated |
+
+The MCP server is therefore not a convenience wrapper over `/v1`. It is the only surface
+outside the console where a governance decision can legitimately be made, because it is
+the only one that knows who is asking.
+
+## The protocol has moved: 2026-07-28
+
+MCP went **stateless** in the 2026-07-28 revision, and the changes are not cosmetic:
+
+- `initialize`/`initialized` and the `Mcp-Session-Id` header are gone. Every request
+  carries its protocol version, client identity and capabilities in `_meta`, so any
+  request can land on any instance behind a plain round-robin load balancer. This suits
+  our serverless deployment exactly — there is no session store to run.
+- Only **POST** is served. A server on this revision ignores an incoming
+  `Mcp-Session-Id`, never mints one, and answers GET and DELETE with `405`.
+- `Mcp-Method` and `Mcp-Name` headers are mandatory, so a gateway can route and meter
+  without parsing bodies.
+- **Multi Round-Trip Requests (MRTR)** replace server-initiated requests. When a tool
+  needs something from the human mid-call it returns `resultType: "input_required"` and
+  the client retries with `inputResponses`. See *Human in the loop* below — for us this
+  is not a migration detail, it is the confirmation step.
+- Authorization hardened: `iss` must be returned and validated (RFC 9207), clients set
+  `application_type` at registration, credentials are bound to their issuing
+  authorization server, and **Dynamic Client Registration is deprecated in favour of
+  Client ID Metadata Documents (CIMD)**.
+- The legacy HTTP+SSE transport is deprecated with a twelve-month window.
+
+We are building new, so we serve this revision only (`legacy: "reject"`) rather than
+carrying a compatibility path we would have to delete within the year.
+
+## Authentication: Better Auth already has it
+
+Mocco's auth is vendor-mediated through Better Auth
+([backend conventions](../reference/backend-conventions.md) — only
+`domain/auth/provider.ts` may import it). Better Auth 1.7 covers this whole design, so
+**no OAuth server is written here**:
+
+```ts
+// domain/auth/provider.ts — the only file that may import these
+import { jwt } from 'better-auth/plugins';
+import { cimd } from '@better-auth/cimd';
+import { mcp } from '@better-auth/mcp';
+
+plugins: [
+  jwt(),
+  cimd({ metadataProfile: 'mcp-2026-07-28' }),
+  mcp({ loginPage: '/sign-in', consentPage: '/consent', resource: 'https://<host>/api/mcp' }),
+]
+```
+
+`mcp()` is the OAuth 2.1 authorization server and serves the RFC 9728 protected-resource
+metadata; `oauthProvider()` is **not** registered separately. `cimd()` provides the
+2026-07-28 client-registration flow that replaces DCR. `requireMcpAuth(auth, handler,
+{ resource })` verifies the bearer token against the JWKS and hands the session to the
+handler, so a tool receives a `userId` the same way a tRPC procedure does.
+
+Its `requiredScopes` option triggers **step-up authorization** when a token lacks a
+scope. That is the right shape for `approvals:write`: an agent reads with the token it
+has, and the human is asked to grant the deciding scope at the moment a decision is
+actually wanted.
+
+**Prerequisite:** the repository is on Better Auth 1.6.23, whose MCP plugin is the
+pre-2026-07-28 API (`withMcpAuth`, no CIMD). Upgrading to 1.7.x is its own slice —
+auth is load-bearing, and an auth upgrade reviewed alongside a new surface is an auth
+upgrade nobody reviewed.
+
+### What we will not do
+
+- **No token passthrough.** The spec forbids an MCP server forwarding a client's token to
+  a downstream API, because it bypasses that API's scope checks, limits and logs. Our
+  tools call domain services in-process, so there is no downstream to forward to — and if
+  one appears (a vendor integration), it gets its own separately-scoped credential.
+- **No token we are not the audience of.** Tokens are bound to the `resource` above and
+  refused otherwise, so a token minted for another MCP server cannot be replayed at ours.
+
+## Where it mounts
+
+[ADR 0011](../adr/0011-external-api-surface-architecture.md) puts external inbound
+surfaces on the App Router and keeps tRPC for the console. MCP is external inbound:
+
+```
+packages/backend/src/
+  transport/mcp/tools/*.ts     one file per tool group; parses, calls one service
+  transport/mcp/server.ts      registers the tools, maps domain errors to messages
+  transport/ext/v1/runs.ts     the read endpoints a key may call
+  runtime/mcp.ts               composition root: builds the server from the domains
+packages/frontend/src/
+  app/api/mcp/route.ts         POST only, requireMcpAuth + createMcpHandler(legacy: 'reject')
+packages/cli/                  @mocco/cli — `npx mocco …`
+```
+
+The handler is composed in `runtime/`, like the job runner: it sits above the domains and
+the domains do not know it exists.
+
+## The tools
+
+Named `mocco_<domain>_<verb>`, because a prefix is what keeps tools legible once a model
+has several servers loaded.
+
+**Reading** — available to a key and a person alike:
+
+| Tool | Answers |
+|---|---|
+| `mocco_runs_search` | Which runs match a filter (project, status, ref, time) |
+| `mocco_runs_get` | One run: steps, gates, why it is paused |
+| `mocco_approvals_search` | What is waiting on a human, and on whom |
+| `mocco_approvals_get` | One request: subject, policy, votes, who may still vote |
+
+**Deciding** — person only, refused for a key with a message saying why:
+
+| Tool | Does |
+|---|---|
+| `mocco_approvals_vote` | Approve or reject with a reason |
+| `mocco_gates_resume` | Resume a paused run, when the caller's role allows it |
+
+### Search, not list
+
+Anthropic's tool-design guidance is blunt about this: a tool that returns everything is
+"a disaster for agents", because the model pays for every row in context before it can
+find the one it wanted. So the read tools are **search with filters and paging**, never
+a bare dump, and every one takes a `response_format` of `concise` or `detailed` so the
+model can ask for ids and statuses first and the full step list only once it knows which
+run it cares about.
+
+### What a tool must not do
+
+A tool is a thin adapter, exactly as a tRPC router is
+([backend conventions](../reference/backend-conventions.md)). It parses its input, calls
+**one** service, and maps domain errors to a message the model can act on. No tool
+composes a decision out of several services, and no tool has a code path the console does
+not. If an agent can do something through MCP that a person cannot do in the console,
+that is a hole in the model, not a feature of MCP.
+
+Every mutating tool is audited through the same service that audits the console, so the
+audit chain cannot tell whether a vote arrived from a browser or an agent except by the
+principal it records. That is deliberate: the evidence must be uniform.
+
+## Human in the loop, and read-only by default
+
+Prompt injection succeeds when tool calls execute silently. The standard mitigation is a
+confirmation that shows the human exactly what is about to happen — and MRTR is the
+protocol's own mechanism for it: `mocco_approvals_vote` returns
+`resultType: "input_required"` with the run, the gate and the policy it is about to
+satisfy, and only applies the vote when the retry carries the human's confirmation.
+
+Separately, the server runs **read-only unless told otherwise**. Supabase's
+`read_only=true` has become the reference pattern here, and for a surface whose mutating
+tools approve production deploys the default has to be the safe one. A workspace that
+wants agents to decide opts in; everyone else gets the four read tools and nothing that
+can deploy.
+
+These are not alternatives to the role check. They sit in front of it, and the role check
+still refuses what the role refuses.
+
+## Scopes
+
+| Scope | Grants |
+|---|---|
+| `runs:read` | List and read runs, steps and gates |
+| `approvals:read` | List and read approval requests and their votes |
+| `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
+
+`approvals:write` existing as a scope and being unavailable to keys is the point: the
+model stays uniform and the refusal is one check in one place, rather than a shape the
+key system cannot express. It is also the scope `requiredScopes` steps up for.
+
+## The CLI
+
+**One `mocco`, run with `npx`.** `mocco-ota` becomes `mocco ota …` and stays as a
+deprecated alias for the builds that already call it. Two CLIs for one product is a
+question every user has to answer before they can use either.
+
+```bash
+npx mocco login                       # device code; a token per profile
+npx mocco runs list --project acme
+npx mocco gate approve <id> --reason "checked the migration"
+npx mocco ota publish --channel production   # what mocco-ota publish is today
+```
+
+Two ways to authenticate, because the CLI has two callers:
+
+- **A person**, through `mocco login`. The OAuth 2.0 Device Authorization Grant
+  (RFC 8628) is the fit — Vercel made it their CLI default in 2025 — and it is also the
+  only flow that works where a browser cannot be opened, which includes an agent in a
+  sandbox. Loopback + PKCE is the safer choice when a browser *is* available, so the
+  login tries that first and falls back to the device code.
+- **CI**, through `MOCCO_API_KEY` or GitHub OIDC, exactly as `mocco-ota` does now. It can
+  publish and read; it cannot approve, and says so plainly if asked to.
+
+The polling loop is where device-flow implementations usually go wrong: honour the
+server's `interval`, back off on `slow_down`, stop at `expires_in`, and report
+`access_denied` and `expired_token` as themselves rather than as a generic failure.
+
+The CLI is a client of the same endpoints with no logic of its own — the third consumer
+of one contract, not a third contract.
+
+## Slices
+
+Each is a PR, in dependency order. The first two are useful on their own: they are the
+public read API for runs, which any dashboard or SDK wants regardless of MCP.
+
+1. **`/v1` governance reads** — `runs:read`, `approvals:read`, the four read endpoints,
+   rate limits, tests. No MCP yet.
+2. **`approvals:write`, refused for keys** — the endpoint and the refusal, so the rule
+   lands in one place before anything calls it.
+3. **Better Auth 1.6 → 1.7** — on its own, because auth is load-bearing.
+4. **`mcp()` + `cimd()` + the discovery routes** — the authorization server and the
+   session a tool will receive. No tools yet.
+5. **The MCP server with the read tools** — `transport/mcp`, `runtime/mcp.ts`, the App
+   Router route, read-only by default. Proves the shape against a real client.
+6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
+   confirmation and the opt-in that enables them.
+7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
+   `@mocco/ota-cli`, which becomes an alias.
+8. **OTA and flags tools** — once the shape has survived a real week.
+
+## Evaluating it
+
+Anthropic's guidance is that tool quality is measured, not asserted: build tasks from
+real uses ("the staging deploy is stuck, find out why and approve it if the migration is
+additive"), and track tool calls per task, tokens consumed, and tool errors. A tool that
+is correct but costs a model forty calls to use is not finished. This belongs with
+slice 5, where there is something to measure.
+
+## Open questions
+
+- **Which workspace is an agent acting in?** A person can belong to several. A call with
+  no workspace is ambiguous and asking every time is noise. Likely a selection held per
+  session, defaulting when there is only one.
+- **Rate limits for a person's token.** `/v1` limits per key; an MCP token needs its own
+  bucket, and an agent polling `mocco_runs_get` in a loop is the expected shape, not the
+  abusive one.
+- **Does `mocco_gates_resume` belong behind its own scope?** Resuming is not voting, and
+  a role may well be allowed one and not the other.
