@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -110,3 +110,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `/workspaces/[id]/p/[projectId]/…`.
 - Docs touched: `reference/frontend-conventions.md`
 - Source: branch `feat/app-shell-projects` (issue #109)
+
+## 2026-10-02 — Getting-started and deploy-governance customer guides
+
+- Added the `start` guide set (what Mocco offers, workspace and projects, members and access, API keys, the audit
+  log) and the `governance` set (deploy governance overview), with screenshots from a local run; listed the
+  existing messenger guide, which had no set, so `/docs/messenger/contact-us` now renders.
+- The governance guide has no commit or run screenshots: the local workspace had no synced commits or runs, and
+  making them would have meant changing data. The audit screenshot is cropped to the table.
+- Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
+- Source: branch `docs/getting-started`

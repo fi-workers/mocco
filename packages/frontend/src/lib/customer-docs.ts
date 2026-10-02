@@ -1,5 +1,5 @@
 // Build-time reader for the customer guides in docs/customer/<set>/ (one folder per
-// product area, e.g. notifications, ota). Only getStaticProps / getStaticPaths call it,
+// product area, e.g. start, notifications, ota). Only getStaticProps / getStaticPaths call it,
 // so node:fs and the Markdown lexer never reach the browser bundle. The Markdown becomes
 // a small tree (lib/doc-ast.ts) that the page renders as React elements.
 import { readdirSync, readFileSync } from 'node:fs';
@@ -22,6 +22,8 @@ const imagesPath = (set: GuideSet) => `/docs/${set}/images`;
 
 /** Reading order of each set's guides in the side nav; any other page follows alphabetically. */
 const ORDER: Record<GuideSet, readonly string[]> = {
+  [GuideSets.start]: ['overview', 'workspace-and-projects', 'members-and-access', 'api-keys', 'audit-log'],
+  [GuideSets.governance]: ['overview'],
   [GuideSets.notifications]: [
     'overview',
     'connect-discord',
@@ -33,6 +35,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
   ],
   [GuideSets.ota]: ['overview', 'force-update', 'pipeline', 'gate-eas-update', 'gate-codepush', 'gate-hot-updater'],
   [GuideSets.flags]: ['quickstart'],
+  [GuideSets.messenger]: ['contact-us'],
 };
 
 const SLUG = /^[a-z0-9-]+$/u;
