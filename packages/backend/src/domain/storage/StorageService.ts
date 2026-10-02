@@ -246,6 +246,16 @@ export class StorageService {
       : await this.deps.store.signedDownloadUrl(object.key, expiresInSeconds);
   }
 
+  /** The bytes of a ready object (bounded by its product's maxBytes), or null when the
+   * store has lost them. */
+  async read(workspaceId: string, objectId: string): Promise<Uint8Array<ArrayBuffer> | null> {
+    const object = await this.requireObject(workspaceId, objectId);
+    if (object.status !== ObjectStatuses.ready) {
+      throw new StoredObjectNotFoundError(objectId);
+    }
+    return await this.deps.store.get(object.key);
+  }
+
   /** Delete an object: its bytes now, its row after the retention window. */
   async delete(workspaceId: string, objectId: string): Promise<void> {
     const object = await this.requireObject(workspaceId, objectId);

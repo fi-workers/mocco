@@ -1,5 +1,5 @@
 // OTA hosting router (ADR 0021) — thin: a project's hosted OTA apps, their code-signing
-// certificates and their channels. Mounted as `ota.hosting`. Every procedure requires the
+// certificates, their channels and the releases CI uploaded. Mounted as `ota.hosting`. Every procedure requires the
 // OTA product (`productProcedure`); adding or retiring a certificate also requires an
 // owner or admin, because a certificate decides whose signatures devices accept.
 import { gateRequirementsSchema } from '@mocco/common/governance';
@@ -8,6 +8,7 @@ import {
   otaAppSchema,
   otaChannelCreateInputSchema,
   otaChannelSchema,
+  otaReleaseSchema,
   signingCertificateInputSchema,
   signingCertificateSchema,
 } from '@mocco/common/ota-hosting';
@@ -38,6 +39,16 @@ const adminOtaProcedure = otaProcedure.use(async ({ ctx, getRawInput, next }) =>
 });
 
 export const otaHostingRouter = router({
+  releases: router({
+    list: otaProcedure
+      .input(appInput)
+      .output(z.object({ releases: z.array(otaReleaseSchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return { releases: await ctx.otaUploads.listReleases(app) };
+      }),
+  }),
+
   apps: router({
     list: otaProcedure
       .input(projectInput)

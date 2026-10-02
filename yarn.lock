@@ -1658,6 +1658,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@expo/code-signing-certificates@npm:0.0.7":
+  version: 0.0.7
+  resolution: "@expo/code-signing-certificates@npm:0.0.7"
+  dependencies:
+    node-forge: "npm:^1.4.0"
+  checksum: 10/d8192c8355740ff70ff6754f1f180e54777a59f3df808480cada562a3be97ece86f7e0e69d652edc1d630506a49a66d9ff94dccefda6d01122845ae0d5bde5d3
+  languageName: node
+  linkType: hard
+
 "@floating-ui/core@npm:^1.8.0":
   version: 1.8.0
   resolution: "@floating-ui/core@npm:1.8.0"
@@ -2132,6 +2141,22 @@ __metadata:
     tw-animate-css: "npm:1.4.0"
     typescript: "npm:5.9.3"
     zod: "npm:4.1.13"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/ota-cli@workspace:packages/ota-cli":
+  version: 0.0.0-use.local
+  resolution: "@mocco/ota-cli@workspace:packages/ota-cli"
+  dependencies:
+    "@expo/code-signing-certificates": "npm:0.0.7"
+    "@mocco/common": "workspace:*"
+    eslint: "npm:10.6.0"
+    tsx: "npm:4.22.4"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+    zod: "npm:4.1.13"
+  bin:
+    mocco-ota: ./bin/mocco-ota.mjs
   languageName: unknown
   linkType: soft
 
@@ -9537,6 +9562,13 @@ __metadata:
     encoding:
       optional: true
   checksum: 10/b24f8a3dc937f388192e59bcf9d0857d7b6940a2496f328381641cb616efccc9866e89ec43f2ec956bbd6c3d3ee05524ce77fe7b29ccd34692b3a16f237d6676
+  languageName: node
+  linkType: hard
+
+"node-forge@npm:^1.4.0":
+  version: 1.4.0
+  resolution: "node-forge@npm:1.4.0"
+  checksum: 10/d70fd769768e646eda73343d4d4105ccb6869315d975905a22117431c04ae5b6df6c488e34ed275b1a66b50195a09b84b5c8aeca3b8605c20605fcb8e9f109d9
   languageName: node
   linkType: hard
 

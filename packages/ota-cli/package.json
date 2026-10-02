@@ -1,0 +1,34 @@
+{
+  "name": "@mocco/ota-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Publish signed Expo Updates to Mocco-hosted OTA from CI.",
+  "type": "module",
+  "bin": {
+    "mocco-ota": "./bin/mocco-ota.mjs"
+  },
+  "exports": {
+    "./init": "./src/init.ts",
+    "./publish": "./src/publish.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node ./bin/mocco-ota.mjs"
+  },
+  "dependencies": {
+    "@expo/code-signing-certificates": "0.0.7",
+    "@mocco/common": "workspace:*",
+    "tsx": "4.22.4",
+    "zod": "4.1.13"
+  },
+  "devDependencies": {
+    "eslint": "10.6.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

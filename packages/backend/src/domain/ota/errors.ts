@@ -1,4 +1,4 @@
-import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@backend/domain/errors';
 
 /** Version policies apply to store builds only (iOS and Android apps) — BAD_REQUEST. */
 export class NotAStoreAppError extends BadRequestError {
@@ -110,5 +110,36 @@ export class SigningCertificateNotFoundError extends NotFoundError {
   constructor(certificateId: string, options?: ErrorOptions) {
     super(`Signing certificate ${certificateId} was not found`, options);
     this.name = 'SigningCertificateNotFoundError';
+  }
+}
+
+/** An upload or finalize the CLI must fix: the message says exactly what is wrong. */
+export class OtaUploadRejectedError extends BadRequestError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = 'OtaUploadRejectedError';
+  }
+}
+
+/** The key's project doesn't own the OTA app (reported like a missing app). */
+export class OtaUploadForbiddenError extends ForbiddenError {
+  constructor(options?: ErrorOptions) {
+    super("This key can't upload to that OTA app", options);
+    this.name = 'OtaUploadForbiddenError';
+  }
+}
+
+export class OtaReleaseNotFoundError extends NotFoundError {
+  constructor(releaseId: string, options?: ErrorOptions) {
+    super(`OTA release ${releaseId} was not found`, options);
+    this.name = 'OtaReleaseNotFoundError';
+  }
+}
+
+/** The session already uploaded a release, or the release was already finalized. */
+export class OtaUploadConflictError extends ConflictError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = 'OtaUploadConflictError';
   }
 }
