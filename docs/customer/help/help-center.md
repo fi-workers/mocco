@@ -1,6 +1,6 @@
 ---
 title: Publish a help center
-description: Set up a public help site for a project, write articles in Markdown with a live preview, publish them, and restore an earlier version — and how readers reach the site.
+description: Set up a public help site for a project, write articles in Markdown with a live preview, import from Mintlify, publish, translate into other languages, and restore an earlier version — and how readers reach the site.
 type: guide
 status: active
 created: 2026-10-02
@@ -67,6 +67,24 @@ The editor has the article's title and its text in Markdown on the left, and the
 ![Editing an article: Markdown on the left, the preview on the right, and Unpublished changes after saving](./images/editor.png)
 
 Every save is kept in **History** below the editor. **Restore** makes an earlier version the draft again, as a new save, so nothing in the history is lost. Publish it to put it back on the site.
+
+## Translate
+
+When you publish, Mocco translates the article into each language the site offers, if your Mocco has automatic translation turned on (otherwise you write each language yourself). The **Translations** section of the article shows every language and where it stands:
+
+- **Machine translated**: Mocco's translation, made from the published article.
+- **Reviewed**: a person wrote or fixed it. Mocco never replaces it on its own.
+- **Source changed**: the article was published again after this translation was made; review it to bring it up to date.
+- **Failed**: the translation changed the article's structure (a heading, a code block or a link), so Mocco didn't use it. The reason is shown.
+- **Not translated**: nothing yet. Readers in that language get the article in the language you write in.
+
+Choose **Review** (or **Edit**) to write or fix a language beside its preview, then **Save translation**. **Translate again** asks for a new machine translation; on a reviewed language it asks first, because it replaces the reviewed text.
+
+![An article's translations: English reviewed, Japanese not translated yet](./images/translations.png)
+
+Readers who pick a language see its translation, and the article list shows translated titles.
+
+![The English translation of an article on the public site](./images/public-translated.png)
 
 ## 5. What readers see
 
