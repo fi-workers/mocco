@@ -3,7 +3,7 @@ import { ChangeOutcomes, ChangesetSources, FlagTypes } from '@mocco/common/flags
 import { resolveFlag } from '@mocco/flags-core';
 
 import { auditRestores } from '@backend/domain/flags/audit-restores';
-import { FlagEnvironmentNotFoundError, FlagKeyTakenError } from '@backend/domain/flags/errors';
+import { FlagEnvironmentNotFoundError, FlagKeyTakenError, FlagNotFoundError } from '@backend/domain/flags/errors';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
 import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
@@ -328,6 +328,61 @@ export class FlagService {
     return snapshot === undefined
       ? undefined
       : { version: snapshot.version, etag: snapshot.etag, document: snapshot.document };
+  }
+
+  /**
+   * What OFREP evaluates for an environment: its current snapshot and which flags
+   * publishable keys may see. Undefined when the environment is gone.
+   */
+  async ofrepState(workspaceId: string, environmentId: string) {
+    const environment = await new FlagEnvironmentRepo(this.deps.db).byId(workspaceId, environmentId);
+    if (environment === undefined) {
+      return undefined;
+    }
+    const [snapshot, flags] = await Promise.all([
+      new FlagRulesetSnapshotRepo(this.deps.db).latest(workspaceId, environmentId),
+      new FlagRepo(this.deps.db).listByProject(workspaceId, environment.projectId),
+    ]);
+    if (snapshot === undefined) {
+      return undefined;
+    }
+    return {
+      version: snapshot.version,
+      etag: snapshot.etag,
+      ruleset: snapshot.document as unknown as Ruleset,
+      clientVisible: new Set(flags.filter(flag => flag.clientVisible).map(flag => flag.key)),
+    };
+  }
+
+  /** The environment's newest version and ETag (the change stream polls this). */
+  async rulesetHead(workspaceId: string, environmentId: string) {
+    return await new FlagRulesetSnapshotRepo(this.deps.db).latestHead(workspaceId, environmentId);
+  }
+
+  /** Let publishable keys (browsers, apps) evaluate a flag over OFREP, or stop them. Audited. */
+  async setClientVisible(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { flagKey: string; clientVisible: boolean },
+  ) {
+    const flag = await new FlagRepo(this.deps.db).setClientVisible(
+      workspaceId,
+      projectId,
+      input.flagKey,
+      input.clientVisible,
+    );
+    if (flag === undefined) {
+      throw new FlagNotFoundError(input.flagKey);
+    }
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.flagClientVisibilityChanged,
+      subjectType: 'flag',
+      subjectId: flag.id,
+      payload: { key: flag.key, clientVisible: input.clientVisible },
+    });
+    return flag;
   }
 
   /** The environment's current compiled ruleset. */

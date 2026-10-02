@@ -83,6 +83,7 @@ describe('@mocco/openfeature-server against /v1/flags/ruleset (pglite)', () => {
         baseUrl: BASE_URL,
         fetch: fetchThroughApp,
         pollIntervalMs: 1000,
+        changeDetection: 'poll',
       });
       await OpenFeature.setProviderAndWait('flags-e2e', provider);
       const client = OpenFeature.getClient('flags-e2e');
@@ -113,5 +114,76 @@ describe('@mocco/openfeature-server against /v1/flags/ruleset (pglite)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('picks up a change from the stream within 2 s, long before the next poll', async () => {
+    const audit = new AuditService({ audit: new AuditRepo(t.db) });
+    const { projects } = createProjectDomain(t.db);
+    const apiKeys = createApiKeyService(t.db, { projects, audit });
+    const flags = new FlagService({ db: t.db, audit });
+    const app = new Hono<V1Env>().basePath('/api/ext').route(
+      '/v1',
+      createV1Routes({
+        apiKeys,
+        limiter: new MemoryRateLimiter(),
+        flags: { flags, stream: { pollMs: 100, maxConnectionMs: 10_000 } },
+      }),
+    );
+    const workspaceId = expectOne(
+      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
+    ).id;
+    const userId = expectOne(
+      await t.db
+        .insert(users)
+        .values({ email: `${randomUUID()}@acme.test` })
+        .returning(),
+    ).id;
+    const { id: projectId } = await projects.create(workspaceId, { name: 'Acme', handle: 'acme' });
+    const environment = await flags.createEnvironment(workspaceId, projectId, userId, {
+      key: 'production',
+      name: 'Production',
+    });
+    await flags.createBooleanFlag(workspaceId, projectId, userId, {
+      key: 'checkout',
+      description: null,
+      lifecycle: 'temporary',
+    });
+    const { token } = await apiKeys.create(workspaceId, projectId, userId, {
+      kind: ApiKeyKinds.secret,
+      name: 'server',
+      scopes: [ApiScopes.flagsRead],
+      expiresAt: null,
+      flagEnvironmentId: environment.id,
+    });
+    const provider = new MoccoProvider({
+      secretKey: token,
+      baseUrl: BASE_URL,
+      fetch: async (input, init) => await app.fetch(new Request(input, init)),
+      // A minute between polls: only the stream can deliver the change in time.
+      pollIntervalMs: 60_000,
+    });
+    await OpenFeature.setProviderAndWait('flags-stream', provider);
+    const client = OpenFeature.getClient('flags-stream');
+    expect(await client.getBooleanValue('checkout', false)).toBe(false);
+    // Let the stream connect before the change.
+    await new Promise(resolve => {
+      setTimeout(resolve, 300);
+    });
+
+    const changedAt = Date.now();
+    await flags.applyChangeset(workspaceId, projectId, userId, {
+      environmentId: environment.id,
+      baseVersion: 1,
+      ops: [{ op: 'set_enabled', flagKey: 'checkout', enabled: true }],
+      reason: null,
+    });
+    await vi.waitFor(
+      async () => {
+        expect(await client.getBooleanValue('checkout', false)).toBe(true);
+      },
+      { timeout: 2000, interval: 50 },
+    );
+
+    expect(Date.now() - changedAt).toBeLessThan(2000);
   });
 });

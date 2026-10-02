@@ -60,7 +60,7 @@ describe('MoccoProvider', () => {
   it('evaluates locally from the polled ruleset, with no network call per evaluation', async () => {
     const mocco = fakeMocco();
     mocco.state.next = serve(ruleset(true, 2), '"v2"');
-    const provider = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch });
+    const provider = new MoccoProvider({ secretKey: KEY, changeDetection: 'poll', fetch: mocco.fetch });
     await OpenFeature.setProviderAndWait(domain, provider);
     const client = OpenFeature.getClient(domain);
     const callsAfterInit = mocco.fetch.mock.calls.length;
@@ -83,7 +83,12 @@ describe('MoccoProvider', () => {
   it('polls with If-None-Match and announces changed flags', async () => {
     const mocco = fakeMocco();
     mocco.state.next = serve(ruleset(false, 1), '"v1"');
-    const provider = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch, pollIntervalMs: 1000 });
+    const provider = new MoccoProvider({
+      secretKey: KEY,
+      changeDetection: 'poll',
+      fetch: mocco.fetch,
+      pollIntervalMs: 1000,
+    });
     await OpenFeature.setProviderAndWait(domain, provider);
     const client = OpenFeature.getClient(domain);
     const changes: unknown[] = [];
@@ -106,7 +111,12 @@ describe('MoccoProvider', () => {
   it('keeps serving the last good ruleset while Mocco is down, as STALE, and recovers', async () => {
     const mocco = fakeMocco();
     mocco.state.next = serve(ruleset(true, 2), '"v2"');
-    const provider = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch, pollIntervalMs: 1000 });
+    const provider = new MoccoProvider({
+      secretKey: KEY,
+      changeDetection: 'poll',
+      fetch: mocco.fetch,
+      pollIntervalMs: 1000,
+    });
     await OpenFeature.setProviderAndWait(domain, provider);
     const client = OpenFeature.getClient(domain);
     const events: string[] = [];
@@ -135,11 +145,16 @@ describe('MoccoProvider', () => {
     const mocco = fakeMocco();
     mocco.state.next = () => new TypeError('fetch failed');
 
-    const bootstrapped = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch, bootstrap: ruleset(true, 1) });
+    const bootstrapped = new MoccoProvider({
+      secretKey: KEY,
+      changeDetection: 'poll',
+      fetch: mocco.fetch,
+      bootstrap: ruleset(true, 1),
+    });
     await OpenFeature.setProviderAndWait(domain, bootstrapped);
     const isFromBootstrap = await OpenFeature.getClient(domain).getBooleanValue('new-checkout', false);
 
-    const bare = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch });
+    const bare = new MoccoProvider({ secretKey: KEY, changeDetection: 'poll', fetch: mocco.fetch });
     await expect(OpenFeature.setProviderAndWait(`${domain}-bare`, bare)).rejects.toThrow(
       /Couldn't load the Mocco ruleset/u,
     );
@@ -155,7 +170,12 @@ describe('MoccoProvider', () => {
   it('keeps the last good ruleset when Mocco serves one it cannot use', async () => {
     const mocco = fakeMocco();
     mocco.state.next = serve(ruleset(true, 2), '"v2"');
-    const provider = new MoccoProvider({ secretKey: KEY, fetch: mocco.fetch, pollIntervalMs: 1000 });
+    const provider = new MoccoProvider({
+      secretKey: KEY,
+      changeDetection: 'poll',
+      fetch: mocco.fetch,
+      pollIntervalMs: 1000,
+    });
     await OpenFeature.setProviderAndWait(domain, provider);
     const client = OpenFeature.getClient(domain);
 

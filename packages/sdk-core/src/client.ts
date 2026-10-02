@@ -138,6 +138,32 @@ export class MoccoClient {
     return { modified: true, body: (await response.json()) as T, etag: response.headers.get('etag') };
   }
 
+  /**
+   * Open an event stream (`text/event-stream`) with the key; read it with
+   * `readServerSentEvents`. Refusals throw `MoccoError` like any request; no retries (the
+   * caller reconnects).
+   */
+  async openStream(path: string, opts: { lastEventId?: string; signal?: AbortSignal } = {}): Promise<Response> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${this.options.key}`,
+          accept: 'text/event-stream',
+          ...(opts.lastEventId !== undefined && { 'last-event-id': opts.lastEventId }),
+        },
+        ...(opts.signal !== undefined && { signal: opts.signal }),
+      });
+    } catch (error) {
+      throw new MoccoNetworkError(`Couldn't reach Mocco at ${this.baseUrl}`, { cause: error });
+    }
+    if (!response.ok) {
+      throw new MoccoError(response.status, await problemOf(response));
+    }
+    return response;
+  }
+
   /** Which project and scopes this key speaks for — a quick configuration check. */
   async whoami(): Promise<WhoAmI> {
     return await this.request<WhoAmI>('GET', '/whoami');

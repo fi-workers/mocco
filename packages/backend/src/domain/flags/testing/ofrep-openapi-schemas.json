@@ -1,0 +1,445 @@
+{
+  "$id": "https://openfeature.dev/ofrep/openapi.json",
+  "$comment": "components.schemas of open-feature/protocol service/openapi.yaml at 98c4e0de5583c0d79dd938b82975c80125335e92 (OpenAPI 3.1 / JSON Schema 2020-12), vendored for tests. One patch: evaluationSuccess's value-shape oneOf is anyOf \u2014 as published, codeDefaultFlag ({properties: {}}) matches every object and an integer matches both integerFlag and floatFlag, so no evaluation with a value (including the spec's own examples) passes a strict oneOf.",
+  "components": {
+    "schemas": {
+      "bulkEvaluationRequest": {
+        "description": "Request body for bulk flag evaluation. Contains a static context that will be used \nto evaluate all flags.\n",
+        "type": "object",
+        "required": ["context"],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/context"
+          }
+        }
+      },
+      "bulkEvaluationSuccess": {
+        "description": "Success response for bulk flag evaluation. Contains an array of flag evaluations, \nwhere each item can be either a successful evaluation or an evaluation failure. \nThis allows partial success scenarios where some flags may fail while others succeed.\n",
+        "type": "object",
+        "required": ["flags"],
+        "properties": {
+          "flags": {
+            "type": "array",
+            "description": "Array of flag evaluations. Each evaluation can be a success or failure.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/evaluationSuccess"
+                },
+                {
+                  "$ref": "#/components/schemas/evaluationFailure"
+                }
+              ]
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/metadata",
+            "description": "Arbitrary metadata for the flag set, useful for telemetry and documentary purposes.\n"
+          },
+          "eventStreams": {
+            "type": "array",
+            "description": "Optional array of real-time change notification connections. When present,\nthe provider should connect to any entries with a known type and re-fetch\nflag evaluations when notified of changes. If not present, the provider\nshould continue using polling for change detection. Entries with unknown\ntypes must be ignored for forward compatibility.\n",
+            "items": {
+              "$ref": "#/components/schemas/eventStream"
+            }
+          }
+        }
+      },
+      "bulkEvaluationFailure": {
+        "description": "Failure response for bulk evaluation. Returned when the entire bulk evaluation request \nfails (e.g., invalid context, parse errors). Individual flag failures within a successful \nbulk evaluation are represented as evaluationFailure items in the flags array.\n",
+        "type": "object",
+        "properties": {
+          "errorCode": {
+            "type": "string",
+            "description": "An error code specific to the bulk evaluation error. See \nhttps://openfeature.dev/specification/types#error-code for error code definitions.\n",
+            "example": "INVALID_CONTEXT"
+          },
+          "errorDetails": {
+            "type": "string",
+            "description": "Optional error details description for logging or debugging purposes",
+            "example": "Context property 'plan' must be a string"
+          }
+        },
+        "required": ["errorCode"]
+      },
+      "evaluationRequest": {
+        "description": "Request body for single feature flag evaluation. Contains the evaluation context that will be \nused to evaluate the feature flag.\n",
+        "type": "object",
+        "required": ["context"],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/context"
+          }
+        }
+      },
+      "serverEvaluationSuccess": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/evaluationSuccess"
+          }
+        ]
+      },
+      "eventStream": {
+        "description": "A real-time change notification connection endpoint. The `type` field\nidentifies the push mechanism; currently only `sse` is defined. Providers\nmust ignore entries with unknown types for forward compatibility.\nExactly one of `url` or `endpoint` must be provided.\n",
+        "type": "object",
+        "required": ["type"],
+        "oneOf": [
+          {
+            "required": ["url"],
+            "not": {
+              "required": ["endpoint"]
+            }
+          },
+          {
+            "required": ["endpoint"],
+            "not": {
+              "required": ["url"]
+            }
+          }
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The connection type identifying the push mechanism to use.\nCurrently only `sse` is defined. Providers must ignore entries\nwith unknown types for forward compatibility.\n",
+            "example": "sse"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The endpoint URL the client should connect to for real-time\nflag change notifications. This is the default representation and\nis opaque to the provider. The URL may include authentication tokens,\nchannel identifiers, or other query parameters as needed by the\nvendor's infrastructure. Implementations must treat this value as\nsensitive and must not log or persist the full URL including its\nquery string.\n",
+            "example": "https://sse.example.com/event-stream?channels=env_abc123_v1"
+          },
+          "endpoint": {
+            "$ref": "#/components/schemas/eventStreamEndpoint"
+          },
+          "inactivityDelaySec": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 120,
+            "description": "Number of seconds of client inactivity (e.g., browser tab hidden,\nmobile app backgrounded) after which the connection should be closed\nto conserve resources. The client must reconnect and perform a full\nunconditional re-fetch when activity resumes. When determining the\neffective inactivity timeout, providers should use a client-side\noverride if configured; otherwise use this value when present;\notherwise default to 120 seconds.\n",
+            "example": 120
+          }
+        }
+      },
+      "eventStreamEndpoint": {
+        "type": "object",
+        "required": ["requestUri"],
+        "description": "Structured endpoint components for deployments that need to override\nthe origin cleanly while preserving the request target. When present,\nproviders construct the connection URL as `origin + requestUri`. If\n`origin` is absent, providers should use their configured OFREP base\nURL origin.\n",
+        "properties": {
+          "origin": {
+            "type": "string",
+            "format": "uri",
+            "description": "The scheme + host + optional port portion of the endpoint URL.\nIf absent, providers should use their configured OFREP base URL origin.\n",
+            "example": "https://sse.example.com"
+          },
+          "requestUri": {
+            "type": "string",
+            "pattern": "^/",
+            "description": "The path + query portion of the endpoint URL. Must start with `/`.\n",
+            "example": "/event-stream?channels=env_abc123_v1"
+          }
+        }
+      },
+      "sseEvent": {
+        "description": "Schema for a single Server-Sent Event in the flag configuration change\nnotification stream. The `data` field contains a JSON-encoded payload\nthat providers must parse to determine the event type and any metadata.\n",
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "JSON-encoded event payload. Providers must parse this string as JSON\nand inspect the `type` field to determine behavior.\n",
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "$ref": "#/components/schemas/sseEventData"
+            }
+          },
+          "event": {
+            "type": "string",
+            "description": "The SSE event type. Always `message` for OFREP events. Providers\nmust inspect `data.type` rather than this field for event routing.\n",
+            "example": "message"
+          },
+          "id": {
+            "type": "string",
+            "description": "Event identifier used by SSE clients for resume semantics via\n`Last-Event-ID`.\n",
+            "example": "evt-1234"
+          },
+          "retry": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Reconnection time in milliseconds suggested by the server.\n"
+          }
+        }
+      },
+      "sseEventData": {
+        "description": "JSON payload inside the event `data` field. The `type` field determines\nthe event semantics. Providers must handle `refetchEvaluation` and\nignore unknown values for forward compatibility.\n",
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The OFREP event type. Currently only `refetchEvaluation` is defined.\nProviders must ignore unknown values for forward compatibility.\n",
+            "example": "refetchEvaluation"
+          },
+          "etag": {
+            "type": "string",
+            "description": "Latest flag configuration cache validation token. If present,\nproviders should include it as the `flagConfigEtag` query parameter\non the re-fetch request.\n",
+            "example": "abc123"
+          },
+          "lastModified": {
+            "description": "Latest flag configuration timestamp. Supports Unix timestamp in\nseconds (recommended) or an ISO 8601 date-time string.\nIf present, providers should include it as the `flagConfigLastModified`\nquery parameter on the re-fetch request.\n",
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "format": "date-time"
+              }
+            ],
+            "example": 1771622898
+          }
+        }
+      },
+      "evaluationSuccess": {
+        "description": "Successful feature flag evaluation response. The value property is present \nfor all flag types except `codeDefaultFlag`, which indicates the provider should use the \ncode default value.\n",
+        "type": "object",
+        "required": ["key", "reason"],
+        "allOf": [
+          {
+            "properties": {
+              "key": {
+                "$ref": "#/components/schemas/key"
+              },
+              "reason": {
+                "type": "string",
+                "description": "An OpenFeature reason code indicating why the flag was evaluated to this value. \nSee https://openfeature.dev/specification/types/#resolution-reason for reason code definitions.\n",
+                "enum": ["STATIC", "TARGETING_MATCH", "SPLIT", "DISABLED", "UNKNOWN"]
+              },
+              "variant": {
+                "type": "string",
+                "description": "Variant identifier for the evaluated feature flag value. Represents a specific variation \nor configuration of the feature flag.\n"
+              },
+              "metadata": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/metadata"
+                  },
+                  {
+                    "$ref": "#/components/schemas/flagMetadataDescription"
+                  },
+                  {
+                    "$ref": "#/components/schemas/flagMetadataExamples"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/booleanFlag"
+              },
+              {
+                "$ref": "#/components/schemas/stringFlag"
+              },
+              {
+                "$ref": "#/components/schemas/integerFlag"
+              },
+              {
+                "$ref": "#/components/schemas/floatFlag"
+              },
+              {
+                "$ref": "#/components/schemas/objectFlag"
+              },
+              {
+                "$ref": "#/components/schemas/codeDefaultFlag"
+              }
+            ]
+          }
+        ]
+      },
+      "evaluationFailure": {
+        "description": "Feature flag evaluation failure response. Returned when a feature flag evaluation fails, such as when \nthe context is invalid, required targeting keys are missing, or parsing errors occur. \n",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/key"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "OpenFeature compatible error code indicating the type of error. See \nhttps://openfeature.dev/specification/types#error-code for error code definitions.\n",
+            "enum": ["PARSE_ERROR", "TARGETING_KEY_MISSING", "INVALID_CONTEXT", "GENERAL"]
+          },
+          "errorDetails": {
+            "$ref": "#/components/schemas/errorDetails"
+          },
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/metadata"
+              },
+              {
+                "$ref": "#/components/schemas/flagMetadataDescription"
+              },
+              {
+                "$ref": "#/components/schemas/flagMetadataExamples"
+              }
+            ]
+          }
+        },
+        "required": ["key", "errorCode"]
+      },
+      "flagNotFound": {
+        "description": "Feature flag not found response. Returned when a requested feature flag key does not exist in the \nflag management system. This can be an expected response in certain flag management systems. \nThis is distinct from evaluation failures, which occur when a flag exists but cannot be evaluated.\n",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/key"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Error code indicating the flag was not found",
+            "enum": ["FLAG_NOT_FOUND"]
+          },
+          "errorDetails": {
+            "$ref": "#/components/schemas/errorDetails"
+          },
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/metadata"
+              },
+              {
+                "$ref": "#/components/schemas/flagMetadataDescription"
+              },
+              {
+                "$ref": "#/components/schemas/flagMetadataExamples"
+              }
+            ]
+          }
+        },
+        "required": ["key", "errorCode"]
+      },
+      "generalErrorResponse": {
+        "description": "General error response for unexpected server errors (500 status). Used when the \nserver encounters an internal error that prevents flag evaluation.\n",
+        "type": "object",
+        "properties": {
+          "errorDetails": {
+            "$ref": "#/components/schemas/errorDetails"
+          }
+        }
+      },
+      "key": {
+        "type": "string",
+        "description": "The unique identifier (key) of the feature flag. This is used to reference a specific \nflag in the flag management system.\n",
+        "example": "discount-banner"
+      },
+      "context": {
+        "type": "object",
+        "description": "Evaluation context containing information used to evaluate feature flags. The context\nmay include an optional `targetingKey` identifying the subject of the evaluation, along\nwith additional properties such as user attributes, session data, or request metadata\nthat can be used for targeting rules.\n",
+        "properties": {
+          "targetingKey": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "example": {
+          "targetingKey": "user-123",
+          "email": "user@example.com",
+          "plan": "premium",
+          "country": "CA"
+        }
+      },
+      "booleanFlag": {
+        "description": "A boolean typed flag value. Used for simple on/off feature flags.",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "boolean"
+          }
+        },
+        "required": ["value"]
+      },
+      "stringFlag": {
+        "description": "A string typed flag value.",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": ["value"]
+      },
+      "integerFlag": {
+        "description": "An integer typed flag value.",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer"
+          }
+        },
+        "required": ["value"]
+      },
+      "floatFlag": {
+        "description": "A float typed flag value.",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "required": ["value"]
+      },
+      "objectFlag": {
+        "description": "An object typed flag value.",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["value"]
+      },
+      "codeDefaultFlag": {
+        "description": "A flag evaluation that defers to the code default value. When a flag evaluation returns \nthis type, it indicates that the provider should use the default value specified in the \napplication code rather than a value from the flag management system.\n\n**Note**: This schema has no `value` property. The provider must use the code default \nvalue when processing this response.\n",
+        "type": "object",
+        "properties": {}
+      },
+      "errorDetails": {
+        "type": "string",
+        "description": "A human-readable error description providing additional context about the evaluation \nfailure. Useful for logging, debugging, and monitoring purposes.\n"
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Arbitrary metadata object that can contain any additional information about flags or \nflag sets. This metadata is useful for debugging and telemetry purposes.\n",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "flagMetadataExamples": {
+        "description": "Example metadata structure for flags",
+        "example": {
+          "team": "ecommerce",
+          "businessPurpose": "experiment",
+          "owner": "product-team"
+        }
+      },
+      "flagMetadataDescription": {
+        "description": "Arbitrary metadata for the flag, useful for telemetry and documentary purposes.\n"
+      }
+    }
+  }
+}

@@ -1,10 +1,11 @@
 // The public entry of @mocco/openfeature-server: an OpenFeature server provider that
-// evaluates Mocco feature flags locally (ADR 0024). It polls the key's environment
-// ruleset (`GET /v1/flags/ruleset`, If-None-Match), so an evaluation is a pure in-memory
-// lookup with no network call, and it keeps serving the last good ruleset when Mocco is
-// unreachable (emitting PROVIDER_STALE until a poll succeeds again).
+// evaluates Mocco feature flags locally (ADR 0024). It fetches the key's environment
+// ruleset (`GET /v1/flags/ruleset`, If-None-Match) when the change stream says it changed
+// and on a polling interval, so an evaluation is a pure in-memory lookup with no network
+// call, and it keeps serving the last good ruleset when Mocco is unreachable (emitting
+// PROVIDER_STALE until a fetch succeeds again).
 import { parseRuleset, resolveTyped } from '@mocco/flags-core';
-import { MoccoClient } from '@mocco/sdk-core';
+import { MoccoClient, readServerSentEvents } from '@mocco/sdk-core';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents, StandardResolutionReasons } from '@openfeature/server-sdk';
 
 import type { FlagValueType, Ruleset } from '@mocco/flags-core';
@@ -18,12 +19,29 @@ export interface MoccoProviderOptions {
   pollIntervalMs?: number;
   /** A ruleset document to serve until the first successful poll (e.g. one baked into the build). */
   bootstrap?: unknown;
+  /**
+   * How changes reach the provider. `stream` (default): listen to Mocco's change stream
+   * and fetch the ruleset as soon as it changes, with polling kept as a fallback.
+   * `poll`: poll only.
+   */
+  changeDetection?: 'stream' | 'poll';
   fetch?: typeof fetch;
 }
 
 export const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const MIN_POLL_INTERVAL_MS = 1000;
 const RULESET_PATH = '/flags/ruleset';
+const STREAM_PATH = '/flags/stream';
+/** Reconnect delays for the change stream: 1 s doubling to 30 s, with jitter. */
+const STREAM_RETRY_MS = 1000;
+const STREAM_RETRY_MAX_MS = 30_000;
+
+/** Wait without keeping the process alive. */
+const sleep = async (ms: number) => {
+  await new Promise<void>(resolve => {
+    setTimeout(resolve, ms).unref();
+  });
+};
 
 /** The keys whose definitions differ between two rulesets. */
 function changedFlags(before: Ruleset | null, after: Ruleset): string[] {
@@ -31,6 +49,16 @@ function changedFlags(before: Ruleset | null, after: Ruleset): string[] {
   return [...keys].filter(
     key => JSON.stringify(before?.flags[key] ?? null) !== JSON.stringify(after.flags[key] ?? null),
   );
+}
+
+/** Whether an OFREP stream event asks for a re-fetch (unknown events are ignored). */
+function isRefetch(data: string): boolean {
+  try {
+    const parsed = JSON.parse(data) as { type?: unknown };
+    return parsed.type === 'refetchEvaluation';
+  } catch {
+    return false;
+  }
 }
 
 const errorText = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
@@ -51,6 +79,14 @@ export class MoccoProvider implements Provider {
 
   private isPolling = false;
 
+  private readonly isStreaming: boolean;
+
+  private isClosed = false;
+
+  private stream: AbortController | undefined;
+
+  private lastEventId: string | undefined;
+
   readonly metadata = { name: 'Mocco' } as const;
 
   readonly runsOn = 'server' as const;
@@ -67,6 +103,7 @@ export class MoccoProvider implements Provider {
       ...(options.fetch !== undefined && { fetch: options.fetch }),
     });
     this.pollIntervalMs = Math.max(MIN_POLL_INTERVAL_MS, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
+    this.isStreaming = (options.changeDetection ?? 'stream') === 'stream';
     if (options.bootstrap !== undefined) {
       const check = parseRuleset(options.bootstrap);
       if (!check.ok) {
@@ -100,6 +137,59 @@ export class MoccoProvider implements Provider {
       ...(resolution.errorCode !== undefined && { errorCode: resolution.errorCode as ErrorCode }),
       ...(resolution.errorMessage !== undefined && { errorMessage: resolution.errorMessage }),
     };
+  }
+
+  /** Handle one connection's events until it ends. */
+  private async consume(response: Response): Promise<void> {
+    const events = readServerSentEvents(response);
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop -- events are handled in order
+      const next = await events.next();
+      if (next.done === true) {
+        return;
+      }
+      const { id, data } = next.value;
+      this.lastEventId = id ?? this.lastEventId;
+      if (isRefetch(data)) {
+        // eslint-disable-next-line no-await-in-loop -- fetch before reading on
+        await this.poll({ isInitial: false });
+      }
+    }
+  }
+
+  /**
+   * Listen to the change stream until closed: each `refetchEvaluation` triggers a poll
+   * (an ETag'd fetch, so nothing is downloaded twice). Reconnects with backoff and
+   * `Last-Event-ID`; the stream ending (Mocco closes it every few minutes) is normal.
+   */
+  private async listen(): Promise<void> {
+    let failures = 0;
+    for (;;) {
+      if (this.isClosed) {
+        return;
+      }
+      this.stream = new AbortController();
+      try {
+        // eslint-disable-next-line no-await-in-loop -- one connection at a time
+        const response = await this.client.openStream(STREAM_PATH, {
+          signal: this.stream.signal,
+          ...(this.lastEventId !== undefined && { lastEventId: this.lastEventId }),
+        });
+        failures = 0;
+        // eslint-disable-next-line no-await-in-loop -- one connection at a time
+        await this.consume(response);
+      } catch {
+        failures += 1;
+      }
+      if (this.isClosed) {
+        return;
+      }
+      const delay = Math.min(STREAM_RETRY_MAX_MS, STREAM_RETRY_MS * 2 ** Math.min(failures, 5));
+      // eslint-disable-next-line sonarjs/pseudo-random -- reconnect jitter, not a secret
+      const jittered = delay / 2 + Math.random() * (delay / 2);
+      // eslint-disable-next-line no-await-in-loop -- the reconnect backoff
+      await sleep(jittered);
+    }
   }
 
   private startPolling(): void {
@@ -159,6 +249,10 @@ export class MoccoProvider implements Provider {
    * Mocco unreachable) initialization fails, and polling keeps trying to recover. */
   async initialize(): Promise<void> {
     this.startPolling();
+    if (this.isStreaming) {
+      // eslint-disable-next-line no-void -- runs until onClose; never rejects
+      void this.listen();
+    }
     const error = await this.poll({ isInitial: true });
     if (error !== undefined && this.ruleset === null) {
       throw new Error(`Couldn't load the Mocco ruleset: ${error}`);
@@ -166,6 +260,8 @@ export class MoccoProvider implements Provider {
   }
 
   async onClose(): Promise<void> {
+    this.isClosed = true;
+    this.stream?.abort();
     clearInterval(this.timer);
     this.timer = undefined;
     await Promise.resolve();

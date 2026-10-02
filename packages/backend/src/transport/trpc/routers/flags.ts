@@ -61,6 +61,15 @@ export const flagsRouter = router({
       flag: await ctx.flags.createFlag(input.workspaceId, input.projectId, ctx.session.user.id, input.flag),
     })),
 
+  /** Let publishable keys (browsers, apps) evaluate a flag over OFREP, or stop them. */
+  setClientVisible: flagsProcedure
+    .input(projectInput.extend({ flagKey: z.string(), clientVisible: z.boolean() }))
+    .output(z.object({ flag: flagSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...change } = input;
+      return { flag: await ctx.flags.setClientVisible(workspaceId, projectId, ctx.session.user.id, change) };
+    }),
+
   segments: flagsProcedure
     .input(environmentInput)
     .output(z.object({ segments: z.array(flagSegmentSchema) }))

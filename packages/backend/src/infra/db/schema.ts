@@ -1590,6 +1590,9 @@ export const flags = pgTable(
     variants: jsonb().$type<Record<string, unknown>>().notNull(),
     description: text(),
     lifecycle: text().$type<FlagLifecycle>().notNull().default(FlagLifecycles.temporary),
+    // Whether publishable keys (browsers, apps) get this flag over OFREP; off by default so
+    // internal flags can't be enumerated from a client.
+    clientVisible: boolean('client_visible').notNull().default(false),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
   },
