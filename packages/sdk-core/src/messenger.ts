@@ -81,6 +81,7 @@ interface StoredSession {
 const isFresh = (session: StoredSession) => Date.parse(session.expiresAt) > Date.now() + 60_000;
 
 const MESSENGER_PATH = '/messenger';
+/** Suffixed per key: a session belongs to one project, so a build with another key starts fresh. */
 const STORAGE_KEY = 'mocco-messenger:session:v1';
 export const DEFAULT_MESSENGER_POLL_MS = 15_000;
 const MIN_POLL_MS = 3000;
@@ -129,6 +130,8 @@ const initialState: MessengerState = {
 export class MessengerClient {
   private readonly baseUrl: string;
 
+  private readonly storageKey: string;
+
   private readonly fetchImpl: typeof fetch;
 
   private readonly pollIntervalMs: number;
@@ -150,6 +153,8 @@ export class MessengerClient {
 
   private pushToken: string | undefined;
 
+  private pushPlatform: MessengerPushTokenRequest['platform'] | undefined;
+
   getState = (): MessengerState => this.state;
 
   subscribe = (listener: () => void): (() => void) => {
@@ -163,6 +168,7 @@ export class MessengerClient {
     if (keyKindOf(options.publishableKey) !== 'publishable') {
       throw new MoccoKeyError('The messenger uses a publishable key (mk_pub_…) with messenger:chat');
     }
+    this.storageKey = `${STORAGE_KEY}:${options.publishableKey.slice(-8)}`;
     this.baseUrl = withoutTrailingSlashes(options.baseUrl ?? DEFAULT_BASE_URL) + MESSENGER_PATH;
     this.fetchImpl = options.fetch ?? fetch.bind(globalThis);
     this.pollIntervalMs = Math.max(MIN_POLL_MS, options.pollIntervalMs ?? DEFAULT_MESSENGER_POLL_MS);
@@ -178,7 +184,7 @@ export class MessengerClient {
 
   private async readStored(): Promise<StoredSession | null> {
     try {
-      const text = await this.options.storage?.getItem(STORAGE_KEY);
+      const text = await this.options.storage?.getItem(this.storageKey);
       return typeof text === 'string' ? (JSON.parse(text) as StoredSession) : null;
     } catch {
       return null;
@@ -188,8 +194,8 @@ export class MessengerClient {
   private async writeStored(session: StoredSession | null): Promise<void> {
     try {
       await (session === null
-        ? this.options.storage?.removeItem(STORAGE_KEY)
-        : this.options.storage?.setItem(STORAGE_KEY, JSON.stringify(session)));
+        ? this.options.storage?.removeItem(this.storageKey)
+        : this.options.storage?.setItem(this.storageKey, JSON.stringify(session)));
     } catch {
       // Without storage the next launch just opens a new session.
     }
@@ -401,8 +407,9 @@ export class MessengerClient {
 
   /**
    * Upload a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB) and return its id, to pass
-   * as `attachmentIds` when starting or continuing a conversation. In React Native, read
-   * a picked image's bytes with `await (await fetch(uri)).blob()`.
+   * as `attachmentIds` when starting or continuing a conversation. In React Native, pass
+   * bytes (`new Uint8Array(await (await fetch(uri)).arrayBuffer())`): with a Blob, RN
+   * replaces the upload's Content-Type and the upload is refused.
    */
   async attach(input: {
     body: Blob | ArrayBuffer | Uint8Array<ArrayBuffer>;
@@ -570,6 +577,27 @@ export class MessengerClient {
   async registerPushToken(input: MessengerPushTokenRequest): Promise<void> {
     await this.call('POST', '/push-tokens', input);
     this.pushToken = input.token;
+    this.pushPlatform = input.platform;
+  }
+
+  /**
+   * The app's signed-in user changed (they signed in, or switched accounts): ask
+   * `identity` again and open their session. What this device wrote as a guest moves to
+   * the account, and a registered push token follows the new session.
+   */
+  async reidentify(): Promise<void> {
+    const { pushToken, pushPlatform } = this;
+    this.session = null;
+    this.pushToken = undefined;
+    this.setState({ ...initialState, status: 'loading' });
+    await this.refresh();
+    if (pushToken !== undefined && pushPlatform !== undefined && this.session !== null) {
+      try {
+        await this.registerPushToken({ provider: 'expo', token: pushToken, platform: pushPlatform });
+      } catch {
+        // The app registers again on its next launch.
+      }
+    }
   }
 
   /** Forget the session (the user signed out of the app); this device stops getting their pushes. */
@@ -585,6 +613,7 @@ export class MessengerClient {
       }
     }
     this.pushToken = undefined;
+    this.pushPlatform = undefined;
     this.session = null;
     await this.writeStored(null);
     this.setState({ ...initialState, status: 'signed_out' });

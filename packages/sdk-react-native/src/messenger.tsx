@@ -26,7 +26,7 @@ export type {
   MessengerState,
   MessengerStorage,
 } from '@mocco/sdk-core';
-export { MessengerClient, messengerConversationIdOf } from '@mocco/sdk-core';
+export { MessengerClient, MoccoError, MoccoNetworkError, messengerConversationIdOf } from '@mocco/sdk-core';
 
 /** One client for the app; create it once (outside a component). */
 export function createMessenger(options: MessengerClientOptions): MessengerClient {

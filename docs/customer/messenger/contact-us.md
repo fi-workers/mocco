@@ -113,7 +113,7 @@ function Thread({ id }: { id: string }) {
 }
 ```
 
-When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
+When someone signs in to your app, call `useMessenger().reidentify()` so the messenger opens their session. When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
 
 To attach a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB; up to 3 per message), upload it first and send its id:
 
@@ -122,11 +122,12 @@ const messenger = useMessenger();
 const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
 const asset = picked.assets?.[0];
 if (asset !== undefined) {
-  const body = await (await fetch(asset.uri)).blob();
+  // Send bytes: with a Blob, React Native replaces the upload's Content-Type and it is refused.
+  const body = new Uint8Array(await (await fetch(asset.uri)).arrayBuffer());
   const attachmentId = await messenger.attach({
     body,
-    contentType: 'image/png', // or the picked image's type
-    sizeBytes: body.size,
+    contentType: 'image/jpeg', // the picked image's real type
+    sizeBytes: body.byteLength,
   });
   await send('Here is what I see', [attachmentId]); // from useConversation(id)
 }
@@ -199,7 +200,7 @@ if (status === 'signed_out') {
 }
 ```
 
-The device remembers the guest, so they see your replies the next time they open the app. If they sign in later on the same device, what they wrote moves to their account. In the inbox a guest's conversation is marked **Guest**, with **Not signed in** and their email beside it. Mocco doesn't email them for you yet; reply in the app, or write to the email they left.
+The device remembers the guest, so they see your replies the next time they open the app. If they sign in later on the same device and your app calls `reidentify()`, what they wrote moves to their account. In the inbox a guest's conversation is marked **Guest**, with **Not signed in** and their email beside it. Mocco doesn't email them for you yet; reply in the app, or write to the email they left.
 
 ![A guest's conversation: the "Not signed in" badge and the email they left](./images/messenger-guest.png)
 

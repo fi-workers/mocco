@@ -353,6 +353,39 @@ describe('MessengerClient', () => {
     ]);
   });
 
+  it('moves a guest to the account when the app user signs in, with the push token', async () => {
+    const server = fakeMessenger();
+    const user: { current: typeof identity | null } = { current: null };
+    const client = clientFor(server, {
+      storage: memoryStorage(),
+      identity: async () => await Promise.resolve(user.current),
+    });
+    await client.continueAsGuest({ email: 'guest@example.com' });
+    await client.registerPushToken({ provider: 'expo', token: 'ExponentPushToken[abc]', platform: 'ios' });
+
+    user.current = identity;
+    await client.reidentify();
+
+    expect(client.getState()).toMatchObject({ status: 'ready', isGuest: false });
+    const sessions = server.calls.filter(call => call.path === '/sessions');
+    expect(sessions.at(-1)?.body).toMatchObject({ userId: 'u1', guestToken: 'mmg_device-token-0123456789' });
+    const pushes = server.calls.filter(call => call.path === '/push-tokens');
+    expect(pushes.map(call => call.auth)).toEqual([expect.any(String), expect.any(String)]);
+    expect(pushes[0]?.auth).not.toBe(pushes[1]?.auth);
+  });
+
+  it("doesn't reuse a session stored under another key", async () => {
+    const server = fakeMessenger();
+    const storage = memoryStorage();
+    await clientFor(server, { storage }).refresh();
+    await clientFor(server, { storage, publishableKey: 'mk_pub_0123456789abcdefghijklmn99999999' }).refresh();
+
+    expect(server.calls.filter(call => call.path === '/sessions').map(call => call.auth)).toEqual([
+      KEY,
+      'mk_pub_0123456789abcdefghijklmn99999999',
+    ]);
+  });
+
   it('refuses a secret key', () => {
     expect(
       () =>
