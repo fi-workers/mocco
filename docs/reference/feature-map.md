@@ -92,7 +92,7 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Governed changesets | Live | Changes to a protected target are approval requests with a diff (ADR 0020) |
 | Kill switch | Live | One-way, ungated, audited; restore is gated |
 | Server SDK (local evaluation) | Live | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
-| Client SDKs (OFREP) | Not drawn | Web and React Native OpenFeature providers on OFREP bulk evaluation; SSE streaming |
+| Client SDKs (OFREP) | Prototype | OFREP bulk and single evaluation (client-visible flags only) and the SSE change stream are live; the web and React Native providers come next |
 | Telemetry and stale flags | Not drawn | Aggregated evaluation counts; flags no code evaluates any more |
 | Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate |
 

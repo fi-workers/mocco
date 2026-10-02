@@ -316,6 +316,36 @@ function EnvironmentEditor({
   );
 }
 
+/** Whether browsers and apps (publishable keys, over OFREP) may evaluate this flag. */
+function ClientVisibility({ workspaceId, projectId, flag }: Omit<Props, 'flagKey'> & { flag: FlagDto }) {
+  const utils = trpc.useUtils();
+  const change = trpc.flags.setClientVisible.useMutation({
+    onSuccess: async () => {
+      await utils.flags.list.invalidate();
+    },
+  });
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={flag.clientVisible}
+          disabled={change.isPending}
+          onChange={event => {
+            change.mutate({ workspaceId, projectId, flagKey: flag.key, clientVisible: event.target.checked });
+          }}
+        />
+        Available to browsers and apps
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Publishable keys evaluate only flags marked available, and only ever get the resolved value — never the rules.
+        Server keys see every flag.
+      </p>
+      {change.error ? <p className="text-xs text-destructive">{errorMessage(change.error)}</p> : null}
+    </div>
+  );
+}
+
 /** One flag: its variants, and per environment its rules, fallthrough and preview. */
 export default function FlagDetail({ workspaceId, projectId, flagKey }: Props) {
   const router = useRouter();
@@ -350,6 +380,7 @@ export default function FlagDetail({ workspaceId, projectId, flagKey }: Props) {
         </div>
         {flag.description ? <p className="text-sm text-muted-foreground">{flag.description}</p> : null}
       </div>
+      <ClientVisibility workspaceId={workspaceId} projectId={projectId} flag={flag} />
       <section className="flex flex-col gap-1">
         <h3 className="text-sm font-medium">Variants</h3>
         <ul className="flex flex-wrap gap-2">

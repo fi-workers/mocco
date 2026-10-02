@@ -281,6 +281,8 @@ export const flagSchema = z.object({
   variants: variantsSchema,
   description: z.string().nullable(),
   lifecycle: z.enum([FlagLifecycles.temporary, FlagLifecycles.permanent]),
+  /** Evaluated for publishable (browser and app) keys over OFREP; server keys see every flag. */
+  clientVisible: z.boolean(),
   createdAt: z.date(),
 });
 export type FlagDto = z.infer<typeof flagSchema>;

@@ -23,6 +23,8 @@ code_refs:
   - packages/backend/src/domain/flags/compile-ruleset.ts
   - packages/backend/src/transport/trpc/routers/flags.ts
   - packages/backend/src/transport/ext/v1/flags.ts
+  - packages/backend/src/transport/ext/v1/ofrep.ts
+  - packages/backend/src/domain/flags/ofrep.ts
   - packages/sdk-flags-core/src/evaluate.ts
   - packages/sdk-openfeature-server/src/openfeature-server.ts
 ---
@@ -145,9 +147,29 @@ The response is the flagd document with `ETag` and `Cache-Control: private, no-c
 
 `@mocco/flags-core` evaluates a ruleset locally: the restricted JsonLogic subset, flagd's `fractional` (MurmurHash3 x86_32; bucket `(hash × totalWeight) >> 32`), `sem_ver` with Go `x/mod/semver` semantics, `starts_with` and `ends_with`, and flagd's resolution rules (`$flagd.flagKey` and `$flagd.timestamp` in the context; DISABLED, STATIC, DEFAULT, TARGETING_MATCH; FLAG_NOT_FOUND, TYPE_MISMATCH, PARSE_ERROR, GENERAL). A conformance test replays flagd's own evaluator cases (`conformance.test.ts`). `parseRuleset` refuses a document with an operator outside the subset before it is used.
 
-`@mocco/openfeature-server` is the OpenFeature server provider over it ([SDK packages](./sdk.md)). It polls this endpoint with `If-None-Match` (default every 30 s), evaluates in memory, emits `PROVIDER_CONFIGURATION_CHANGED` with `flagsChanged`, and keeps the last good ruleset as `PROVIDER_STALE` when a poll fails or returns a ruleset it can't use. An optional `bootstrap` ruleset lets it start while Mocco is unreachable. `transport/ext/v1/flags-sdk.test.ts` runs the provider against the real routes.
+`@mocco/openfeature-server` is the OpenFeature server provider over it ([SDK packages](./sdk.md)). It listens to the change stream and fetches this endpoint with `If-None-Match` as soon as the ruleset changes, also polling every 30 s as a fallback (`changeDetection: 'poll'` polls only). It evaluates in memory, emits `PROVIDER_CONFIGURATION_CHANGED` with `flagsChanged`, and keeps the last good ruleset as `PROVIDER_STALE` when a poll fails or returns a ruleset it can't use. An optional `bootstrap` ruleset lets it start while Mocco is unreachable. `transport/ext/v1/flags-sdk.test.ts` runs the provider against the real routes.
 
 flagd's HTTP sync works against the same endpoint (`authHeader: "Bearer mk_sec_…"`; it sends `If-None-Match` too), for teams that run flagd or use a non-JavaScript OpenFeature provider; the customer [quickstart](../customer/flags/quickstart.md) shows the command.
+
+### Change stream
+
+`GET /v1/flags/stream` is an OFREP event stream (`text/event-stream`). When the environment's version moves, it sends `data: {"type":"refetchEvaluation","etag":"<snapshot ETag>"}` with `id` set to the version, so `Last-Event-ID` resumes and a reconnecting client hears about a change it missed. It sends a `: ping` comment every 25 s and closes after 240 s (Vercel's function limit); clients reconnect.
+
+It is authenticated by a `flags:read` key in the header (server SDKs), or by a stream token in `?token=`. Browsers' `EventSource` can't send headers, so the OFREP bulk response advertises a tokenized URL. A token (`StreamTokens`, HMAC with a key derived from `AUTH_SECRET`, valid for an hour) names one environment and grants nothing else. Without `AUTH_SECRET`, no stream is advertised and clients poll.
+
+Until the realtime foundation (#123) exists, each connection checks the environment's newest snapshot version once a second, which is one indexed read. Swapping to `RealtimePublisher` changes only this route.
+
+## OFREP (browsers and apps)
+
+`POST /v1/ofrep/v1/evaluate/flags` (bulk) and `POST /v1/ofrep/v1/evaluate/flags/{key}` implement the OpenFeature Remote Evaluation Protocol, so the OFREP `baseUrl` is the public API base (`https://api.mocco.club/v1`). Any `flags:read` key works:
+
+- **Who sees what.** A publishable key evaluates only flags marked **available to browsers and apps** (`client_visible`, off by default, set on the flag's page). Any other flag is `FLAG_NOT_FOUND`, the same as a missing one. A secret key sees every flag.
+- **What a response carries.** Resolved values only: `key`, `value`, `variant`, `reason`. Never rules, segment lists or Mocco's flag metadata.
+- **Reasons.** OFREP's enum has no `DEFAULT`, so a value that fell through to the default variant is `STATIC`. A disabled flag is `DISABLED` with no `value` (OFREP's code-default).
+- **Errors.** `PARSE_ERROR` or `GENERAL` per flag. A body without an object `context` is `400 INVALID_CONTEXT`.
+- **Caching.** The bulk response's `ETag` hashes the snapshot ETag, the key's audience and the context, so `If-None-Match` with the same context answers `304`. The response also lists `eventStreams` (the tokenized stream URL).
+
+`transport/ext/v1/ofrep.test.ts` validates responses against OFREP's OpenAPI schemas (vendored in `domain/flags/testing/ofrep-openapi-schemas.json`, with one documented fix: the published `oneOf` for a value accepts no value at all). It also checks that segment keys and rules never appear, and runs the generic `@openfeature/ofrep-web-provider` against the routes.
 
 A key is bound to one environment when it is created: `flagEnvironmentId` is required with `flags:read` and refused without it ([public API](./public-api.md#keys)).
 
@@ -165,6 +187,7 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | `changeset`, `voteChangeset`, `withdrawChangeset`, `rebaseChangeset` | A changeset with its votes; vote with the reviewed content hash; withdraw or rebase your own |
 | `setChangeGate` | Protect, re-gate or unprotect an environment |
 | `kill`, `setKillRoles` | Kill a flag now (gate bypassed, reason required); choose who may kill |
+| `setClientVisible` | Let publishable keys evaluate a flag over OFREP, or stop them |
 | `history` | An environment's last 50 changesets, newest first |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
 

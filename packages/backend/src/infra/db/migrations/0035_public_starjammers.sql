@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_flags" ADD COLUMN "client_visible" boolean DEFAULT false NOT NULL;

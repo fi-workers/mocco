@@ -32,7 +32,7 @@ export interface V1Env {
 
 const BEARER = 'Bearer ';
 const KEY_HEADER = 'x-mocco-key';
-const ALLOWED_HEADERS = 'authorization, content-type, x-mocco-key, idempotency-key';
+const ALLOWED_HEADERS = 'authorization, content-type, x-mocco-key, idempotency-key, if-none-match, last-event-id';
 const EXPOSED_HEADERS = 'ratelimit-limit, ratelimit-remaining, ratelimit-reset, etag';
 
 /** Per-key limits by kind; per-IP limits for routes without a key. */

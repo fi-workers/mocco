@@ -2484,7 +2484,9 @@ __metadata:
     "@octokit/plugin-throttling": "npm:11.0.3"
     "@openfeature/core": "npm:1.12.0"
     "@openfeature/flagd-core": "npm:4.0.1"
+    "@openfeature/ofrep-web-provider": "npm:0.4.3"
     "@openfeature/server-sdk": "npm:1.23.0"
+    "@openfeature/web-sdk": "npm:1.10.0"
     "@trpc/server": "npm:11.18.0"
     "@types/pg": "npm:8.20.0"
     "@vercel/functions": "npm:3.7.5"
@@ -3113,12 +3115,41 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openfeature/ofrep-core@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "@openfeature/ofrep-core@npm:2.3.0"
+  peerDependencies:
+    "@openfeature/core": ^1.6.0
+  checksum: 10/29bfd56d4400c0e8426153cb753c81f11d4120694301a65c6501277c70520d99a5055e0131f7a8a1839f2712e537b6ac5570cec52bf3824572b08f4681b17f06
+  languageName: node
+  linkType: hard
+
+"@openfeature/ofrep-web-provider@npm:0.4.3":
+  version: 0.4.3
+  resolution: "@openfeature/ofrep-web-provider@npm:0.4.3"
+  dependencies:
+    "@openfeature/ofrep-core": "npm:^2.3.0"
+  peerDependencies:
+    "@openfeature/web-sdk": ^1.10.0
+  checksum: 10/3284a5a65b88f0da64e24cf55c158e13fc49e777fcd9e0f808c69fcb5c45c46a86b8f4dc263332ee63d85be349311bb6a533b1441949c57902d7030175213bb2
+  languageName: node
+  linkType: hard
+
 "@openfeature/server-sdk@npm:1.23.0":
   version: 1.23.0
   resolution: "@openfeature/server-sdk@npm:1.23.0"
   peerDependencies:
     "@openfeature/core": ^1.12.0
   checksum: 10/74061b5d177fe7d15dfb8e1ac08d311efc25479a8ff643c080c1c11d1d7b8c06c092d569a6132711a5d52138ea2a9e2ca2c4e530cec956f166c2e34f370a0705
+  languageName: node
+  linkType: hard
+
+"@openfeature/web-sdk@npm:1.10.0":
+  version: 1.10.0
+  resolution: "@openfeature/web-sdk@npm:1.10.0"
+  peerDependencies:
+    "@openfeature/core": ^1.12.0
+  checksum: 10/a9dcfaa93c3093580526db4ee24ffbb3ff81a2c2bf52827d8e64a0e673e5faae5dda9ca31f58801739a7d0b92d5cc5d76111bbc2fc00621e4e002cd964a3dc09
   languageName: node
   linkType: hard
 
