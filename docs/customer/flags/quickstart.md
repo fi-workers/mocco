@@ -21,7 +21,7 @@ Mocco's feature flags work with [OpenFeature](https://openfeature.dev), so your 
 
 ## 1. Turn on feature flags
 
-A workspace owner turns on **Feature flags** on the workspace's **Products** page. The project then shows a **Feature flags** tab.
+A workspace member turns on **Feature flags** on the workspace's **Products** page. The project then shows a **Feature flags** tab.
 
 ## 2. Create environments and a flag
 

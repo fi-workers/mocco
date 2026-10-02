@@ -45,7 +45,7 @@ Mocco posts events to Discord: its own events, such as a gate waiting for approv
 
 ## Messenger
 
-In-app "contact us" for your signed-in users. They write from inside your app, and your team answers from the project's **Inbox**, with the user's app version and platform alongside each conversation. See [In-app contact with Mocco Messenger](../messenger/contact-us.md).
+In-app "contact us" for your users: signed in, or with an email they leave if they aren't. They write from inside your app, with screenshots if they like, and your team answers from the project's **Inbox**, with the user's app version and platform alongside each conversation. Replies reach the app as push notifications. See [In-app contact with Mocco Messenger](../messenger/contact-us.md).
 
 ## API keys and SDKs
 
