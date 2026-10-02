@@ -22,4 +22,11 @@ describe('help center search', () => {
     expect(searchArticles(articles, '링크', 1)[0]?.snippet).toContain('링크');
     expect(searchArticles(articles, ' '.repeat(3), 10)).toEqual([]);
   });
+
+  it('in any mode, ranks by how many words match, and finds a word with a particle', () => {
+    expect(searchArticles(articles, '위젯 coupon', 10, 'any').map(hit => hit.path)).toHaveLength(3);
+    // "위젯이" matches "위젯"; "a" is too short to count.
+    expect(searchArticles(articles, '위젯이 안 보여요 a', 10, 'any').map(hit => hit.path)).toEqual(['/ko/a', '/ko/b']);
+    expect(searchArticles(articles, 'nothing here', 10, 'any')).toEqual([]);
+  });
 });

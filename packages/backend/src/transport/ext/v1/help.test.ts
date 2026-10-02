@@ -125,6 +125,18 @@ describe('/v1/help (pglite)', () => {
     });
   });
 
+  it('matches any word of free text with match=any', async () => {
+    await publish();
+    const key = await keyFor([ApiScopes.helpRead]);
+    const query = `q=${encodeURIComponent('위젯이 화면에 안 보여요')}`;
+
+    const every = await search(key, query);
+    const any = await search(key, `${query}&match=any`);
+
+    expect([every.body, any.status]).toEqual([{ locale: 'ko', hits: [] }, 200]);
+    expect((any.body as { hits: { title: string }[] }).hits.map(hit => hit.title)).toEqual(['위젯 추가하기']);
+  });
+
   it('needs help:read, a query, and a help center', async () => {
     const withoutScope = await keyFor([ApiScopes.messengerChat]);
     const key = await keyFor([ApiScopes.helpRead]);

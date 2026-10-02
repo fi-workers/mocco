@@ -95,3 +95,21 @@ Readers can search from the box at the top of every page. Every word they type h
 ![Searching the help center: results for a word, with a snippet of each article](./images/search.png)
 
 ![A published article on the public help site, with the article list and the language switcher](./images/public-article.png)
+
+## Suggest articles in your app
+
+Your app can search the help center too, for example to show related articles while someone writes to you, so they may find the answer before they send. Create a **Publishable** key with the **help:read** scope on the **API keys** tab (an app that already uses Messenger can add the scope to its key). Then, in React Native:
+
+```tsx
+import { createHelp, useHelpSearch } from '@mocco/react-native/messenger';
+
+const help = createHelp({ publishableKey: 'mk_pub_…' });
+
+function Suggestions({ text }: { text: string }) {
+  // Waits until typing pauses; `any` finds articles that share any word with the text.
+  const { hits } = useHelpSearch(help, text, { locale: 'en', limit: 3, match: 'any' });
+  return hits.map(hit => <ArticleLink key={hit.path} title={hit.title} url={hit.url} />);
+}
+```
+
+Each hit has the article's `title`, a `snippet` of its text and its `url` on your help site, in the reader's language where it is translated. Any other client can call `GET https://api.mocco.club/v1/help/search?q=…&locale=en&match=any` with the key as `Authorization: Bearer mk_pub_…`.

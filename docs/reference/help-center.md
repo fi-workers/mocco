@@ -19,7 +19,7 @@ code_refs:
 
 # Help center
 
-The [help center design](../specs/2026-09-24-help-center-design.md) (#96) so far: the data model, the services to write, publish and read a help center, the public site and the console editor. Import, translation, search and custom domains come in later slices.
+The [help center design](../specs/2026-09-24-help-center-design.md) (#96) so far: the data model, the services to write, publish and read a help center, the public site, the console editor, import, translation and search. Custom domains are served by host (`HELP_CUSTOM_DOMAINS`); verifying them in the console comes later.
 
 ## Sites
 
@@ -66,6 +66,15 @@ Each article has a translation per offered language in `mocco_help_translations`
 ## Import
 
 `HelpImportService.importBundle` takes a bundle of collections → sections → articles (`@mocco/common/help-import`, `importBundleSchema`) and matches it to the site: collections by slug, sections by title, articles by their old path (`mocco_help_redirects`). New articles are created; known ones get an `import` revision only when their content hash changed; every new old path becomes a redirect; with `publish`, every imported article's draft is published. The console's **Import from Mintlify** reads a picked folder in the browser: `bundleFromMintlify` converts `docs.json` and the MDX (Steps → numbered list, Tip/Info/Note/Warning/Check → labelled quotes, Update → headings, other components dropped), the pages' images are uploaded first (`createImageUpload` → PUT → `completeImage`, public objects under the `helpcenter` storage policy: PNG, JPEG, WebP, GIF, 10 MB), and the bundle is sent one collection per request. On the public site, any other path is looked up as an old path and redirects (308) to its article.
+
+## Search
+
+`searchArticles` (`domain/helpcenter/search.ts`) runs in memory over a site's published texts, in the reader's locale where translated and the source elsewhere. Matching is case-insensitive substring per term, so any script works without a tokenizer. Two modes:
+
+- `all` (default, the public site's search box): every term (up to 6) must appear in the title or the text.
+- `any` (free text, such as an inquiry being written in an app): one term is enough. Terms shorter than two letters are skipped, up to 24 are used, trailing punctuation is dropped, and a term of three or more letters also matches without its last letter, so a Korean word with a particle ("위젯이") finds "위젯".
+
+Ranking: matched terms ×100, title matches ×10, text matches ×1. Each hit has a 140-character plain-text snippet around the first match in the text. Served at `/api/help/search` (public site, frontend) and `GET /v1/help/search` (`help:read`, publishable keys allowed; `q` up to 500 characters, `match=all|any`, `limit` up to 20); the SDK wraps the latter as `HelpClient.search` and `useHelpSearch` (`@mocco/react-native/messenger`).
 
 ## Operator API
 

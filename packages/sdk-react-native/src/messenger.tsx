@@ -9,6 +9,7 @@ import { AppState } from 'react-native';
 
 import type {
   HelpArticleHit,
+  HelpSearchOptions,
   HelpClientOptions,
   MessengerCategory,
   MessengerClientOptions,
@@ -20,6 +21,7 @@ import type { ReactNode } from 'react';
 
 export type {
   HelpArticleHit,
+  HelpSearchOptions,
   HelpClientOptions,
   MessengerAttachment,
   MessengerCategory,
@@ -186,11 +188,11 @@ export function createHelp(options: HelpClientOptions): HelpClient {
 export function useHelpSearch(
   help: HelpClient,
   query: string,
-  opts: { locale?: string; limit?: number } = {},
+  opts: HelpSearchOptions = {},
 ): { hits: HelpArticleHit[]; isSearching: boolean } {
   const [hits, setHits] = useState<HelpArticleHit[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const { locale, limit } = opts;
+  const { locale, limit, match } = opts;
   useEffect(() => {
     let isCurrent = true;
     const timer = setTimeout(() => {
@@ -201,6 +203,7 @@ export function useHelpSearch(
           const found = await help.search(query, {
             ...(locale !== undefined && { locale }),
             ...(limit !== undefined && { limit }),
+            ...(match !== undefined && { match }),
           });
           if (isCurrent) {
             setHits(found);
@@ -218,6 +221,6 @@ export function useHelpSearch(
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [help, query, locale, limit]);
+  }, [help, query, locale, limit, match]);
   return { hits, isSearching };
 }

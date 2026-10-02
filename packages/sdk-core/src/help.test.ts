@@ -23,6 +23,16 @@ describe('HelpClient', () => {
     expect(new Headers(init.headers).get('authorization')).toBe('Bearer mk_pub_x');
   });
 
+  it('asks for any-word matching', async () => {
+    const fetchSpy = vi.fn(async () => await Promise.resolve(Response.json({ locale: 'ko', hits: [] })));
+    const help = new HelpClient({ publishableKey: 'mk_pub_x', fetch: fetchSpy });
+
+    await help.search('위젯이 안 보여요', { match: 'any' });
+
+    const [url] = fetchSpy.mock.calls[0] as unknown as [string];
+    expect(new URL(url).searchParams.get('match')).toBe('any');
+  });
+
   it('throws MoccoError on a refusal', async () => {
     const help = new HelpClient({
       publishableKey: 'mk_pub_x',

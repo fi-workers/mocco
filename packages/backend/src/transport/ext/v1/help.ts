@@ -19,9 +19,11 @@ export interface HelpServingDeps {
 }
 
 const searchQuerySchema = z.object({
-  q: z.string().trim().min(1).max(100),
+  q: z.string().trim().min(1).max(500),
   locale: helpLocaleSchema.optional(),
   limit: z.coerce.number().int().min(1).max(20).default(5),
+  /** `any`: one word is enough, for free text such as an inquiry being written. */
+  match: z.enum(['all', 'any']).default('all'),
 });
 
 export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1Env> {
@@ -30,7 +32,7 @@ export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1En
   app.get('/search', requireKey(deps, { scope: ApiScopes.helpRead }), async c => {
     const query = searchQuerySchema.safeParse(c.req.query());
     if (!query.success) {
-      return problemResponse(problemOf(400, ProblemCodes.badRequest, 'q is required (1–100 characters)'));
+      return problemResponse(problemOf(400, ProblemCodes.badRequest, 'q is required (1–500 characters)'));
     }
     const { workspaceId, projectId } = c.var.principal;
     try {
@@ -40,6 +42,7 @@ export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1En
         query.data.locale ?? '',
         query.data.q,
         query.data.limit,
+        query.data.match,
       );
       const origin = help.originOf(result.slug);
       c.header('Cache-Control', 'public, max-age=60');

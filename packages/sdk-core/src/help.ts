@@ -14,6 +14,14 @@ export interface HelpArticleHit {
   snippet: string;
 }
 
+export interface HelpSearchOptions {
+  /** The reader's language; the source language where an article isn't translated. */
+  locale?: string;
+  limit?: number;
+  /** `all` (default): every word must appear. `any`: one word is enough. */
+  match?: 'all' | 'any';
+}
+
 export interface HelpClientOptions {
   /** A key with help:read (`mk_pub_…` in an app). */
   publishableKey: string;
@@ -32,12 +40,14 @@ export class HelpClient {
   }
 
   /**
-   * Published articles matching `query` (every word must appear), best first, in
-   * `locale` where translated. An empty query answers no hits without a request.
+   * Published articles matching `query`, best first, in `locale` where translated. Every
+   * word must appear, or with `match: 'any'` (for free text such as an inquiry being
+   * written) one word is enough and more matching words rank higher. An empty query
+   * answers no hits without a request.
    */
-  async search(query: string, opts: { locale?: string; limit?: number } = {}): Promise<HelpArticleHit[]> {
+  async search(query: string, opts: HelpSearchOptions = {}): Promise<HelpArticleHit[]> {
     // eslint-disable-next-line sonarjs/null-dereference -- query is a string, never null
-    const trimmed = query.trim().slice(0, 100);
+    const trimmed = query.trim().slice(0, 500);
     if (trimmed === '') {
       return [];
     }
@@ -47,6 +57,9 @@ export class HelpClient {
     }
     if (opts.limit !== undefined) {
       params.set('limit', String(opts.limit));
+    }
+    if (opts.match !== undefined) {
+      params.set('match', opts.match);
     }
     let response: Response;
     try {
