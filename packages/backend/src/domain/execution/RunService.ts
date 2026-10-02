@@ -163,6 +163,13 @@ export interface RunServiceDeps {
  * `.output` at the router. Vendor/adapter words never appear here (ADR 0004);
  * `applyCallback` is the single funnel every executor reports through.
  */
+export interface ProjectRunFilter {
+  state?: RunState;
+  repoId?: string;
+  limit: number;
+  before?: Date;
+}
+
 export class RunService {
   constructor(private readonly deps: RunServiceDeps) {}
 
@@ -540,6 +547,30 @@ export class RunService {
     const gates = await this.deps.runGates.findByRun(workspaceId, runId);
     const resumes = await this.deps.resumes.listByRun(workspaceId, runId);
     return { run, steps, gates, resumes };
+  }
+
+  /**
+   * Runs of the repositories a project links, newest first — the project-scoped read the
+   * public API serves, where the caller is an API key and so knows a project rather than
+   * a workspace. Read-only: a key may watch a deploy, never resume one (ADR 0025).
+   */
+  async searchInProject(workspaceId: string, projectId: string, filter: ProjectRunFilter) {
+    return await this.deps.runs.searchInProject(workspaceId, projectId, filter);
+  }
+
+  /**
+   * One run with its steps and gates, scoped to a project the same way. Returns undefined
+   * for a run the project does not reach — including one in the same workspace — so a key
+   * cannot learn that an id exists under a repository it was not given.
+   */
+  async getInProject(workspaceId: string, projectId: string, runId: string) {
+    const row = await this.deps.runs.findInProject(workspaceId, projectId, runId);
+    if (row === undefined) {
+      return undefined;
+    }
+    const steps = await this.deps.steps.listByRun(workspaceId, runId);
+    const gates = await this.deps.runGates.findByRun(workspaceId, runId);
+    return { ...row, steps, gates };
   }
 
   /** A run plus its progression events with `seq > sinceSeq`, and its gates + votes —

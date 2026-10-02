@@ -4,7 +4,7 @@ description: The versioned public API on the ext app — publishable and secret 
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [reference, platform, api, api-keys, rate-limiting]
@@ -30,6 +30,8 @@ A key belongs to one project and has a kind:
 | Kind | Token | Where it lives | Scopes |
 |---|---|---|---|
 | Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed) |
+
+`runs:read` is secret-only and read-only. Run history is operational data about a team's deploys, so it never reaches a browser or an app; and a key authenticates a **project**, not a person, so it can watch a deploy but never resume one — deciding needs someone the audit chain can name ([ADR 0002](../adr/0002-mocco-is-an-independent-authorization-layer.md), [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). A run carries no project: it reaches one through its commit's repository and `mocco_project_repos`, so a key sees its own project's repositories and nothing else.
 | Secret | `mk_sec_` + 32 base62 characters | Servers and CI | Any scope |
 
 The token is returned once, by `apiKey.create`, and only its SHA-256 is stored; the console shows `mk_sec_…abcd`. Keys are managed on the project's **API keys** tab (`/workspaces/{id}/p/{projectId}/api-keys`): pick the kind (publishable keys offer only client scopes), name it and choose scopes, copy the token from the one-time notice, and revoke with an inline confirmation. Owners and admins create and revoke keys (`apikey.created`, `apikey.revoked` in the audit log); members can list them. A key may expire (`expiresAt`), and its `lastUsedAt` is updated at most once a minute.
@@ -76,6 +78,8 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `POST /v1/flags/telemetry` | `flags:read` (publishable: client-visible flags only) | Aggregated evaluation counts `{ evaluations: [{ flag, variant, count, windowStart }] }` (≤ 500 entries); `202 { accepted, ignored }`; 300 a minute per key on top of the key's limit; see [Feature flags](./flags.md#evaluation-telemetry-and-stale-flags) |
 | `POST /v1/ofrep/v1/evaluate/flags` · `…/flags/{key}` | `flags:read` (publishable: client-visible flags only) | OFREP bulk / single evaluation for `{ context }`; bulk has an `ETag` (`If-None-Match` → `304`) and `eventStreams`; see [Feature flags](./flags.md#ofrep-browsers-and-apps) |
 | `GET /v1/flags/ruleset` | secret, `flags:read` | The key's environment as a flagd v0 document, with a strong `ETag` and `Cache-Control: private, no-cache`; `If-None-Match` with the current tag → `304` (the document isn't loaded); see [Feature flags](./flags.md#serving-server-sdks) |
+| `GET /v1/runs` | secret, `runs:read` | The runs of the repositories this key's project links, newest first, with the commit that produced each. Filters: `state`, `repoId`, `limit` (≤ 100), `before` (the previous page's last `createdAt`); the answer carries `nextBefore` when the page was full. `Cache-Control: private, no-cache` |
+| `GET /v1/runs/{id}` | secret, `runs:read` | One run with its steps and gates — enough to say why it is paused and on what. `404` for a run the project does not link, including one in the same workspace |
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |
 | `POST /v1/ota/apps/{otaAppId}/events` | none (devices; rate-limited per IP) | `202`; body `{ clientId, platform, events: [{ type, updateId, occurredAt?, detail? }] }` (≤ 50 events, ≤ 16 KB; `413` over) |
