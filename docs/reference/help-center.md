@@ -49,6 +49,10 @@ Text lives in `mocco_help_revisions`, append-only, one row per save: locale, tit
 
 With `HELP_SITES_DOMAIN` set, `https://<slug>.<domain>/` serves the site ([ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/` redirects to the source language, `/{locale}` lists the published collections, `/{locale}/articles/{shortId}-{slug}` shows an article (a stale slug or a missing language redirects to the canonical path), and an unknown site is a 404. Pages are generated on first request and regenerated at most every 60 seconds, so a publish shows up within a minute. Article Markdown renders through the same tree as the customer guides; links may be `http(s)`, `mailto`, site paths or anchors, and images must be `https`.
 
+## Custom domains
+
+`HELP_CUSTOM_DOMAINS` maps a customer's domain to a site slug (`help.example.com=example`); `next.config.ts` adds a host rewrite per pair, alongside the `<slug>.<HELP_SITES_DOMAIN>` one, so the site's pages, redirects and old paths all work on that host. It is set per deployment for now: a domain needs adding to the Vercel project (and its DNS pointing there) anyway. Verifying domains from the console, through the Vercel Domains API, comes later.
+
 ## Console
 
 The project's **Help center** tab (shown once the product is on) sets the site up (address, source language, offered languages), lists collections → sections → articles with their state (Draft, Published, Unpublished changes), and adds each level. The article editor shows the Markdown beside a live preview rendered by the same tree as the public site (`lib/help-markdown.ts`), with Save draft, Publish (only with no unsaved changes), Unpublish, Delete and the revision history with Restore ([customer guide](../customer/help/help-center.md)).

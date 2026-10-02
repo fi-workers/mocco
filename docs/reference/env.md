@@ -86,6 +86,8 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 `HELP_SITES_DOMAIN` (a bare domain such as `help.mocco.club`, read by `next.config.ts` at build time) serves each help center at `https://<site slug>.<that domain>/`, rewritten to `pages/_sites/<site>/*` ([ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)). The domain needs a wildcard DNS record and certificate pointing at the deployment. Locally, `help.localhost:3217` works without DNS (the port is ignored by the rewrite and kept in the console's link to the site). Unset, help centers aren't served.
 
+`HELP_CUSTOM_DOMAINS` (comma-separated `domain=site-slug` pairs, such as `help.showyourti.me=showyourtime`, read by `next.config.ts` at build time) serves a help center on the customer's own domain. Each domain must also be added to the Vercel project and point at it (a CNAME to Vercel's DNS). The console links the site there instead of `<slug>.<HELP_SITES_DOMAIN>`.
+
 `AI_GATEWAY_API_KEY` (a Vercel AI Gateway key) turns on help center translation: publishing an article queues a translation into each language the site offers. `HELP_TRANSLATION_MODEL` picks the model (an AI Gateway model id, default `anthropic/claude-sonnet-5`). Unset, nothing is translated and readers get the source language.
 
 ## Storage vars
