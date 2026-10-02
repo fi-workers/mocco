@@ -2,6 +2,7 @@ import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes, StaleKinds } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
+import { ArticleStatuses, RevisionKinds } from '@mocco/common/help';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { AuthorKinds, ConversationStatuses, MessageVisibilities } from '@mocco/common/messenger';
@@ -63,6 +64,7 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
+import type { ArticleStatus, RevisionKind } from '@mocco/common/help';
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
@@ -2561,6 +2563,158 @@ export const otaAdoptionDaily = pgTable(
       columns: [t.appId, t.workspaceId],
       foreignColumns: [otaApps.id, otaApps.workspaceId],
       name: 'mocco_ota_adoption_daily_app_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A project's help center (#96): its public slug and languages. One per project. */
+export const helpSites = pgTable(
+  'mocco_help_sites',
+  {
+    projectId: uuid('project_id').primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    // The public label: `<slug>.help.<mocco domain>`, until a custom domain is bound.
+    slug: text().notNull(),
+    sourceLocale: text('source_locale').notNull(),
+    // The languages articles are translated into (never the source).
+    locales: text().array().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_sites_slug_uq').on(t.slug),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_help_sites_project_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** The top level of a help site (a tab: "Getting started", "Guides"). */
+export const helpCollections = pgTable(
+  'mocco_help_collections',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    slug: text().notNull(),
+    title: text().notNull(),
+    description: text(),
+    position: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_collections_project_slug_uq').on(t.projectId, t.slug),
+    unique('mocco_help_collections_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.projectId],
+      foreignColumns: [helpSites.projectId],
+      name: 'mocco_help_collections_site_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A group of articles inside a collection. */
+export const helpSections = pgTable(
+  'mocco_help_sections',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    collectionId: uuid('collection_id').notNull(),
+    title: text().notNull(),
+    position: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_help_sections_collection_position_idx').on(t.collectionId, t.position),
+    unique('mocco_help_sections_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.collectionId, t.workspaceId],
+      foreignColumns: [helpCollections.id, helpCollections.workspaceId],
+      name: 'mocco_help_sections_collection_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** An article. Its text lives in revisions; `short_id` is the stable public URL key. */
+export const helpArticles = pgTable(
+  'mocco_help_articles',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    sectionId: uuid('section_id').notNull(),
+    shortId: text('short_id').notNull(),
+    slug: text().notNull(),
+    position: integer().notNull(),
+    status: text().$type<ArticleStatus>().notNull(),
+    draftRevisionId: uuid('draft_revision_id'),
+    publishedRevisionId: uuid('published_revision_id'),
+    publishedAt: timestamp('published_at'),
+    publishedByUserId: uuid('published_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_articles_project_short_uq').on(t.projectId, t.shortId),
+    index('mocco_help_articles_section_position_idx').on(t.sectionId, t.position),
+    unique('mocco_help_articles_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.sectionId, t.workspaceId],
+      foreignColumns: [helpSections.id, helpSections.workspaceId],
+      name: 'mocco_help_articles_section_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_articles_status_check', sql`${t.status} IN (${sqlInList(Object.values(ArticleStatuses))})`),
+  ],
+);
+
+/** Append-only text of an article in one language: every save, import and restore. */
+export const helpRevisions = pgTable(
+  'mocco_help_revisions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    articleId: uuid('article_id').notNull(),
+    locale: text().notNull(),
+    title: text().notNull(),
+    bodyMd: text('body_md').notNull(),
+    // sha256 of the normalized title and body; translations compare against it later.
+    contentHash: text('content_hash').notNull(),
+    kind: text().$type<RevisionKind>().notNull(),
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    index('mocco_help_revisions_article_locale_created_idx').on(t.articleId, t.locale, t.createdAt),
+    foreignKey({
+      columns: [t.articleId, t.workspaceId],
+      foreignColumns: [helpArticles.id, helpArticles.workspaceId],
+      name: 'mocco_help_revisions_article_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_revisions_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(RevisionKinds))})`),
+  ],
+);
+
+/** Old paths (an imported site's URLs) that redirect to an article. */
+export const helpRedirects = pgTable(
+  'mocco_help_redirects',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    fromPath: text('from_path').notNull(),
+    articleId: uuid('article_id').notNull(),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_redirects_project_path_uq').on(t.projectId, t.fromPath),
+    foreignKey({
+      columns: [t.articleId, t.workspaceId],
+      foreignColumns: [helpArticles.id, helpArticles.workspaceId],
+      name: 'mocco_help_redirects_article_fk',
     }).onDelete('cascade'),
   ],
 );

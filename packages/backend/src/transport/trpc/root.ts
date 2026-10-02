@@ -5,6 +5,7 @@ import { approvalRouter } from '@backend/transport/trpc/routers/approval';
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { flagsRouter } from '@backend/transport/trpc/routers/flags';
+import { helpRouter } from '@backend/transport/trpc/routers/help';
 import { inboundRouter } from '@backend/transport/trpc/routers/inbound';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
 import { messengerRouter } from '@backend/transport/trpc/routers/messenger';
@@ -34,6 +35,7 @@ export const appRouter = router({
   ota: otaRouter,
   flags: flagsRouter,
   messenger: messengerRouter,
+  help: helpRouter,
   apiKey: apiKeyRouter,
   inbound: inboundRouter,
   notification: notificationRouter,

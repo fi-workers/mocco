@@ -7,6 +7,7 @@ import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getHelpDomain } from '@backend/domain/helpcenter/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { getMessengerDomain } from '@backend/domain/messenger/instance';
@@ -27,6 +28,8 @@ import type { StaleFlagDetector } from '@backend/domain/flags/StaleFlagDetector'
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
+import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
@@ -77,6 +80,8 @@ export interface TrpcDeps extends Services {
   staleFlags: StaleFlagDetector;
   messengerSettings: MessengerSettingsService;
   inbox: InboxService;
+  helpSites: HelpSiteService;
+  helpAuthoring: HelpAuthoringService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -127,6 +132,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         staleFlags: deps.staleFlags,
         messengerSettings: deps.messengerSettings,
         inbox: deps.inbox,
+        helpSites: deps.helpSites,
+        helpAuthoring: deps.helpAuthoring,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -171,6 +178,8 @@ export function productionServices(): TrpcDeps {
     staleFlags: getFlagsDomain().staleFlags,
     messengerSettings: getMessengerDomain().messengerSettings,
     inbox: getMessengerDomain().inbox,
+    helpSites: getHelpDomain().helpSites,
+    helpAuthoring: getHelpDomain().helpAuthoring,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

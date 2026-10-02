@@ -580,7 +580,9 @@ describe('/v1/messenger (pglite)', () => {
 
       expect(first.upload).toMatchObject({ method: 'PUT', headers: { 'content-type': 'image/png' } });
       expect([started.status, sent.status, retried.status]).toEqual([201, 201, 201]);
-      expect(retried.body).toEqual(sent.body);
+      // The same stored message; its attachment links are signed per request, so they may differ.
+      const idOf = (answer: typeof sent) => (answer.body as unknown as { message: { id: string } }).message.id;
+      expect(idOf(retried)).toBe(idOf(sent));
       expect(listed.body).toMatchObject({
         messages: [
           {
