@@ -34,20 +34,6 @@ describe('RunRepo project-scoped reads (pglite)', () => {
   });
 
   /** A workspace with one project and one repository linked to it. */
-  async function seedProject() {
-    const workspaceId = expectOne(
-      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
-    ).id;
-    const projectId = expectOne(
-      await t.db
-        .insert(projects)
-        .values({ workspaceId, name: 'Acme', handle: randomUUID().slice(0, 8) })
-        .returning(),
-    ).id;
-    const repoId = await addRepo(workspaceId, projectId);
-    return { workspaceId, projectId, repoId };
-  }
-
   /** A repository in `workspaceId`, linked to `projectId` when one is given. */
   async function addRepo(workspaceId: string, projectId?: string) {
     const connection = expectOne(
@@ -73,6 +59,20 @@ describe('RunRepo project-scoped reads (pglite)', () => {
       await t.db.insert(projectRepos).values({ workspaceId, projectId, repoId });
     }
     return repoId;
+  }
+
+  async function seedProject() {
+    const workspaceId = expectOne(
+      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
+    ).id;
+    const projectId = expectOne(
+      await t.db
+        .insert(projects)
+        .values({ workspaceId, name: 'Acme', handle: randomUUID().slice(0, 8) })
+        .returning(),
+    ).id;
+    const repoId = await addRepo(workspaceId, projectId);
+    return { workspaceId, projectId, repoId };
   }
 
   /** A run on `repoId`, with its commit and pinned config. */

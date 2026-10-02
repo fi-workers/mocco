@@ -36,6 +36,7 @@ const kindHints: Record<ApiKeyKind, string> = {
 };
 
 const scopeLabels: Record<ApiScope, string> = {
+  [ApiScopes.runsRead]: 'runs:read — read pipeline runs, their steps and gates',
   [ApiScopes.otaRead]: 'ota:read — check for OTA updates',
   [ApiScopes.otaWrite]: 'ota:write — upload and publish OTA updates',
   [ApiScopes.flagsRead]: 'flags:read — evaluate feature flags',
