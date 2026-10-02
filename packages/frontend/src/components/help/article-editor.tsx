@@ -7,6 +7,7 @@ import { useRouter } from 'next/router';
 import { useState } from 'react';
 
 import DocContent from '@frontend/components/doc-content';
+import TranslationsPanel from '@frontend/components/help/translations-panel';
 import {
   Ago,
   errorMessage,
@@ -209,6 +210,12 @@ export default function ArticleEditor({ workspaceId, projectId, articleId }: Pro
         articleId={articleId}
         initialTitle={draft.title}
         initialBody={draft.body}
+      />
+      <TranslationsPanel
+        workspaceId={workspaceId}
+        projectId={projectId}
+        articleId={articleId}
+        source={article.published === null ? null : { title: article.published.title, body: article.published.body }}
       />
       <History workspaceId={workspaceId} projectId={projectId} articleId={articleId} />
       <section className="flex flex-col gap-2 border-t border-border pt-4">

@@ -117,7 +117,7 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 |---|---|---|
 | Sites, articles and revisions | Prototype | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback |
 | Public site | Prototype | `<slug>.<HELP_SITES_DOMAIN>`: a home per language and article pages, ISR every 60 seconds (ADR 0015, draft) |
-| Translation | Prototype | On publish, each offered language is machine-translated through `AI_GATEWAY_API_KEY` (structure-checked), served per language; reviewed text is never overwritten and shows as stale; no console screen yet |
+| Translation | Prototype | On publish, each offered language is machine-translated through `AI_GATEWAY_API_KEY` (structure-checked), served per language; reviewed text is never overwritten and shows as stale; the article editor's Translations section reviews each language; collection and section titles aren't translated yet |
 | Console editor | Prototype | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, publish and history ([customer guide](../customer/help/help-center.md)) |
 
 ### Deploy loop depth
