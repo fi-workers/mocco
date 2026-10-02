@@ -16,6 +16,8 @@ import { parseManifestUrl, readAppJson, writeAppJson } from './app-config';
 import { CliError } from './errors';
 import { isPresent } from './fs';
 
+import type { ExpoConfig } from './app-config';
+
 export interface InitOptions {
   projectDir: string;
   manifestUrl: string;
@@ -54,7 +56,7 @@ async function ignoreKeys(projectDir: string): Promise<void> {
 /** Point `app.json` at this Mocco app, leaving the rest of the config alone. */
 async function writeUpdates(
   file: string,
-  json: { expo?: Record<string, unknown> },
+  json: { expo?: ExpoConfig },
   options: Pick<InitOptions, 'manifestUrl' | 'channel' | 'keyid'>,
 ): Promise<void> {
   const expo = json.expo ?? {};
@@ -63,7 +65,7 @@ async function writeUpdates(
     expo: {
       ...expo,
       updates: {
-        ...(expo.updates as Record<string, unknown> | undefined),
+        ...expo.updates,
         url: options.manifestUrl,
         requestHeaders: { 'expo-channel-name': options.channel },
         codeSigningCertificate: `./${CERTIFICATE_FILE}`,

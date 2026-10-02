@@ -22,6 +22,20 @@ export interface ExpoConfig {
   [key: string]: unknown;
 }
 
+/**
+ * Expo's `runtimeVersion` policies (its vocabulary, so the values are its casing).
+ * `appVersion` reads the config; `fingerprint` only the project's own Expo CLI can
+ * resolve, and it resolves differently per platform.
+ */
+export const RuntimeVersionPolicies = {
+  nativeVersion: 'nativeVersion',
+  sdkVersion: 'sdkVersion',
+  appVersion: 'appVersion',
+  fingerprint: 'fingerprint',
+} as const;
+
+export type RuntimeVersionPolicy = (typeof RuntimeVersionPolicies)[keyof typeof RuntimeVersionPolicies];
+
 const runtimeVersionSchema = z.union([z.string().min(1), z.object({ policy: z.string() })]);
 
 const MANIFEST_URL = /^(?<base>https?:\/\/.+)\/ota\/apps\/(?<appId>[\da-f-]{36})\/manifest$/u;
@@ -55,7 +69,7 @@ export function keyidOf(config: ExpoConfig): string {
 /** The `fingerprint` policy, which only the project's own Expo CLI can resolve, per platform. */
 export function isFingerprintPolicy(config: ExpoConfig): boolean {
   const parsed = runtimeVersionSchema.safeParse(config.runtimeVersion);
-  return parsed.success && typeof parsed.data !== 'string' && parsed.data.policy === 'fingerprint';
+  return parsed.success && typeof parsed.data !== 'string' && parsed.data.policy === RuntimeVersionPolicies.fingerprint;
 }
 
 /** The runtime version: a literal, or the `appVersion` policy. Other policies need the flag. */
@@ -65,7 +79,7 @@ export function runtimeVersionOf(config: ExpoConfig, platform: OtaPlatform): str
   if (typeof value === 'string') {
     return value;
   }
-  if (value?.policy === 'appVersion' && config.version !== undefined) {
+  if (value?.policy === RuntimeVersionPolicies.appVersion && config.version !== undefined) {
     return config.version;
   }
   throw new CliError(

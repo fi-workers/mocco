@@ -21,6 +21,23 @@ const metadataSchema = z.object({
   ),
 });
 
+/**
+ * The `expo export` command line for `platforms`, naming each one.
+ *
+ * Never `--platform all`: that means every platform the Expo config declares, so a project
+ * that also targets web exports web too — bytes OTA never serves, and a web-only bundling
+ * failure that fails the publish (`expo-sqlite`'s wasm import is one).
+ */
+export function exportCommandOf(
+  platforms: readonly OtaPlatform[],
+  distDir: string,
+): { command: string; args: string[] } {
+  return {
+    command: 'npx',
+    args: ['expo', 'export', ...platforms.flatMap(platform => ['--platform', platform]), '--output-dir', distDir],
+  };
+}
+
 export interface ExportedFile {
   path: string;
   ext: string | null;
