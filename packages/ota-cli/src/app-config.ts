@@ -52,6 +52,12 @@ export function keyidOf(config: ExpoConfig): string {
   return config.updates?.codeSigningMetadata?.keyid ?? DEFAULT_SIGNING_KEY_ID;
 }
 
+/** The `fingerprint` policy, which only the project's own Expo CLI can resolve, per platform. */
+export function isFingerprintPolicy(config: ExpoConfig): boolean {
+  const parsed = runtimeVersionSchema.safeParse(config.runtimeVersion);
+  return parsed.success && typeof parsed.data !== 'string' && parsed.data.policy === 'fingerprint';
+}
+
 /** The runtime version: a literal, or the `appVersion` policy. Other policies need the flag. */
 export function runtimeVersionOf(config: ExpoConfig, platform: OtaPlatform): string {
   const parsed = runtimeVersionSchema.safeParse(config.runtimeVersion);

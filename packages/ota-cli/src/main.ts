@@ -8,25 +8,33 @@ import { parseArgs, promisify } from 'node:util';
 import { DEFAULT_SIGNING_KEY_ID, OtaPlatforms } from '@mocco/common/ota-hosting';
 
 import { MoccoApi } from './api';
-import { keyidOf, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
+import { isFingerprintPolicy, keyidOf, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
 import { CliError } from './errors';
+import { fingerprintOf } from './fingerprint';
 import { isPresent } from './fs';
 import { init, KEY_FILE } from './init';
 import { promote } from './promote';
 import { publish } from './publish';
+import { releaseGroupsOf } from './release-groups';
 
+import type { ExpoConfig } from './app-config';
 import type { OtaPlatform } from '@mocco/common/ota-hosting';
 
 const USAGE = `Usage:
-  mocco-ota init --manifest-url <url> [--channel production] [--keyid root] [--project .]
+  mocco-ota init --manifest-url <url> [--channel production] [--keyid root] [--keep-key] [--project .]
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
+      --keep-key reuses the key and certificate already in the project and writes only
+      the config — for pointing at another Mocco app without a new store build.
 
   mocco-ota publish [--channel <name> [--rollout <percent>] [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
                     [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
       Export, upload and finalize a signed release; with --channel, promote it once ready
       (--wait waits for approval on a protected channel, within the 15-minute session).
+      The runtime version comes from --runtime-version, else app.json: a literal, the
+      appVersion policy, or the fingerprint policy (resolved per platform by the project's
+      own Expo CLI, which makes iOS and Android separate releases).
       Authenticates with MOCCO_API_KEY (a secret key with ota:write), or with --oidc in
       GitHub Actions (trusted publishing; the default there when MOCCO_API_KEY is unset).
       Signs with MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
@@ -69,10 +77,18 @@ function platformsOf(value: string): OtaPlatform[] {
   throw new CliError(`--platform must be ios, android or all (got ${value})`);
 }
 
-async function expoExport(projectDir: string, platform: string, distDir: string): Promise<void> {
-  log(`Running expo export --platform ${platform}…`);
+/**
+ * Export the bundles for `platforms`, naming each one.
+ *
+ * Never `--platform all`: that means every platform the Expo config declares, so a project
+ * that also targets web exports web too — bytes OTA never serves, and a web-only bundling
+ * failure that fails the publish (`expo-sqlite`'s wasm import is one).
+ */
+async function expoExport(projectDir: string, platforms: readonly OtaPlatform[], distDir: string): Promise<void> {
+  const args = platforms.flatMap(platform => ['--platform', platform]);
+  log(`Running expo export ${args.join(' ')}…`);
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- runs the project's own Expo CLI, as a developer would
-  const child = spawn('npx', ['expo', 'export', '--platform', platform, '--output-dir', distDir], {
+  const child = spawn('npx', ['expo', 'export', ...args, '--output-dir', distDir], {
     cwd: projectDir,
     stdio: 'inherit',
   });
@@ -106,6 +122,7 @@ async function runInit(args: readonly string[]): Promise<void> {
       'manifest-url': { type: 'string' },
       channel: { type: 'string', default: 'production' },
       keyid: { type: 'string', default: DEFAULT_SIGNING_KEY_ID },
+      'keep-key': { type: 'boolean', default: false },
       project: { type: 'string', default: '.' },
     },
   });
@@ -117,6 +134,7 @@ async function runInit(args: readonly string[]): Promise<void> {
     manifestUrl: values['manifest-url'],
     channel: values.channel,
     keyid: values.keyid,
+    isKeepingKey: values['keep-key'],
     log,
   });
 }
@@ -167,6 +185,17 @@ async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url
     throw new CliError('app.json has no Mocco updates.url; run mocco-ota init, or pass --app-id and --api-url');
   }
   return { appId, apiBase, expo };
+}
+
+/** What one platform publishes under: the flag wins, then app.json — where only the
+ * project's own Expo CLI can resolve the `fingerprint` policy. */
+function runtimeVersionResolver(projectDir: string, expo: ExpoConfig, flag: string | undefined) {
+  return async (platform: OtaPlatform): Promise<string> => {
+    if (flag !== undefined) {
+      return flag;
+    }
+    return isFingerprintPolicy(expo) ? await fingerprintOf(projectDir, platform) : runtimeVersionOf(expo, platform);
+  };
 }
 
 /** `--rollout 10` → 10 (percent); unset → 100. */
@@ -259,18 +288,16 @@ async function runPublish(args: readonly string[]): Promise<void> {
   const { appId, apiBase, expo } = await targetOf(projectDir, values);
   const auth = isOidcWanted(values.oidc) ? { oidcToken: await githubOidcToken(apiBase) } : { apiKey: apiKeyOf() };
   const platforms = platformsOf(values.platform);
-  const [first = OtaPlatforms.ios] = platforms;
   const distDir = path.resolve(projectDir, values.dist);
   if (!values['skip-export']) {
-    await expoExport(projectDir, values.platform, distDir);
+    await expoExport(projectDir, platforms, distDir);
   }
-  const result = await publish({
+  const groups = await releaseGroupsOf(platforms, runtimeVersionResolver(projectDir, expo, values['runtime-version']));
+  const common = {
     apiBase,
     appId,
     auth,
     distDir,
-    platforms,
-    runtimeVersion: values['runtime-version'] ?? runtimeVersionOf(expo, first),
     signingKeyPem: await signingKeyOf(projectDir, values['signing-key']),
     keyid: keyidOf(expo),
     message: values.message ?? (await gitOutput(projectDir, ['log', '-1', '--pretty=%s'])),
@@ -283,10 +310,18 @@ async function runPublish(args: readonly string[]): Promise<void> {
       rolloutPercent: percentOf(values.rollout),
     }),
     log,
-  });
-  log(
-    `Done: release ${result.releaseId} (${result.reusedAssets} asset(s) reused, ${result.uploadedBytes} bytes uploaded).`,
-  );
+  };
+  // Sequential: a second release reuses the assets the first one just uploaded.
+  await groups.reduce(async (previous, group) => {
+    await previous;
+    if (groups.length > 1) {
+      log(`Publishing ${group.platforms.join(', ')} under runtime version ${group.runtimeVersion}…`);
+    }
+    const result = await publish({ ...common, platforms: group.platforms, runtimeVersion: group.runtimeVersion });
+    log(
+      `Done: release ${result.releaseId} (${result.reusedAssets} asset(s) reused, ${result.uploadedBytes} bytes uploaded).`,
+    );
+  }, Promise.resolve());
 }
 
 /** Run the command line; resolves to the exit code. */

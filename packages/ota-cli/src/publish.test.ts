@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
+import { isFingerprintPolicy, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
 import { CERTIFICATE_FILE, init, KEY_FILE } from './init';
 import { publish } from './publish';
 
@@ -147,8 +147,35 @@ describe('mocco-ota', () => {
     expect(certificate.publicKey.asymmetricKeyType).toBe('rsa');
     expect(await readFile(path.join(projectDir, '.gitignore'), 'utf8')).toBe('keys/\n');
     await expect(init({ projectDir, manifestUrl: MANIFEST_URL, channel: 'production', keyid: 'root' })).rejects.toThrow(
-      /already exists/u,
+      /--keep-key/u,
     );
+  });
+
+  it('init --keep-key repoints app.json without touching the key or certificate', async () => {
+    const before = {
+      key: await readFile(path.join(projectDir, KEY_FILE), 'utf8'),
+      certificate: await readFile(path.join(projectDir, CERTIFICATE_FILE), 'utf8'),
+    };
+    const other = `${API}/ota/apps/${randomUUID()}/manifest`;
+
+    await init({ projectDir, manifestUrl: other, channel: 'staging', keyid: 'root', isKeepingKey: true });
+
+    const { json } = await readAppJson(projectDir);
+    expect(json.expo?.updates).toMatchObject({
+      url: other,
+      requestHeaders: { 'expo-channel-name': 'staging' },
+      codeSigningCertificate: `./${CERTIFICATE_FILE}`,
+    });
+    expect(await readFile(path.join(projectDir, KEY_FILE), 'utf8')).toBe(before.key);
+    expect(await readFile(path.join(projectDir, CERTIFICATE_FILE), 'utf8')).toBe(before.certificate);
+  });
+
+  it('init --keep-key refuses when there is no certificate to verify against', async () => {
+    await rm(path.join(projectDir, CERTIFICATE_FILE));
+
+    await expect(
+      init({ projectDir, manifestUrl: MANIFEST_URL, channel: 'production', keyid: 'root', isKeepingKey: true }),
+    ).rejects.toThrow(/--keep-key needs/u);
   });
 
   it('uploads only missing assets and signs every body with the key the certificate verifies', async () => {
@@ -222,5 +249,12 @@ describe('mocco-ota', () => {
     expect(() => runtimeVersionOf({ runtimeVersion: { policy: 'fingerprint' } }, 'ios')).toThrow(
       /pass --runtime-version/u,
     );
+  });
+
+  it('singles out the fingerprint policy, which only the project Expo CLI can resolve', () => {
+    expect(isFingerprintPolicy({ runtimeVersion: { policy: 'fingerprint' } })).toBe(true);
+    expect(isFingerprintPolicy({ runtimeVersion: { policy: 'appVersion' } })).toBe(false);
+    expect(isFingerprintPolicy({ runtimeVersion: '2.0' })).toBe(false);
+    expect(isFingerprintPolicy({})).toBe(false);
   });
 });

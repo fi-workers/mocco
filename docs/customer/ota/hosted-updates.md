@@ -32,11 +32,21 @@ npx mocco-ota init --manifest-url <the manifest URL>
 
 It creates a signing key pair and a certificate (`keys/private-key.pem`, git-ignored, and `certs/certificate.pem`) and writes the `updates` block into `app.json`. Build and ship a new binary with it: the certificate is embedded in the binary.
 
+Set a `runtimeVersion` in `app.json` if you have none. It is what pairs a JS bundle with a binary, and a device only ever loads an update whose runtime version matches its own — so this is what stops a bundle landing on a binary whose native code can't run it:
+
+```json
+"runtimeVersion": { "policy": "fingerprint" }
+```
+
+`fingerprint` hashes the native dependencies and config, so the value changes by itself whenever the native side does — nobody has to remember. `mocco-ota publish` resolves it per platform with your project's own Expo CLI, which makes iOS and Android separate releases (they hash differently). A literal or the `appVersion` policy works too, and both keep the two platforms in one release.
+
 ## 2. Register the certificate
 
 Paste `certs/certificate.pem` under **Signing certificates** (owners and admins). Mocco refuses any update whose signature doesn't verify against an active certificate. Each certificate shows which runtime versions depend on it; retiring one stops updates for the binaries that embed it, so retire it only after those binaries are gone.
 
-Store `keys/private-key.pem` as the CI secret `MOCCO_OTA_SIGNING_KEY`.
+Store `keys/private-key.pem` as the CI secret `MOCCO_OTA_SIGNING_KEY`, and back it up. The certificate is embedded in the binary, so replacing the key needs a new store build — losing it means no OTA until one ships.
+
+The key outlives a single OTA app. To point the same app at another Mocco app later — a second environment, a self-hosted move, or connecting for real after a local trial — run `init` again with `--keep-key`: it rewrites only the `updates` block and leaves the key and certificate alone, so the binaries already out there keep verifying. Register the same certificate on the new app.
 
 ## 3. Create channels
 
