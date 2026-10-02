@@ -27,6 +27,7 @@ export const ProjectSections = {
   otaTokens: 'otaTokens',
   otaHosting: 'otaHosting',
   flags: 'flags',
+  inbox: 'inbox',
   apiKeys: 'apiKeys',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
@@ -56,6 +57,7 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
   { key: ProjectSections.otaTokens, label: 'OTA tokens', href: Routes.projectOtaTokens, product: Products.ota },
   { key: ProjectSections.otaHosting, label: 'OTA hosting', href: Routes.projectOtaHosting, product: Products.ota },
   { key: ProjectSections.flags, label: 'Feature flags', href: Routes.projectFlags, product: Products.flags },
+  { key: ProjectSections.inbox, label: 'Inbox', href: Routes.projectInbox, product: Products.messenger },
   { key: ProjectSections.apiKeys, label: 'API keys', href: Routes.projectApiKeys, product: null },
 ];
 
@@ -93,8 +95,8 @@ export const productCatalog: Readonly<Record<Product, { label: string; descripti
   },
   [Products.messenger]: {
     label: 'Messenger',
-    description: 'In-app customer chat for web and React Native.',
-    available: false,
+    description: 'Let your signed-in users contact you from your app, and answer them from one inbox.',
+    available: true,
   },
   [Products.helpcenter]: {
     label: 'Help center',

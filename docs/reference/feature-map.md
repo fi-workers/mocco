@@ -103,7 +103,7 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Feature | Status | Notes |
 |---|---|---|
 | Conversations and identity | Prototype | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
-| Team inbox | Prototype | tRPC inbox, replies, internal notes, open/closed, blocking, Discord alerts through the Mocco preset; the console screens come next |
+| Team inbox | Prototype | The project's **Inbox** tab: setup (identity secret shown once), open/closed lists with unread, the thread with replies and internal notes, the user's current and starting app context, close/reopen, blocking, categories and secret rotation; Discord alerts through the Mocco preset ([customer guide](../customer/messenger/contact-us.md)) |
 | Attachments, React Native SDK, push replies | Not drawn | Screenshots, `@mocco/messenger-react-native`, Expo push when the team replies |
 
 ### Deploy loop depth

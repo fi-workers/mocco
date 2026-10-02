@@ -57,6 +57,11 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/flags/${encodeURIComponent(flagKey)}`;
     return environmentId === undefined ? path : `${path}?env=${encodeURIComponent(environmentId)}`;
   },
+  /** The project's messenger inbox (#95); `status=closed` lists the closed conversations. */
+  projectInbox: (id: string, projectId: string, status?: 'open' | 'closed') =>
+    `/workspaces/${id}/p/${projectId}/inbox${status === 'closed' ? '?status=closed' : ''}`,
+  projectConversation: (id: string, projectId: string, conversationId: string) =>
+    `/workspaces/${id}/p/${projectId}/inbox/${conversationId}`,
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */
