@@ -122,11 +122,12 @@ const messenger = useMessenger();
 const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
 const asset = picked.assets?.[0];
 if (asset !== undefined) {
-  const body = await (await fetch(asset.uri)).blob();
+  // Send bytes: with a Blob, React Native replaces the upload's Content-Type and it is refused.
+  const body = new Uint8Array(await (await fetch(asset.uri)).arrayBuffer());
   const attachmentId = await messenger.attach({
     body,
-    contentType: 'image/png', // or the picked image's type
-    sizeBytes: body.size,
+    contentType: 'image/jpeg', // the picked image's real type
+    sizeBytes: body.byteLength,
   });
   await send('Here is what I see', [attachmentId]); // from useConversation(id)
 }

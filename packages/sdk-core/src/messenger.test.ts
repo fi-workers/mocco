@@ -374,6 +374,18 @@ describe('MessengerClient', () => {
     expect(pushes[0]?.auth).not.toBe(pushes[1]?.auth);
   });
 
+  it("doesn't reuse a session stored under another key", async () => {
+    const server = fakeMessenger();
+    const storage = memoryStorage();
+    await clientFor(server, { storage }).refresh();
+    await clientFor(server, { storage, publishableKey: 'mk_pub_0123456789abcdefghijklmn99999999' }).refresh();
+
+    expect(server.calls.filter(call => call.path === '/sessions').map(call => call.auth)).toEqual([
+      KEY,
+      'mk_pub_0123456789abcdefghijklmn99999999',
+    ]);
+  });
+
   it('refuses a secret key', () => {
     expect(
       () =>
