@@ -253,6 +253,13 @@
       "when": 1790914813856,
       "tag": "0035_public_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790918812066,
+      "tag": "0036_colossal_next_avengers",
+      "breakpoints": true
     }
   ]
 }

@@ -80,6 +80,46 @@ describe('MoccoProvider', () => {
     expect(mocco.fetch.mock.calls).toHaveLength(callsAfterInit);
   });
 
+  it('counts evaluations and sends them once a minute (unknown flags aside), or not at all if off', async () => {
+    const reports: unknown[] = [];
+    const mocco = fakeMocco();
+    const fetchWithTelemetry = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/flags/telemetry')) {
+        reports.push(JSON.parse(String(init?.body)));
+        return Response.json({ accepted: 1, ignored: 0 }, { status: 202 });
+      }
+      return await mocco.fetch(input, init);
+    });
+    mocco.state.next = serve(ruleset(true, 2), '"v2"');
+    await OpenFeature.setProviderAndWait(
+      domain,
+      new MoccoProvider({
+        secretKey: KEY,
+        changeDetection: 'poll',
+        pollIntervalMs: 600_000,
+        fetch: fetchWithTelemetry,
+      }),
+    );
+    const client = OpenFeature.getClient(domain);
+    await client.getBooleanValue('new-checkout', false);
+    await client.getBooleanValue('new-checkout', false);
+    await client.getBooleanValue('nope', false);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reports).toEqual([
+      { evaluations: [{ flag: 'new-checkout', variant: 'on', count: 2, windowStart: expect.any(String) }] },
+    ]);
+
+    const quiet = `${domain}-quiet`;
+    await OpenFeature.setProviderAndWait(
+      quiet,
+      new MoccoProvider({ secretKey: KEY, changeDetection: 'poll', telemetry: false, fetch: fetchWithTelemetry }),
+    );
+    await OpenFeature.getClient(quiet).getBooleanValue('new-checkout', false);
+    await OpenFeature.clearProviders();
+    expect(reports).toHaveLength(1);
+  });
+
   it('polls with If-None-Match and announces changed flags', async () => {
     const mocco = fakeMocco();
     mocco.state.next = serve(ruleset(false, 1), '"v1"');

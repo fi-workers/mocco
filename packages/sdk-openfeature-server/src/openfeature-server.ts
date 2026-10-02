@@ -5,7 +5,7 @@
 // call, and it keeps serving the last good ruleset when Mocco is unreachable (emitting
 // PROVIDER_STALE until a fetch succeeds again).
 import { parseRuleset, resolveTyped } from '@mocco/flags-core';
-import { MoccoClient, readServerSentEvents } from '@mocco/sdk-core';
+import { EvaluationCounter, MoccoClient, readServerSentEvents, TELEMETRY_PATH } from '@mocco/sdk-core';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents, StandardResolutionReasons } from '@openfeature/server-sdk';
 
 import type { FlagValueType, Ruleset } from '@mocco/flags-core';
@@ -25,6 +25,11 @@ export interface MoccoProviderOptions {
    * `poll`: poll only.
    */
   changeDetection?: 'stream' | 'poll';
+  /**
+   * Send Mocco how often each flag was evaluated, counted in memory and sent at most once
+   * a minute (default on). Mocco uses it only to point out flags nobody evaluates any more.
+   */
+  telemetry?: boolean;
   fetch?: typeof fetch;
 }
 
@@ -87,6 +92,8 @@ export class MoccoProvider implements Provider {
 
   private lastEventId: string | undefined;
 
+  private readonly counter: EvaluationCounter | undefined;
+
   readonly metadata = { name: 'Mocco' } as const;
 
   readonly runsOn = 'server' as const;
@@ -104,6 +111,14 @@ export class MoccoProvider implements Provider {
     });
     this.pollIntervalMs = Math.max(MIN_POLL_INTERVAL_MS, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS);
     this.isStreaming = (options.changeDetection ?? 'stream') === 'stream';
+    if (options.telemetry ?? true) {
+      this.counter = new EvaluationCounter({
+        send: async evaluations => {
+          await this.client.request('POST', TELEMETRY_PATH, { body: { evaluations } });
+        },
+        unrefTimer: true,
+      });
+    }
     if (options.bootstrap !== undefined) {
       const check = parseRuleset(options.bootstrap);
       if (!check.ok) {
@@ -129,6 +144,9 @@ export class MoccoProvider implements Provider {
       };
     }
     const resolution = resolveTyped(this.ruleset, flagKey, type, defaultValue, context);
+    if (resolution.errorCode !== ErrorCode.FLAG_NOT_FOUND) {
+      this.counter?.record(flagKey, resolution.variant ?? null);
+    }
     return {
       value: resolution.value,
       reason: resolution.reason,
@@ -249,6 +267,7 @@ export class MoccoProvider implements Provider {
    * Mocco unreachable) initialization fails, and polling keeps trying to recover. */
   async initialize(): Promise<void> {
     this.startPolling();
+    this.counter?.start();
     if (this.isStreaming) {
       // eslint-disable-next-line no-void -- runs until onClose; never rejects
       void this.listen();
@@ -264,7 +283,7 @@ export class MoccoProvider implements Provider {
     this.stream?.abort();
     clearInterval(this.timer);
     this.timer = undefined;
-    await Promise.resolve();
+    await this.counter?.stop();
   }
 
   // eslint-disable-next-line unicorn/consistent-boolean-name -- the OpenFeature Provider interface names it

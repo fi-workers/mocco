@@ -64,7 +64,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 20 });
 
-    expect(report).toMatchObject({ ran: 12, errors: [], outcomes: { succeeded: 12 } });
+    expect(report).toMatchObject({ ran: 14, errors: [], outcomes: { succeeded: 14 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -80,6 +80,8 @@ describe('job runtime composition (pglite)', () => {
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,
         FlagJobKinds.expireChangesets,
+        FlagJobKinds.detectStale,
+        FlagJobKinds.staleDigest,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);

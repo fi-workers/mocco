@@ -10,6 +10,7 @@ owner: andrea
 tags: [customer, flags, openfeature, guide]
 related:
   - ./browsers-and-apps.md
+  - ./stale-flags.md
   - ../../reference/flags.md
   - ../../reference/sdk.md
 ---
@@ -114,3 +115,7 @@ flagd sends the last `ETag` with each poll, so unchanged rules cost one small re
 ## Browsers and apps
 
 For web pages, React and React Native apps, see [Feature flags in browsers and apps](./browsers-and-apps.md): devices get only the answers, never the rules.
+
+## Clean up stale flags
+
+Mocco points out flags that look ready to come out of your code: never evaluated, not evaluated lately, or serving one value to everyone. See [Clean up stale flags](./stale-flags.md).

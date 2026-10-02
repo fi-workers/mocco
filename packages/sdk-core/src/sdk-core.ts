@@ -17,3 +17,5 @@ export type {
   OtaUploadRequest,
   OtaUploadResponse,
 } from './wire';
+export { DEFAULT_TELEMETRY_INTERVAL_MS, EvaluationCounter, TELEMETRY_PATH } from './telemetry';
+export type { EvaluationCount, EvaluationCounterOptions } from './telemetry';

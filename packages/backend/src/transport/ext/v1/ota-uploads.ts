@@ -26,15 +26,13 @@ import {
   type V1Deps,
   type V1Env,
 } from '@backend/transport/ext/v1/middleware';
-import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
+import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
 import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { PromotionResult } from '@mocco/common/ota-hosting';
-import type { Context } from 'hono';
-import type { z } from 'zod';
 
 export interface OtaUploadDeps {
   uploads: Pick<UploadService, 'createSession' | 'authenticate' | 'beginRelease' | 'finalize'>;
@@ -80,30 +78,6 @@ function problemOfError(error: unknown): Response {
     return problemResponse(problemOf(403, ProblemCodes.forbidden, 'Forbidden', error.message));
   }
   throw error;
-}
-
-/** The request's JSON body parsed by `schema`, or a 400 problem naming the first issue. */
-async function parseJson<S extends z.ZodType>(
-  c: Context,
-  schema: S,
-): Promise<{ data: z.output<S>; refused?: undefined } | { data?: undefined; refused: Response }> {
-  let json: unknown;
-  try {
-    json = await c.req.json();
-  } catch {
-    return { refused: problemResponse(problemOf(400, ProblemCodes.badRequest, 'The body must be JSON')) };
-  }
-  const parsed = schema.safeParse(json);
-  if (parsed.success) {
-    return { data: parsed.data };
-  }
-  const [issue] = parsed.error.issues;
-  const where = issue === undefined || issue.path.length === 0 ? '' : `${issue.path.join('.')}: `;
-  return {
-    refused: problemResponse(
-      problemOf(400, ProblemCodes.badRequest, 'Invalid request', `${where}${issue?.message ?? 'invalid'}`),
-    ),
-  };
 }
 
 /** Authenticate `Authorization: Bearer mk_ups_…` and limit per session. */

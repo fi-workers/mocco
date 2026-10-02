@@ -55,6 +55,44 @@ describe('MoccoWebProvider', () => {
     expect(mocco.requests[0]?.headers.get('authorization')).toBe(`Bearer ${KEY}`);
   });
 
+  it('counts reads (known flags only) and sends them on close', async () => {
+    const mocco = fakeMocco();
+    const reports: unknown[] = [];
+    const fetchWithTelemetry = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/flags/telemetry')) {
+        reports.push(JSON.parse(String(init?.body)));
+        return new Response(null, { status: 202 });
+      }
+      return await mocco.fetch(input, init);
+    };
+    const domain = `test-${randomUUID()}`;
+    await OpenFeature.setProviderAndWait(
+      domain,
+      new MoccoWebProvider({
+        publishableKey: KEY,
+        fetchImplementation: fetchWithTelemetry,
+        cacheMode: 'disabled',
+        changeDetection: 'none',
+        disableVisibilityRefresh: true,
+      }),
+    );
+    const client = OpenFeature.getClient(domain);
+    client.getBooleanValue('new-checkout', false);
+    client.getStringValue('checkout-copy', 'x');
+    client.getStringValue('checkout-copy', 'x');
+    client.getBooleanValue('missing', false);
+    await OpenFeature.clearProviders();
+
+    expect(reports).toEqual([
+      {
+        evaluations: [
+          { flag: 'new-checkout', variant: 'on', count: 1, windowStart: expect.any(String) },
+          { flag: 'checkout-copy', variant: 'short', count: 2, windowStart: expect.any(String) },
+        ],
+      },
+    ]);
+  });
+
   it('refuses a secret key or a non-key', () => {
     expect(() => new MoccoWebProvider({ publishableKey: 'mk_sec_0123456789abcdefghijklmnopqrstuv' })).toThrow(
       /publishable key/u,

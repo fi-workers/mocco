@@ -6,6 +6,7 @@ import { useState } from 'react';
 import ChangesetRow from '@frontend/components/flags/changeset-row';
 import Protection from '@frontend/components/flags/protection';
 import Segments from '@frontend/components/flags/segments';
+import { StaleBadges, StaleSummary } from '@frontend/components/flags/stale';
 import {
   errorMessage,
   inputClass,
@@ -18,7 +19,7 @@ import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { FlagConfigDto, FlagDto, FlagEnvironmentDto, FlagType } from '@mocco/common/flags';
+import type { FlagConfigDto, FlagDto, FlagEnvironmentDto, FlagType, StaleFindingDto } from '@mocco/common/flags';
 
 interface Props {
   workspaceId: string;
@@ -291,7 +292,8 @@ function Flags({
   projectId,
   environments,
   flags,
-}: Props & { environments: FlagEnvironmentDto[]; flags: FlagWithConfigs[] }) {
+  stale,
+}: Props & { environments: FlagEnvironmentDto[]; flags: FlagWithConfigs[]; stale: readonly StaleFindingDto[] }) {
   return (
     <section className="flex flex-col gap-3">
       <div>
@@ -301,6 +303,7 @@ function Flags({
           you turn it on. Each switch is applied at once and recorded in the environment’s history.
         </p>
       </div>
+      <StaleSummary findings={stale} />
       {flags.length === 0 ? (
         <p className="text-sm text-muted-foreground">No flags yet.</p>
       ) : (
@@ -329,6 +332,7 @@ function Flags({
                       {flag.type === FlagTypes.boolean ? null : (
                         <StatusBadge tone={Tones.neutral}>{flag.type}</StatusBadge>
                       )}
+                      <StaleBadges findings={stale.filter(finding => finding.flagKey === flag.key)} />
                     </div>
                     {flag.description ? <div className="text-xs text-muted-foreground">{flag.description}</div> : null}
                   </td>
@@ -406,6 +410,7 @@ export default function FeatureFlags({ workspaceId, projectId }: Props) {
   const input = { workspaceId, projectId };
   const environmentsQuery = trpc.flags.environments.useQuery(input);
   const flagsQuery = trpc.flags.list.useQuery(input);
+  const staleQuery = trpc.flags.stale.useQuery(input);
   if (environmentsQuery.isLoading || flagsQuery.isLoading) {
     return <Spinner />;
   }
@@ -419,7 +424,13 @@ export default function FeatureFlags({ workspaceId, projectId }: Props) {
   return (
     <div className="flex flex-col gap-8">
       <Environments workspaceId={workspaceId} projectId={projectId} environments={environments} />
-      <Flags workspaceId={workspaceId} projectId={projectId} environments={environments} flags={flags} />
+      <Flags
+        workspaceId={workspaceId}
+        projectId={projectId}
+        environments={environments}
+        flags={flags}
+        stale={staleQuery.data?.findings ?? []}
+      />
       <PerEnvironment workspaceId={workspaceId} projectId={projectId} environments={environments} />
     </div>
   );

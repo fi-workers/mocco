@@ -22,6 +22,7 @@ code_refs:
   - packages/sdk-openfeature-server/src/openfeature-server.ts
   - packages/sdk-openfeature-web/src/openfeature-web.ts
   - packages/sdk-openfeature-react-native/src/openfeature-react-native.ts
+  - packages/sdk-core/src/telemetry.ts
   - .github/workflows/publish.yml
 ---
 
@@ -31,7 +32,7 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 
 | Package | For | What's in it |
 |---|---|---|
-| `@mocco/sdk-core` | every SDK | `MoccoClient` (the `/v1` fetch client: the key as `Authorization: Bearer`, retries on 429 and 502–504 for GETs and idempotent POSTs with the server's `Retry-After` / `RateLimit-Reset` or backoff, problem+json → `MoccoError` with `status` and `code`), key checks (a secret key is refused in a browser), and the `/v1` wire types |
+| `@mocco/sdk-core` | every SDK | `MoccoClient` (the `/v1` fetch client: the key as `Authorization: Bearer`, retries on 429 and 502–504 for GETs and idempotent POSTs with the server's `Retry-After` / `RateLimit-Reset` or backoff, problem+json → `MoccoError` with `status` and `code`), key checks (a secret key is refused in a browser), `EvaluationCounter` (the flag providers' per-minute evaluation counts), and the `/v1` wire types |
 | `@mocco/js` | browsers | `createMocco({ publishableKey })`; product clients join as subpaths (`@mocco/js/flags`). Size budget: 10 KB gzipped with sdk-core (`yarn sdk:size`; 2.3 KB today) |
 | `@mocco/node` | servers | `createMoccoServer({ secretKey })`, `signIdentity(secret, externalId)` (hex HMAC-SHA256, platform foundations §5), and `verifyWebhook({ body, signatureHeader, secret })` for `mocco-signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">` with a 5-minute replay window — the contract Mocco's outbound webhooks will sign with |
 | `@mocco/react-native` | React Native apps | `createMoccoNative`; **`/ota`**: `<MoccoOta appId clientId />` (reports `launched` / `emergency_launch`), `reportOtaError()`, `useMoccoUpdate()` (status, `isMandatory`, `applyNow`; downloads in the background and applies a mandatory update when the app returns to the foreground); the Expo config plugin (`"plugins": [["@mocco/react-native", { "manifestUrl", "channel" }]]`). Peers: `expo-updates`, `react`, `react-native` (no native code) |

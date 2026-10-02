@@ -16,7 +16,7 @@ import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo'
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
-import { createFlagHandlers, expireFlagChangesetsSchedule } from '@backend/domain/flags/jobs';
+import { createFlagHandlers, flagSchedules } from '@backend/domain/flags/jobs';
 import { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import { ApprovalRequestRepo } from '@backend/domain/governance/repos/approval-request.repo';
 import { ApprovalVoteRepo } from '@backend/domain/governance/repos/approval-vote.repo';
@@ -112,7 +112,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     now: deps.now,
   });
   // The job's own approval service: expiry resolves requests, it never applies one.
-  const { flagGovernance } = createFlagsDomain(db, {
+  const { flagGovernance, staleFlags } = createFlagsDomain(db, {
     audit,
     approvals: new ApprovalService({
       requests: new ApprovalRequestRepo(db),
@@ -137,7 +137,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       connectStates: new DiscordConnectStateRepo(db),
     }),
     ...createStorageHandlers({ storage: deps.storage }),
-    ...createFlagHandlers({ governance: flagGovernance }),
+    ...createFlagHandlers({ governance: flagGovernance, stale: staleFlags }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createOtaHandlers({
       uploads,
@@ -166,7 +166,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       rateLimitPruneSchedule,
       pruneUploadSessionsSchedule,
       ...otaMetricsSchedules,
-      expireFlagChangesetsSchedule,
+      ...flagSchedules,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });

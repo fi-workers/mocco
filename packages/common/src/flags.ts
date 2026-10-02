@@ -382,3 +382,59 @@ export type ChangesetDto = z.infer<typeof changesetSchema>;
 /** The bucketing algorithm Mocco's rulesets pin (ADR 0024). */
 export const BUCKETING_VERSION = 'mocco-v1';
 export const FLAGD_SCHEMA_URL = 'https://flagd.dev/schema/v0/flags.json';
+
+/** Evaluation telemetry (#144): SDKs count evaluations per flag and variant over a window
+ * and send the counts at most once a minute. Advisory only: stale detection reads it, no
+ * governance decision does. */
+export const FlagTelemetryLimits = {
+  /** Entries per request. */
+  maxEntries: 500,
+  /** Evaluations one entry may report. */
+  maxCount: 1_000_000,
+  /** How far back a window may start; older counts are ignored. */
+  maxWindowAgeMs: 24 * 60 * 60 * 1000,
+  /** Clock skew allowed for a window starting in the future. */
+  maxClockSkewMs: 5 * 60 * 1000,
+} as const;
+
+export const flagTelemetryEntrySchema = z.object({
+  flag: flagKeySchema,
+  /** The variant served; null when none was (a disabled flag, an error). */
+  variant: z.string().regex(VARIANT_NAME_PATTERN).nullable(),
+  count: z.int().min(1).max(FlagTelemetryLimits.maxCount),
+  windowStart: z.iso.datetime({ offset: true }),
+});
+export type FlagTelemetryEntry = z.infer<typeof flagTelemetryEntrySchema>;
+
+export const flagTelemetryInputSchema = z.object({
+  evaluations: z.array(flagTelemetryEntrySchema).min(1).max(FlagTelemetryLimits.maxEntries),
+});
+export type FlagTelemetryInput = z.infer<typeof flagTelemetryInputSchema>;
+
+/** Why a flag looks ready for cleanup. */
+export const StaleKinds = {
+  /** Evaluated before, but not in the last `staleDays`. */
+  unused: 'unused',
+  /** Older than `staleDays` and never evaluated. */
+  neverEvaluated: 'never_evaluated',
+  /** Serving one variant to everyone in every environment for `staleDays`. */
+  fullyRolledOut: 'fully_rolled_out',
+} as const;
+export type StaleKind = (typeof StaleKinds)[keyof typeof StaleKinds];
+
+/** How long a flag must look stale before it is reported. */
+export const STALE_AFTER_DAYS = 30;
+
+export const staleFindingSchema = z.object({
+  id: z.uuid(),
+  flagId: z.uuid(),
+  flagKey: z.string(),
+  kind: z.enum(Object.values(StaleKinds) as [StaleKind, ...StaleKind[]]),
+  detectedAt: z.date(),
+  /** When the flag was last evaluated anywhere, if ever (from telemetry). */
+  lastEvaluatedAt: z.date().nullable(),
+  /** For fully_rolled_out: the variant everyone gets. */
+  servedVariant: z.string().nullable(),
+  dismissedUntil: z.date().nullable(),
+});
+export type StaleFindingDto = z.infer<typeof staleFindingSchema>;

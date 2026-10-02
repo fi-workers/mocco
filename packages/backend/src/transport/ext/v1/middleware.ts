@@ -131,7 +131,15 @@ export const limitAnonymous = (deps: V1Deps) =>
  * per key. Refusals are problem+json: 401 for a missing, unknown, revoked or expired key
  * and for a secret key sent from a browser; 403 for a disallowed origin, kind or scope.
  */
-export const requireKey = (deps: V1Deps, opts: { kinds?: readonly ApiKeyKind[]; scope?: ApiScope } = {}) =>
+export const requireKey = (
+  deps: V1Deps,
+  opts: {
+    kinds?: readonly ApiKeyKind[];
+    scope?: ApiScope;
+    /** A tighter per-key limit for this route, on top of the key's own. */
+    routeLimit?: { name: string; rules: Record<ApiKeyKind, RateLimitRule> };
+  } = {},
+) =>
   createMiddleware<V1Env>(async (c, next) => {
     const token = presentedKey(c);
     if (token === undefined || token === '') {
@@ -165,6 +173,16 @@ export const requireKey = (deps: V1Deps, opts: { kinds?: readonly ApiKeyKind[]; 
     const { refused, headers } = await limit(deps, `key:${principal.keyId}`, KeyRateLimits[principal.kind]);
     if (refused !== undefined) {
       return refused;
+    }
+    if (opts.routeLimit !== undefined) {
+      const route = await limit(
+        deps,
+        `key:${principal.keyId}:${opts.routeLimit.name}`,
+        opts.routeLimit.rules[principal.kind],
+      );
+      if (route.refused !== undefined) {
+        return route.refused;
+      }
     }
     c.set('principal', principal);
     await next();

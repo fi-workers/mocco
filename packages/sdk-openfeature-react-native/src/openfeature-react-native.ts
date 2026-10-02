@@ -7,7 +7,14 @@
 // and, given an EventSource implementation, as soon as Mocco's change stream says a flag
 // changed. React Native has no localStorage, page visibility or EventSource, so the app
 // passes those in.
-import { DEFAULT_BASE_URL, keyKindOf, MoccoKeyError, withoutTrailingSlashes } from '@mocco/sdk-core';
+import {
+  DEFAULT_BASE_URL,
+  EvaluationCounter,
+  keyKindOf,
+  MoccoKeyError,
+  TELEMETRY_PATH,
+  withoutTrailingSlashes,
+} from '@mocco/sdk-core';
 import { ErrorCode, OpenFeatureEventEmitter, ProviderEvents, StandardResolutionReasons } from '@openfeature/web-sdk';
 
 import type { EvaluationContext, FlagMetadata, JsonValue, Provider, ResolutionDetails } from '@openfeature/web-sdk';
@@ -46,6 +53,12 @@ export interface MoccoReactNativeProviderOptions {
   pollIntervalMs?: number;
   /** How long a stored evaluation may be served (default 30 days). */
   cacheTtlMs?: number;
+  /**
+   * Send Mocco how often each flag was read, counted on the device and sent at most once
+   * a minute and when the app goes to the background (default on). Mocco uses it only to
+   * point out flags nobody evaluates any more.
+   */
+  telemetry?: boolean;
   fetch?: typeof fetch;
 }
 
@@ -161,6 +174,8 @@ export class MoccoReactNativeProvider implements Provider {
 
   private streamRetry: ReturnType<typeof setTimeout> | undefined;
 
+  private readonly counter: EvaluationCounter | undefined;
+
   readonly metadata = { name: 'Mocco' } as const;
 
   readonly runsOn = 'client' as const;
@@ -177,6 +192,20 @@ export class MoccoReactNativeProvider implements Provider {
     this.fetchImpl = options.fetch ?? fetch.bind(globalThis);
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    if (options.telemetry ?? true) {
+      this.counter = new EvaluationCounter({
+        send: async evaluations => {
+          const response = await this.fetchImpl(`${this.baseUrl}${TELEMETRY_PATH}`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${options.publishableKey}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ evaluations }),
+          });
+          if (!response.ok) {
+            throw new Error(`Mocco answered ${response.status}`);
+          }
+        },
+      });
+    }
   }
 
   private storageKey(context: EvaluationContext): string {
@@ -366,6 +395,10 @@ export class MoccoReactNativeProvider implements Provider {
     } else {
       this.stopPolling();
       this.disconnect();
+      if (this.counter !== undefined) {
+        // eslint-disable-next-line no-void -- an event callback can't await; flush() never rejects
+        void this.counter.flush();
+      }
     }
   }
 
@@ -391,6 +424,7 @@ export class MoccoReactNativeProvider implements Provider {
         errorMessage: `No flag "${flagKey}" for this key`,
       };
     }
+    this.counter?.record(flagKey, flag.variant ?? null);
     const flagMetadata = flag.metadata ?? {};
     if (flag.errorCode !== undefined) {
       return {
@@ -432,6 +466,7 @@ export class MoccoReactNativeProvider implements Provider {
    */
   async initialize(context: EvaluationContext = {}): Promise<void> {
     this.context = context;
+    this.counter?.start();
     this.appStateSubscription ??= this.options.appState?.addEventListener('change', state => {
       this.onAppStateChange(state);
     });
@@ -468,7 +503,7 @@ export class MoccoReactNativeProvider implements Provider {
     this.disconnect();
     this.appStateSubscription?.remove();
     this.appStateSubscription = undefined;
-    await Promise.resolve();
+    await this.counter?.stop();
   }
 
   // eslint-disable-next-line unicorn/consistent-boolean-name -- the OpenFeature Provider interface names it

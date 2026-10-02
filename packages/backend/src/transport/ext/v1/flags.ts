@@ -11,19 +11,23 @@
 // reconnect. Authenticated by a key header, or by a stream token (browsers' EventSource
 // can't send headers; the OFREP bulk response advertises the tokenized URL).
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
+import { flagTelemetryInputSchema } from '@mocco/common/flags';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { requireKey } from '@backend/transport/ext/v1/middleware';
-import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
+import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { FlagService } from '@backend/domain/flags/FlagService';
+import type { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
 import type { StreamTokens } from '@backend/domain/flags/stream-token';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { Context } from 'hono';
 
 export interface FlagServingDeps {
   flags: Pick<FlagService, 'servingRuleset' | 'ofrepState' | 'rulesetHead'>;
+  /** Evaluation counts from SDKs; undefined leaves POST /flags/telemetry unmounted. */
+  telemetry?: Pick<FlagTelemetryService, 'ingest'>;
   /** Signs the stream URLs OFREP advertises; undefined: no event streams (clients poll). */
   streamTokens?: StreamTokens;
   /** Stream timing (tests shorten it). */
@@ -34,6 +38,13 @@ const STREAM_POLL_MS = 1000;
 const STREAM_HEARTBEAT_MS = 25_000;
 /** Vercel caps a function's duration; close first and let the client reconnect. */
 const STREAM_MAX_CONNECTION_MS = 240_000;
+
+/** Each SDK instance sends at most one report a minute; this leaves room for many
+ * instances sharing a key, and caps what one key can write. */
+export const TELEMETRY_RATE_LIMITS = {
+  publishable: { limit: 300, windowSeconds: 60 },
+  secret: { limit: 300, windowSeconds: 60 },
+} as const;
 
 /** Revalidate on every use; never stored by a shared cache. */
 const CACHE_CONTROL = 'private, no-cache';
@@ -48,6 +59,33 @@ const heldEtags = (header: string | undefined): string[] =>
 
 export function createFlagServingRoutes(deps: V1Deps, flags: FlagServingDeps): Hono<V1Env> {
   const app = new Hono<V1Env>();
+
+  const { telemetry } = flags;
+  if (telemetry !== undefined) {
+    // Aggregated evaluation counts (#144). Advisory: they feed stale-flag hints only.
+    app.post(
+      '/telemetry',
+      requireKey(deps, {
+        scope: ApiScopes.flagsRead,
+        routeLimit: { name: 'flags-telemetry', rules: TELEMETRY_RATE_LIMITS },
+      }),
+      async c => {
+        const { workspaceId, flagEnvironmentId, kind } = c.var.principal;
+        if (flagEnvironmentId === null) {
+          return problemResponse(problemOf(403, ProblemCodes.forbidden, 'This key is not bound to a flag environment'));
+        }
+        const body = await parseJson(c, flagTelemetryInputSchema);
+        if (body.refused !== undefined) {
+          return body.refused;
+        }
+        const result = await telemetry.ingest(
+          { workspaceId, environmentId: flagEnvironmentId, keyKind: kind },
+          body.data,
+        );
+        return c.json(result, 202);
+      },
+    );
+  }
 
   app.get('/ruleset', requireKey(deps, { kinds: [ApiKeyKinds.secret], scope: ApiScopes.flagsRead }), async c => {
     const { workspaceId, flagEnvironmentId } = c.var.principal;
