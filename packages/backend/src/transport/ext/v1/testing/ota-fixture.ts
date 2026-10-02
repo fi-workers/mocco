@@ -34,6 +34,7 @@ import { createV1Routes } from '@backend/transport/ext/v1/routes';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { OtaDomain } from '@backend/domain/ota/instance';
 import type { OtaPlatform, UploadResponse } from '@mocco/common/ota-hosting';
+import type { JWTVerifyGetKey } from 'jose';
 
 export const ORIGIN = 'https://mocco.test';
 export const API = `${ORIGIN}/api/ext/v1`;
@@ -69,7 +70,7 @@ export interface ManifestOptions {
   launch?: FakeAsset;
 }
 
-export async function createOtaFixture() {
+export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey } = {}) {
   const t: TestDb = await createTestDb();
   const root = await mkdtemp(path.join(tmpdir(), 'mocco-ota-'));
   const signer = new StorageUrlSigner('ota-test-key');
@@ -87,7 +88,15 @@ export async function createOtaFixture() {
     },
     kick: () => {},
   } as unknown as JobQueue;
-  const ota: OtaDomain = createOtaDomain(t.db, { projects, approvals, audit, publicApiBase: API, storage, queue });
+  const ota: OtaDomain = createOtaDomain(t.db, {
+    projects,
+    approvals,
+    audit,
+    publicApiBase: API,
+    storage,
+    queue,
+    ...(options.oidcKeys !== undefined && { oidcKeys: options.oidcKeys }),
+  });
   const apiKeys = createApiKeyService(t.db, { projects, audit });
   const app = new Hono()
     .basePath('/api/ext')
@@ -96,7 +105,12 @@ export async function createOtaFixture() {
       createV1Routes({
         apiKeys,
         limiter: new MemoryRateLimiter(),
-        ota: { uploads: ota.otaUploads, channels: ota.otaChannels, updateChecks: ota.otaUpdateChecks },
+        ota: {
+          uploads: ota.otaUploads,
+          channels: ota.otaChannels,
+          updateChecks: ota.otaUpdateChecks,
+          trustPolicies: ota.otaTrustPolicies,
+        },
       }),
     )
     .route('/', createStorageRoutes({ store, signer }));

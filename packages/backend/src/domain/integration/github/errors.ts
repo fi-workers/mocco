@@ -45,3 +45,11 @@ export function octokitStatus(error: unknown): number | undefined {
   }
   return undefined;
 }
+
+/** Why a token was refused (logged and audited; the caller only ever sees a fixed 403). */
+export class OidcTokenRejectedError extends Error {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(reason, options);
+    this.name = 'OidcTokenRejectedError';
+  }
+}

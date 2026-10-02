@@ -4,23 +4,40 @@
 // promotes ready releases to unprotected channels. Rejections are
 // problem+json whose `detail` says exactly what to fix, so the CLI can print it as is.
 import { ApiScopes } from '@mocco/common/apikey';
-import { finalizeRequestSchema, promotionRequestSchema, uploadRequestSchema } from '@mocco/common/ota-hosting';
+import {
+  finalizeRequestSchema,
+  oidcExchangeRequestSchema,
+  promotionRequestSchema,
+  uploadRequestSchema,
+} from '@mocco/common/ota-hosting';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@backend/domain/errors';
-import { KeyRateLimits, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
+import { OidcExchangeDeniedError } from '@backend/domain/ota/errors';
+import {
+  KeyRateLimits,
+  limitAnonymous,
+  requireKey,
+  type V1Deps,
+  type V1Env,
+} from '@backend/transport/ext/v1/middleware';
 import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
+import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
 export interface OtaUploadDeps {
   uploads: Pick<UploadService, 'createSession' | 'authenticate' | 'beginRelease' | 'finalize'>;
-  channels: Pick<OtaChannelService, 'promoteAsKey' | 'releaseStatusAsKey'>;
+  channels: Pick<
+    OtaChannelService,
+    'promoteAsKey' | 'releaseStatusAsKey' | 'promoteAsSession' | 'releaseStatusAsSession'
+  >;
+  trustPolicies: Pick<TrustPolicyService, 'exchange'>;
 }
 
 interface SessionEnv {
@@ -109,6 +126,23 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
     },
   );
 
+  // Trusted publishing: a GitHub Actions OIDC token for a 15-minute session. Every
+  // refusal is the same 403 (the reason is logged and audited, never returned).
+  app.post('/auth/oidc', limitAnonymous(deps), async c => {
+    const { data, refused } = await parseJson(c, oidcExchangeRequestSchema);
+    if (refused !== undefined) {
+      return refused;
+    }
+    try {
+      return c.json(await ota.trustPolicies.exchange(data.appId, data.token), 201);
+    } catch (error) {
+      if (error instanceof OidcExchangeDeniedError) {
+        return problemResponse(problemOf(403, ProblemCodes.forbidden, 'OIDC token not accepted'));
+      }
+      throw error;
+    }
+  });
+
   const ciKey = requireKey(deps, { kinds: ['secret'], scope: ApiScopes.otaWrite });
 
   // A release's status, so CI can wait for `ready` before promoting.
@@ -152,6 +186,33 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
     }
     try {
       return c.json(await ota.uploads.beginRelease(c.var.session, data), 201);
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  sessions.get('/:releaseId', async c => {
+    try {
+      return c.json(await ota.channels.releaseStatusAsSession(c.var.session, c.req.param('releaseId')));
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  // Promote the session's release (within a trust policy's channels).
+  sessions.post('/:releaseId/promotions', async c => {
+    const { data, refused } = await parseJson(c, promotionRequestSchema);
+    if (refused !== undefined) {
+      return refused;
+    }
+    try {
+      const result = await ota.channels.promoteAsSession(
+        c.var.session,
+        c.req.param('releaseId'),
+        data.channel,
+        data.reason,
+      );
+      return c.json(result, result.changed ? 201 : 200);
     } catch (error) {
       return problemOfError(error);
     }

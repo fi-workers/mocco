@@ -10,6 +10,8 @@
 export interface CredentialIssueRequest {
   /** The run's workspace — a provider that stores per-workspace secrets scopes its lookup by it. */
   workspaceId: string;
+  /** The run the credential is for — a provider that mints run-bound credentials records it. */
+  runId: string;
   provider: string;
   role: string;
   ttlSeconds: number;

@@ -5,6 +5,7 @@
 // provider is a later, user-side swap behind the port), so `getCredential()` never
 // returns undefined and the tRPC/ext contexts carry it non-optionally.
 import { OtaCredentialProviders } from '@mocco/common/ota';
+import { MOCCO_OTA_CREDENTIAL_PROVIDER } from '@mocco/common/ota-hosting';
 
 import { getAudit } from '@backend/domain/audit/instance';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -17,10 +18,15 @@ import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { getOtaDomain } from '@backend/domain/ota/instance';
 import { EXTERNAL_TOKEN_TOOLS, ExternalTokenProvider } from '@backend/domain/ota/providers/external-token';
+import { MoccoOtaProvider } from '@backend/domain/ota/providers/mocco-ota';
+import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
 import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-external-credential.repo';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
+
+import type { CredentialProvider } from '@backend/domain/credential/ports';
 
 export interface Credential {
   grants: GrantService;
@@ -44,18 +50,27 @@ export function getCredential(): Credential {
         configs: new CommitConfigRepo(db),
         commits: new CommitRepo(db),
         grants,
-        // OTA tools' sealed publishing tokens (ota-<tool>); every other provider id is
-        // still the stub until the real AWS STS provider lands.
+        // OTA tools' sealed publishing tokens (ota-<tool>) and Mocco-hosted OTA upload
+        // sessions (mocco-ota); every other provider id is still the stub until the real
+        // AWS STS provider lands.
         provider: new RoutingCredentialProvider(
-          new Map(
-            EXTERNAL_TOKEN_TOOLS.map(tool => [
-              OtaCredentialProviders[tool],
-              new ExternalTokenProvider(tool, {
-                credentials: new OtaExternalCredentialRepo(db),
-                secretBox: getSecretBox,
-              }),
-            ]),
-          ),
+          new Map<string, CredentialProvider>([
+            ...EXTERNAL_TOKEN_TOOLS.map(
+              tool =>
+                [
+                  OtaCredentialProviders[tool],
+                  new ExternalTokenProvider(tool, {
+                    credentials: new OtaExternalCredentialRepo(db),
+                    secretBox: getSecretBox,
+                  }),
+                ] as const,
+            ),
+            // Mocco-hosted OTA: an upload session for the app the role names.
+            [
+              MOCCO_OTA_CREDENTIAL_PROVIDER,
+              new MoccoOtaProvider({ apps: new OtaAppRepo(db), uploads: getOtaDomain().otaUploads }),
+            ] as const,
+          ]),
           new StubCredentialProvider(),
         ),
         audit: getAudit().audit,

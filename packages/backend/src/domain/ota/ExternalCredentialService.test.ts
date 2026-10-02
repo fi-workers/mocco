@@ -27,6 +27,9 @@ import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCred
 
 const SECRET = 'expo-robot-token-abc123';
 
+/** The broker passes the run id; these providers don't use it. */
+const RUN_ID = '00000000-0000-4000-8000-000000000001';
+
 describe('External OTA credentials (pglite)', () => {
   let t: TestDb;
   let audit: AuditService;
@@ -135,19 +138,31 @@ describe('External OTA credentials (pglite)', () => {
   describe('the broker provider', () => {
     it("releases the secret named by the role, looked up in the run's workspace only", async () => {
       await service.create(workspaceId, projectId, userId, { tool: OtaTools.eas, name: 'prod', secret: SECRET });
-      const issued = await provider().issue({ workspaceId, provider: 'ota-eas', role: 'prod', ttlSeconds: 900 });
+      const issued = await provider().issue({
+        workspaceId,
+        runId: RUN_ID,
+        provider: 'ota-eas',
+        role: 'prod',
+        ttlSeconds: 900,
+      });
       expect(issued).toMatchObject({ provider: 'ota-eas', role: 'prod', value: SECRET });
 
       const other = await seedWorkspaceProject('other');
       await expect(
-        provider().issue({ workspaceId: other.workspaceId, provider: 'ota-eas', role: 'prod', ttlSeconds: 900 }),
+        provider().issue({
+          workspaceId: other.workspaceId,
+          runId: RUN_ID,
+          provider: 'ota-eas',
+          role: 'prod',
+          ttlSeconds: 900,
+        }),
       ).rejects.toBeInstanceOf(CredentialUnavailableError);
     });
 
     it("does not release another tool's credential under the same name", async () => {
       await service.create(workspaceId, projectId, userId, { tool: OtaTools.codepush, name: 'prod', secret: SECRET });
       await expect(
-        provider().issue({ workspaceId, provider: 'ota-eas', role: 'prod', ttlSeconds: 900 }),
+        provider().issue({ workspaceId, runId: RUN_ID, provider: 'ota-eas', role: 'prod', ttlSeconds: 900 }),
       ).rejects.toBeInstanceOf(CredentialUnavailableError);
     });
 
@@ -163,7 +178,7 @@ describe('External OTA credentials (pglite)', () => {
         secretFingerprint: rowA.secretFingerprint,
       });
       await expect(
-        provider().issue({ workspaceId, provider: 'ota-eas', role: 'b', ttlSeconds: 900 }),
+        provider().issue({ workspaceId, runId: RUN_ID, provider: 'ota-eas', role: 'b', ttlSeconds: 900 }),
       ).rejects.toBeInstanceOf(CredentialUnavailableError);
     });
   });

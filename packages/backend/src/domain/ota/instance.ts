@@ -7,6 +7,7 @@ import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
 import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin, schemeFor } from '@backend/domain/execution/endpoints';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { GitHubOidcVerifier } from '@backend/domain/integration/github/oidc';
 import { getJobQueue } from '@backend/domain/jobs/instance';
 import { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
 import { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
@@ -20,9 +21,11 @@ import { OtaChannelRepo } from '@backend/domain/ota/repos/ota-channel.repo';
 import { OtaExternalCredentialRepo } from '@backend/domain/ota/repos/ota-external-credential.repo';
 import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
+import { TrustPolicyRepo } from '@backend/domain/ota/repos/trust-policy.repo';
 import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
 import { ChannelStateCache } from '@backend/domain/ota/serving/state-cache';
 import { SigningService } from '@backend/domain/ota/SigningService';
+import { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import { UpdateCheckService } from '@backend/domain/ota/UpdateCheckService';
 import { UploadService } from '@backend/domain/ota/UploadService';
 import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
@@ -41,6 +44,7 @@ import type { StorageService } from '@backend/domain/storage/StorageService';
 import type { Env } from '@backend/infra/config/env';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
+import type { JWTVerifyGetKey } from 'jose';
 
 export interface OtaDomain {
   versionPolicies: VersionPolicyService;
@@ -51,6 +55,7 @@ export interface OtaDomain {
   otaUploads: UploadService;
   otaChannels: OtaChannelService;
   otaUpdateChecks: UpdateCheckService;
+  otaTrustPolicies: TrustPolicyService;
 }
 
 /** The production queue, resolved on first enqueue (tests that never upload need no env). */
@@ -85,10 +90,12 @@ export function createOtaDomain(
     /** Where uploaded bundles go; undefined refuses uploads. */
     storage?: StorageService;
     queue?: JobQueue;
+    /** GitHub's OIDC keys; tests pass a local key set. */
+    oidcKeys?: JWTVerifyGetKey;
   },
 ): OtaDomain {
   const policies = new AppVersionPolicyRepo(db);
-  const { secretBox = getSecretBox, publicApiBase, storage, queue = lazyQueue, ...services } = deps;
+  const { secretBox = getSecretBox, publicApiBase, storage, queue = lazyQueue, oidcKeys, ...services } = deps;
   const versionPolicies = new VersionPolicyService({
     policies,
     changes: new AppVersionPolicyChangeRepo(db),
@@ -114,6 +121,16 @@ export function createOtaDomain(
   const releases = new OtaReleaseRepo(db);
   const heads = new ChannelHeadRepo(db);
   const assets = new OtaAssetRepo(db);
+  const uploads = new UploadService({
+    apps: new OtaAppRepo(db),
+    sessions: new UploadSessionRepo(db),
+    releases,
+    assets,
+    signing,
+    storage,
+    queue,
+    audit: services.audit,
+  });
   return {
     versionPolicies,
     versionChecks: new VersionCheckService({ policies }),
@@ -125,16 +142,7 @@ export function createOtaDomain(
     }),
     otaHosting: hosting,
     otaSigning: signing,
-    otaUploads: new UploadService({
-      apps: new OtaAppRepo(db),
-      sessions: new UploadSessionRepo(db),
-      releases,
-      assets,
-      signing,
-      storage,
-      queue,
-      audit: services.audit,
-    }),
+    otaUploads: uploads,
     otaChannels: new OtaChannelService({
       apps: new OtaAppRepo(db),
       channels: new OtaChannelRepo(db),
@@ -144,6 +152,18 @@ export function createOtaDomain(
       cache,
     }),
     otaUpdateChecks: new UpdateCheckService({ heads, assets, storage, cache }),
+    otaTrustPolicies: new TrustPolicyService({
+      apps: new OtaAppRepo(db),
+      channels: new OtaChannelRepo(db),
+      policies: new TrustPolicyRepo(db),
+      uploads,
+      // Jobs request their OIDC token for Mocco's public API origin.
+      verifier: new GitHubOidcVerifier({
+        audience: new URL(publicApiBase).origin,
+        ...(oidcKeys !== undefined && { keys: oidcKeys }),
+      }),
+      audit: services.audit,
+    }),
   };
 }
 

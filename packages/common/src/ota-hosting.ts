@@ -291,3 +291,41 @@ export interface PromotionResult {
   /** False when the channel already served this release (nothing changed). */
   changed: boolean;
 }
+
+/** A ref pattern: an exact ref, or `*` as a wildcard within it (`refs/tags/v*`). */
+export const REF_PATTERN = /^refs\/[\w./*-]{1,200}$/;
+
+/** Who may publish without a stored key: a GitHub repository (by numeric id) and ref. */
+export const otaTrustPolicySchema = z.object({
+  id: z.uuid(),
+  appId: z.uuid(),
+  provider: z.literal('github'),
+  repositoryId: z.string(),
+  repository: z.string(),
+  refPattern: z.string(),
+  workflowRef: z.string().nullable(),
+  environment: z.string().nullable(),
+  /** Unprotected channels a session from this policy may promote to. */
+  allowedChannels: z.array(z.string()),
+  createdAt: z.date(),
+});
+export type OtaTrustPolicyDto = z.infer<typeof otaTrustPolicySchema>;
+
+export const otaTrustPolicyInputSchema = z.object({
+  repositoryId: z.string().regex(/^\d{1,20}$/),
+  repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/),
+  refPattern: z.string().regex(REF_PATTERN).default('refs/heads/main'),
+  workflowRef: z.string().min(1).max(300).nullable().default(null),
+  environment: z.string().min(1).max(100).nullable().default(null),
+  allowedChannels: z.array(z.string().regex(CHANNEL_NAME_PATTERN)).max(20).default([]),
+});
+export type OtaTrustPolicyInput = z.infer<typeof otaTrustPolicyInputSchema>;
+
+/** `POST /v1/ota/auth/oidc`. */
+export const oidcExchangeRequestSchema = z.object({
+  appId: z.uuid(),
+  token: z.string().min(1).max(10_000),
+});
+
+/** The broker provider id a gated Mocco run step names to get an upload session. */
+export const MOCCO_OTA_CREDENTIAL_PROVIDER = 'mocco-ota';

@@ -20,6 +20,7 @@ import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCred
 import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import type { SigningService } from '@backend/domain/ota/SigningService';
+import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
@@ -67,6 +68,8 @@ export interface Context {
   otaUploads: UploadService;
   /** Always present — what OTA channels serve, and promotions. */
   otaChannels: OtaChannelService;
+  /** Always present — trusted publishing from GitHub Actions. */
+  otaTrustPolicies: TrustPolicyService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

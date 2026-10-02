@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { MoccoApi } from './api';
 import { readExport } from './expo-export';
 import { buildManifest, republishOf, rollBackToEmbeddedOf } from './manifest';
+import { promoteWithSession } from './promote';
 import { signBody } from './sign';
 
 import type { FinalizeResult } from './api';
@@ -14,7 +15,8 @@ import type { FinalizeRequest, OtaPlatform } from '@mocco/common/ota-hosting';
 export interface PublishOptions {
   apiBase: string;
   appId: string;
-  apiKey: string;
+  /** A secret API key with ota:write, or a GitHub Actions OIDC token (trusted publishing). */
+  auth: { apiKey: string } | { oidcToken: string };
   distDir: string;
   platforms: readonly OtaPlatform[];
   runtimeVersion: string;
@@ -25,6 +27,8 @@ export interface PublishOptions {
   isMandatory: boolean;
   /** The static Expo config, served to the app as `extra.expoClient`. */
   expoConfig: Record<string, unknown>;
+  /** Promote to this unprotected channel once Mocco has verified the release. */
+  channel?: string;
   log?: (line: string) => void;
   fetch?: typeof fetch;
   now?: () => Date;
@@ -64,7 +68,10 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
   const exports = await readExport(options.distDir, options.platforms);
   const files = uniqueFiles(exports);
 
-  const session = await api.createSession(options.appId, options.apiKey);
+  const session =
+    'apiKey' in options.auth
+      ? await api.createSession(options.appId, options.auth.apiKey)
+      : await api.exchangeOidc(options.appId, options.auth.oidcToken);
   const declared = await api.declare(session, {
     runtimeVersion: options.runtimeVersion,
     platforms: [...options.platforms],
@@ -129,5 +136,9 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
       .map(([platform, id]) => `${platform} ${id}`)
       .join(', ')}; ${request.republishes.length} rollback(s) pre-signed. Mocco is verifying the assets.`,
   );
+  if (options.channel !== undefined) {
+    log(`Waiting for Mocco to verify the assets before promoting to ${options.channel}…`);
+    await promoteWithSession(api, { session, releaseId: result.releaseId, channel: options.channel }, { log });
+  }
   return { ...result, uploadedBytes, reusedAssets: files.length - declared.missing.length };
 }

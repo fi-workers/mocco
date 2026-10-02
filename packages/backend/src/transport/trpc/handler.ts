@@ -30,6 +30,7 @@ import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCred
 import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import type { SigningService } from '@backend/domain/ota/SigningService';
+import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
@@ -57,6 +58,7 @@ export interface TrpcDeps extends Services {
   otaSigning: SigningService;
   otaUploads: UploadService;
   otaChannels: OtaChannelService;
+  otaTrustPolicies: TrustPolicyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -98,6 +100,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         otaSigning: deps.otaSigning,
         otaUploads: deps.otaUploads,
         otaChannels: deps.otaChannels,
+        otaTrustPolicies: deps.otaTrustPolicies,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -133,6 +136,7 @@ export function productionServices(): TrpcDeps {
     otaSigning: getOtaDomain().otaSigning,
     otaUploads: getOtaDomain().otaUploads,
     otaChannels: getOtaDomain().otaChannels,
+    otaTrustPolicies: getOtaDomain().otaTrustPolicies,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

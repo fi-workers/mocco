@@ -70,6 +70,23 @@ export interface UploadServiceDeps {
   now?: () => Date;
 }
 
+/** What a new session may do and who it speaks for. */
+export interface SessionGrant {
+  principal: string;
+  apiKeyId?: string;
+  trustPolicyId?: string;
+  /** Channels it may promote to; null for any unprotected one. */
+  allowedChannels: string[] | null;
+  /** Capped at 15 minutes. */
+  ttlSeconds?: number;
+}
+
+export interface MintedSession {
+  sessionToken: string;
+  expiresAt: Date;
+  allowedChannels: string[] | null;
+}
+
 /** One signed body of a finalize request, with what it was parsed into. */
 interface SignedBody {
   platform: OtaPlatform;
@@ -398,22 +415,24 @@ export class UploadService {
     });
   }
 
-  /** Mint a session for a key whose project owns the app. The token is returned once. */
-  async createSession(principal: ApiPrincipal, appId: string): Promise<{ sessionToken: string; expiresAt: Date }> {
-    const app = await this.deps.apps.findById(appId);
-    if (app?.workspaceId !== principal.workspaceId || app.projectId !== principal.projectId) {
-      throw new OtaAppNotFoundError(appId);
-    }
+  /**
+   * Mint an upload session for `app` (at most 15 minutes) and audit it. Every way in — a
+   * secret key, a GitHub OIDC token, a broker-approved run step — ends here. The token is
+   * returned once; only its hash is stored.
+   */
+  async mintSession(app: OtaAppRow, grant: SessionGrant): Promise<MintedSession> {
     // eslint-disable-next-line unicorn/prefer-uint8array-base64 -- Uint8Array#toBase64 isn't in Node 22
     const sessionToken = `${UPLOAD_SESSION_TOKEN_PREFIX}${randomBytes(32).toString('base64url')}`;
-    const expiresAt = new Date(this.now().getTime() + UPLOAD_SESSION_TTL_SECONDS * 1000);
-    const principalName = `apikey:${principal.keyId}`;
+    const ttlSeconds = Math.min(grant.ttlSeconds ?? UPLOAD_SESSION_TTL_SECONDS, UPLOAD_SESSION_TTL_SECONDS);
+    const expiresAt = new Date(this.now().getTime() + ttlSeconds * 1000);
     const session = await this.deps.sessions.insert({
       workspaceId: app.workspaceId,
       appId: app.id,
       tokenHash: hashToken(sessionToken),
-      principal: principalName,
-      apiKeyId: principal.keyId,
+      principal: grant.principal,
+      apiKeyId: grant.apiKeyId ?? null,
+      trustPolicyId: grant.trustPolicyId ?? null,
+      allowedChannels: grant.allowedChannels,
       expiresAt,
       createdAt: this.now(),
     });
@@ -422,9 +441,28 @@ export class UploadService {
       action: AuditActions.otaUploadAuthorized,
       subjectType: 'ota_app',
       subjectId: app.id,
-      payload: { sessionId: session.id, principal: principalName, expiresAt },
+      payload: {
+        sessionId: session.id,
+        principal: grant.principal,
+        trustPolicyId: grant.trustPolicyId ?? null,
+        allowedChannels: grant.allowedChannels,
+        expiresAt,
+      },
     });
-    return { sessionToken, expiresAt };
+    return { sessionToken, expiresAt, allowedChannels: grant.allowedChannels };
+  }
+
+  /** Mint a session for a secret key whose project owns the app. */
+  async createSession(principal: ApiPrincipal, appId: string): Promise<MintedSession> {
+    const app = await this.deps.apps.findById(appId);
+    if (app?.workspaceId !== principal.workspaceId || app.projectId !== principal.projectId) {
+      throw new OtaAppNotFoundError(appId);
+    }
+    return await this.mintSession(app, {
+      principal: `apikey:${principal.keyId}`,
+      apiKeyId: principal.keyId,
+      allowedChannels: null,
+    });
   }
 
   /** The live session a token belongs to, or undefined (unknown, malformed or expired). */

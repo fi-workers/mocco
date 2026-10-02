@@ -11,6 +11,8 @@ import {
   otaChannelSchema,
   otaPlatformSchema,
   otaReleaseSchema,
+  otaTrustPolicyInputSchema,
+  otaTrustPolicySchema,
   signingCertificateInputSchema,
   signingCertificateSchema,
 } from '@mocco/common/ota-hosting';
@@ -41,6 +43,31 @@ const adminOtaProcedure = otaProcedure.use(async ({ ctx, getRawInput, next }) =>
 });
 
 export const otaHostingRouter = router({
+  trustPolicies: router({
+    list: otaProcedure
+      .input(appInput)
+      .output(z.object({ policies: z.array(otaTrustPolicySchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return { policies: await ctx.otaTrustPolicies.list(app) };
+      }),
+
+    /** Trust a GitHub repository and ref to publish without a stored key (owners and admins). */
+    create: adminOtaProcedure
+      .input(appInput.extend(otaTrustPolicyInputSchema.shape))
+      .output(z.object({ policy: otaTrustPolicySchema }))
+      .mutation(async ({ ctx, input }) => {
+        const { workspaceId, projectId, appId, ...policy } = input;
+        const app = await ctx.otaHosting.requireApp(workspaceId, projectId, appId);
+        return { policy: await ctx.otaTrustPolicies.create(app, ctx.session.user.id, policy) };
+      }),
+
+    delete: adminOtaProcedure.input(appInput.extend({ policyId: z.uuid() })).mutation(async ({ ctx, input }) => {
+      const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+      await ctx.otaTrustPolicies.delete(app, ctx.session.user.id, input.policyId);
+    }),
+  }),
+
   releases: router({
     list: otaProcedure
       .input(appInput)
