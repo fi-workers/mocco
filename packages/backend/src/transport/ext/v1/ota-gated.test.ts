@@ -152,7 +152,7 @@ describe('gated promotion to protected channels', () => {
     const [requested] = published;
     expect(requested?.payload).toMatchObject({
       facts: { channel: 'production', release: releaseId },
-      message: { title: expect.stringMatching(/^Approval needed: Fix the login button → production$/u) },
+      message: { title: expect.stringMatching(/^Approval needed: Promote Fix the login button → production$/u) },
     });
   });
 

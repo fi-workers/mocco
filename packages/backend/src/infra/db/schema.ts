@@ -1824,6 +1824,8 @@ export const otaChannelHeads = pgTable(
     runtimeVersion: text('runtime_version').notNull(),
     activeUpdateId: uuid('active_update_id').references(() => otaUpdates.id, { onDelete: 'set null' }),
     candidateUpdateId: uuid('candidate_update_id').references(() => otaUpdates.id, { onDelete: 'set null' }),
+    // What `active` replaced: a rollback serves the pre-signed republish of its content.
+    previousUpdateId: uuid('previous_update_id').references(() => otaUpdates.id, { onDelete: 'set null' }),
     // Basis points of devices that get the candidate (0..10000).
     rolloutBp: smallint('rollout_bp').notNull().default(0),
     rolloutSalt: text('rollout_salt').notNull(),

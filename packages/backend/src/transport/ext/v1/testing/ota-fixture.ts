@@ -227,11 +227,40 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
     return { releaseId: declared.releaseId, declared, session, manifest };
   };
 
+  /**
+   * Publish like the CLI: a signed iOS update, a republish of every rollback target and a
+   * rollBackToEmbedded directive (both dated 1 ms later), then verify it. Returns the
+   * release and update ids.
+   */
+  const publishReady = async (label: string) => {
+    const launch = assetOf(`console.log("${label}")`, 'application/javascript', 'bundle');
+    const session = await newSession();
+    const declared = await declare(session, [launch, image]);
+    await putMissing(declared, [launch, image]);
+    const createdAt = new Date();
+    const updateId = randomUUID();
+    const manifest = manifestOf({ createdAt, launch, id: updateId });
+    const later = new Date(createdAt.getTime() + 1).toISOString();
+    const directive = JSON.stringify({ type: 'rollBackToEmbedded', parameters: { commitTime: later } });
+    const response = await finalize(session, declared.releaseId, {
+      updates: [{ platform: OtaPlatforms.ios, body: manifest, signature: signBody(manifest) }],
+      republishes: declared.rollbackTargets.map(target => {
+        const body = JSON.stringify({ ...(JSON.parse(target.manifest) as object), id: randomUUID(), createdAt: later });
+        return { platform: target.platform, targetUpdateId: target.updateId, body, signature: signBody(body) };
+      }),
+      directives: [{ platform: OtaPlatforms.ios, body: directive, signature: signBody(directive) }],
+    });
+    expect(response.status).toBe(200);
+    await ota.otaUploads.verifyAssets(declared.releaseId);
+    return { releaseId: declared.releaseId, updateId, rollbackTargets: declared.rollbackTargets.length };
+  };
+
   return {
     t,
     app,
     ota,
     approvals,
+    publishReady,
     enqueued,
     workspaceId,
     ownerId,

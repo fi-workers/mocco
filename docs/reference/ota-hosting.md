@@ -34,7 +34,7 @@ code_refs:
 
 # Mocco-hosted OTA updates
 
-> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), trusted publishing (#130) and gated promotion (#131); rollout and rollback (#132) build on it.
+> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), trusted publishing (#130), gated promotion (#131), and staged rollout, pause and rollback (#132).
 
 ## OTA apps
 
@@ -107,23 +107,40 @@ Promoting a `ready` release to a channel points that channel's heads (one per pl
 
 Promote from the console (**Promote** on a ready release, or **Request approval** when the channel is protected), with `mocco-ota promote --release <id> --channel <name> [--wait]`, or with `mocco-ota publish --channel <name> [--wait]`, which waits until the release is verified (and, with `--wait`, for the approval). `/v1` answers `201` when heads changed, `202` with `requestId` when approval is pending, and `200` for a no-op; `GET …/promotions/{requestId}` reports the request's state. The channel row shows what it serves per platform and each waiting request: the release, its size, its git SHA, the assets devices would download compared with what the channel serves now, the reason, and what the policy needs.
 
+## Rollout, pause and rollback
+
+A promotion below 100% starts a **staged rollout**: the release becomes the head's candidate for that share of devices (basis points; a device's bucket is the SHA-256 of the head's salt and its `EAS-Client-ID`, so raising the share only adds devices), while everyone else keeps the active update.
+
+| Action | Gated on a protected channel | What it does |
+|---|---|---|
+| Promote at a share < 100% (`rollout`) | yes | The release becomes the candidate for that share |
+| Set share | yes | Changes the share; 100% completes |
+| Complete | yes | The candidate becomes active (and the old active its `previous`) |
+| Resume | yes | Lifts a pause |
+| **Pause** | never | Freezes new adoption: devices not on the candidate get the active update; devices already on it keep it |
+| **Roll back** (per platform) | never | Serves the pre-signed republish of what the head served before, re-dated after the bad update, so devices on it take it at once. During a rollout this is the abort: the republish of the active update, valid for devices on the candidate |
+| **Roll back to embedded** (per platform) | never | Serves the bad update's pre-signed `rollBackToEmbedded` directive |
+
+A rollback needs the republish the CLI pre-signed when the bad release was uploaded (for each channel head on its runtime). Without one (a channel's first release, or a second rollback in a row), the refusal says so and points at rolling back to embedded or publishing a fix. Each action writes a deployment (`rollout`, `pause`, `resume`, `complete`, `rollback`, `rollback_embedded`, with the share before and after) and an `ota.channel.changed` audit entry. The console shows each head's active and candidate release, the share and whether it's paused, a head that was rolled back ("Rolled back to …") or serves the embedded bundle, and the controls that apply. From CI: `mocco-ota promote --rollout 10`, `mocco-ota publish --channel staging --rollout 10`, `mocco-ota pause --channel <name>`, `mocco-ota rollback --channel <name> [--platform ios] [--to-embedded]`.
+
 ## Serving devices
 
 `GET /v1/ota/apps/{id}/manifest` speaks Expo Updates protocol v1 to the stock client. It reads `expo-protocol-version` (only `1`, else 400), `expo-platform` and `expo-runtime-version` (required, else 400), `expo-channel-name`, `EAS-Client-ID` and `expo-current-update-id`. Then:
 
 1. **No head** for the app, channel, platform and runtime (including an unknown app or channel): **204** with `expo-protocol-version: 1`. Never 404, so apps can't be enumerated and a misconfigured build keeps its embedded bundle.
 2. A head serving a `rollBackToEmbedded` directive: the **directive** part.
-3. The **candidate** for devices whose rollout bucket (SHA-256 of salt and `EAS-Client-ID`, mod 10 000) is below the rollout share and the head isn't paused; everyone else gets the **active** update. A device without `EAS-Client-ID` is always in the control group.
-4. Already running the target: **204**. Otherwise, **200** `multipart/mixed` with the `manifest` part, carrying the exact signed bytes and their `expo-signature` header, plus an `extensions` part. A client that accepts only JSON gets `application/expo+json` with `expo-signature` as a response header (and 406 for a directive).
+3. A device already on the candidate: **204** (it keeps it while paused, or after the share was lowered).
+4. The **candidate** for devices whose rollout bucket (SHA-256 of salt and `EAS-Client-ID`, mod 10 000) is below the rollout share and the head isn't paused; everyone else gets the **active** update. A device without `EAS-Client-ID` is always in the control group.
+5. Already running the target: **204**. Otherwise, **200** `multipart/mixed` with the `manifest` part, carrying the exact signed bytes and their `expo-signature` header, plus an `extensions` part. A client that accepts only JSON gets `application/expo+json` with `expo-signature` as a response header (and 406 for a directive).
 
 Responses carry `expo-sfv-version: 0` and `cache-control: private, max-age=0`. Each head's serving state is cached in-process for 5 seconds, including "nothing to serve", so a burst of checks costs one query per head. A promotion invalidates the cache at once in the instance that made it; other instances catch up within the TTL.
 
 `GET /v1/ota/apps/{id}/assets/{hash}` (the URL inside every signed manifest) redirects (302) to the verified bytes in the store: the CDN or bucket URL, or the filesystem driver's route. Unknown or unverified hashes are 404.
 
-## Tables (migrations 0022–0024)
+## Tables (migrations 0022–0027)
 
 `mocco_ota_apps`, `mocco_ota_signing_certificates`, `mocco_ota_channels`, `mocco_ota_upload_sessions` (token hash only, one release per session, its trust policy and allowed channels), `mocco_ota_trust_policies`, plus the tables the next slices fill: `mocco_ota_releases`, `mocco_ota_updates` (the exact signed manifest bytes, never rewritten; the id is the Expo update id from CI), `mocco_ota_signed_directives`, `mocco_ota_assets` (content-addressed by base64url SHA-256, linked to `mocco_objects`), `mocco_ota_update_assets`, `mocco_ota_channel_heads` (serving state per channel, platform and runtime version) and `mocco_ota_deployments` (append-only channel history). All are workspace-scoped with composite FKs.
 
 ## tRPC surface
 
-`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | promote`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.
+`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | previewPromotion | promote | changeRollout | stop`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.

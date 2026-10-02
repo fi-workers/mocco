@@ -7,6 +7,7 @@ import { parseArgs, promisify } from 'node:util';
 
 import { DEFAULT_SIGNING_KEY_ID, OtaPlatforms } from '@mocco/common/ota-hosting';
 
+import { MoccoApi } from './api';
 import { keyidOf, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
 import { CliError } from './errors';
 import { isPresent } from './fs';
@@ -21,7 +22,7 @@ const USAGE = `Usage:
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
 
-  mocco-ota publish [--channel <name> [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
+  mocco-ota publish [--channel <name> [--rollout <percent>] [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
                     [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
       Export, upload and finalize a signed release; with --channel, promote it once ready
@@ -30,9 +31,14 @@ const USAGE = `Usage:
       GitHub Actions (trusted publishing; the default there when MOCCO_API_KEY is unset).
       Signs with MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
 
-  mocco-ota promote --release <id> --channel <name> [--wait] [--project .]
-      Point a channel at a ready release; a protected channel gets an approval request
-      (--wait waits for the decision). Needs MOCCO_API_KEY.
+  mocco-ota promote --release <id> --channel <name> [--rollout <percent>] [--wait]
+      Point a channel at a ready release, or roll it out to a share of devices; a
+      protected channel gets an approval request (--wait waits for the decision).
+
+  mocco-ota pause --channel <name>
+  mocco-ota rollback --channel <name> [--platform ios|android] [--to-embedded]
+      Stop a rollout, or roll back instantly to the pre-signed republish (or to the
+      embedded bundle). Never gated. Both need MOCCO_API_KEY.
 `;
 
 const run = promisify(execFile);
@@ -163,12 +169,49 @@ async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url
   return { appId, apiBase, expo };
 }
 
+/** `--rollout 10` → 10 (percent); unset → 100. */
+function percentOf(value: string | undefined): number {
+  if (value === undefined) {
+    return 100;
+  }
+  // eslint-disable-next-line sonarjs/null-dereference -- narrowed to a string above
+  const percent = Number(value.replace(/%$/u, ''));
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+    throw new CliError(`--rollout must be a percent between 0 and 100 (got ${value})`);
+  }
+  return percent;
+}
+
+/** `mocco-ota pause|rollback --channel <name> [--to-embedded]`: stop actions, never gated. */
+async function runStop(command: 'pause' | 'rollback', args: readonly string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      channel: { type: 'string' },
+      platform: { type: 'string' },
+      'to-embedded': { type: 'boolean', default: false },
+      'app-id': { type: 'string' },
+      'api-url': { type: 'string' },
+      project: { type: 'string', default: '.' },
+    },
+  });
+  if (values.channel === undefined) {
+    throw new CliError('--channel is required');
+  }
+  const { appId, apiBase } = await targetOf(path.resolve(values.project), values);
+  const rollbackAction = values['to-embedded'] ? 'rollback-to-embedded' : 'rollback';
+  const action = command === 'pause' ? 'pause' : rollbackAction;
+  const result = await new MoccoApi(apiBase).stop(appId, values.channel, action, apiKeyOf(), values.platform ?? null);
+  log(`${result.channel}: ${result.kind.replace('_', ' ')} done (${result.platforms.join(', ')}).`);
+}
+
 async function runPromote(args: readonly string[]): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
     options: {
       release: { type: 'string' },
       channel: { type: 'string' },
+      rollout: { type: 'string' },
       wait: { type: 'boolean', default: false },
       'app-id': { type: 'string' },
       'api-url': { type: 'string' },
@@ -185,6 +228,7 @@ async function runPromote(args: readonly string[]): Promise<void> {
     apiKey: apiKeyOf(),
     releaseId: values.release,
     channel: values.channel,
+    rolloutPercent: percentOf(values.rollout),
     isWaitingForApproval: values.wait,
     log,
   });
@@ -196,6 +240,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
     options: {
       platform: { type: 'string', default: 'all' },
       channel: { type: 'string' },
+      rollout: { type: 'string' },
       wait: { type: 'boolean', default: false },
       oidc: { type: 'boolean', default: false },
       message: { type: 'string' },
@@ -232,7 +277,11 @@ async function runPublish(args: readonly string[]): Promise<void> {
     gitSha: values['git-sha'] ?? process.env.GITHUB_SHA ?? (await gitOutput(projectDir, ['rev-parse', 'HEAD'])),
     isMandatory: values.mandatory,
     expoConfig: expo,
-    ...(values.channel !== undefined && { channel: values.channel, isWaitingForApproval: values.wait }),
+    ...(values.channel !== undefined && {
+      channel: values.channel,
+      isWaitingForApproval: values.wait,
+      rolloutPercent: percentOf(values.rollout),
+    }),
     log,
   });
   log(
@@ -254,6 +303,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
     if (command === 'promote') {
       await runPromote(rest);
+      return 0;
+    }
+    if (command === 'pause' || command === 'rollback') {
+      await runStop(command, rest);
       return 0;
     }
     process.stdout.write(USAGE);

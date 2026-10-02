@@ -21,14 +21,14 @@ const clip = (value: string, max: number) => (value.length > max ? `${value.slic
 
 export function promotionMessage(
   type: OtaEventType,
-  subject: { app: OtaAppRow; channel: OtaChannelRow; release: OtaReleaseRow; requestedBy: string },
+  subject: { app: OtaAppRow; channel: OtaChannelRow; release: OtaReleaseRow; requestedBy: string; action: string },
   appOrigin: string | undefined,
 ): NeutralMessage {
   const { app, channel, release } = subject;
   const { verb, severity } = headlines[type];
   const name = clip(release.message ?? release.id, 120);
   return {
-    title: clip(`${verb}: ${name} → ${channel.name}`, 200),
+    title: clip(`${verb}: ${subject.action} ${name} → ${channel.name}`, 200),
     ...(appOrigin !== undefined && {
       url: `${appOrigin}/workspaces/${app.workspaceId}/p/${app.projectId}/ota-hosting?app=${app.id}`,
     }),

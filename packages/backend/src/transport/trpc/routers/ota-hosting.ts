@@ -14,6 +14,9 @@ import {
   otaTrustPolicyInputSchema,
   otaTrustPolicySchema,
   promotionPreviewSchema,
+  promotionResultSchema,
+  rolloutBpOf,
+  stopActionSchema,
   signingCertificateInputSchema,
   signingCertificateSchema,
 } from '@mocco/common/ota-hosting';
@@ -180,21 +183,68 @@ export const otaHostingRouter = router({
           channelId: z.uuid(),
           releaseId: z.uuid(),
           reason: z.string().max(500).nullable().default(null),
+          rolloutPercent: z.number().min(0.01).max(100).default(100),
         }),
       )
-      .output(
-        z.object({
-          channel: z.string(),
-          releaseId: z.uuid(),
-          platforms: z.array(otaPlatformSchema),
-          changed: z.boolean(),
-          outcome: z.enum([ChannelPolicyOutcomes.applied, ChannelPolicyOutcomes.pendingApproval]),
-          requestId: z.uuid().nullable(),
-        }),
-      )
+      .output(promotionResultSchema)
       .mutation(async ({ ctx, input }) => {
         const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
-        return await ctx.otaChannels.promote(app, input.channelId, input.releaseId, ctx.session.user.id, input.reason);
+        return await ctx.otaChannels.promote(
+          app,
+          input.channelId,
+          input.releaseId,
+          ctx.session.user.id,
+          input.reason,
+          rolloutBpOf(input.rolloutPercent),
+        );
+      }),
+
+    /** Set (percent), complete or resume the rollout in progress — gated on a protected channel. */
+    changeRollout: otaProcedure
+      .input(
+        appInput.extend({
+          channelId: z.uuid(),
+          kind: z.enum(['rollout', 'complete', 'resume']),
+          rolloutPercent: z.number().min(0.01).max(100).optional(),
+          runtimeVersion: z.string().nullable().default(null),
+          reason: z.string().max(500).nullable().default(null),
+        }),
+      )
+      .output(promotionResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return await ctx.otaChannels.changeRollout(
+          app,
+          input.channelId,
+          {
+            kind: input.kind,
+            runtimeVersion: input.runtimeVersion,
+            ...(input.rolloutPercent !== undefined && { rolloutBp: rolloutBpOf(input.rolloutPercent) }),
+          },
+          ctx.session.user.id,
+          input.reason,
+        );
+      }),
+
+    /** Pause, roll back or roll back to embedded — never gated, always audited. */
+    stop: otaProcedure
+      .input(
+        appInput.extend({
+          channelId: z.uuid(),
+          action: stopActionSchema,
+          runtimeVersion: z.string().nullable().default(null),
+          platform: otaPlatformSchema.nullable().default(null),
+          reason: z.string().max(500).nullable().default(null),
+        }),
+      )
+      .output(promotionResultSchema)
+      .mutation(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return await ctx.otaChannels.stopFromConsole(app, input.channelId, input.action, ctx.session.user.id, {
+          runtimeVersion: input.runtimeVersion,
+          platform: input.platform,
+          reason: input.reason,
+        });
       }),
   }),
 });
