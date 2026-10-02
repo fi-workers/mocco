@@ -10,6 +10,7 @@ import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-t
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
+import { searchArticles } from '@backend/domain/helpcenter/search';
 
 import type { HelpSiteRow } from '@backend/domain/helpcenter/repos/site.repo';
 import type { Db } from '@backend/infra/db/types';
@@ -52,6 +53,19 @@ export class HelpPublicReadService {
     }
     const [revision] = await new HelpArticleRepo(this.deps.db).revisionsByIds([row.revisionId]);
     return revision;
+  }
+
+  /** Translated texts of these articles in `locale`, by article id. */
+  private async translationTexts(articleIds: readonly string[], locale: string) {
+    const rows = await new HelpTranslationRepo(this.deps.db).withText(articleIds, locale);
+    const revisions = await new HelpArticleRepo(this.deps.db).revisionsByIds(rows.map(row => row.revisionId ?? ''));
+    const byId = new Map(revisions.map(revision => [revision.id, revision]));
+    return new Map(
+      rows.flatMap(row => {
+        const revision = byId.get(row.revisionId ?? '');
+        return revision === undefined ? [] : [[row.articleId, revision] as const];
+      }),
+    );
   }
 
   async site(slug: string) {
@@ -161,6 +175,48 @@ export class HelpPublicReadService {
       publishedAt: article.publishedAt,
       canonicalPath: articlePath(served, article.shortId, article.slug),
     };
+  }
+
+  /**
+   * Published articles matching `query`, in `locale` where translated (else the source),
+   * best first: every term must appear in the title or the text.
+   */
+  async search(slug: string, locale: string, query: string, limit = 10) {
+    const site = await this.requireSite(slug);
+    const served = localeFor(site, locale);
+    const articleRepo = new HelpArticleRepo(this.deps.db);
+    const treeRepo = new HelpTreeRepo(this.deps.db);
+    const collections = await treeRepo.collections(site.workspaceId, site.projectId);
+    const sections = await treeRepo.sections(
+      site.workspaceId,
+      collections.map(collection => collection.id),
+    );
+    const inSections = await articleRepo.inSections(
+      site.workspaceId,
+      sections.map(section => section.id),
+    );
+    const articles = inSections.filter(
+      article => article.status === ArticleStatuses.published && article.publishedRevisionId !== null,
+    );
+    const sources = await articleRepo.revisionsByIds(articles.map(article => article.publishedRevisionId ?? ''));
+    const sourceById = new Map(sources.map(revision => [revision.id, revision]));
+    const translations =
+      served === site.sourceLocale
+        ? new Map<string, { title: string; bodyMd: string }>()
+        : await this.translationTexts(
+            articles.map(article => article.id),
+            served,
+          );
+    const searchable = articles.flatMap(article => {
+      const translated = translations.get(article.id);
+      const text = translated ?? sourceById.get(article.publishedRevisionId ?? '');
+      if (text === undefined) {
+        return [];
+      }
+      const textLocale = translated === undefined ? site.sourceLocale : served;
+      return [{ title: text.title, body: text.bodyMd, path: articlePath(textLocale, article.shortId, article.slug) }];
+    });
+    return { locale: served, hits: searchArticles(searchable, query, limit) };
   }
 
   /** Where an old path (an imported site's URL) now lives, or undefined. */

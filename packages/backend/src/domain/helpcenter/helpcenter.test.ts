@@ -155,6 +155,28 @@ describe('help center (pglite)', () => {
     expect(hidden.collections).toEqual([]);
   });
 
+  it('searches published articles only', async () => {
+    const { article } = await setUp();
+    await help.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {
+      articleId: article.id,
+      title: '위젯 기능',
+      body: '홈 화면에 위젯을 추가하세요.',
+    });
+    const before = await help.helpPublic.search('showyourtime', 'ko', '위젯');
+    await help.helpAuthoring.publish(workspaceId, projectId, authorId, article.id);
+
+    const after = await help.helpPublic.search('showyourtime', 'ko', '위젯 추가');
+
+    expect(before.hits).toEqual([]);
+    expect(after.hits).toEqual([
+      {
+        title: '위젯 기능',
+        path: `/ko/articles/${article.shortId}-widget-features`,
+        snippet: '홈 화면에 위젯을 추가하세요.',
+      },
+    ]);
+  });
+
   it('keeps every save in history and restores an old one as the draft', async () => {
     const { article } = await setUp();
     await help.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {

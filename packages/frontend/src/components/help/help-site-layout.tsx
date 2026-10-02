@@ -4,6 +4,7 @@
 import { HELP_LOCALE_NAMES } from '@mocco/common/help';
 import Head from 'next/head';
 
+import { wordsFor } from '@frontend/lib/help-site-words';
 import { cn } from '@frontend/lib/utils';
 
 import type { HelpSiteNav } from '@frontend/lib/help-site';
@@ -28,9 +29,20 @@ export default function HelpSiteLayout({
       </Head>
       <div lang={nav.locale} className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="flex h-14 items-center justify-between gap-4 border-b border-border px-4 md:px-6">
-          <a href={`/${nav.locale}`} className="font-semibold tracking-tight">
-            {nav.name}
-          </a>
+          <div className="flex min-w-0 items-center gap-4">
+            <a href={`/${nav.locale}`} className="shrink-0 font-semibold tracking-tight">
+              {nav.name}
+            </a>
+            <form action={`/${nav.locale}/search`} method="get" role="search" className="hidden sm:block">
+              <input
+                type="search"
+                name="q"
+                aria-label={wordsFor(nav.locale).search}
+                placeholder={wordsFor(nav.locale).searchPlaceholder}
+                className="h-8 w-56 rounded-md border border-border bg-background px-2.5 text-sm"
+              />
+            </form>
+          </div>
           {nav.locales.length > 1 ? (
             <nav aria-label="Language" className="flex flex-wrap items-center gap-1 text-sm">
               {nav.locales.map(locale => (
