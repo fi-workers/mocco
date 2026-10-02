@@ -2,6 +2,13 @@
 # "Version packages" PR; merging that PR publishes to npm with trusted publishing
 # (OIDC — no npm token) and provenance. The @mocco scope must be linked to this
 # repository as a trusted publisher on npmjs.com first.
+#
+# The upload goes through the npm CLI (`scripts/publish-packages.mjs`), not
+# `changeset publish`. Changesets publishes through the detected package manager, and
+# yarn cannot do OIDC — it only looks for a stored `npmAuthToken` and fails with
+# `YN0033: No authentication configured`. Only npm's own CLI exchanges the Actions OIDC
+# token for a registry credential, and only from 11.5.1, which is newer than the npm
+# bundled with Node 22 — hence the explicit upgrade below.
 name: Publish SDKs
 
 on:
@@ -28,6 +35,10 @@ jobs:
       # pin; corepack has to be on first, so no setup-node cache (as in ci.yml).
       - name: Enable corepack (yarn is integrity-pinned via packageManager)
         run: corepack enable
+      # Node 22 bundles npm 10, which has no trusted publishing. Pinned so a broken
+      # npm release can't silently change how this job authenticates.
+      - name: Install an npm that can do trusted publishing
+        run: npm install --global npm@11.6.2
       - run: yarn install --immutable
       - run: yarn sdk:build
       - run: yarn test-sdk
