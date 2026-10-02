@@ -29,7 +29,7 @@ A key belongs to one project and has a kind:
 
 | Kind | Token | Where it lives | Scopes |
 |---|---|---|---|
-| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed) |
+| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed), `help:read` |
 
 `runs:read` is secret-only and read-only. Run history is operational data about a team's deploys, so it never reaches a browser or an app; and a key authenticates a **project**, not a person, so it can watch a deploy but never resume one — deciding needs someone the audit chain can name ([ADR 0002](../adr/0002-mocco-is-an-independent-authorization-layer.md), [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). A run carries no project: it reaches one through its commit's repository and `mocco_project_repos`, so a key sees its own project's repositories and nothing else.
 | Secret | `mk_sec_` + 32 base62 characters | Servers and CI | Any scope |
@@ -73,6 +73,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ping` | none | `{ "ok": true, "api": "v1" }` |
 | `GET /v1/whoami` | any | `{ projectId, kind, scopes }` |
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
+| `GET /v1/help/search?q=&locale=&limit=&match=` | `help:read` | The key's project's published help articles matching `q` (every word, or with `match=any` any word, ranked by how many match; title hits first), in `locale` where translated (any language tag; `en-KR` counts as `en`): `{ locale, hits: [{ title, path, url, snippet }] }`; `url` is absolute when the site's domain is configured; 404 without a help center; see [Help center](./help-center.md#search) |
 | `POST /v1/messenger/sessions` | `messenger:chat` | A session for a user the app's server signed (`userHash`); then `/v1/messenger/conversations…` with the `mms_` session token; see [Messenger](./messenger.md) |
 | `GET /v1/flags/stream` | `flags:read` key, or `?token=` from an OFREP response | OFREP event stream: `refetchEvaluation` events (`id` = version, `Last-Event-ID` resumes), pings every 25 s, closes after 240 s; see [Feature flags](./flags.md#change-stream) |
 | `POST /v1/flags/telemetry` | `flags:read` (publishable: client-visible flags only) | Aggregated evaluation counts `{ evaluations: [{ flag, variant, count, windowStart }] }` (≤ 500 entries); `202 { accepted, ignored }`; 300 a minute per key on top of the key's limit; see [Feature flags](./flags.md#evaluation-telemetry-and-stale-flags) |

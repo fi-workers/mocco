@@ -10,7 +10,7 @@ import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-t
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
-import { searchArticles } from '@backend/domain/helpcenter/search';
+import { type SearchMatch, searchArticles } from '@backend/domain/helpcenter/search';
 
 import type { HelpSiteRow } from '@backend/domain/helpcenter/repos/site.repo';
 import type { Db } from '@backend/infra/db/types';
@@ -179,9 +179,9 @@ export class HelpPublicReadService {
 
   /**
    * Published articles matching `query`, in `locale` where translated (else the source),
-   * best first: every term must appear in the title or the text.
+   * best first: every term must appear in the title or the text, or with `any`, one of them.
    */
-  async search(slug: string, locale: string, query: string, limit = 10) {
+  async search(slug: string, locale: string, query: string, limit = 10, match: SearchMatch = 'all') {
     const site = await this.requireSite(slug);
     const served = localeFor(site, locale);
     const articleRepo = new HelpArticleRepo(this.deps.db);
@@ -216,7 +216,23 @@ export class HelpPublicReadService {
       const textLocale = translated === undefined ? site.sourceLocale : served;
       return [{ title: text.title, body: text.bodyMd, path: articlePath(textLocale, article.shortId, article.slug) }];
     });
-    return { locale: served, hits: searchArticles(searchable, query, limit) };
+    return { locale: served, hits: searchArticles(searchable, query, limit, match) };
+  }
+
+  /** Search the help center of a project (the /v1 surface, where a key names the project). */
+  async searchInProject(
+    workspaceId: string,
+    projectId: string,
+    locale: string,
+    query: string,
+    limit = 10,
+    match: SearchMatch = 'all',
+  ) {
+    const site = await new HelpSiteRepo(this.deps.db).find(workspaceId, projectId);
+    if (site === undefined) {
+      throw new HelpSiteNotFoundError(`project ${projectId}`);
+    }
+    return { slug: site.slug, ...(await this.search(site.slug, locale, query, limit, match)) };
   }
 
   /** Where an old path (an imported site's URL) now lives, or undefined. */

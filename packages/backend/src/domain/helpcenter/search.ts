@@ -1,6 +1,7 @@
-// Searching a help center (#96): every query term must appear in the title or the text
-// (case-insensitive, any script, so Korean and Japanese work without a tokenizer);
-// title hits rank first. Pure: the read service hands it the published texts. A site's
+// Searching a help center (#96): by default every query term must appear in the title or
+// the text (case-insensitive, any script, so Korean and Japanese work without a
+// tokenizer); title hits rank first. `any` mode is for free text, such as an inquiry
+// being written: an article needs one matching term, and more matching terms rank higher. Pure: the read service hands it the published texts. A site's
 // help fits in memory at this scale; a Postgres index can replace this later.
 
 /* eslint-disable sonarjs/null-dereference -- every value here is a string, never null */
@@ -18,7 +19,9 @@ export interface SearchHit {
   snippet: string;
 }
 
-const MAX_TERMS = 6;
+export type SearchMatch = 'all' | 'any';
+
+const MAX_TERMS = { all: 6, any: 24 } as const;
 const SNIPPET = 140;
 
 /** Markdown → plain text, near enough for a snippet. */
@@ -45,12 +48,35 @@ function snippetOf(text: string, term: string): string {
   return `${at > 0 ? '…' : ''}${slice}${at + SNIPPET < text.length ? '…' : ''}`;
 }
 
-export function searchArticles(articles: readonly SearchableArticle[], query: string, limit: number): SearchHit[] {
-  const terms = query
+/**
+ * The forms of a term to look for. In free text a Korean word usually carries a particle
+ * ("위젯이", "위젯을"), so a Korean word of three or more letters also matches without
+ * its last letter. Strip trailing punctuation first.
+ */
+function formsOf(term: string, match: SearchMatch): string[] {
+  let word = term;
+  while (/[\p{P}\p{S}]$/u.test(word)) {
+    word = word.slice(0, -1);
+  }
+  if (match === 'all') {
+    return [term];
+  }
+  // Only Hangul: in English, dropping a letter ("the" → "th") matches noise.
+  return [...word].length >= 3 && /\p{Script=Hangul}$/u.test(word) ? [word, [...word].slice(0, -1).join('')] : [word];
+}
+
+export function searchArticles(
+  articles: readonly SearchableArticle[],
+  query: string,
+  limit: number,
+  match: SearchMatch = 'all',
+): SearchHit[] {
+  const words = query
     .toLowerCase()
     .split(/\s+/u)
-    .filter(term => term !== '')
-    .slice(0, MAX_TERMS);
+    .filter(term => term !== '');
+  // A one-letter word in free text ("a", "안") matches almost everything.
+  const terms = (match === 'any' ? words.filter(word => [...word].length >= 2) : words).slice(0, MAX_TERMS[match]);
   if (terms.length === 0) {
     return [];
   }
@@ -59,10 +85,13 @@ export function searchArticles(articles: readonly SearchableArticle[], query: st
       const text = plain(article.body);
       const title = article.title.toLowerCase();
       const body = text.toLowerCase();
-      const isMatch = terms.every(term => title.includes(term) || body.includes(term));
-      const score =
-        terms.filter(term => title.includes(term)).length * 10 + terms.filter(term => body.includes(term)).length;
-      const firstInBody = terms.find(term => body.includes(term)) ?? terms[0] ?? '';
+      const forms = terms.map(term => formsOf(term, match));
+      const inTitle = forms.filter(alternatives => alternatives.some(form => title.includes(form)));
+      const inBody = forms.filter(alternatives => alternatives.some(form => body.includes(form)));
+      const hits = forms.filter(alternatives => alternatives.some(form => title.includes(form) || body.includes(form)));
+      const isMatch = match === 'all' ? hits.length === terms.length : hits.length > 0;
+      const score = hits.length * 100 + inTitle.length * 10 + inBody.length;
+      const firstInBody = inBody[0]?.find(form => body.includes(form)) ?? terms[0] ?? '';
       return { article, isMatch, score, snippet: snippetOf(text, firstInBody) };
     })
     .filter(entry => entry.isMatch)

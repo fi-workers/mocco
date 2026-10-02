@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 
 import { createFlagServingRoutes } from '@backend/transport/ext/v1/flags';
+import { createHelpRoutes } from '@backend/transport/ext/v1/help';
 import { createMessengerRoutes } from '@backend/transport/ext/v1/messenger';
 import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
 import { createOfrepRoutes } from '@backend/transport/ext/v1/ofrep';
@@ -35,6 +36,10 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
 
   if (deps.messenger !== undefined) {
     app.route('/messenger', createMessengerRoutes(deps, deps.messenger));
+  }
+
+  if (deps.help !== undefined) {
+    app.route('/help', createHelpRoutes(deps, deps.help));
   }
 
   if (deps.flags !== undefined) {

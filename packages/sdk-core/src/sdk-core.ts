@@ -36,3 +36,5 @@ export { DEFAULT_TELEMETRY_INTERVAL_MS, EvaluationCounter, TELEMETRY_PATH } from
 export type { EvaluationCount, EvaluationCounterOptions } from './telemetry';
 export { DEFAULT_MESSENGER_POLL_MS, MessengerClient, messengerConversationIdOf } from './messenger';
 export type { MessengerClientOptions, MessengerIdentity, MessengerState, MessengerStorage } from './messenger';
+export { HelpClient } from './help';
+export type { HelpArticleHit, HelpClientOptions, HelpSearchOptions } from './help';

@@ -32,6 +32,8 @@ export const ApiScopes = {
   /** Start and continue conversations as the app's users (#95); every call also needs
    * the user's identity signed by the app's server. */
   messengerChat: 'messenger:chat',
+  /** Search the project's published help center (#96), e.g. to suggest articles in an app. */
+  helpRead: 'help:read',
 } as const;
 export type ApiScope = (typeof ApiScopes)[keyof typeof ApiScopes];
 export const apiScopeSchema = z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]]);
@@ -42,6 +44,7 @@ export const PUBLISHABLE_SCOPES: readonly ApiScope[] = [
   ApiScopes.otaRead,
   ApiScopes.flagsRead,
   ApiScopes.messengerChat,
+  ApiScopes.helpRead,
 ];
 
 /** A key as the console lists it — never the token or its hash. */

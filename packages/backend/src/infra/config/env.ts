@@ -79,6 +79,11 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(['s3', 'filesystem']).optional(),
   // Expo push access token, when the Expo project requires one ("enhanced security"); messenger reply push.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // Where help centers are served (also read by next.config.ts): <slug>.<HELP_SITES_DOMAIN>,
+  // or a customer domain from HELP_CUSTOM_DOMAINS (`help.example.com=<slug>,…`). /v1 help
+  // search builds article URLs from them.
+  HELP_SITES_DOMAIN: z.string().min(1).optional(),
+  HELP_CUSTOM_DOMAINS: z.string().min(1).optional(),
   // Vercel AI Gateway key for help center translation; unset, help centers serve the source language.
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),
   // The model help centers translate with (an AI Gateway model id); default anthropic/claude-sonnet-5.

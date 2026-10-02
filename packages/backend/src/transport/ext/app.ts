@@ -21,6 +21,8 @@ import { simulateStep } from '@backend/domain/execution/executors/generic/execut
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
 import { flagStreamTokensFromEnv, getFlagsDomain } from '@backend/domain/flags/instance';
+import { getHelpDomain } from '@backend/domain/helpcenter/instance';
+import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { ConnectionClaimedError, ConnectStateInvalidError } from '@backend/domain/integration/errors';
 import { GithubHeaders, GithubSetupActions } from '@backend/domain/integration/github/constants';
@@ -426,6 +428,7 @@ export async function extHandler(request: Request): Promise<Response> {
       },
       messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
       runs: { runs: execution.runs },
+      help: { help: getHelpDomain().helpPublic, originOf: slug => helpSiteOrigin(slug, env) },
     },
     storage:
       storageStore instanceof FilesystemObjectStore
