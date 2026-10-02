@@ -109,6 +109,14 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Guests | Prototype | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
 | Push replies | Prototype | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
 
+### Help center (#96)
+
+The first slice of the [help center design](../specs/2026-09-24-help-center-design.md) ([reference](./help-center.md)).
+
+| Capability | State | Notes |
+|---|---|---|
+| Sites, articles and revisions | Prototype | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback; no public pages or editor yet |
+
 ### Deploy loop depth
 
 | Feature | Status | Description |
