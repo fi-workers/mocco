@@ -100,4 +100,12 @@ export const messengerRouter = router({
       await ctx.inbox.setContactBlocked(input.workspaceId, input.projectId, ctx.session.user.id, input);
       return { ok: true } as const;
     }),
+
+  /** Erase the contact and everything they wrote (a privacy request). */
+  eraseContact: messengerProcedure
+    .input(projectInput.extend({ contactId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.inbox.eraseContact(input.workspaceId, input.projectId, ctx.session.user.id, input.contactId);
+      return { ok: true } as const;
+    }),
 });

@@ -3,6 +3,7 @@
 // what they were running when they wrote.
 import { MessageVisibilities } from '@mocco/common/messenger';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
 import { INBOX_REFRESH_MS } from '@frontend/components/messenger/inbox';
@@ -148,6 +149,14 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
       await utils.messenger.conversation.invalidate(input);
     },
   });
+  const router = useRouter();
+  const [isConfirmingErase, setIsConfirmingErase] = useState(false);
+  const erasing = trpc.messenger.eraseContact.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.inbox.invalidate();
+      await router.push(Routes.projectInbox(workspaceId, projectId));
+    },
+  });
   const lastSeq = conversationQuery.data?.conversation.lastMessageSeq;
   const { mutate: markReadNow } = markRead;
   // Reading the thread marks it read, again whenever a new message arrives.
@@ -284,6 +293,44 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
             {isBlocked ? 'Unblock user' : 'Block user'}
           </Button>
           {blocking.error ? <p className="text-sm text-destructive">{errorMessage(blocking.error)}</p> : null}
+          <div className="flex flex-col gap-2 border-t pt-3">
+            <p className="text-xs text-muted-foreground">
+              For a privacy request: erases this user with every conversation, message and screenshot. It can&apos;t be
+              undone.
+            </p>
+            {isConfirmingErase ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  className="text-sm"
+                  pending={erasing.isPending}
+                  onClick={() => {
+                    erasing.mutate({ workspaceId, projectId, contactId: contact.id });
+                  }}>
+                  Yes, erase
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  disabled={erasing.isPending}
+                  onClick={() => {
+                    setIsConfirmingErase(false);
+                  }}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-fit text-sm text-destructive"
+                onClick={() => {
+                  setIsConfirmingErase(true);
+                }}>
+                Erase user&apos;s data
+              </Button>
+            )}
+            {erasing.error ? <p className="text-sm text-destructive">{errorMessage(erasing.error)}</p> : null}
+          </div>
         </aside>
       </div>
     </div>

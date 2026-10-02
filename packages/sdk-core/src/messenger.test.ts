@@ -386,6 +386,19 @@ describe('MessengerClient', () => {
     ]);
   });
 
+  it("deletes the user's data and forgets them on the device", async () => {
+    const server = fakeMessenger();
+    const storage = memoryStorage();
+    const client = clientFor(server, { storage });
+    await client.startConversation({ body: 'Delete my account' });
+
+    await client.deleteMyData();
+
+    expect(server.calls.at(-1)).toMatchObject({ method: 'DELETE', path: '/me' });
+    expect(client.getState()).toMatchObject({ status: 'signed_out', conversations: [] });
+    expect(storage.items.size).toBe(0);
+  });
+
   it('refuses a secret key', () => {
     expect(
       () =>

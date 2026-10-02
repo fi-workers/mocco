@@ -2,6 +2,7 @@
 // the app's server signed, then list, start and continue that user's conversations.
 // Every query is scoped by the contact the session token resolves to, never by ids in
 // the request body, so one user can never read another's conversations.
+import { AuditActions } from '@mocco/common/audit';
 import { MessengerEventTypes } from '@mocco/common/events';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 import { Products } from '@mocco/common/project';
@@ -9,6 +10,7 @@ import { Visibilities } from '@mocco/common/storage';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
 import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
+import { eraseContact } from '@backend/domain/messenger/erase';
 import {
   AttachmentNotFoundError,
   AttachmentsUnavailableError,
@@ -24,6 +26,7 @@ import { MessengerAttachmentRepo } from '@backend/domain/messenger/repos/attachm
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
 import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
@@ -49,6 +52,8 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export interface ContactMessengerDeps {
   db: Db;
   settings: Pick<MessengerSettingsService, 'withSecret'>;
+  /** Records a user erasing themselves; without it, the erase isn't audited. */
+  audit?: Pick<AuditService, 'record'>;
   /** Object storage for screenshots; without it, attachments are refused. */
   storage?: AttachmentStorage;
   events?: EventPublisher;
@@ -411,5 +416,19 @@ export class ContactMessengerService {
   async markRead(principal: ContactPrincipal, conversationId: string, seq: number): Promise<void> {
     await this.requireConversation(principal, conversationId);
     await new MessengerConversationRepo(this.deps.db).markContactRead(conversationId, seq);
+  }
+
+  /** The user erases themselves: every conversation, message and attachment they have
+   * (an app's "delete my account"). The session goes too. */
+  async erase(principal: ContactPrincipal): Promise<void> {
+    const { contact } = principal;
+    await eraseContact(this.deps, contact);
+    await this.deps.audit?.record(contact.workspaceId, {
+      actorUserId: null,
+      action: AuditActions.messengerContactErased,
+      subjectType: 'messenger_contact',
+      subjectId: contact.id,
+      payload: { projectId: contact.projectId, by: 'contact' },
+    });
   }
 }

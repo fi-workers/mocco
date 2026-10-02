@@ -113,7 +113,7 @@ function Thread({ id }: { id: string }) {
 }
 ```
 
-When someone signs in to your app, call `useMessenger().reidentify()` so the messenger opens their session. When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
+When a user deletes their account in your app, call `useMessenger().deleteMyData()`: it erases their conversations, messages and screenshots in Mocco and forgets them on the device. When someone signs in to your app, call `useMessenger().reidentify()` so the messenger opens their session. When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
 
 To attach a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB; up to 3 per message), upload it first and send its id:
 
@@ -182,6 +182,7 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 | `POST /conversations/{id}/messages` | Reply: `{ "body": "…", "clientMessageId": "<uuid>" }` |
 | `POST /conversations/{id}/read` | `{ "seq": 5 }` once the user has seen up to that message |
 | `POST /push-tokens` | `{ "provider": "expo", "token": "ExponentPushToken[…]", "platform": "ios" }` so replies are pushed to the device; `DELETE /push-tokens` `{ "token": … }` on sign out |
+| `DELETE /me` | Erase the user and everything they wrote, for your app's "delete my account" |
 | `POST /attachments` | `{ "contentType": "image/png", "sizeBytes": 48213 }` → an `attachmentId` and an `upload` URL to `PUT` the bytes to; then list the id in `attachmentIds` when you start or reply |
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.
@@ -223,6 +224,10 @@ Open a conversation to read the thread and answer:
 Screenshots the user attached show in the thread; select one to open it full size.
 
 ![A message with an attached screenshot in the conversation view](./images/messenger-attachment.png)
+
+When someone asks you to delete their data, choose **Erase user's data** in the side panel and confirm. Mocco deletes the user with every conversation, message and screenshot; it can't be undone, and the audit log records only that it happened.
+
+![Erasing a user's data: the confirmation in the side panel](./images/messenger-erase.png)
 
 The categories users pick from are in the inbox settings. Your app gets them with each session; it can show the labels as they are or translate them by key.
 

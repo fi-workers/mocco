@@ -619,6 +619,19 @@ export class MessengerClient {
     this.setState({ ...initialState, status: 'signed_out' });
   }
 
+  /**
+   * Erase everything this user wrote: their conversations, messages and screenshots,
+   * on Mocco's side and on this device (for the app's "delete my account"). Can't be undone.
+   */
+  async deleteMyData(): Promise<void> {
+    await this.call('DELETE', '/me');
+    this.pushToken = undefined;
+    this.pushPlatform = undefined;
+    this.session = null;
+    await this.writeStored(null);
+    this.setState({ ...initialState, status: 'signed_out' });
+  }
+
   /** Stop polling for good. */
   close(): void {
     this.stopTimer();
