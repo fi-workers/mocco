@@ -11,11 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
-import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
+import { RunRepo } from '@backend/domain/execution/repos/run.repo';
+import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
-import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { expectOne } from '@backend/infra/db/rows';
 import {
   commitConfigs,
@@ -119,7 +119,8 @@ describe('/v1/runs (pglite)', () => {
         .values({ id: randomUUID(), name: 'Ada', email: `${randomUUID()}@acme.test`, emailVerified: true })
         .returning(),
     ).id;
-    projectId = (await projects.create(workspaceId, { name: 'Acme', handle: 'acme' })).id;
+    const project = await projects.create(workspaceId, { name: 'Acme', handle: 'acme' });
+    projectId = project.id;
     const connection = expectOne(
       await t.db
         .insert(providerConnections)
