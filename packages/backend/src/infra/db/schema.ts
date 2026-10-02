@@ -1556,6 +1556,11 @@ export const flagEnvironments = pgTable(
     name: text().notNull(),
     // Set exactly when the environment is protected: changes then need this gate's approval.
     changeGate: jsonb('change_gate').$type<GateRequirements>(),
+    // Roles whose members may kill a flag (ungated); empty: any workspace member.
+    killRoles: text('kill_roles')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     // The version of the latest applied changeset; 0 until the first one.
     currentVersion: integer('current_version').notNull().default(0),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),

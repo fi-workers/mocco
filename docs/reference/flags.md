@@ -18,6 +18,7 @@ code_refs:
   - packages/backend/src/domain/flags/FlagService.ts
   - packages/backend/src/domain/flags/RulesetPublisher.ts
   - packages/backend/src/domain/flags/FlagGovernanceService.ts
+  - packages/backend/src/domain/flags/KillSwitchService.ts
   - packages/backend/src/domain/flags/apply-ops.ts
   - packages/backend/src/domain/flags/compile-ruleset.ts
   - packages/backend/src/transport/trpc/routers/flags.ts
@@ -28,7 +29,7 @@ code_refs:
 
 # Feature flags
 
-Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: the kill switch, the client SDKs and flags-as-code.
+Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: the client SDKs, telemetry and flags-as-code.
 
 ## Model
 
@@ -54,6 +55,8 @@ A **changeset** (`mocco_flag_changesets`) is an ordered list of ops against a ba
 | `set_rules` | Replaces the flag's rules |
 | `set_rollout` | Sets or clears the fallthrough percentage rollout |
 | `set_segment`, `delete_segment` | Create, replace or delete a segment |
+| `kill`, `restore` | Serve the off variant to everyone / undo it (a kill normally goes through `KillSwitchService`) |
+| `set_off_variant` | What a kill serves |
 
 A changeset stores its ops, the rendered diff (before and after per field), and a `content_hash`: sha-256 over the canonical JSON of `{environmentId, baseVersion, ops}`. The hash is what a later approval will pin.
 
@@ -82,6 +85,12 @@ An environment with a `change_gate` is protected (ADR 0023). `FlagGovernanceServ
 - **Apply.** The approval handler applies the changeset through the publisher with its own `baseVersion`, marking the same row `applied`. If the environment moved meanwhile, it becomes `conflicted` and nothing is written.
 - **Reject, withdraw, rebase, expire.** A rejection marks it `rejected`. The proposer can withdraw it (`withdrawn`) or rebase a pending or conflicted one: the same ops proposed on the current version, with a new hash and a new request, so no earlier vote counts. The old pending changeset becomes `superseded` only once the new proposal succeeds. The `flags.changesets.expire` job (every 15 minutes) expires those past `expires_at`. Each transition is audited (`flag.changeset.rejected`, `.conflicted`, `.withdrawn`, `.expired`).
 - **Gates.** `flags.setChangeGate` protects an unprotected environment at once. Changing or removing a protected environment's gate is a `flags.change_gate` request under its current gate. A changeset keeps the requirements it was proposed under (`flag.change_gate.changed` is audited).
+
+## Kill switch
+
+`KillSwitchService.kill` (#142, ADR 0024) applies a `kill` op through the publisher at once, with `source: kill` and no base version, on any environment: it bypasses the change gate. A reason is required. If the environment has `kill_roles` (migration 0034), only members of one of those roles may kill (`KillNotAllowedError`); empty means any workspace member, and `flags.setKillRoles` is for workspace owners and admins. A kill is audited as `flag.killed` (actor, reason, changeset, version) and published as `flags.flag.killed`. On a protected environment it also opens a post-hoc `review` request (`flags.kill`) under the gate.
+
+`restore` and `set_off_variant` are normal ops: gated on a protected environment. An applied restore is audited as `flag.restored`.
 
 ## The compiled ruleset
 
@@ -155,6 +164,7 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | `applyChangeset` | Apply ops against `baseVersion` (`applied`), or propose them on a protected environment (`pending_approval`) |
 | `changeset`, `voteChangeset`, `withdrawChangeset`, `rebaseChangeset` | A changeset with its votes; vote with the reviewed content hash; withdraw or rebase your own |
 | `setChangeGate` | Protect, re-gate or unprotect an environment |
+| `kill`, `setKillRoles` | Kill a flag now (gate bypassed, reason required); choose who may kill |
 | `history` | An environment's last 50 changesets, newest first |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
 

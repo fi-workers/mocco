@@ -40,6 +40,7 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: FlagEventTypes.flagChangesetRequested, filter: {} },
     { eventType: FlagEventTypes.flagChangesetApplied, filter: {} },
     { eventType: FlagEventTypes.flagChangesetRejected, filter: {} },
+    { eventType: FlagEventTypes.flagKilled, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [

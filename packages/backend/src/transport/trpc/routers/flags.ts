@@ -193,6 +193,25 @@ export const flagsRouter = router({
       return { changeset };
     }),
 
+  /** Kill a flag in an environment now, bypassing its gate (audited; reviewed afterwards if protected). */
+  kill: flagsProcedure
+    .input(environmentInput.extend({ flagKey: z.string(), reason: z.string().min(1).max(500) }))
+    .output(z.object({ changeset: changesetSchema, reviewRequestId: z.uuid().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...kill } = input;
+      return await ctx.flagKillSwitch.kill(workspaceId, projectId, ctx.session.user.id, kill);
+    }),
+
+  /** Who may kill flags in an environment (workspace owners and admins set it). */
+  setKillRoles: flagsProcedure
+    .input(environmentInput.extend({ roles: z.array(z.string().min(1).max(80)).max(20) }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.workspace.assertAdmin(ctx.headers, input.workspaceId);
+      const { workspaceId, projectId, ...roles } = input;
+      await ctx.flagKillSwitch.setKillRoles(workspaceId, projectId, ctx.session.user.id, roles);
+      return { ok: true } as const;
+    }),
+
   /** Protect, re-gate or unprotect an environment. A protected one's gate changes need its current gate. */
   setChangeGate: flagsProcedure
     .input(environmentInput.extend({ gate: gateRequirementsSchema.nullable() }))

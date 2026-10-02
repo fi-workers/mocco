@@ -48,6 +48,8 @@ export const FlagApprovalSubjects = {
   changeset: 'flags.changeset',
   /** Changing (or removing) a protected environment's change gate. */
   changeGate: 'flags.change_gate',
+  /** The post-hoc review of a kill on a protected environment. */
+  kill: 'flags.kill',
 } as const;
 
 /** How a proposed change ended up. */
@@ -227,6 +229,16 @@ export const changeOpSchema = z.discriminatedUnion('op', [
     segment: segmentDefinitionSchema,
   }),
   z.object({ op: z.literal('delete_segment'), segmentKey: z.string().regex(SEGMENT_KEY_PATTERN) }),
+  /** Serve the off variant to everyone (the kill switch; `KillSwitchService` applies it ungated). */
+  z.object({ op: z.literal('kill'), flagKey: flagKeySchema }),
+  /** Undo a kill. A normal change: gated on a protected environment. */
+  z.object({ op: z.literal('restore'), flagKey: flagKeySchema }),
+  /** What a kill serves. A normal change: gated on a protected environment. */
+  z.object({
+    op: z.literal('set_off_variant'),
+    flagKey: flagKeySchema,
+    variant: z.string().regex(VARIANT_NAME_PATTERN),
+  }),
 ]);
 export type ChangeOp = z.infer<typeof changeOpSchema>;
 
@@ -247,6 +259,8 @@ export const flagEnvironmentSchema = z.object({
   name: z.string(),
   /** Set when the environment is protected (ADR 0023): changes need this gate's approval. */
   changeGate: gateRequirementsSchema.nullable(),
+  /** Roles whose members may kill a flag here; empty: any workspace member. */
+  killRoles: z.array(z.string()),
   currentVersion: z.number(),
   createdAt: z.date(),
 });

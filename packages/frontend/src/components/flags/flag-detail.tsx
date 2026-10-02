@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import KillSwitch from '@frontend/components/flags/kill-switch';
 import { ruleDraftOf, toRule, toServe } from '@frontend/components/flags/rule-drafts';
 import { RulesEditor, ServeEditor } from '@frontend/components/flags/rule-editor';
 import {
@@ -28,12 +29,14 @@ interface Props {
 
 interface Draft {
   enabled: boolean;
+  offVariant: string;
   rules: RuleDraft[];
   fallthrough: ServeDraft;
 }
 
 const draftOf = (config: FlagConfigDto): Draft => ({
   enabled: config.enabled,
+  offVariant: config.offVariant,
   rules: config.rules.map(rule => ruleDraftOf(rule)),
   fallthrough:
     config.rollout === null
@@ -63,6 +66,9 @@ function opsOf(flagKey: string, config: FlagConfigDto, draft: Draft): ChangeOp[]
   }
   if (draft.enabled !== config.enabled) {
     ops.push({ op: 'set_enabled', flagKey, enabled: draft.enabled });
+  }
+  if (draft.offVariant !== config.offVariant) {
+    ops.push({ op: 'set_off_variant', flagKey, variant: draft.offVariant });
   }
   return ops;
 }
@@ -238,6 +244,21 @@ function EnvironmentEditor({
           </p>
         ) : null}
       </section>
+      <label className={`${labelClass} w-fit`}>
+        Off variant (what a kill serves)
+        <select
+          value={draft.offVariant}
+          className={`${inputClass} font-mono`}
+          onChange={event => {
+            setDraft({ ...draft, offVariant: event.target.value });
+          }}>
+          {variants.map(variant => (
+            <option key={variant} value={variant}>
+              {variant}
+            </option>
+          ))}
+        </select>
+      </label>
       <Preview
         workspaceId={workspaceId}
         projectId={projectId}
@@ -284,6 +305,13 @@ function EnvironmentEditor({
         </Notice>
       )}
       {save.error ? <p className="text-sm text-destructive">{errorMessage(save.error)}</p> : null}
+      <KillSwitch
+        workspaceId={workspaceId}
+        projectId={projectId}
+        flagKey={flag.key}
+        environment={environment}
+        config={config}
+      />
     </div>
   );
 }

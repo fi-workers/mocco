@@ -89,3 +89,11 @@ export class RulesetTooLargeError extends BadRequestError {
     this.name = 'RulesetTooLargeError';
   }
 }
+
+/** The caller isn't in the environment's kill roles — FORBIDDEN. */
+export class KillNotAllowedError extends ForbiddenError {
+  constructor(roles: readonly string[], options?: ErrorOptions) {
+    super(`Only members of ${roles.join(', ')} can kill flags in this environment`, options);
+    this.name = 'KillNotAllowedError';
+  }
+}

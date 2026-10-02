@@ -6,7 +6,8 @@ import { Severities } from '@mocco/common/notification';
 import type { ChangeDiffEntry } from '@mocco/common/flags';
 import type { NeutralMessage } from '@mocco/common/notification';
 
-type FlagEventType = (typeof FlagEventTypes)[keyof typeof FlagEventTypes];
+/** The changeset events (the kill alert renders its own message). */
+type FlagEventType = Exclude<(typeof FlagEventTypes)[keyof typeof FlagEventTypes], typeof FlagEventTypes.flagKilled>;
 
 const headlines: Record<FlagEventType, { verb: string; severity: NeutralMessage['severity'] }> = {
   [FlagEventTypes.flagChangesetRequested]: { verb: 'Approval needed', severity: Severities.warning },

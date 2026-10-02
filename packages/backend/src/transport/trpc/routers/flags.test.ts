@@ -273,6 +273,30 @@ describe('flags router on pglite', () => {
     });
   });
 
+  it('kills a flag at once, and lets only admins choose who may kill', async () => {
+    const { api, scope } = await setup();
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    await api.flags.createBoolean({ ...scope, key: 'checkout' });
+    const member = await signedInCaller('member@example.com');
+    await t.db
+      .insert(members)
+      .values({ organizationId: scope.workspaceId, userId: member.userId, role: WorkspaceMemberRoles.member });
+    const target = { ...scope, environmentId: environment.id };
+
+    await expect(member.api.flags.setKillRoles({ ...target, roles: [] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await api.flags.setKillRoles({ ...target, roles: ['oncall'] });
+    await expect(member.api.flags.kill({ ...target, flagKey: 'checkout', reason: 'errors' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await api.flags.setKillRoles({ ...target, roles: [] });
+    const killed = await member.api.flags.kill({ ...target, flagKey: 'checkout', reason: 'errors' });
+    const { flags } = await api.flags.list(scope);
+
+    expect(killed).toMatchObject({ changeset: { source: 'kill', state: 'applied' }, reviewRequestId: null });
+    expect(flags[0]?.configs[0]).toMatchObject({ killed: true });
+  });
+
   it("never reaches another workspace's environment", async () => {
     const owner = await setup();
     await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.flags });

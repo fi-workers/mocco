@@ -117,6 +117,19 @@ function applyFlagOp(working: Working, op: Exclude<ChangeOp, { op: 'set_segment'
       configs.set(op.flagKey, { ...config, rollout: op.rollout });
       return;
     }
+    case 'kill': {
+      configs.set(op.flagKey, { ...config, killed: true });
+      return;
+    }
+    case 'restore': {
+      configs.set(op.flagKey, { ...config, killed: false });
+      return;
+    }
+    case 'set_off_variant': {
+      requireVariants(state, op.flagKey, [op.variant]);
+      configs.set(op.flagKey, { ...config, offVariant: op.variant });
+      return;
+    }
     default: {
       throw new InvalidChangeError('Unknown change');
     }
