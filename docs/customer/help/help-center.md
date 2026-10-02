@@ -82,7 +82,7 @@ Choose **Review** (or **Edit**) to write or fix a language beside its preview, t
 
 ![An article's translations: English reviewed, Japanese not translated yet](./images/translations.png)
 
-Readers who pick a language see its translation, and the article list shows translated titles.
+Readers who pick a language see its translation, and the article list shows translated titles, collections and sections included.
 
 ![The English translation of an article on the public site](./images/public-translated.png)
 

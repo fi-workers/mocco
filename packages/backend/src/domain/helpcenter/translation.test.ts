@@ -130,11 +130,15 @@ describe('help center translation (pglite)', () => {
     });
     expect(english?.body).toContain('[en] Tap [here](https://a.test).');
     expect(tree.collections[0]?.sections[0]?.articles[0]).toMatchObject({ title: '[ja] Widget' });
+    expect([tree.collections[0]?.title, tree.collections[0]?.sections[0]?.title]).toEqual([
+      '[ja] Start',
+      '[ja] Basics',
+    ]);
+    expect(translator.calls).toBe(6);
     expect(states.locales.map(entry => [entry.locale, entry.state, entry.isStale])).toEqual([
       ['en', 'auto', false],
       ['ja', 'auto', false],
     ]);
-    expect(translator.calls).toBe(2);
   });
 
   it('keeps a reviewed translation when the source changes, showing it as stale', async () => {

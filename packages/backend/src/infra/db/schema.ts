@@ -2726,6 +2726,38 @@ export const helpTranslations = pgTable(
   ],
 );
 
+/** A collection's or section's title in another language (machine-translated with its articles). */
+export const helpNodeTranslations = pgTable(
+  'mocco_help_node_translations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    collectionId: uuid('collection_id'),
+    sectionId: uuid('section_id'),
+    locale: text().notNull(),
+    title: text().notNull(),
+    // The source title this was made from; a renamed node is translated again.
+    sourceTitle: text('source_title').notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_node_translations_collection_uq').on(t.collectionId, t.locale),
+    uniqueIndex('mocco_help_node_translations_section_uq').on(t.sectionId, t.locale),
+    foreignKey({
+      columns: [t.collectionId, t.workspaceId],
+      foreignColumns: [helpCollections.id, helpCollections.workspaceId],
+      name: 'mocco_help_node_translations_collection_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.sectionId, t.workspaceId],
+      foreignColumns: [helpSections.id, helpSections.workspaceId],
+      name: 'mocco_help_node_translations_section_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_node_translations_node_check', sql`(${t.collectionId} IS NULL) <> (${t.sectionId} IS NULL)`),
+  ],
+);
+
 /** Old paths (an imported site's URLs) that redirect to an article. */
 export const helpRedirects = pgTable(
   'mocco_help_redirects',
