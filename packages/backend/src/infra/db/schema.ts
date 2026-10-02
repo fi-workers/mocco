@@ -5,6 +5,7 @@ import { JobStatuses } from '@mocco/common/jobs';
 import { ChannelKinds, ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { OtaTools, PolicyDirections } from '@mocco/common/ota';
 import { AppPlatforms, Products } from '@mocco/common/project';
+import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
@@ -13,6 +14,7 @@ import {
   timestamp,
   boolean,
   bigserial,
+  bigint,
   integer,
   jsonb,
   index,
@@ -46,6 +48,7 @@ import type {
 } from '@mocco/common/notification';
 import type { OtaTool, PolicyDirection, VersionMessage, VersionPolicyRules } from '@mocco/common/ota';
 import type { AppPlatform, Product } from '@mocco/common/project';
+import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
 // id: uuid (non-sequential — safe for token/audit/URL exposure).
@@ -1448,5 +1451,53 @@ export const otaExternalCredentials = pgTable(
       name: 'mocco_ota_external_credentials_project_workspace_fk',
     }).onDelete('cascade'),
     check('mocco_ota_external_credentials_tool_check', sql`${t.tool} IN (${sqlInList(Object.values(OtaTools))})`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Object storage (platform foundations §10). The ledger of every stored object: the bytes
+// live in the configured ObjectStore; this row says who owns them, what they are, and
+// whether the upload finished. Uploads are two-phase (pending → ready); the storage.gc
+// job removes pending rows older than a day and the bytes of deleted ones.
+// ─────────────────────────────────────────────────────────────
+
+export const objects = pgTable(
+  'mocco_objects',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id'),
+    /** The product line that stored it (`Products`), for quotas and per-product policy. */
+    product: text().notNull(),
+    /** The store key: `<pub|prv>/w/<workspace>/[p/<project>/]<product>/<id>/<filename>`. */
+    key: text().notNull(),
+    contentType: text('content_type').notNull(),
+    /** The declared size while pending; the verified size once ready. */
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    sha256: text(),
+    visibility: text().$type<Visibility>().notNull(),
+    status: text().$type<ObjectStatus>().notNull().default(ObjectStatuses.pending),
+    // SET NULL: an object outlives the person who uploaded it.
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    readyAt: timestamp('ready_at'),
+    deletedAt: timestamp('deleted_at'),
+  },
+  t => [
+    uniqueIndex('mocco_objects_key_uq').on(t.key),
+    index('mocco_objects_workspace_product_idx').on(t.workspaceId, t.product),
+    // The gc job's scan: stale pending uploads and deleted objects.
+    index('mocco_objects_status_created_idx').on(t.status, t.createdAt),
+    // A project's object is pinned to its workspace (skipped by Postgres while project_id is null).
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_objects_project_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_objects_visibility_check', sql`${t.visibility} IN (${sqlInList(Object.values(Visibilities))})`),
+    check('mocco_objects_status_check', sql`${t.status} IN (${sqlInList(Object.values(ObjectStatuses))})`),
+    check('mocco_objects_size_check', sql`${t.sizeBytes} >= 0`),
   ],
 );

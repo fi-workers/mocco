@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-09-25
+updated: 2026-10-01
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -79,6 +79,13 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 ## Job tick vars
 
 `CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. See [Background jobs and schedules](./jobs.md#env).
+
+## Storage vars
+
+`STORAGE_DRIVER` (`s3` or `filesystem`) picks the object store; see [object storage](./storage.md). Unset, local dev uses `filesystem` and Vercel has none.
+
+- `s3`: `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` (required), `STORAGE_ENDPOINT` (R2: `https://<account>.r2.cloudflarestorage.com`; omit for AWS), `STORAGE_REGION` (default `auto`), `STORAGE_PUBLIC_BASE_URL` (the CDN serving `pub/`).
+- `filesystem`: `STORAGE_FS_ROOT` (default `.mocco-storage` in the working directory), `STORAGE_SIGNING_SECRET` (default: derived from `AUTH_SECRET`).
 
 ## Discord vars
 

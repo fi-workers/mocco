@@ -70,6 +70,22 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   /** The Mocco bot's token; every Discord REST call sends it. */
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  // Object storage (platform foundations §10). `s3` covers AWS S3, Cloudflare R2, MinIO
+  // and Supabase Storage's S3 endpoint; `filesystem` is for dev and single-box
+  // self-host. Unset: filesystem locally, and not configured on Vercel.
+  STORAGE_DRIVER: z.enum(['s3', 'filesystem']).optional(),
+  STORAGE_BUCKET: z.string().min(1).optional(),
+  /** Custom S3 endpoint (R2: `https://<account>.r2.cloudflarestorage.com`); omit for AWS. */
+  STORAGE_ENDPOINT: z.url().optional(),
+  STORAGE_REGION: z.string().min(1).default('auto'),
+  STORAGE_ACCESS_KEY_ID: z.string().min(1).optional(),
+  STORAGE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /** The CDN or public-bucket origin serving the `pub/` prefix, without a trailing slash. */
+  STORAGE_PUBLIC_BASE_URL: z.url().optional(),
+  /** Filesystem driver: the directory objects live under (default `.mocco-storage` in the cwd). */
+  STORAGE_FS_ROOT: z.string().min(1).optional(),
+  /** Filesystem driver: the HMAC key of its signed URLs (default: derived from AUTH_SECRET). */
+  STORAGE_SIGNING_SECRET: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

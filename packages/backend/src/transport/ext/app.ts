@@ -28,11 +28,15 @@ import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
+import { storageSignerFromEnv } from '@backend/domain/storage/config';
+import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
+import { getStorageDomain } from '@backend/domain/storage/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
 import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
+import { createStorageRoutes, type StorageRouteDeps } from '@backend/transport/ext/storage';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -83,6 +87,8 @@ export interface ExtDeps {
    * DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_BOT_TOKEN are not all set, and
    * both routes 503. */
   discord?: DiscordInstallDeps;
+  /** The filesystem storage driver's signed route; undefined with any other driver (404s). */
+  storage?: StorageRouteDeps;
 }
 
 const WORKSPACES = '/workspaces';
@@ -321,6 +327,9 @@ export function createExtApp(deps: ExtDeps): Hono {
   // Job tick (ADR 0014): Vercel Cron (GET), a self-host cron or curl drives JobRunner.tick.
   app.route('/', createJobTickRoutes(deps.jobTick));
 
+  // Signed reads and uploads for the filesystem storage driver (platform foundations §10).
+  app.route('/', createStorageRoutes(deps.storage));
+
   // Defense-in-depth (symmetric with the tRPC maskInternalError): an unexpected
   // throw surfaces as a fixed generic 500 — never a vendor/SQL/token detail. The log
   // line names the matched route pattern (never the raw path, which can carry an
@@ -345,6 +354,7 @@ export async function extHandler(request: Request): Promise<Response> {
   const tickSecrets = [env.CRON_SECRET, env.JOBS_TICK_SECRET].filter(secret => secret !== undefined);
   const services = getServices();
   const discordInstall = getNotification().install;
+  const storageStore = getStorageDomain()?.store;
   const app = createExtApp({
     auth: services.auth,
     connection: integration?.connection,
@@ -371,6 +381,10 @@ export async function extHandler(request: Request): Promise<Response> {
         : undefined,
     inbound: getInbound()?.inbound,
     discord: discordInstall === undefined ? undefined : { install: discordInstall, workspace: services.workspace },
+    storage:
+      storageStore instanceof FilesystemObjectStore
+        ? { store: storageStore, signer: storageSignerFromEnv(env) }
+        : undefined,
   });
   return await app.fetch(request);
 }

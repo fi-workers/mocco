@@ -74,6 +74,7 @@ related:
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
+- [Object storage](./reference/storage.md) — the store port and its S3/R2 and filesystem drivers, two-phase uploads, quotas, signed URLs, storage.gc
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
 - [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
 - [Inbound webhook sources](./reference/inbound.md) — per-source ingest URLs, vendor secrets, receipts and outcomes, quota, retention

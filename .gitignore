@@ -35,3 +35,6 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Local object storage (filesystem driver default root)
+.mocco-storage/

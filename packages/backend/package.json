@@ -23,6 +23,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1144.0",
+    "@aws-sdk/s3-request-presigner": "3.1144.0",
     "@mocco/common": "workspace:*",
     "@octokit/app": "16.1.2",
     "@octokit/plugin-retry": "8.1.0",
