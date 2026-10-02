@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-09-24
+updated: 2026-10-01
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -70,6 +70,16 @@ Goal: connect repo → define gate → prove that **without approval, a producti
 ## Post-MVP — after the wedge holds
 
 Many are already drawn in the prototype (designed, but deferrable).
+
+### Product line 1 — OTA release management (#99)
+
+The first product after deploy governance, in phases set by the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md).
+
+| Feature | Status | Description |
+|---|---|---|
+| Version policy and native force update | **Live** | Minimum, recommended and blocked versions per store app; tighten changes gated, relax changes reviewed after. See [OTA version policy](./ota-version-policy.md) |
+| Gate existing OTA tools | **Live** | Mocco holds the EAS / CodePush / hot-updater publishing token and releases it only to a step behind a resumed gate. See [OTA external credentials](./ota-external-credentials.md) |
+| Hosted Expo Updates | Not drawn | Mocco serves updates to the stock `expo-updates` client (ADR 0021); the key stays in CI (ADR 0022); promotions to protected channels need approval (ADR 0020) |
 
 ### Deploy loop depth
 

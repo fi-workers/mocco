@@ -43,6 +43,9 @@ related:
 - [0017 — Public /v1 API, publishable and secret keys, and MIT SDKs (draft)](./adr/0017-public-v1-api-keys-and-sdk-licensing.md)
 - [0018 — Domain events are separate from the audit log (draft)](./adr/0018-domain-events-vs-audit-log.md)
 - [0019 — Inbound webhooks use per-source ingest URLs with mandatory signatures (draft)](./adr/0019-inbound-webhooks-use-per-source-ingest-urls-with-mandatory-signatures.md)
+- [0020 — Approvals outside pipeline runs (draft)](./adr/0020-approvals-outside-pipeline-runs.md)
+- [0021 — The OTA client contract is the Expo Updates protocol v1 (draft)](./adr/0021-ota-client-is-expo-updates-protocol-v1.md)
+- [0022 — OTA code signing: the key stays in CI, rollbacks are pre-signed (draft)](./adr/0022-ota-signing-key-stays-in-ci.md)
 
 ## Implementation
 
