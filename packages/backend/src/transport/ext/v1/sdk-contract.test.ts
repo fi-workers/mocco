@@ -9,6 +9,7 @@ import {
   type messageCreateInputSchema,
   type messengerSessionInputSchema,
   type messengerSessionSchema,
+  type pushTokenInputSchema,
 } from '@mocco/common/messenger';
 import {
   type clientEventsRequestSchema,
@@ -25,6 +26,7 @@ import type {
   MessengerConversationRequest,
   MessengerMessage,
   MessengerMessageRequest,
+  MessengerPushTokenRequest,
   MessengerSessionRequest,
   MessengerSessionResponse,
   OtaEventsRequest,
@@ -60,5 +62,6 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof contactConversationSchema>>().toExtend<MessengerConversation>();
     expectTypeOf<z.output<typeof contactMessageSchema>>().toExtend<MessengerMessage>();
     expectTypeOf<MessengerAttachmentRequest>().toExtend<z.input<typeof attachmentCreateInputSchema>>();
+    expectTypeOf<MessengerPushTokenRequest>().toExtend<z.input<typeof pushTokenInputSchema>>();
   });
 });

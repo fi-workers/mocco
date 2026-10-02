@@ -26,7 +26,7 @@ export type {
   MessengerState,
   MessengerStorage,
 } from '@mocco/sdk-core';
-export { MessengerClient } from '@mocco/sdk-core';
+export { MessengerClient, messengerConversationIdOf } from '@mocco/sdk-core';
 
 /** One client for the app; create it once (outside a component). */
 export function createMessenger(options: MessengerClientOptions): MessengerClient {
@@ -58,7 +58,7 @@ export function MessengerProvider({ client, children }: { client: MessengerClien
   return <MessengerContext.Provider value={client}>{children}</MessengerContext.Provider>;
 }
 
-/** The client, for actions the hooks don't cover: `attach` a screenshot, `signOut` after the user signs out. */
+/** The client, for actions the hooks don't cover: `attach` a screenshot, `registerPushToken`, `signOut` after the user signs out. */
 export function useMessenger(): MessengerClient {
   const client = useContext(MessengerContext);
   if (client === null) {

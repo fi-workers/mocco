@@ -2,7 +2,9 @@
 import { getAudit } from '@backend/domain/audit/instance';
 import { getEventBus } from '@backend/domain/events/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { getJobQueue } from '@backend/domain/jobs/instance';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
+import { ExpoPushSender } from '@backend/domain/messenger/push';
 import { getStorageDomain } from '@backend/domain/storage/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
@@ -17,6 +19,8 @@ export function getMessengerDomain(): MessengerDomain {
     audit: getAudit().audit,
     box: getSecretBox,
     storage: getStorageDomain()?.storage,
+    queue: getJobQueue(),
+    pushSender: new ExpoPushSender({ accessToken: getEnv().EXPO_ACCESS_TOKEN }),
     events: getEventBus(),
     appOrigin: resolveBaseOrigin({ serviceDomain: getEnv().SERVICE_DOMAIN, vercelUrl: getEnv().VERCEL_URL }),
   });

@@ -9,6 +9,8 @@ import {
   markReadInputSchema,
   messageCreateInputSchema,
   messengerSessionInputSchema,
+  pushTokenDeleteInputSchema,
+  pushTokenInputSchema,
 } from '@mocco/common/messenger';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
@@ -21,6 +23,7 @@ import { limit, requireKey } from '@backend/transport/ext/v1/middleware';
 import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { ContactMessengerService, ContactPrincipal } from '@backend/domain/messenger/ContactMessengerService';
+import type { MessengerPushService } from '@backend/domain/messenger/MessengerPushService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 
 export interface MessengerServingDeps {
@@ -35,6 +38,7 @@ export interface MessengerServingDeps {
     | 'markRead'
     | 'createAttachment'
   >;
+  push?: Pick<MessengerPushService, 'registerToken' | 'unregisterToken'>;
 }
 
 /** Per-contact limits on top of the key's own. */
@@ -181,6 +185,27 @@ export function createMessengerRoutes(deps: V1Deps, messenger: MessengerServingD
     }
     return await answer(async () => c.json(await messenger.contacts.createAttachment(c.var.contact, body.data), 201));
   });
+
+  // The device's Expo push token, so team replies reach it while the app is closed.
+  const { push } = messenger;
+  if (push !== undefined) {
+    session.post('/push-tokens', async c => {
+      const body = await parseJson(c, pushTokenInputSchema);
+      if (body.refused !== undefined) {
+        return body.refused;
+      }
+      await push.registerToken(c.var.contact, body.data);
+      return c.body(null, 204);
+    });
+    session.delete('/push-tokens', async c => {
+      const body = await parseJson(c, pushTokenDeleteInputSchema);
+      if (body.refused !== undefined) {
+        return body.refused;
+      }
+      await push.unregisterToken(c.var.contact, body.data.token);
+      return c.body(null, 204);
+    });
+  }
 
   session.post('/conversations/:id/read', async c => {
     const body = await parseJson(c, markReadInputSchema);

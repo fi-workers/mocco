@@ -155,3 +155,10 @@ export interface MessengerMessageRequest {
   attachmentIds?: string[];
   context?: MessengerContext;
 }
+
+/** `POST /v1/messenger/push-tokens`: the device's Expo push token. */
+export interface MessengerPushTokenRequest {
+  provider: 'expo';
+  token: string;
+  platform: 'ios' | 'android';
+}

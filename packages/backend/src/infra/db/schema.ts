@@ -72,6 +72,7 @@ import type {
   MessageVisibility,
   MessengerCategory,
   MessengerContext,
+  PushProvider,
 } from '@mocco/common/messenger';
 import type {
   ChannelKind,
@@ -1983,6 +1984,34 @@ export const messengerAttachments = pgTable(
       columns: [t.contactId, t.workspaceId],
       foreignColumns: [messengerContacts.id, messengerContacts.workspaceId],
       name: 'mocco_messenger_attachments_contact_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A contact's device that takes push notifications. A token moves to whoever
+ * registered it last in the project (one device, one signed-in user). */
+export const messengerPushTokens = pgTable(
+  'mocco_messenger_push_tokens',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    provider: text().$type<PushProvider>().notNull(),
+    token: text().notNull(),
+    platform: text().notNull(),
+    lastSeenAt: timestamp('last_seen_at').notNull(),
+    // Set when the push service says the device is gone; such tokens get nothing.
+    disabledAt: timestamp('disabled_at'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_messenger_push_tokens_project_token_uq').on(t.projectId, t.token),
+    index('mocco_messenger_push_tokens_contact_idx').on(t.contactId),
+    foreignKey({
+      columns: [t.contactId, t.workspaceId],
+      foreignColumns: [messengerContacts.id, messengerContacts.workspaceId],
+      name: 'mocco_messenger_push_tokens_contact_fk',
     }).onDelete('cascade'),
   ],
 );
