@@ -21,11 +21,13 @@ code_refs:
   - packages/backend/src/domain/flags/compile-ruleset.ts
   - packages/backend/src/transport/trpc/routers/flags.ts
   - packages/backend/src/transport/ext/v1/flags.ts
+  - packages/sdk-flags-core/src/evaluate.ts
+  - packages/sdk-openfeature-server/src/openfeature-server.ts
 ---
 
 # Feature flags
 
-Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: targeting rules, gated changesets, the kill switch and the SDKs.
+Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: targeting rules in the console, gated changesets, the kill switch and the client SDKs.
 
 ## Model
 
@@ -103,7 +105,13 @@ ETag: "kq3…"
 Cache-Control: private, no-cache
 ```
 
-The response is the flagd document with `ETag` and `Cache-Control: private, no-cache`. A request whose `If-None-Match` lists the current tag (weak or strong, or `*`) gets a `304`. The endpoint reads only the head of the newest snapshot (version and ETag) and loads the document only when the caller doesn't hold it, so polling costs one small query. Server SDKs keep the last good ruleset when Mocco is unreachable.
+The response is the flagd document with `ETag` and `Cache-Control: private, no-cache`. A request whose `If-None-Match` lists the current tag (weak or strong, or `*`) gets a `304`. The endpoint reads only the head of the newest snapshot (version and ETag) and loads the document only when the caller doesn't hold it, so polling costs one small query. ### SDKs
+
+`@mocco/flags-core` evaluates a ruleset locally: the restricted JsonLogic subset, flagd's `fractional` (MurmurHash3 x86_32; bucket `(hash × totalWeight) >> 32`), `sem_ver` with Go `x/mod/semver` semantics, `starts_with` and `ends_with`, and flagd's resolution rules (`$flagd.flagKey` and `$flagd.timestamp` in the context; DISABLED, STATIC, DEFAULT, TARGETING_MATCH; FLAG_NOT_FOUND, TYPE_MISMATCH, PARSE_ERROR, GENERAL). A conformance test replays flagd's own evaluator cases (`conformance.test.ts`). `parseRuleset` refuses a document with an operator outside the subset before it is used.
+
+`@mocco/openfeature-server` is the OpenFeature server provider over it ([SDK packages](./sdk.md)). It polls this endpoint with `If-None-Match` (default every 30 s), evaluates in memory, emits `PROVIDER_CONFIGURATION_CHANGED` with `flagsChanged`, and keeps the last good ruleset as `PROVIDER_STALE` when a poll fails or returns a ruleset it can't use. An optional `bootstrap` ruleset lets it start while Mocco is unreachable. `transport/ext/v1/flags-sdk.test.ts` runs the provider against the real routes.
+
+flagd's HTTP sync works against the same endpoint (`authHeader: "Bearer mk_sec_…"`; it sends `If-None-Match` too), for teams that run flagd or use a non-JavaScript OpenFeature provider; the customer [quickstart](../customer/flags/quickstart.md) shows the command.
 
 A key is bound to one environment when it is created: `flagEnvironmentId` is required with `flags:read` and refused without it ([public API](./public-api.md#keys)).
 

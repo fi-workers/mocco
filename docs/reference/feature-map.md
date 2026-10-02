@@ -91,7 +91,7 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Flags, variants and targeting | Live | Boolean flags with per-environment on/off today; string, number and JSON flags; rules on context attributes, segments, percentage rollout (`mocco-v1` bucketing) |
 | Governed changesets | Not drawn | Changes to a protected target are approval requests with a diff (ADR 0020) |
 | Kill switch | Not drawn | One-way, ungated, audited; restore is gated |
-| Server SDK (local evaluation) | Not drawn | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
+| Server SDK (local evaluation) | Live | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
 | Client SDKs (OFREP) | Not drawn | Web and React Native OpenFeature providers on OFREP bulk evaluation; SSE streaming |
 | Telemetry and stale flags | Not drawn | Aggregated evaluation counts; flags no code evaluates any more |
 | Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate |

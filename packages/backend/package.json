@@ -42,7 +42,11 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.4",
+    "@mocco/flags-core": "workspace:*",
+    "@mocco/openfeature-server": "workspace:*",
     "@mocco/sdk-core": "workspace:*",
+    "@openfeature/core": "1.12.0",
+    "@openfeature/server-sdk": "1.23.0",
     "@types/pg": "8.20.0",
     "ajv": "8.20.0",
     "eslint": "10.6.0",

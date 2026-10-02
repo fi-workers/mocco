@@ -43,7 +43,11 @@ function Environments({ workspaceId, projectId, environments }: Props & { enviro
         <h2 className="text-sm font-medium">Environments</h2>
         <p className="text-xs text-muted-foreground">
           Each environment is its own ruleset, and each SDK key reads exactly one. The name is a label only: nothing in
-          Mocco treats an environment called production differently.
+          Mocco treats an environment called production differently.{' '}
+          <Link href={Routes.guide('flags', 'quickstart')} className="underline underline-offset-2">
+            Evaluate flags from your server
+          </Link>
+          .
         </p>
       </div>
       <ul className="flex flex-wrap gap-2">

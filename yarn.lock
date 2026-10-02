@@ -2476,10 +2476,14 @@ __metadata:
     "@aws-sdk/s3-request-presigner": "npm:3.1144.0"
     "@electric-sql/pglite": "npm:0.5.4"
     "@mocco/common": "workspace:*"
+    "@mocco/flags-core": "workspace:*"
+    "@mocco/openfeature-server": "workspace:*"
     "@mocco/sdk-core": "workspace:*"
     "@octokit/app": "npm:16.1.2"
     "@octokit/plugin-retry": "npm:8.1.0"
     "@octokit/plugin-throttling": "npm:11.0.3"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/server-sdk": "npm:1.23.0"
     "@trpc/server": "npm:11.18.0"
     "@types/pg": "npm:8.20.0"
     "@vercel/functions": "npm:3.7.5"
@@ -2517,6 +2521,18 @@ __metadata:
     "@types/node": "npm:22.20.0"
     eslint: "npm:10.6.0"
     typescript: "npm:5.9.3"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/flags-core@workspace:*, @mocco/flags-core@workspace:packages/sdk-flags-core":
+  version: 0.0.0-use.local
+  resolution: "@mocco/flags-core@workspace:packages/sdk-flags-core"
+  dependencies:
+    "@types/node": "npm:22.20.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
   languageName: unknown
   linkType: soft
 
@@ -2584,6 +2600,24 @@ __metadata:
     tsup: "npm:8.5.1"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/openfeature-server@workspace:*, @mocco/openfeature-server@workspace:packages/sdk-openfeature-server":
+  version: 0.0.0-use.local
+  resolution: "@mocco/openfeature-server@workspace:packages/sdk-openfeature-server"
+  dependencies:
+    "@mocco/flags-core": "workspace:*"
+    "@mocco/sdk-core": "workspace:*"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/server-sdk": "npm:1.23.0"
+    "@types/node": "npm:22.20.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+  peerDependencies:
+    "@openfeature/server-sdk": ^1.23.0
   languageName: unknown
   linkType: soft
 
@@ -3053,6 +3087,22 @@ __metadata:
     "@octokit/request-error": "npm:^7.0.0"
     "@octokit/webhooks-methods": "npm:^6.0.0"
   checksum: 10/8d2ebd7ba9c89c10525ae934ccd05c3cd14fa3b0b3cd383831433f5ee7f43d145ff48413882d7ca95624571f1daa8d51883742d132d97e247709b4167895bd1f
+  languageName: node
+  linkType: hard
+
+"@openfeature/core@npm:1.12.0":
+  version: 1.12.0
+  resolution: "@openfeature/core@npm:1.12.0"
+  checksum: 10/d95bd67bf86397e358738914268f50a1bd45b6fc8648c8f197bddc9d968c6eb03bf9bd5f98e89f0b39a8f89f8043ed17c1d3a73e239b41f87773ccbbee38f4c4
+  languageName: node
+  linkType: hard
+
+"@openfeature/server-sdk@npm:1.23.0":
+  version: 1.23.0
+  resolution: "@openfeature/server-sdk@npm:1.23.0"
+  peerDependencies:
+    "@openfeature/core": ^1.12.0
+  checksum: 10/74061b5d177fe7d15dfb8e1ac08d311efc25479a8ff643c080c1c11d1d7b8c06c092d569a6132711a5d52138ea2a9e2ca2c4e530cec956f166c2e34f370a0705
   languageName: node
   linkType: hard
 

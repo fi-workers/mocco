@@ -26,6 +26,9 @@ export interface RequestOptions {
   idempotencyKey?: string;
 }
 
+/** What a conditional GET resolves to. */
+export type ConditionalResult<T> = { modified: false } | { modified: true; body: T; etag: string | null };
+
 /** What `GET /v1/whoami` answers: the project and scopes a key speaks for. */
 export interface WhoAmI {
   projectId: string;
@@ -81,10 +84,11 @@ export class MoccoClient {
     this.sleep = options.sleep ?? sleepFor;
   }
 
-  async request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
+  /** Send with the key, retrying what is safe to retry; resolves with a 2xx or 304 response. */
+  private async send(method: string, path: string, opts: RequestOptions): Promise<Response> {
     const isRetryable = method === 'GET' || opts.idempotencyKey !== undefined;
     const maxRetries = isRetryable ? (this.options.maxRetries ?? 2) : 0;
-    const attempt = async (count: number): Promise<T> => {
+    const attempt = async (count: number): Promise<Response> => {
       let response: Response;
       try {
         response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -105,8 +109,8 @@ export class MoccoClient {
         }
         throw new MoccoNetworkError(`Couldn't reach Mocco at ${this.baseUrl}`, { cause: error });
       }
-      if (response.ok) {
-        return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+      if (response.ok || response.status === 304) {
+        return response;
       }
       if (isRetryableStatus(response.status) && count < maxRetries) {
         await this.sleep(backoffMs(count + 1, serverWaitSeconds(response.headers)));
@@ -115,6 +119,23 @@ export class MoccoClient {
       throw new MoccoError(response.status, await problemOf(response));
     };
     return await attempt(0);
+  }
+
+  async request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
+    const response = await this.send(method, path, opts);
+    return response.status === 204 || response.status === 304 ? (undefined as T) : ((await response.json()) as T);
+  }
+
+  /**
+   * A conditional GET: with `etag` (the tag of what the caller holds), a `304` resolves to
+   * `{ modified: false }` without a body; otherwise the body and its new tag.
+   */
+  async getIfChanged<T>(path: string, etag: string | null): Promise<ConditionalResult<T>> {
+    const response = await this.send('GET', path, etag === null ? {} : { headers: { 'if-none-match': etag } });
+    if (response.status === 304) {
+      return { modified: false };
+    }
+    return { modified: true, body: (await response.json()) as T, etag: response.headers.get('etag') };
   }
 
   /** Which project and scopes this key speaks for — a quick configuration check. */
