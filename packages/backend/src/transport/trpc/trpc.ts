@@ -16,6 +16,7 @@ import type { ApprovalService } from '@backend/domain/governance/ApprovalService
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import type { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
@@ -98,6 +99,7 @@ export interface Context {
   /** The help center: its site and writing articles (#96). */
   helpSites: HelpSiteService;
   helpAuthoring: HelpAuthoringService;
+  helpImport: HelpImportService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

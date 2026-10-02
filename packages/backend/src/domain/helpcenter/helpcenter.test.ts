@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
-import { HelpNodeNotFoundError, HelpSiteExistsError, HelpSlugTakenError } from '@backend/domain/helpcenter/errors';
+import {
+  HelpNodeNotFoundError,
+  HelpSiteExistsError,
+  HelpSlugTakenError,
+  HelpStorageNotConfiguredError,
+} from '@backend/domain/helpcenter/errors';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
@@ -13,6 +18,25 @@ import { users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { HelpDomain } from '@backend/domain/helpcenter/compose';
+
+/** A bundle of two articles; the widget's body varies. */
+const bundle = (body: string) => ({
+  collections: [
+    {
+      title: '시작하기',
+      slug: 'features',
+      sections: [
+        {
+          title: '기본 기능',
+          articles: [
+            { title: '위젯', slug: 'widget-features', body, fromPath: '/features/widget-features' },
+            { title: '카메라', slug: 'camera-features', body: 'Camera', fromPath: '/features/camera-features' },
+          ],
+        },
+      ],
+    },
+  ],
+});
 
 describe('help center (pglite)', () => {
   let t: TestDb;
@@ -173,5 +197,96 @@ describe('help center (pglite)', () => {
       `/ko/articles/${article.shortId}-widget-features`,
     );
     expect(await help.helpPublic.redirect('showyourtime', '/nowhere')).toBeUndefined();
+  });
+
+  describe('import', () => {
+    it('creates the tree, publishes, and keeps each old path as a redirect', async () => {
+      await help.helpSites.enable(workspaceId, projectId, authorId, { slug: 'syt', sourceLocale: 'ko', locales: [] });
+
+      const counts = await help.helpImport.importBundle(workspaceId, projectId, authorId, bundle('Widget'), {
+        publish: true,
+      });
+      const tree = await help.helpPublic.tree('syt', 'ko');
+      const redirect = await help.helpPublic.redirect('syt', '/features/widget-features');
+
+      expect(counts).toEqual({ created: 2, updated: 0, unchanged: 0 });
+      expect(tree.collections.map(collection => [collection.slug, collection.sections[0]?.articles.length])).toEqual([
+        ['features', 2],
+      ]);
+      expect(redirect).toMatch(/^\/ko\/articles\/[a-z0-9]{6}-widget-features$/u);
+    });
+
+    it('updates only what changed when imported again, without duplicating', async () => {
+      await help.helpSites.enable(workspaceId, projectId, authorId, { slug: 'syt', sourceLocale: 'ko', locales: [] });
+      await help.helpImport.importBundle(workspaceId, projectId, authorId, bundle('Widget'), { publish: false });
+
+      const again = await help.helpImport.importBundle(workspaceId, projectId, authorId, bundle('Widget v2'), {
+        publish: false,
+      });
+      const [collection] = await help.helpAuthoring.tree(workspaceId, projectId);
+      const articles = collection?.sections[0]?.articles ?? [];
+      const widget = articles.find(article => article.slug === 'widget-features');
+      const history = await help.helpAuthoring.history(workspaceId, projectId, widget?.id ?? '');
+
+      expect(again).toEqual({ created: 0, updated: 1, unchanged: 1 });
+      expect(articles.map(article => article.status)).toEqual(['draft', 'draft']);
+      expect(history.map(revision => [revision.body, revision.kind])).toEqual([
+        ['Widget v2', 'import'],
+        ['Widget', 'import'],
+      ]);
+    });
+
+    it('reuses an image the project already stored instead of uploading it again', async () => {
+      const stored = { id: randomUUID() };
+      const calls: string[] = [];
+      const storage = {
+        findReady: async ({ sha256 }: { sha256: string }) => {
+          // eslint-disable-next-line sonarjs/null-dereference -- sha256 is a string, never null
+          calls.push(`find ${sha256.slice(0, 4)}`);
+          return await Promise.resolve(sha256 === 'a'.repeat(64) ? (stored as never) : undefined);
+        },
+        beginUpload: async () => {
+          calls.push('begin');
+          return await Promise.resolve({
+            object: { id: 'new' } as never,
+            upload: { url: 'u', method: 'PUT', headers: {} } as never,
+          });
+        },
+        completeUpload: async () => await Promise.resolve({} as never),
+        downloadUrl: async (_workspaceId: string, id: string) => await Promise.resolve(`https://cdn.test/${id}`),
+      };
+      const withStorage = createHelpDomain(t.db, { audit: new AuditService({ audit: new AuditRepo(t.db) }), storage });
+      await withStorage.helpSites.enable(workspaceId, projectId, authorId, {
+        slug: 'syt',
+        sourceLocale: 'ko',
+        locales: [],
+      });
+      const image = { contentType: 'image/png' as const, sizeBytes: 10, filename: 'a.png' };
+
+      const known = await withStorage.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+        ...image,
+        sha256: 'a'.repeat(64),
+      });
+      const fresh = await withStorage.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+        ...image,
+        sha256: 'b'.repeat(64),
+      });
+
+      expect(known).toEqual({ url: `https://cdn.test/${stored.id}` });
+      expect(fresh).toMatchObject({ objectId: 'new' });
+      expect(calls).toEqual(['find aaaa', 'find bbbb', 'begin']);
+    });
+
+    it('refuses image uploads without object storage', async () => {
+      await help.helpSites.enable(workspaceId, projectId, authorId, { slug: 'syt', sourceLocale: 'ko', locales: [] });
+
+      await expect(
+        help.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+          contentType: 'image/png',
+          sizeBytes: 10,
+          filename: 'a.png',
+        }),
+      ).rejects.toBeInstanceOf(HelpStorageNotConfiguredError);
+    });
   });
 });

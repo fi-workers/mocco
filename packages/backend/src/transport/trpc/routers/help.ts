@@ -5,9 +5,11 @@ import {
   articleCreateInputSchema,
   collectionInputSchema,
   draftInputSchema,
+  helpImageInputSchema,
   helpSiteInputSchema,
   sectionInputSchema,
 } from '@mocco/common/help';
+import { importBundleSchema } from '@mocco/common/help-import';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
 
@@ -121,4 +123,27 @@ export const helpRouter = router({
           input.revisionId,
         ),
     ),
+
+  /** Reserve a public upload for an article image; PUT it, then `completeImage`. */
+  createImageUpload: helpProcedure
+    .input(projectInput.extend(helpImageInputSchema.shape))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpImport.createImageUpload(input.workspaceId, input.projectId, ctx.session.user.id, input),
+    ),
+
+  /** The uploaded image's public URL, once storage verified it. */
+  completeImage: helpProcedure
+    .input(projectInput.extend({ objectId: z.uuid() }))
+    .mutation(
+      async ({ ctx, input }) => await ctx.helpImport.completeImage(input.workspaceId, input.projectId, input.objectId),
+    ),
+
+  /** Import articles (from Mintlify, converted in the console); importing again updates them. */
+  importBundle: helpProcedure.input(projectInput.extend({ bundle: importBundleSchema, publish: z.boolean() })).mutation(
+    async ({ ctx, input }) =>
+      await ctx.helpImport.importBundle(input.workspaceId, input.projectId, ctx.session.user.id, input.bundle, {
+        publish: input.publish,
+      }),
+  ),
 });

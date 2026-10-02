@@ -25,6 +25,32 @@ export class ObjectRepo {
     return getOrThrow(rows, `Object ${id} was not found`);
   }
 
+  /** A ready object of the project and product with this content hash, if any. */
+  async findReadyBySha256(input: {
+    workspaceId: string;
+    projectId: string;
+    product: string;
+    visibility: string;
+    sha256: string;
+  }): Promise<StoredObjectRow | undefined> {
+    const o = schema.objects;
+    const [row] = await this.db
+      .select()
+      .from(o)
+      .where(
+        and(
+          eq(o.workspaceId, input.workspaceId),
+          eq(o.projectId, input.projectId),
+          eq(o.product, input.product),
+          eq(o.visibility, input.visibility as StoredObjectRow['visibility']),
+          eq(o.sha256, input.sha256),
+          eq(o.status, ObjectStatuses.ready),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
   /** Bytes the workspace holds or has reserved (pending + ready). */
   async usedBytes(workspaceId: string): Promise<number> {
     const [row] = await this.db

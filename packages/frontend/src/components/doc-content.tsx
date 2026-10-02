@@ -64,7 +64,7 @@ function Inline({ nodes }: { nodes: DocInline[] }) {
                   src={node.src}
                   alt={node.alt}
                   loading="lazy"
-                  className="my-2 h-auto max-w-full rounded-xl border border-border"
+                  className="my-2 h-auto max-h-[36rem] max-w-full rounded-xl border border-border object-contain"
                 />
               );
             }

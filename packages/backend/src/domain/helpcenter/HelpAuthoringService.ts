@@ -1,6 +1,7 @@
 // Writing a help center (#96): collections → sections → articles, drafts saved as
 // append-only revisions, publishing, unpublishing and restoring. Callers are workspace
 // members, checked by the tRPC procedure; every query is scoped by workspace and project.
+
 import { AuditActions } from '@mocco/common/audit';
 import { ArticleStatuses, RevisionKinds, slugify } from '@mocco/common/help';
 
