@@ -2693,6 +2693,9 @@ __metadata:
     expo-updates: ">=0.24.0"
     react: ">=18"
     react-native: ">=0.73"
+  peerDependenciesMeta:
+    expo-updates:
+      optional: true
   languageName: unknown
   linkType: soft
 

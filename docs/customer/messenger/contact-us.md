@@ -50,7 +50,74 @@ const userHash = signIdentity(process.env.MOCCO_MESSENGER_SECRET!, user.id);
 
 ## 5. Contact your team from the app
 
-Your app opens a session with the user id and signature, then uses the session token for that user's conversations. The base URL is `https://api.mocco.club/v1/messenger`.
+### React Native
+
+Install the SDK (it is plain JavaScript, so it runs in Expo Go too):
+
+```bash
+npm install @mocco/react-native @react-native-async-storage/async-storage
+```
+
+Create one messenger for the app and wrap the app in its provider. `identity` asks your server for the signed-in user's signature, or returns `null` while nobody is signed in:
+
+```tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createMessenger, MessengerProvider } from '@mocco/react-native/messenger';
+import * as Application from 'expo-application';
+import { Platform } from 'react-native';
+
+const messenger = createMessenger({
+  publishableKey: 'mk_pub_…',
+  identity: async () => {
+    const user = await getSignedInUser();
+    if (user === null) return null;
+    const { userHash } = await api.messengerIdentity(); // your endpoint, signs user.id
+    return { userId: user.id, userHash, name: user.name, email: user.email };
+  },
+  context: () => ({
+    appVersion: Application.nativeApplicationVersion ?? undefined,
+    build: Application.nativeBuildVersion ?? undefined,
+    platform: Platform.OS === 'ios' ? 'ios' : 'android',
+  }),
+  storage: AsyncStorage,
+});
+
+export default function App() {
+  return (
+    <MessengerProvider client={messenger}>
+      <Navigation />
+    </MessengerProvider>
+  );
+}
+```
+
+Then draw the screens in your own design with the hooks:
+
+```tsx
+import { useConversation, useConversations, useMessengerCategories, useUnreadCount } from '@mocco/react-native/messenger';
+
+function SettingsRow() {
+  const unread = useUnreadCount(); // a badge on "Contact us"
+  // …
+}
+
+function ContactList() {
+  const { conversations, start } = useConversations(); // refreshed while the screen is open
+  const categories = useMessengerCategories();
+  // start({ category: 'bug', body }) to open a new one
+}
+
+function Thread({ id }: { id: string }) {
+  const { messages, send, isSending } = useConversation(id); // new messages are marked read
+  // messages: { seq, author: 'contact' | 'operator', authorName, body, createdAt }
+}
+```
+
+When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
+
+### Any other client
+
+The SDK calls a small HTTP API you can use from anywhere. The base URL is `https://api.mocco.club/v1/messenger`.
 
 ```http
 POST /sessions
@@ -78,8 +145,6 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 | `POST /conversations/{id}/read` | `{ "seq": 5 }` once the user has seen up to that message |
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.
-
-A React Native SDK that does this for you, with hooks for the list, the thread and the unread badge, is on the way. Until then, the calls above are the whole API.
 
 ## 6. Answer from the inbox
 

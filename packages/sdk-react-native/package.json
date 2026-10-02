@@ -1,7 +1,7 @@
 {
   "name": "@mocco/react-native",
   "version": "0.0.0",
-  "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate) and the Expo config plugin.",
+  "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate), in-app contact (messenger hooks) and the Expo config plugin.",
   "license": "MIT",
   "type": "commonjs",
   "sideEffects": false,
@@ -17,6 +17,12 @@
       "types": "./dist/ota.d.ts",
       "import": "./dist/ota.mjs",
       "require": "./dist/ota.js"
+    },
+    "./messenger": {
+      "@mocco/source": "./src/messenger.tsx",
+      "types": "./dist/messenger.d.ts",
+      "import": "./dist/messenger.mjs",
+      "require": "./dist/messenger.js"
     },
     "./app.plugin.js": "./app.plugin.js"
   },
@@ -54,5 +60,10 @@
     "react": ">=18",
     "react-native": ">=0.73"
   },
-  "main": "./dist/mocco-react-native.js"
+  "main": "./dist/mocco-react-native.js",
+  "peerDependenciesMeta": {
+    "expo-updates": {
+      "optional": true
+    }
+  }
 }

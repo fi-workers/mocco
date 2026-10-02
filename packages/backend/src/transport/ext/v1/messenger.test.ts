@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
 import { MessengerEventTypes } from '@mocco/common/events';
+import { MessengerClient } from '@mocco/sdk-core';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -256,6 +257,49 @@ describe('/v1/messenger (pglite)', () => {
       MessengerEventTypes.messengerMessageReceived,
     ]);
     expect([blocked.status, newSession.status]).toEqual([403, 403]);
+  });
+
+  it('works with the SDK client end to end, with internal notes never reaching it', async () => {
+    const client = new MessengerClient({
+      publishableKey: key,
+      baseUrl: 'https://www.mocco.test/api/ext/v1',
+      identity: async () =>
+        await Promise.resolve({ userId: 'sdk-user', userHash: userHashOf(secret, 'sdk-user'), name: 'Jun' }),
+      context: () => ({ appVersion: '3.8.1', platform: 'android' }),
+      fetch: async (input, init) => await app.fetch(new Request(input, init)),
+    });
+
+    const conversation = await client.startConversation({ category: 'billing', body: 'Charged twice' });
+    await messenger.inbox.write(workspaceId, projectId, operatorId, {
+      conversationId: conversation.id,
+      body: 'checked the payment provider',
+      internal: true,
+    });
+    await messenger.inbox.write(workspaceId, projectId, operatorId, {
+      conversationId: conversation.id,
+      body: 'Refunded the second charge.',
+      internal: false,
+    });
+    await client.refresh();
+    const unread = client.getState().unreadCount;
+    const thread = await client.loadThread(conversation.id);
+    await client.markRead(conversation.id);
+    await client.sendMessage(conversation.id, 'Thank you!');
+    await client.refresh();
+    client.close();
+
+    expect(unread).toBe(1);
+    expect(thread.map(message => [message.author, message.body])).toEqual([
+      ['contact', 'Charged twice'],
+      ['operator', 'Refunded the second charge.'],
+    ]);
+    expect(client.getState()).toMatchObject({
+      status: 'ready',
+      unreadCount: 0,
+      conversations: [{ id: conversation.id, category: 'billing', preview: 'Thank you!' }],
+    });
+    const { contact } = await messenger.inbox.get(workspaceId, projectId, conversation.id);
+    expect(contact).toMatchObject({ name: 'Jun', lastContext: { appVersion: '3.8.1', platform: 'android' } });
   });
 
   it('limits how fast one user can write', async () => {
