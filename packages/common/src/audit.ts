@@ -52,6 +52,9 @@ export const AuditActions = {
   flagChangesetWithdrawn: 'flag.changeset.withdrawn',
   flagChangesetExpired: 'flag.changeset.expired',
   flagChangeGateChanged: 'flag.change_gate.changed',
+  flagKilled: 'flag.killed',
+  flagRestored: 'flag.restored',
+  flagKillRolesChanged: 'flag.kill_roles.changed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

@@ -239,6 +239,13 @@
       "when": 1790909354693,
       "tag": "0033_wet_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790911130360,
+      "tag": "0034_ambitious_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

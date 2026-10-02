@@ -16,6 +16,69 @@ import type { FlagEnvironmentDto } from '@mocco/common/flags';
 /** What a change-gate approval would set. */
 const pinnedGateSchema = z.object({ gate: gateRequirementsSchema.nullable() });
 
+/** Who may kill flags here: members of any of the chosen roles, or anyone when none is chosen. */
+function KillRoles({
+  workspaceId,
+  projectId,
+  environment,
+}: {
+  workspaceId: string;
+  projectId: string;
+  environment: FlagEnvironmentDto;
+}) {
+  const utils = trpc.useUtils();
+  const rolesQuery = trpc.role.list.useQuery({ workspaceId });
+  const roles = rolesQuery.data?.roles ?? [];
+  const [chosen, setChosen] = useState<string[]>(environment.killRoles);
+  const toggle = (name: string, isOn: boolean) => {
+    setChosen(previous => (isOn ? [...previous, name] : previous.filter(other => other !== name)));
+  };
+  const save = trpc.flags.setKillRoles.useMutation({
+    onSuccess: async () => {
+      await utils.flags.environments.invalidate();
+    },
+  });
+  const isChanged =
+    chosen.length !== environment.killRoles.length || chosen.some(name => !environment.killRoles.includes(name));
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs text-muted-foreground">
+        Who can kill a flag in {environment.name} (it never waits for approval):{' '}
+        {environment.killRoles.length === 0
+          ? 'any workspace member.'
+          : `members of ${environment.killRoles.join(', ')}.`}
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        {roles.map(role => (
+          <label key={role.id} className="flex items-center gap-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={chosen.includes(role.name)}
+              onChange={event => {
+                toggle(role.name, event.target.checked);
+              }}
+            />
+            {role.name}
+          </label>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs"
+          disabled={!isChanged}
+          pending={save.isPending}
+          onClick={() => {
+            save.mutate({ workspaceId, projectId, environmentId: environment.id, roles: chosen });
+          }}>
+          Save kill roles
+        </Button>
+      </div>
+      {save.error ? <p className="text-xs text-destructive">{errorMessage(save.error)}</p> : null}
+    </div>
+  );
+}
+
 export default function Protection({
   workspaceId,
   projectId,
@@ -75,6 +138,12 @@ export default function Protection({
       ) : null}
       {notice === null ? null : <p className="text-xs text-muted-foreground">{notice}</p>}
       {change.error ? <p className="text-sm text-destructive">{errorMessage(change.error)}</p> : null}
+      <KillRoles
+        key={environment.killRoles.join(',')}
+        workspaceId={workspaceId}
+        projectId={projectId}
+        environment={environment}
+      />
       <PendingGateRequests
         workspaceId={workspaceId}
         subjectType={FlagApprovalSubjects.changeGate}

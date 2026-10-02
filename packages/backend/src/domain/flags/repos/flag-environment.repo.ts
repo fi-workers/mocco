@@ -74,6 +74,13 @@ export class FlagEnvironmentRepo {
       .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
   }
 
+  async setKillRoles(workspaceId: string, environmentId: string, killRoles: string[]) {
+    await this.db
+      .update(schema.flagEnvironments)
+      .set({ killRoles })
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
+  }
+
   /** Take the environment's publish lock for the rest of the transaction and read its
    * current version. Call inside a transaction only. */
   async lockForPublish(workspaceId: string, environmentId: string) {

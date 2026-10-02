@@ -56,7 +56,15 @@ Changing or removing an environment's protection is itself approved under its cu
 
 ![A protected Staging environment: a ramp to 25% waiting for one mobile-release approval, with its reason, diff and hash](./images/flags-approval.png)
 
-## 5. Create a server key for one environment
+## 5. Kill a flag in an emergency
+
+If a flag causes trouble, open it, enter a reason in **Kill switch** and choose **Kill**. Everyone in that environment gets the flag's **off variant** at once, whatever its rules say. That includes SDKs and flagd clients that don't know about Mocco: the served rules themselves say "off".
+
+A kill never waits for approval, even in a protected environment, and is always recorded with who did it and why. In a protected environment, the kill is then up for review by the environment's approvers, who mark it reviewed or flag a problem. The **off variant** is set on the flag's page; changing it, and restoring a killed flag, are normal changes, so they need approval in a protected environment. On the Feature flags tab, **Edit protection** also sets which roles may kill flags in that environment (by default, any workspace member).
+
+![A killed flag in a protected environment: everyone gets off, a restore can be proposed, and the kill waits for review](./images/flags-kill.png)
+
+## 6. Create a server key for one environment
 
 On the project's **API keys** tab, create a **Secret** key with the **flags:read** scope and choose the environment it reads. A key reads exactly one environment, so create one key per environment and give each server the key for its own environment. Copy the key from the notice; it is shown only once.
 
@@ -64,7 +72,7 @@ On the project's **API keys** tab, create a **Secret** key with the **flags:read
 
 Keep this key on the server. Mocco refuses secret keys sent from a browser, because the rules can hold user lists and other details your users shouldn't see.
 
-## 6. Evaluate flags from Node
+## 7. Evaluate flags from Node
 
 Install OpenFeature's server SDK and the Mocco provider:
 

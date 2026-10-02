@@ -2,6 +2,7 @@ import { AuditActions } from '@mocco/common/audit';
 import { ChangeOutcomes, ChangesetSources, FlagTypes } from '@mocco/common/flags';
 import { resolveFlag } from '@mocco/flags-core';
 
+import { auditRestores } from '@backend/domain/flags/audit-restores';
 import { FlagEnvironmentNotFoundError, FlagKeyTakenError } from '@backend/domain/flags/errors';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
@@ -76,6 +77,7 @@ export class FlagService {
         diff: changeset.diff,
       },
     });
+    await auditRestores(this.deps.audit, workspaceId, actorUserId, changeset);
   }
 
   /** Run `work` in a transaction, mapping a key collision to `FlagKeyTakenError`. */

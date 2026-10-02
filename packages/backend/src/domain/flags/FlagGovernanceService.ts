@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
 import { changesetContentHash } from '@backend/domain/flags/apply-ops';
+import { auditRestores } from '@backend/domain/flags/audit-restores';
 import { changesetMessage } from '@backend/domain/flags/changeset-message';
 import {
   ChangesetConflictError,
@@ -81,7 +82,7 @@ export class FlagGovernanceService {
   }
 
   private async notify(
-    type: (typeof FlagEventTypes)[keyof typeof FlagEventTypes],
+    type: Exclude<(typeof FlagEventTypes)[keyof typeof FlagEventTypes], typeof FlagEventTypes.flagKilled>,
     environment: FlagEnvironmentRow,
     changeset: FlagChangesetRow,
   ): Promise<void> {
@@ -308,6 +309,7 @@ export class FlagGovernanceService {
         source: applied.source,
         diff: applied.diff,
       });
+      await auditRestores(this.deps.audit, workspaceId, changeset.proposedByUserId, applied);
       await this.notify(FlagEventTypes.flagChangesetApplied, environment, applied);
     } catch (error) {
       if (!(error instanceof ChangesetConflictError)) {

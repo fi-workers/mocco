@@ -157,6 +157,7 @@ function FlagCell({
           }}>
           {config.enabled ? 'On' : 'Off'}
         </Button>
+        {config.killed ? <StatusBadge tone={Tones.danger}>Killed</StatusBadge> : null}
         {isSentForApproval ? <span className="text-xs text-muted-foreground">Sent for approval</span> : null}
         {change.error ? <span className="text-xs text-destructive">{errorMessage(change.error)}</span> : null}
       </div>
