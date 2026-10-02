@@ -27,15 +27,27 @@ interface Props {
   projectId: string;
 }
 
-/** The public site's host (`<slug>.<HELP_SITES_DOMAIN>`, which may carry a port locally), or null. */
+/** The domain HELP_CUSTOM_DOMAINS maps to this site (`help.example.com=<slug>`), if any. */
+function customDomainOf(slug: string): string | undefined {
+  /* eslint-disable sonarjs/null-dereference -- every value here is a string from a split, never null */
+  const entries = (process.env.NEXT_PUBLIC_HELP_CUSTOM_DOMAINS ?? '').split(',').map(entry => entry.trim().split('='));
+  return entries.find(([, site]) => site?.trim() === slug)?.[0]?.trim();
+  /* eslint-enable sonarjs/null-dereference */
+}
+
+/**
+ * The public site's host and URL: its custom domain when HELP_CUSTOM_DOMAINS maps one,
+ * else `<slug>.<HELP_SITES_DOMAIN>` (which may carry a port locally); null when neither.
+ */
 export function publicSiteHost(slug: string): { host: string; url: string } | null {
+  const custom = customDomainOf(slug);
   const domain = process.env.NEXT_PUBLIC_HELP_SITES_DOMAIN ?? '';
-  if (domain === '') {
+  const host = custom ?? (domain === '' ? undefined : `${slug}.${domain}`);
+  if (host === undefined) {
     return null;
   }
-  const host = `${slug}.${domain}`;
-  // eslint-disable-next-line sonarjs/null-dereference -- domain is a string, never null
-  return { host, url: `${domain.startsWith('help.localhost') ? 'http' : 'https'}://${host}` };
+  // eslint-disable-next-line sonarjs/null-dereference -- host is a string, never null
+  return { host, url: `${host.split(':', 1)[0]?.endsWith('localhost') ? 'http' : 'https'}://${host}` };
 }
 
 /** Nothing but spaces. */

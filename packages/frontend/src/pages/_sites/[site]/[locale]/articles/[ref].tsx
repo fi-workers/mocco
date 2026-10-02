@@ -12,7 +12,7 @@ interface Props {
 }
 
 // One help article. A stale slug or a language the site doesn't have redirects to the
-// article's canonical path. Statically generated on first request (ISR, ADR 0025).
+// article's canonical path. Statically generated on first request (ISR, ADR 0015).
 export const getStaticPaths: GetStaticPaths = () => ({ paths: [], fallback: 'blocking' });
 
 export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {

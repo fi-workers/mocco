@@ -20,13 +20,15 @@ const config: NextConfig = {
   env: {
     NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? '',
     NEXT_PUBLIC_HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN ?? '',
+    NEXT_PUBLIC_HELP_CUSTOM_DOMAINS: process.env.HELP_CUSTOM_DOMAINS ?? '',
   },
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
   rewrites: async () => {
     const apiHostname = hostnameOf(process.env.PUBLIC_API_DOMAIN);
-    // Help centers (#96, ADR 0025): with HELP_SITES_DOMAIN set (e.g. help.mocco.club),
-    // https://<site>.<that domain>/* is served by pages/_sites/<site>/*.
+    // Help centers (#96, ADR 0015): with HELP_SITES_DOMAIN set (e.g. help.mocco.club),
+    // https://<site>.<that domain>/* is served by pages/_sites/<site>/*; a domain in
+    // HELP_CUSTOM_DOMAINS (help.example.com=<site>) serves that site on the customer's own host.
     const helpHostname = hostnameOf(process.env.HELP_SITES_DOMAIN);
     const beforeFiles = [
       ...(apiHostname === ''
@@ -48,6 +50,21 @@ const config: NextConfig = {
               destination: '/_sites/:site/:path',
             },
           ]),
+      // HELP_CUSTOM_DOMAINS: `help.example.com=example,docs.other.app=other` (domain = site slug).
+      ...(process.env.HELP_CUSTOM_DOMAINS ?? '').split(',').flatMap(entry => {
+        const [domain, site] = entry.split('=', 2).map(part => part.trim());
+        const hostname = hostnameOf(domain).toLowerCase();
+        if (hostname === '' || site === undefined || !/^[a-z0-9-]+$/u.test(site)) {
+          return [];
+        }
+        return [
+          {
+            source: '/:path((?!_next/|api/|favicon).*)',
+            has: [{ type: 'host' as const, value: `^${escape(hostname)}$` }],
+            destination: `/_sites/${site}/:path`,
+          },
+        ];
+      }),
     ];
     return { beforeFiles, afterFiles: [], fallback: [] };
   },

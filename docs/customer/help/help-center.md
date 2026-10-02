@@ -86,6 +86,10 @@ Readers who pick a language see its translation, and the article list shows tran
 
 ![The English translation of an article on the public site](./images/public-translated.png)
 
+## Use your own domain
+
+Your help center is at `<address>.help.mocco.club` from the start. To serve it on your own domain, such as `help.example.com`, ask the Mocco team to add the domain, then point it at Mocco with a DNS record (a `CNAME` to the target they give you). Once the record resolves, the site and every old address of an imported site answer on your domain. The **Help center** tab then links your domain.
+
 ## 5. What readers see
 
 The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change appears on the site within a minute.

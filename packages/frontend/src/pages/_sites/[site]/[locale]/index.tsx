@@ -9,7 +9,7 @@ interface Props {
 }
 
 // A help center's home in one language: every collection with its articles. Statically
-// generated on first request and refreshed in the background (ISR, ADR 0025).
+// generated on first request and refreshed in the background (ISR, ADR 0015).
 export const getStaticPaths: GetStaticPaths = () => ({ paths: [], fallback: 'blocking' });
 
 export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
