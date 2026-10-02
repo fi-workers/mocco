@@ -112,4 +112,6 @@ function Suggestions({ text }: { text: string }) {
 }
 ```
 
+![An app's new-message screen suggesting the help center's "iOS widget" article for "The widget doesn't open the camera"](./images/app-suggestions.png)
+
 Each hit has the article's `title`, a `snippet` of its text and its `url` on your help site, in the reader's language where it is translated. Any other client can call `GET https://api.mocco.club/v1/help/search?q=…&locale=en&match=any` with the key as `Authorization: Bearer mk_pub_…`.
