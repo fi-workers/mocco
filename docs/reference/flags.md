@@ -4,7 +4,7 @@ description: How Mocco stores feature flags — environments (flag targets), fla
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-03
 confidence: high
 owner: andrea
 tags: [reference, flags, openfeature, flagd]
@@ -18,6 +18,8 @@ code_refs:
   - packages/backend/src/domain/flags/FlagService.ts
   - packages/backend/src/domain/flags/RulesetPublisher.ts
   - packages/backend/src/domain/flags/FlagGovernanceService.ts
+  - packages/common/src/flags-file.ts
+  - packages/backend/src/domain/flags/flags-file.ts
   - packages/backend/src/domain/flags/KillSwitchService.ts
   - packages/backend/src/domain/flags/apply-ops.ts
   - packages/backend/src/domain/flags/compile-ruleset.ts
@@ -199,6 +201,48 @@ SDKs count evaluations per flag and variant in memory (`EvaluationCounter` in `@
 - **Digest** (`flags.stale.digest`, weekly): one `flags.stale.digest` event per project with active findings (deduped per project and week), in the Mocco notification preset.
 
 Telemetry is advisory: anyone with a key can send counts, so they only raise or hide cleanup hints. No governance decision reads them; `flags-telemetry.test.ts` checks that the gate, kill switch, publisher and approval code never import the rollup or finding code.
+
+## Flags as code (`.mocco/flags.yml`)
+
+Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). So far the file format and the planning exist; reading the file on a push, the changesets it produces and the console's read-only view come in the next slices.
+
+```yaml
+version: 1
+flags:
+  checkout_v2:                  # the flag key
+    type: boolean               # boolean (default) | string | number | json
+    description: New checkout flow
+    lifecycle: temporary        # temporary (default) | permanent
+    client_visible: false       # evaluated for publishable keys too
+    # variants: { on: true, off: false }   (the default for a boolean flag)
+    # off_variant: off                     (what a kill serves; default `off` for boolean)
+    targets:                    # environment keys
+      staging:
+        default: on             # served when no rule matches
+      production:
+        enabled: true           # default true; false serves callers their code default
+        default: off
+        rules:                  # tried in order
+          - when: { attribute: plan, op: in, values: [enterprise] }
+            serve: on
+          - when:               # a list: every clause must match
+              - { segment: beta }
+              - { attribute: country, op: in, values: [KR] }
+            serve: { rollout: { on: 10, off: 90 } }
+        rollout: { on: 5, off: 95 }   # optional: served instead of `default` when no rule matches
+```
+
+The zod schema is `flagsFileSchema` in `@mocco/common/flags-file`; `yarn schema:gen` writes [flags.schema.json](./flags.schema.json) from it (checked by `schema:drift`). Clause operators and limits are the ones of the [model](#model). Unknown keys are refused, and every variant a target names must be one of the flag's.
+
+`planFlagsFile(file, head)` (`domain/flags/flags-file.ts`, pure) compares the file with the project and answers either a whole plan or every issue, never a partial plan:
+
+- **Creations:** flags the file adds. They join every environment off, like a flag made in the console.
+- **Definition updates:** description, lifecycle and client visibility, and added variants. A flag's type can't change, and its variants can only be added: removing or changing one is an issue.
+- **Adopted / released:** console flags the file now lists, and repo flags it no longer lists. Released flags are turned off everywhere.
+- **Changes:** one list of ops per environment whose state changes (`set_off_variant`, `set_default_variant`, `set_rules`, `set_rollout`, `set_enabled`). An environment the flag doesn't list keeps it off. The ops are checked with `applyOps`, so a rule naming a missing segment is an issue.
+- **Issues:** an environment the file names that doesn't exist, plus the cases above.
+
+A plan never contains `kill` or `restore`, so a sync never un-kills a flag. Planning the same file again after its changes are applied is empty.
 
 ## API
 

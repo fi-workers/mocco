@@ -43,7 +43,7 @@
     "release": "yarn sdk:build && node scripts/publish-packages.mjs",
     "db:drift": "sh scripts/drift-check.sh",
     "schema:gen": "tsx scripts/gen-mocco-schema.ts",
-    "schema:drift": "yarn schema:gen && git diff --exit-code docs/reference/mocco.schema.json"
+    "schema:drift": "yarn schema:gen && git diff --exit-code docs/reference/mocco.schema.json docs/reference/flags.schema.json && git ls-files --error-unmatch docs/reference/flags.schema.json >/dev/null"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

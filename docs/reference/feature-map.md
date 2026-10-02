@@ -94,7 +94,7 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Server SDK (local evaluation) | Live | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
 | Client SDKs (OFREP) | Live | OFREP bulk and single evaluation (client-visible flags only), the SSE change stream, `@mocco/openfeature-web` and `@mocco/openfeature-react-native` (offline copy, foreground refresh); React through `@openfeature/react-sdk` |
 | Telemetry and stale flags | Live | SDKs send per-minute evaluation counts (`POST /v1/flags/telemetry`, hourly rollups); a daily job finds unused, never-evaluated and fully rolled-out flags; badges, dismiss-until and a weekly digest |
-| Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate |
+| Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate. The file format, its JSON Schema and the pure planning exist ([reference](./flags.md#flags-as-code-moccoflagsyml)); the push sync and the console view don't yet |
 
 ### Product line 3 — Messenger (#95)
 
