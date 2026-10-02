@@ -1,5 +1,16 @@
 # @mocco/react-native
 
+## 0.2.0
+
+### Minor Changes
+
+- cd49729: `MessengerClient.deleteMyData()`: erase everything the user wrote (conversations, messages, screenshots) in Mocco and forget them on the device, for an app's "delete my account".
+
+### Patch Changes
+
+- Updated dependencies [cd49729]
+  - @mocco/sdk-core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

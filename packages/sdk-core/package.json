@@ -1,6 +1,6 @@
 {
   "name": "@mocco/sdk-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The shared client of Mocco's SDKs: the /v1 fetch client, retries, keys and errors.",
   "license": "MIT",
   "type": "module",
