@@ -1,6 +1,6 @@
 {
   "name": "@mocco/ota-cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Publish signed Expo Updates to Mocco-hosted OTA from CI: init, publish, promote, pause, rollback.",
   "type": "module",
   "bin": {

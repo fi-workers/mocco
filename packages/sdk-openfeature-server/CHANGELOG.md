@@ -1,5 +1,12 @@
 # @mocco/openfeature-server
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [7e7c786]
+  - @mocco/sdk-core@0.3.0
+
 ## 0.1.1
 
 ### Patch Changes
