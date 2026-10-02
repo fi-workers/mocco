@@ -96,6 +96,15 @@ export class MessengerConversationRepo {
     return row;
   }
 
+  /** The message with this client id in a conversation (a retried send). */
+  async findByClientMessageId(conversationId: string, clientMessageId: string) {
+    const [row] = await this.db
+      .select()
+      .from(msg)
+      .where(and(eq(msg.conversationId, conversationId), eq(msg.clientMessageId, clientMessageId)));
+    return row;
+  }
+
   /** The contact's conversation whose message has this client id (a retried start). */
   async findStartedBy(workspaceId: string, contactId: string, clientMessageId: string) {
     const [row] = await this.db

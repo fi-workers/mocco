@@ -8,6 +8,10 @@ export { backoffMs, isRetryableStatus } from './retry';
 export { readServerSentEvents } from './sse';
 export type { ServerSentEvent } from './sse';
 export type {
+  MessengerAttachment,
+  MessengerAttachmentRequest,
+  MessengerAttachmentResponse,
+  MessengerAttachmentType,
   MessengerCategory,
   MessengerContext,
   MessengerConversation,

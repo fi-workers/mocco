@@ -215,6 +215,26 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
                       </span>
                     ) : null}
                     {message.body}
+                    {message.attachments.length === 0 ? null : (
+                      <span className="mt-2 flex flex-wrap gap-2">
+                        {message.attachments.map((attachment, index) => (
+                          <a
+                            key={attachment.id}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block overflow-hidden rounded-lg border border-border bg-background">
+                            {/* A short-lived signed link to the user's screenshot; next/image can't proxy it. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={attachment.url}
+                              alt={`Attachment ${index + 1} from ${who}`}
+                              className="h-32 w-auto max-w-full object-contain"
+                            />
+                          </a>
+                        ))}
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {isTeam ? (message.authorName ?? 'Your team') : who} · <Ago date={message.createdAt} />

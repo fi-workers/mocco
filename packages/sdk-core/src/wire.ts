@@ -115,18 +115,43 @@ export interface MessengerMessage {
   author: 'contact' | 'operator' | 'system';
   authorName: string | null;
   body: string;
+  /** Screenshots, with download links that work for a few minutes. */
+  attachments: MessengerAttachment[];
   createdAt: string;
+}
+
+export interface MessengerAttachment {
+  id: string;
+  contentType: string;
+  sizeBytes: number;
+  url: string;
+}
+
+export type MessengerAttachmentType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+/** `POST /v1/messenger/attachments`. */
+export interface MessengerAttachmentRequest {
+  contentType: MessengerAttachmentType;
+  sizeBytes: number;
+  filename?: string;
+}
+
+export interface MessengerAttachmentResponse {
+  attachmentId: string;
+  upload: { url: string; method: 'PUT'; headers: Record<string, string> };
 }
 
 export interface MessengerConversationRequest {
   category?: string;
   body: string;
   clientMessageId: string;
+  attachmentIds?: string[];
   context?: MessengerContext;
 }
 
 export interface MessengerMessageRequest {
   body: string;
   clientMessageId: string;
+  attachmentIds?: string[];
   context?: MessengerContext;
 }

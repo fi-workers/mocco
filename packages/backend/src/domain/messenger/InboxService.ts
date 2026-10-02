@@ -5,17 +5,20 @@
 import { AuditActions } from '@mocco/common/audit';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 
+import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
 import { ContactNotFoundError, ConversationNotFoundError } from '@backend/domain/messenger/errors';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
 import type { Db } from '@backend/infra/db/types';
 import type { ConversationStatus } from '@mocco/common/messenger';
 
 export interface InboxDeps {
   db: Db;
   audit: AuditService;
+  storage?: AttachmentStorage;
   now?: () => Date;
 }
 
@@ -73,10 +76,20 @@ export class InboxService {
       throw new ConversationNotFoundError(conversationId);
     }
     const messages = await conversations.messages(conversationId, { afterSeq: 0, limit: 500, publicOnly: false });
+    const attachments = await attachmentsByMessage(
+      this.deps.db,
+      this.deps.storage,
+      workspaceId,
+      messages.map(({ message }) => message.id),
+    );
     return {
       conversation,
       contact,
-      messages: messages.map(({ message, authorName }) => ({ ...message, authorName })),
+      messages: messages.map(({ message, authorName }) => ({
+        ...message,
+        authorName,
+        attachments: attachments.get(message.id) ?? [],
+      })),
     };
   }
 

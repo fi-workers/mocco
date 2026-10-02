@@ -19,6 +19,10 @@ function fakeMessenger() {
   const state = { sessions: 0, revoked: new Set<string>(), failNextNetwork: false };
   const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
+    if (url.host === 'storage.test') {
+      calls.push({ method: init?.method ?? 'GET', path: url.pathname, auth: null, body: null });
+      return new Response(null, { status: 200 });
+    }
     const path = url.pathname.replace('/v1/messenger', '');
     const auth = new Headers(init?.headers).get('authorization')?.replace('Bearer ', '') ?? null;
     const body = init?.body === undefined ? null : (JSON.parse(String(init.body)) as Record<string, unknown>);
@@ -42,6 +46,15 @@ function fakeMessenger() {
     if (auth === null || !auth.startsWith('mms_') || state.revoked.has(auth)) {
       return json({ type: 'https://mocco.dev/problems/invalid_session' }, 401);
     }
+    if (path === '/attachments') {
+      return json(
+        {
+          attachmentId: 'att-1',
+          upload: { url: 'https://storage.test/put/att-1', method: 'PUT', headers: { 'content-type': 'image/png' } },
+        },
+        201,
+      );
+    }
     if (path === '/conversations' && init?.method === 'POST') {
       const id = `conv-${conversations.length + 1}`;
       seenClientIds.add(String(body?.clientMessageId));
@@ -56,7 +69,15 @@ function fakeMessenger() {
         createdAt: new Date().toISOString(),
       });
       messages.set(id, [
-        { id: 'm1', seq: 1, author: 'contact', authorName: null, body: String(body?.body), createdAt: '' },
+        {
+          id: 'm1',
+          seq: 1,
+          author: 'contact',
+          authorName: null,
+          body: String(body?.body),
+          attachments: [],
+          createdAt: '',
+        },
       ]);
       return json({ conversation: conversations[0] }, 201);
     }
@@ -72,6 +93,7 @@ function fakeMessenger() {
         author: 'contact',
         authorName: null,
         body: String(body?.body),
+        attachments: [],
         createdAt: '',
       };
       thread.push(message);
@@ -92,6 +114,7 @@ function fakeMessenger() {
       author: 'operator',
       authorName: 'Ada',
       body,
+      attachments: [],
       createdAt: '',
     });
     const conversation = conversations.find(entry => entry.id === conversationId);
@@ -254,6 +277,29 @@ describe('MessengerClient', () => {
     expect(whilePaused).toBe(whileWatched);
     expect(afterStop).toBe(whilePaused + 1);
     expect(listener).toHaveBeenCalled();
+  });
+
+  it('uploads an attachment to the URL Mocco hands out, then sends its id', async () => {
+    const server = fakeMessenger();
+    const client = clientFor(server);
+    const conversation = await client.startConversation({ body: 'Hello' });
+
+    const attachmentId = await client.attach({
+      body: new Uint8Array([1, 2, 3]),
+      contentType: 'image/png',
+      sizeBytes: 3,
+    });
+    await client.sendMessage(conversation.id, 'See this', [attachmentId]);
+
+    expect(server.calls.find(call => call.path === '/attachments')?.body).toEqual({
+      contentType: 'image/png',
+      sizeBytes: 3,
+    });
+    expect(server.calls.find(call => call.path === '/put/att-1')).toMatchObject({ method: 'PUT', auth: null });
+    expect(server.calls.find(call => call.path.endsWith('/messages') && call.method === 'POST')?.body).toMatchObject({
+      body: 'See this',
+      attachmentIds: ['att-1'],
+    });
   });
 
   it('refuses a secret key', () => {

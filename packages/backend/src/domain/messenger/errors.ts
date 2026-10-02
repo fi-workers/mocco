@@ -55,3 +55,19 @@ export class UnknownCategoryError extends BadRequestError {
     this.name = 'UnknownCategoryError';
   }
 }
+
+/** Attachments need object storage, and this deploy has none configured — BAD_REQUEST. */
+export class AttachmentsUnavailableError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super("Attachments aren't available: object storage isn't configured", options);
+    this.name = 'AttachmentsUnavailableError';
+  }
+}
+
+/** An attachment id that isn't the user's, or is already in a message — BAD_REQUEST. */
+export class AttachmentNotFoundError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('An attachment was not uploaded by this user, or is already in a message', options);
+    this.name = 'AttachmentNotFoundError';
+  }
+}

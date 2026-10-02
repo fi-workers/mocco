@@ -27,6 +27,11 @@ export const storagePolicies: Partial<Record<Product, StoragePolicy>> = {
       'video/*',
     ],
   },
+  // Screenshots users attach to messenger conversations.
+  [Products.messenger]: {
+    maxBytes: 10 * MiB,
+    contentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  },
 };
 
 /** Default per-workspace quota across products (pending + ready bytes). */

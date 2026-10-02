@@ -2,6 +2,7 @@
 // against the route schemas (platform foundations §11).
 import { type whoamiResponseSchema } from '@mocco/common/apikey';
 import {
+  type attachmentCreateInputSchema,
   type contactConversationSchema,
   type contactMessageSchema,
   type conversationCreateInputSchema,
@@ -19,6 +20,7 @@ import {
 import { describe, expectTypeOf, it } from 'vitest';
 
 import type {
+  MessengerAttachmentRequest,
   MessengerConversation,
   MessengerConversationRequest,
   MessengerMessage,
@@ -57,5 +59,6 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof messengerSessionSchema>>().toExtend<MessengerSessionResponse>();
     expectTypeOf<z.output<typeof contactConversationSchema>>().toExtend<MessengerConversation>();
     expectTypeOf<z.output<typeof contactMessageSchema>>().toExtend<MessengerMessage>();
+    expectTypeOf<MessengerAttachmentRequest>().toExtend<z.input<typeof attachmentCreateInputSchema>>();
   });
 });

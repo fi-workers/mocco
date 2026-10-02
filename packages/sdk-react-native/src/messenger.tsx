@@ -17,6 +17,7 @@ import type {
 import type { ReactNode } from 'react';
 
 export type {
+  MessengerAttachment,
   MessengerCategory,
   MessengerClientOptions,
   MessengerConversation,
@@ -57,7 +58,7 @@ export function MessengerProvider({ client, children }: { client: MessengerClien
   return <MessengerContext.Provider value={client}>{children}</MessengerContext.Provider>;
 }
 
-/** The client, for actions the hooks don't cover (`signOut` after the user signs out). */
+/** The client, for actions the hooks don't cover: `attach` a screenshot, `signOut` after the user signs out. */
 export function useMessenger(): MessengerClient {
   const client = useContext(MessengerContext);
   if (client === null) {
@@ -88,7 +89,7 @@ export function useConversations(): {
   status: MessengerState['status'];
   error: Error | null;
   refresh: () => Promise<void>;
-  start: (input: { body: string; category?: string }) => Promise<MessengerConversation>;
+  start: (input: { body: string; category?: string; attachmentIds?: string[] }) => Promise<MessengerConversation>;
 } {
   const client = useMessenger();
   const { conversations, status, error } = useMessengerState();
@@ -97,7 +98,8 @@ export function useConversations(): {
     await client.refresh();
   }, [client]);
   const start = useCallback(
-    async (input: { body: string; category?: string }) => await client.startConversation(input),
+    async (input: { body: string; category?: string; attachmentIds?: string[] }) =>
+      await client.startConversation(input),
     [client],
   );
   return { conversations, status, error, refresh, start };
@@ -113,7 +115,8 @@ export function useConversation(
 ): {
   conversation: MessengerConversation | undefined;
   messages: MessengerMessage[];
-  send: (body: string) => Promise<MessengerMessage>;
+  /** Send a message, with attachment ids from `useMessenger().attach(…)`. */
+  send: (body: string, attachmentIds?: string[]) => Promise<MessengerMessage>;
   isSending: boolean;
   error: Error | null;
   markRead: () => Promise<void>;
@@ -139,11 +142,11 @@ export function useConversation(
     }
   }, [client, conversationId, lastSeq, shouldMarkRead]);
   const send = useCallback(
-    async (body: string) => {
+    async (body: string, attachmentIds?: string[]) => {
       setIsSending(true);
       setSendError(null);
       try {
-        const message = await client.sendMessage(conversationId, body);
+        const message = await client.sendMessage(conversationId, body, attachmentIds);
         setIsSending(false);
         return message;
       } catch (error) {

@@ -8,6 +8,9 @@ import { MoccoError, MoccoKeyError, MoccoNetworkError } from './errors';
 import { keyKindOf } from './keys';
 
 import type {
+  MessengerAttachmentRequest,
+  MessengerAttachmentResponse,
+  MessengerAttachmentType,
   MessengerCategory,
   MessengerContext,
   MessengerConversation,
@@ -332,14 +335,56 @@ export class MessengerClient {
     }
   }
 
+  /**
+   * Upload a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB) and return its id, to pass
+   * as `attachmentIds` when starting or continuing a conversation. In React Native, read
+   * a picked image's bytes with `await (await fetch(uri)).blob()`.
+   */
+  async attach(input: {
+    body: Blob | ArrayBuffer | Uint8Array<ArrayBuffer>;
+    contentType: MessengerAttachmentType;
+    sizeBytes: number;
+    filename?: string;
+  }): Promise<string> {
+    const request: MessengerAttachmentRequest = {
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      ...(input.filename !== undefined && { filename: input.filename }),
+    };
+    const reserved = await this.call<MessengerAttachmentResponse>('POST', '/attachments', request);
+    if (reserved === null) {
+      throw new MoccoKeyError('Nobody is signed in');
+    }
+    let uploaded: Response;
+    try {
+      uploaded = await this.fetchImpl(reserved.upload.url, {
+        method: reserved.upload.method,
+        headers: reserved.upload.headers,
+        body: input.body,
+      });
+    } catch (error) {
+      throw new MoccoNetworkError("Couldn't upload the attachment", { cause: error });
+    }
+    if (!uploaded.ok) {
+      throw new MoccoError(uploaded.status, { title: 'The attachment upload was refused' });
+    }
+    return reserved.attachmentId;
+  }
+
   /** Start a conversation with its first message. Retries reuse one client message id. */
-  async startConversation(input: { body: string; category?: string }): Promise<MessengerConversation> {
+  async startConversation(input: {
+    body: string;
+    category?: string;
+    attachmentIds?: string[];
+  }): Promise<MessengerConversation> {
     const clientMessageId = newClientMessageId();
     const context = this.context();
     const answer = await this.callIdempotent<{ conversation: MessengerConversation }>('POST', '/conversations', {
       body: input.body,
       clientMessageId,
       ...(input.category !== undefined && { category: input.category }),
+      ...(input.attachmentIds !== undefined &&
+        input.attachmentIds.length > 0 && { attachmentIds: input.attachmentIds }),
       ...(context !== undefined && { context }),
     });
     if (answer === null) {
@@ -360,12 +405,17 @@ export class MessengerClient {
   }
 
   /** Write in a conversation. A network failure is retried once with the same client message id. */
-  async sendMessage(conversationId: string, body: string): Promise<MessengerMessage> {
+  async sendMessage(conversationId: string, body: string, attachmentIds: string[] = []): Promise<MessengerMessage> {
     const context = this.context();
     const answer = await this.callIdempotent<{ message: MessengerMessage }>(
       'POST',
       `/conversations/${encodeURIComponent(conversationId)}/messages`,
-      { body, clientMessageId: newClientMessageId(), ...(context !== undefined && { context }) },
+      {
+        body,
+        clientMessageId: newClientMessageId(),
+        ...(attachmentIds.length > 0 && { attachmentIds }),
+        ...(context !== undefined && { context }),
+      },
     );
     if (answer === null) {
       throw new MoccoKeyError('Nobody is signed in');

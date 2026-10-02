@@ -105,7 +105,8 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Conversations and identity | Prototype | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
 | Team inbox | Prototype | The project's **Inbox** tab: setup (identity secret shown once), open/closed lists with unread, the thread with replies and internal notes, the user's current and starting app context, close/reopen, blocking, categories and secret rotation; Discord alerts through the Mocco preset ([customer guide](../customer/messenger/contact-us.md)) |
 | React Native SDK | Prototype | `MessengerClient` in `@mocco/sdk-core` and headless hooks in `@mocco/react-native/messenger` (pure JS, Expo Go) |
-| Attachments, push replies | Not drawn | Screenshots; Expo push when the team replies |
+| Attachments | Prototype | Up to 3 screenshots per message through object storage, verified on send, served with short-lived links; thumbnails in the inbox |
+| Push replies | Not drawn | Expo push when the team replies |
 
 ### Deploy loop depth
 

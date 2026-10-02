@@ -4,9 +4,14 @@
 // the request body, so one user can never read another's conversations.
 import { MessengerEventTypes } from '@mocco/common/events';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
+import { Products } from '@mocco/common/project';
+import { Visibilities } from '@mocco/common/storage';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
+import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
 import {
+  AttachmentNotFoundError,
+  AttachmentsUnavailableError,
   ContactBlockedError,
   ConversationNotFoundError,
   IdentityVerificationError,
@@ -14,15 +19,19 @@ import {
 } from '@backend/domain/messenger/errors';
 import { isUserHashValid, newSessionToken, sessionTokenHash } from '@backend/domain/messenger/identity';
 import { contactMessageEvent } from '@backend/domain/messenger/messages';
+import { MessengerAttachmentRepo } from '@backend/domain/messenger/repos/attachment.repo';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
 
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
 import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
 import type { ContactRow } from '@backend/domain/messenger/repos/contact.repo';
 import type { ConversationRow, MessageRow } from '@backend/domain/messenger/repos/conversation.repo';
 import type { Db } from '@backend/infra/db/types';
 import type {
+  AttachmentCreateInput,
+  AttachmentDto,
   ContactConversationDto,
   ContactMessageDto,
   ConversationCreateInput,
@@ -37,6 +46,8 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export interface ContactMessengerDeps {
   db: Db;
   settings: Pick<MessengerSettingsService, 'withSecret'>;
+  /** Object storage for screenshots; without it, attachments are refused. */
+  storage?: AttachmentStorage;
   events?: EventPublisher;
   appOrigin?: string;
   now?: () => Date;
@@ -70,13 +81,17 @@ function toConversationDto(row: ConversationRow): ContactConversationDto {
   };
 }
 
-function toMessageDto({ message, authorName }: { message: MessageRow; authorName: string | null }): ContactMessageDto {
+function toMessageDto(
+  { message, authorName }: { message: MessageRow; authorName: string | null },
+  attachments: AttachmentDto[] = [],
+): ContactMessageDto {
   return {
     id: message.id,
     seq: message.seq,
     author: message.authorKind,
     authorName: message.authorKind === AuthorKinds.operator ? authorName : null,
     body: message.body,
+    attachments,
     createdAt: message.createdAt.toISOString(),
   };
 }
@@ -114,6 +129,27 @@ export class ContactMessengerService {
       await Promise.resolve();
       return contactMessageEvent(type, { contact, conversation, body }, this.deps.appOrigin);
     });
+  }
+
+  /**
+   * The ids, verified: the contact's own unclaimed attachments, each with its bytes
+   * uploaded as declared (storage checks size and type). Throws on any other id.
+   */
+  private async prepareAttachments(contact: ContactRow, ids: readonly string[] | undefined): Promise<string[]> {
+    const wanted = [...new Set(ids)];
+    if (wanted.length === 0) {
+      return [];
+    }
+    const { storage } = this.deps;
+    if (storage === undefined) {
+      throw new AttachmentsUnavailableError();
+    }
+    const rows = await new MessengerAttachmentRepo(this.deps.db).findUnclaimed(contact.workspaceId, contact.id, wanted);
+    if (rows.length !== wanted.length) {
+      throw new AttachmentNotFoundError();
+    }
+    await Promise.all(rows.map(async row => await storage.completeUpload(contact.workspaceId, row.objectId)));
+    return wanted;
   }
 
   /** Verify the app's signature on the user id, refresh the contact, and issue a session. */
@@ -173,14 +209,19 @@ export class ContactMessengerService {
     if (input.category !== undefined && categories.every(category => category.key !== input.category)) {
       throw new UnknownCategoryError(input.category);
     }
+    // A retried create returns the conversation its first message already started.
+    const started = await new MessengerConversationRepo(this.deps.db).findStartedBy(
+      contact.workspaceId,
+      contact.id,
+      input.clientMessageId,
+    );
+    if (started !== undefined) {
+      return toConversationDto(started);
+    }
+    const attachmentIds = await this.prepareAttachments(contact, input.attachmentIds);
     const now = this.now();
     const result = await this.deps.db.transaction(async tx => {
       const repo = new MessengerConversationRepo(tx);
-      // A retried create returns the conversation its first message already started.
-      const started = await repo.findStartedBy(contact.workspaceId, contact.id, input.clientMessageId);
-      if (started !== undefined) {
-        return { conversation: started, created: false };
-      }
       const conversation = await repo.create({
         workspaceId: contact.workspaceId,
         projectId: contact.projectId,
@@ -192,7 +233,7 @@ export class ContactMessengerService {
         contextAtOpen: input.context ?? contact.lastContext,
         createdAt: now,
       });
-      await repo.append(
+      const { message } = await repo.append(
         contact.workspaceId,
         conversation.id,
         {
@@ -206,6 +247,7 @@ export class ContactMessengerService {
         now,
         preview(input.body),
       );
+      await new MessengerAttachmentRepo(tx).claim(attachmentIds, message.id);
       // The contact has read their own first message.
       await repo.markContactRead(conversation.id, 1);
       const fresh = await repo.findForContact(contact.workspaceId, contact.id, conversation.id);
@@ -218,6 +260,33 @@ export class ContactMessengerService {
     return toConversationDto(result.conversation);
   }
 
+  /** Reserve an upload for a screenshot; send its id with the message that carries it. */
+  async createAttachment(principal: ContactPrincipal, input: AttachmentCreateInput) {
+    const { contact } = principal;
+    requireActive(contact);
+    const { storage } = this.deps;
+    if (storage === undefined) {
+      throw new AttachmentsUnavailableError();
+    }
+    const { object, upload } = await storage.beginUpload({
+      workspaceId: contact.workspaceId,
+      projectId: contact.projectId,
+      product: Products.messenger,
+      filename: input.filename ?? 'screenshot',
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      visibility: Visibilities.private,
+    });
+    const attachment = await new MessengerAttachmentRepo(this.deps.db).insert({
+      workspaceId: contact.workspaceId,
+      contactId: contact.id,
+      objectId: object.id,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+    });
+    return { attachmentId: attachment.id, upload };
+  }
+
   /** Public messages after `afterSeq`, oldest first. */
   async messages(principal: ContactPrincipal, conversationId: string, afterSeq: number): Promise<ContactMessageDto[]> {
     await this.requireConversation(principal, conversationId);
@@ -226,7 +295,13 @@ export class ContactMessengerService {
       limit: MessengerLimits.pageSize,
       publicOnly: true,
     });
-    return rows.map(row => toMessageDto(row));
+    const attachments = await attachmentsByMessage(
+      this.deps.db,
+      this.deps.storage,
+      principal.contact.workspaceId,
+      rows.map(row => row.message.id),
+    );
+    return rows.map(row => toMessageDto(row, attachments.get(row.message.id)));
   }
 
   /** Write in an existing conversation (reopens a closed one). Idempotent on `clientMessageId`. */
@@ -234,6 +309,16 @@ export class ContactMessengerService {
     const { contact } = principal;
     requireActive(contact);
     const conversation = await this.requireConversation(principal, conversationId);
+    // A retried send returns the message already stored.
+    const sent = await new MessengerConversationRepo(this.deps.db).findByClientMessageId(
+      conversationId,
+      input.clientMessageId,
+    );
+    if (sent !== undefined) {
+      const stored = await attachmentsByMessage(this.deps.db, this.deps.storage, contact.workspaceId, [sent.id]);
+      return toMessageDto({ message: sent, authorName: null }, stored.get(sent.id));
+    }
+    const attachmentIds = await this.prepareAttachments(contact, input.attachmentIds);
     const now = this.now();
     const { message, created } = await this.deps.db.transaction(async tx => {
       const repo = new MessengerConversationRepo(tx);
@@ -251,6 +336,9 @@ export class ContactMessengerService {
         now,
         preview(input.body),
       );
+      if (appended.created) {
+        await new MessengerAttachmentRepo(tx).claim(attachmentIds, appended.message.id);
+      }
       await repo.markContactRead(conversationId, appended.message.seq);
       return appended;
     });
@@ -258,7 +346,8 @@ export class ContactMessengerService {
     if (created) {
       await this.announce(MessengerEventTypes.messengerMessageReceived, contact, conversation, input.body);
     }
-    return toMessageDto({ message, authorName: null });
+    const attachments = await attachmentsByMessage(this.deps.db, this.deps.storage, contact.workspaceId, [message.id]);
+    return toMessageDto({ message, authorName: null }, attachments.get(message.id));
   }
 
   async markRead(principal: ContactPrincipal, conversationId: string, seq: number): Promise<void> {

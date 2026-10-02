@@ -1959,6 +1959,34 @@ export const messengerMessages = pgTable(
   ],
 );
 
+/** A screenshot a contact uploaded. It belongs to the contact until a message claims it
+ * (`message_id`), so it can go with the message that starts a conversation. The bytes
+ * live in object storage (`mocco_objects`). */
+export const messengerAttachments = pgTable(
+  'mocco_messenger_attachments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    messageId: uuid('message_id').references(() => messengerMessages.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objects.id, { onDelete: 'cascade' }),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt,
+  },
+  t => [
+    index('mocco_messenger_attachments_message_idx').on(t.messageId),
+    index('mocco_messenger_attachments_contact_idx').on(t.contactId, t.createdAt),
+    foreignKey({
+      columns: [t.contactId, t.workspaceId],
+      foreignColumns: [messengerContacts.id, messengerContacts.workspaceId],
+      name: 'mocco_messenger_attachments_contact_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
 /** How far each team member has read a conversation. */
 export const messengerOperatorReads = pgTable(
   'mocco_messenger_operator_reads',
