@@ -4,9 +4,11 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
-import { createProvider, type Provider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+
+import type { Provider } from '@backend/domain/auth/provider';
 
 /** Drizzle wraps DB errors; the PG constraint name lives on error.cause. */
 const causeOf = async (p: Promise<unknown>): Promise<string> => {
@@ -37,7 +39,7 @@ describe('workspace (organization plugin) on pglite', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    auth = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    auth = createTestProvider(t.db);
   });
   afterEach(async () => {
     await t.close();

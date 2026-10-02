@@ -2,10 +2,12 @@ import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
-import { createProvider, type Provider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+
+import type { Provider } from '@backend/domain/auth/provider';
 
 describe('WorkspaceService.callerRoles / assertAdmin (pglite)', () => {
   let t: TestDb;
@@ -22,7 +24,7 @@ describe('WorkspaceService.callerRoles / assertAdmin (pglite)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    provider = createTestProvider(t.db);
     service = new WorkspaceService(provider);
   });
   afterEach(async () => {

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -71,7 +71,7 @@ describe('GET /api/ext/v1/apps/:appId/version-check (pglite)', () => {
       audit,
     });
     app = createExtApp({
-      auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
+      auth: new AuthService(createTestProvider(t.db)),
       runs: new RunService({
         bus: createTestEventBus(t.db),
         runs: new RunRepo(t.db),

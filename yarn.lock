@@ -686,6 +686,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@better-auth/cimd@npm:1.7.7":
+  version: 1.7.7
+  resolution: "@better-auth/cimd@npm:1.7.7"
+  peerDependencies:
+    "@better-auth/core": ^1.7.7
+    "@better-auth/oauth-provider": ^1.7.7
+    better-auth: ^1.7.7
+    better-call: 1.4.0
+  checksum: 10/f5b9e49aebbd3fa5b668c508de2033c9a69abf1e1c824e7b04bced688bfad3efd7825d4b45649f80f495c1c6e069b592ec7c94da6891c7c6e4434a17ebe2d638
+  languageName: node
+  linkType: hard
+
 "@better-auth/core@npm:1.7.7":
   version: 1.7.7
   resolution: "@better-auth/core@npm:1.7.7"
@@ -736,6 +748,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@better-auth/mcp@npm:1.7.7":
+  version: 1.7.7
+  resolution: "@better-auth/mcp@npm:1.7.7"
+  dependencies:
+    "@better-auth/oauth-provider": "npm:^1.7.7"
+    jose: "npm:^6.1.3"
+  peerDependencies:
+    "@better-auth/core": ^1.7.7
+    better-auth: ^1.7.7
+    better-call: 1.4.0
+  checksum: 10/c82b0592609cd480f347a5965078f5f26edd8fb85ea59d8a468803a28f8b26e2a231f223dac3e106ff6ca6822222e837012d401eea79d45ee82ff4b8b6e55d82
+  languageName: node
+  linkType: hard
+
 "@better-auth/memory-adapter@npm:1.7.7":
   version: 1.7.7
   resolution: "@better-auth/memory-adapter@npm:1.7.7"
@@ -757,6 +783,22 @@ __metadata:
     mongodb:
       optional: true
   checksum: 10/239a8278e8f2fae0248048481d953ce27a9cf655c61dd7813dcdaf4c5c3be24d77268320dee91a776cae586cf1c2aa9c5be6a895793c47d1b44129832cc4de71
+  languageName: node
+  linkType: hard
+
+"@better-auth/oauth-provider@npm:1.7.7":
+  version: 1.7.7
+  resolution: "@better-auth/oauth-provider@npm:1.7.7"
+  dependencies:
+    jose: "npm:^6.2.3"
+    zod: "npm:^4.5.4"
+  peerDependencies:
+    "@better-auth/core": ^1.7.7
+    "@better-auth/utils": 0.4.2
+    "@better-fetch/fetch": 1.3.2
+    better-auth: ^1.7.7
+    better-call: 1.4.0
+  checksum: 10/138a510f4cf6a25fdb1afbf9968ea821b9800c072b0426ff889cae5ec2ea5e1187078f17b0f7fc9736555a5621cd30dd3d975179403b9f396b910d2de41587eb
   languageName: node
   linkType: hard
 
@@ -2480,6 +2522,10 @@ __metadata:
   dependencies:
     "@aws-sdk/client-s3": "npm:3.1144.0"
     "@aws-sdk/s3-request-presigner": "npm:3.1144.0"
+    "@better-auth/cimd": "npm:1.7.7"
+    "@better-auth/core": "npm:1.7.7"
+    "@better-auth/mcp": "npm:1.7.7"
+    "@better-auth/oauth-provider": "npm:1.7.7"
     "@electric-sql/pglite": "npm:0.5.4"
     "@mocco/common": "workspace:*"
     "@mocco/flags-core": "workspace:*"
@@ -2509,7 +2555,7 @@ __metadata:
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
     yaml: "npm:2.9.0"
-    zod: "npm:4.1.13"
+    zod: "npm:4.6.5"
   languageName: unknown
   linkType: soft
 
@@ -2520,7 +2566,7 @@ __metadata:
     eslint: "npm:10.6.0"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
-    zod: "npm:4.1.13"
+    zod: "npm:4.6.5"
   languageName: unknown
   linkType: soft
 
@@ -2586,7 +2632,7 @@ __metadata:
     tailwindcss: "npm:4.1.17"
     tw-animate-css: "npm:1.4.0"
     typescript: "npm:5.9.3"
-    zod: "npm:4.1.13"
+    zod: "npm:4.6.5"
   languageName: unknown
   linkType: soft
 
@@ -2678,7 +2724,7 @@ __metadata:
     tsx: "npm:4.22.4"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
-    zod: "npm:4.1.13"
+    zod: "npm:4.6.5"
   bin:
     mocco-ota: ./dist/cli.js
   languageName: unknown
@@ -14224,10 +14270,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:4.1.13":
-  version: 4.1.13
-  resolution: "zod@npm:4.1.13"
-  checksum: 10/0679190318928f69fcb07751063719de232c663b13955fcdb55db59839569d39f3f29b955cb0cba7af0b724233f88c06b3e84c550397ad4e68f8088fa6799d88
+"zod@npm:4.6.5, zod@npm:^3.25 || ^4.0, zod@npm:^3.25.0 || ^4.0.0, zod@npm:^4.5.4":
+  version: 4.6.5
+  resolution: "zod@npm:4.6.5"
+  checksum: 10/db004952e4dc6eab38b70f0cdef9251a65da84f5d08c5a0ef85e2590cfa9c477544ce734161ff5c05f89a15f0967137607a7feb16716195e04965f030db47213
   languageName: node
   linkType: hard
 
@@ -14235,19 +14281,5 @@ __metadata:
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10/f0c963ec40cd96858451d1690404d603d36507c1fc9682f2dae59ab38b578687d542708a7fdbf645f77926f78c9ed558f57c3d3aa226c285f798df0c4da16995
-  languageName: node
-  linkType: hard
-
-"zod@npm:^3.25 || ^4.0, zod@npm:^3.25.0 || ^4.0.0":
-  version: 4.4.3
-  resolution: "zod@npm:4.4.3"
-  checksum: 10/804b9a42aa8f35f2b3c5a8dff906291cb749115f83ee2afe3576d70b5b5c53c965365c7f4967690647a9c54af9838ff232a85ff9577a0a36c44b68bc6cdefe36
-  languageName: node
-  linkType: hard
-
-"zod@npm:^4.5.4":
-  version: 4.6.5
-  resolution: "zod@npm:4.6.5"
-  checksum: 10/db004952e4dc6eab38b70f0cdef9251a65da84f5d08c5a0ef85e2590cfa9c477544ce734161ff5c05f89a15f0967137607a7feb16716195e04965f030db47213
   languageName: node
   linkType: hard

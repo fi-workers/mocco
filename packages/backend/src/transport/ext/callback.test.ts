@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -95,7 +95,7 @@ describe('ext execution routes (pglite)', () => {
    * routes only need `runs`, `postJson`, and the waitUntil collector. */
   function deps(overrides: Partial<ExtDeps> = {}): ExtDeps {
     return {
-      auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
+      auth: new AuthService(createTestProvider(t.db)),
       runs,
       versionChecks: new VersionCheckService({ policies: new VersionPolicyRepo(t.db) }),
       broker: new CredentialBroker({

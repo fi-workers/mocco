@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { GrantService } from '@backend/domain/credential/GrantService';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -47,7 +47,7 @@ describe('approval router on pglite', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    const provider = createTestProvider(t.db);
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
   });
