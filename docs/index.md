@@ -46,6 +46,8 @@ related:
 - [0020 — Approvals outside pipeline runs (draft)](./adr/0020-approvals-outside-pipeline-runs.md)
 - [0021 — The OTA client contract is the Expo Updates protocol v1 (draft)](./adr/0021-ota-client-is-expo-updates-protocol-v1.md)
 - [0022 — OTA code signing: the key stays in CI, rollbacks are pre-signed (draft)](./adr/0022-ota-signing-key-stays-in-ci.md)
+- [0023 — Flag targets are evaluation scopes, not governance types (draft)](./adr/0023-flag-targets-are-evaluation-scopes.md)
+- [0024 — Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs (draft)](./adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)
 
 ## Implementation
 
