@@ -69,6 +69,8 @@ steps:
       MOCCO_OTA_SIGNING_KEY: ${{ secrets.MOCCO_OTA_SIGNING_KEY }}
 ```
 
+If the job can't reach a registry with `@mocco/ota-cli` on it — a private Mocco, or before the first publish — add `cli-version: source` and the action builds the CLI from the same Mocco commit it was taken from. It costs a checkout and a build per run; everything else is the same.
+
 Elsewhere, create a secret API key with `ota:write` under **API keys** and run `MOCCO_API_KEY=… npx mocco-ota publish --channel staging`. `publish` runs `expo export`, uploads only the files Mocco doesn't have yet, signs the manifest (and pre-signs rollbacks), and waits until Mocco has verified the upload before promoting. Add `--mandatory` for an update the app should apply at the next safe point.
 
 ## In the app
