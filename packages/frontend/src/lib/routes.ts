@@ -62,6 +62,10 @@ export const Routes = {
     `/workspaces/${id}/p/${projectId}/inbox${status === 'closed' ? '?status=closed' : ''}`,
   projectConversation: (id: string, projectId: string, conversationId: string) =>
     `/workspaces/${id}/p/${projectId}/inbox/${conversationId}`,
+  /** The project's help center (#96): setup, then its collections, sections and articles. */
+  projectHelp: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help`,
+  projectHelpArticle: (id: string, projectId: string, articleId: string) =>
+    `/workspaces/${id}/p/${projectId}/help/${articleId}`,
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

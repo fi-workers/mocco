@@ -7,6 +7,22 @@ import { z } from 'zod';
 /** Languages a help site can be written or translated in (BCP 47). */
 export const HELP_LOCALES = ['en', 'ko', 'ja', 'zh', 'th', 'vi', 'id', 'es', 'pt', 'fr', 'de', 'it'] as const;
 export type HelpLocale = (typeof HELP_LOCALES)[number];
+
+/** Each language in its own name, for pickers and the public language switcher. */
+export const HELP_LOCALE_NAMES: Record<HelpLocale, string> = {
+  en: 'English',
+  ko: '한국어',
+  ja: '日本語',
+  zh: '中文',
+  th: 'ไทย',
+  vi: 'Tiếng Việt',
+  id: 'Bahasa Indonesia',
+  es: 'Español',
+  pt: 'Português',
+  fr: 'Français',
+  de: 'Deutsch',
+  it: 'Italiano',
+};
 export const helpLocaleSchema = z.enum(HELP_LOCALES);
 
 export const ArticleStatuses = { draft: 'draft', published: 'published', archived: 'archived' } as const;

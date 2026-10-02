@@ -16,7 +16,11 @@ const config: NextConfig = {
   reactCompiler: true,
   // Bridge Vercel's server-only VERCEL_ENV to the client so the EnvironmentRibbon
   // can mark preview/dev tabs. Empty off-Vercel (local) → the ribbon shows "development".
-  env: { NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? '' },
+  // HELP_SITES_DOMAIN goes to the client too, so the console can link a help center's public site.
+  env: {
+    NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? '',
+    NEXT_PUBLIC_HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN ?? '',
+  },
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
   rewrites: async () => {
