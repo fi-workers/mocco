@@ -1,5 +1,12 @@
 # @mocco/node
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [cd49729]
+  - @mocco/sdk-core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
