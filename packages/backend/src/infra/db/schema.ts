@@ -2,7 +2,7 @@ import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import { ChangesetSources, ChangesetStates, FlagLifecycles, FlagTypes, StaleKinds } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
-import { ArticleStatuses, RevisionKinds } from '@mocco/common/help';
+import { ArticleStatuses, RevisionKinds, TranslationStates } from '@mocco/common/help';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { AuthorKinds, ConversationStatuses, MessageVisibilities } from '@mocco/common/messenger';
@@ -64,7 +64,7 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
-import type { ArticleStatus, RevisionKind } from '@mocco/common/help';
+import type { ArticleStatus, RevisionKind, TranslationState } from '@mocco/common/help';
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
@@ -2695,6 +2695,34 @@ export const helpRevisions = pgTable(
       name: 'mocco_help_revisions_article_fk',
     }).onDelete('cascade'),
     check('mocco_help_revisions_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(RevisionKinds))})`),
+  ],
+);
+
+/** An article's translation into one language: its state and current text (a revision in that language). */
+export const helpTranslations = pgTable(
+  'mocco_help_translations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    articleId: uuid('article_id').notNull(),
+    locale: text().notNull(),
+    state: text().$type<TranslationState>().notNull(),
+    revisionId: uuid('revision_id'),
+    // The published source's content hash this text was made from; a newer source makes it stale.
+    sourceHash: text('source_hash'),
+    lastError: text('last_error'),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_translations_article_locale_uq').on(t.articleId, t.locale),
+    foreignKey({
+      columns: [t.articleId, t.workspaceId],
+      foreignColumns: [helpArticles.id, helpArticles.workspaceId],
+      name: 'mocco_help_translations_article_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_translations_state_check', sql`${t.state} IN (${sqlInList(Object.values(TranslationStates))})`),
   ],
 );
 

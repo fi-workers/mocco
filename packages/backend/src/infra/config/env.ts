@@ -79,6 +79,10 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(['s3', 'filesystem']).optional(),
   // Expo push access token, when the Expo project requires one ("enhanced security"); messenger reply push.
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  // Vercel AI Gateway key for help center translation; unset, help centers serve the source language.
+  AI_GATEWAY_API_KEY: z.string().min(1).optional(),
+  // The model help centers translate with (an AI Gateway model id); default anthropic/claude-sonnet-5.
+  HELP_TRANSLATION_MODEL: z.string().min(1).optional(),
   STORAGE_BUCKET: z.string().min(1).optional(),
   /** Custom S3 endpoint (R2: `https://<account>.r2.cloudflarestorage.com`); omit for AWS. */
   STORAGE_ENDPOINT: z.url().optional(),

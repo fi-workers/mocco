@@ -7,7 +7,9 @@ import {
   draftInputSchema,
   helpImageInputSchema,
   helpSiteInputSchema,
+  helpLocaleSchema,
   sectionInputSchema,
+  translationInputSchema,
 } from '@mocco/common/help';
 import { importBundleSchema } from '@mocco/common/help-import';
 import { Products } from '@mocco/common/project';
@@ -146,4 +148,28 @@ export const helpRouter = router({
         publish: input.publish,
       }),
   ),
+
+  /** Every offered language of an article: state, staleness and text. */
+  translations: helpProcedure
+    .input(articleInput)
+    .query(
+      async ({ ctx, input }) =>
+        await ctx.helpTranslations.translations(input.workspaceId, input.projectId, input.articleId),
+    ),
+
+  /** A person's translation, kept as reviewed (the machine never overwrites it). */
+  saveTranslation: helpProcedure
+    .input(projectInput.extend(translationInputSchema.shape))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpTranslations.saveTranslation(input.workspaceId, input.projectId, ctx.session.user.id, input),
+    ),
+
+  /** Ask the machine again for one language (replacing a reviewed translation too). */
+  retranslate: helpProcedure
+    .input(articleInput.extend({ locale: helpLocaleSchema }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpTranslations.retranslate(input.workspaceId, input.projectId, input.articleId, input.locale),
+    ),
 });

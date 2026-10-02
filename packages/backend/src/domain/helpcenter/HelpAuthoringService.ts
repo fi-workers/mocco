@@ -25,6 +25,8 @@ export interface HelpAuthoringDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   sites: Pick<HelpSiteService, 'require'>;
+  /** Runs after a publish (queues the article's translations). */
+  onPublished?: (workspaceId: string, projectId: string, articleId: string) => Promise<void>;
   now?: () => Date;
 }
 
@@ -246,6 +248,7 @@ export class HelpAuthoringService {
       subjectId: article.id,
       payload: { projectId, revisionId: article.draftRevisionId },
     });
+    await this.deps.onPublished?.(workspaceId, projectId, article.id);
     return await this.article(workspaceId, projectId, article.id);
   }
 
