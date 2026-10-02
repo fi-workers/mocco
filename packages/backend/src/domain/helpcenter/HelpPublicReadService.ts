@@ -6,6 +6,7 @@ import { articlePath, ArticleStatuses } from '@mocco/common/help';
 
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
+import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
@@ -86,17 +87,28 @@ export class HelpPublicReadService {
             articles.map(article => article.id),
             served,
           );
+    const nodeTitles =
+      served === site.sourceLocale
+        ? []
+        : await new HelpNodeTranslationRepo(this.deps.db).inLocale(site.workspaceId, served, {
+            collectionIds: collections.map(collection => collection.id),
+            sectionIds: sections.map(section => section.id),
+          });
+    const collectionTitle = (id: string, fallback: string) =>
+      nodeTitles.find(row => row.collectionId === id)?.title ?? fallback;
+    const sectionTitle = (id: string, fallback: string) =>
+      nodeTitles.find(row => row.sectionId === id)?.title ?? fallback;
     return {
       locale: served,
       collections: collections
         .map(collection => ({
           slug: collection.slug,
-          title: collection.title,
+          title: collectionTitle(collection.id, collection.title),
           description: collection.description,
           sections: sections
             .filter(section => section.collectionId === collection.id)
             .map(section => ({
-              title: section.title,
+              title: sectionTitle(section.id, section.title),
               articles: articles
                 .filter(article => article.sectionId === section.id)
                 .map(article => {

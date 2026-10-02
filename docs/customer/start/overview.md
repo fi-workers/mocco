@@ -47,10 +47,14 @@ Mocco posts events to Discord: its own events, such as a gate waiting for approv
 
 In-app "contact us" for your users: signed in, or with an email they leave if they aren't. They write from inside your app, with screenshots if they like, and your team answers from the project's **Inbox**, with the user's app version and platform alongside each conversation. Replies reach the app as push notifications. See [In-app contact with Mocco Messenger](../messenger/contact-us.md).
 
+## Help center
+
+A public help site for your product. Write articles in Markdown with a live preview, or import an existing Mintlify site; publish them; and offer them in other languages, translated automatically when your Mocco has translation turned on and reviewed by your team. See [Publish a help center](../help/help-center.md).
+
 ## API keys and SDKs
 
 Your apps, servers and CI talk to Mocco with a project's API keys: a **publishable** key for web and React Native apps, a **secret** key for servers and CI. The SDKs wrap that API for each platform: `@mocco/js` for browsers, `@mocco/node` for servers, `@mocco/react-native` for React Native apps, the OpenFeature providers for feature flags, and `@mocco/ota-cli` for publishing OTA updates from CI. See [API keys](./api-keys.md).
 
 ## Coming later
 
-The **Products** page also lists products that aren't available yet, marked **Coming soon**: a status page, app reviews, a feedback board, a help center, a forum, deep links and end-user identity. They can't be turned on until they ship.
+The **Products** page also lists products that aren't available yet, marked **Coming soon**: a status page, app reviews, a feedback board, a forum, deep links and end-user identity. They can't be turned on until they ship.
