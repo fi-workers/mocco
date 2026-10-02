@@ -415,6 +415,7 @@ export async function extHandler(request: Request): Promise<Response> {
         channels: getOtaDomain().otaChannels,
         updateChecks: getOtaDomain().otaUpdateChecks,
         trustPolicies: getOtaDomain().otaTrustPolicies,
+        metrics: getOtaDomain().otaMetrics,
       },
     },
     storage:

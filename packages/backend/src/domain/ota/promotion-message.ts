@@ -8,7 +8,11 @@ import type { OtaChannelRow } from '@backend/domain/ota/repos/ota-channel.repo';
 import type { OtaReleaseRow } from '@backend/domain/ota/repos/ota-release.repo';
 import type { NeutralMessage } from '@mocco/common/notification';
 
-type OtaEventType = (typeof OtaEventTypes)[keyof typeof OtaEventTypes];
+/** The approval events (the spike alert renders its own message). */
+type OtaEventType = Exclude<
+  (typeof OtaEventTypes)[keyof typeof OtaEventTypes],
+  typeof OtaEventTypes.otaEmergencyLaunchSpike
+>;
 
 const headlines: Record<OtaEventType, { verb: string; severity: NeutralMessage['severity'] }> = {
   [OtaEventTypes.otaPromotionRequested]: { verb: 'Approval needed', severity: Severities.warning },

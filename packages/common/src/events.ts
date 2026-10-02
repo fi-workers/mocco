@@ -134,11 +134,13 @@ export const inboundEventPayloadSchemas = {
   [InboundEventTypes['github.workflow_run.succeeded']]: inboundEventPayloadSchema,
 } as const satisfies Record<InboundEventType, z.ZodType>;
 
-/** Mocco-hosted OTA: promotions to protected channels waiting for, or decided by, approval. */
+/** Mocco-hosted OTA: changes to protected channels waiting for or decided by approval, and crash-fallback alerts. */
 export const OtaEventTypes = {
   otaPromotionRequested: 'ota.promotion.requested',
   otaPromotionApproved: 'ota.promotion.approved',
   otaPromotionRejected: 'ota.promotion.rejected',
+  /** A release's emergency-launch rate crossed the alert threshold today. */
+  otaEmergencyLaunchSpike: 'ota.emergency_launch.spike',
 } as const;
 
 /** A product event that, like an inbound one, carries its message rendered when it
@@ -152,6 +154,7 @@ export const otaEventPayloadSchemas = {
   [OtaEventTypes.otaPromotionRequested]: renderedEventPayloadSchema,
   [OtaEventTypes.otaPromotionApproved]: renderedEventPayloadSchema,
   [OtaEventTypes.otaPromotionRejected]: renderedEventPayloadSchema,
+  [OtaEventTypes.otaEmergencyLaunchSpike]: renderedEventPayloadSchema,
 } as const;
 
 /** Every domain event type. Extension point: spread each area's types here. */

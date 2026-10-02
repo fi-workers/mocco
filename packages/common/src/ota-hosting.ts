@@ -388,3 +388,47 @@ export const promotionPreviewSchema = z.object({
   ),
 });
 export type PromotionPreview = z.infer<typeof promotionPreviewSchema>;
+
+/** What the app reports from devices (`@mocco/react-native-ota`). */
+export const OtaClientEventTypes = {
+  launched: 'launched',
+  emergencyLaunch: 'emergency_launch',
+  error: 'error',
+} as const;
+export type OtaClientEventType = (typeof OtaClientEventTypes)[keyof typeof OtaClientEventTypes];
+
+/** `POST /v1/ota/apps/:appId/events`: up to 50 events from one device, at most 16 KB. */
+export const OTA_EVENTS_MAX_BYTES = 16 * 1024;
+export const clientEventsRequestSchema = z.object({
+  /** The device's `EAS-Client-ID`; hashed with the app's pepper, never stored. */
+  clientId: z.string().min(8).max(200),
+  platform: otaPlatformSchema,
+  events: z
+    .array(
+      z.object({
+        type: z.enum([OtaClientEventTypes.launched, OtaClientEventTypes.emergencyLaunch, OtaClientEventTypes.error]),
+        updateId: z.uuid().nullable(),
+        occurredAt: z.iso.datetime({ offset: true }).optional(),
+        /** Bounded detail, e.g. an error message. */
+        detail: z.record(z.string(), z.union([z.string().max(500), z.number(), z.boolean()])).optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+export type ClientEventsRequest = z.infer<typeof clientEventsRequestSchema>;
+
+/** How many devices run a release, now and per day. */
+export const releaseAdoptionSchema = z.object({
+  releaseId: z.uuid(),
+  /** Devices whose last check (within 24 hours) reported this release's update. */
+  activeDevices: z.number(),
+  emergencyLaunches: z.number(),
+  daily: z.array(
+    z.object({ day: z.string(), activeDevices: z.number(), newDevices: z.number(), emergencyLaunches: z.number() }),
+  ),
+});
+export type ReleaseAdoptionDto = z.infer<typeof releaseAdoptionSchema>;
+
+/** A release's emergency-launch rate at or over this (with enough launches) alerts. */
+export const EMERGENCY_LAUNCH_ALERT = { minLaunches: 5, rate: 0.05 } as const;

@@ -21,7 +21,7 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   });
 
   if (deps.ota !== undefined) {
-    app.route('/ota', createOtaServingRoutes(deps.ota));
+    app.route('/ota', createOtaServingRoutes(deps, deps.ota));
     app.route('/ota', createOtaUploadRoutes(deps, deps.ota));
   }
 

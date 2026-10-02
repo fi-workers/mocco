@@ -2,17 +2,21 @@
 // a stock expo-updates client polls, and the asset route its manifests point at. Both are
 // public. An unknown app, channel or runtime is a 204 (no update), never a 404, so apps
 // can't be enumerated and a misconfigured build keeps running its embedded bundle.
-import { otaPlatformSchema } from '@mocco/common/ota-hosting';
+import { clientEventsRequestSchema, OTA_EVENTS_MAX_BYTES, otaPlatformSchema } from '@mocco/common/ota-hosting';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { multipartOf, signatureOf } from '@backend/domain/ota/serving/multipart';
+import { limitAnonymous } from '@backend/transport/ext/v1/middleware';
 
+import type { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
 import type { UpdateCheckService } from '@backend/domain/ota/UpdateCheckService';
+import type { V1Deps } from '@backend/transport/ext/v1/middleware';
 import type { Context } from 'hono';
 
 export interface OtaServingDeps {
   updateChecks: Pick<UpdateCheckService, 'check' | 'assetUrl'>;
+  metrics: Pick<OtaMetricsService, 'recordEvents'>;
 }
 
 const PROTOCOL_HEADERS = {
@@ -34,8 +38,36 @@ function isMultipartAccepted(c: Context): boolean {
   return accept.includes('multipart/mixed') || accept.includes('*/*');
 }
 
-export function createOtaServingRoutes(deps: OtaServingDeps): Hono {
+export function createOtaServingRoutes(v1: V1Deps, deps: OtaServingDeps): Hono {
   const app = new Hono();
+
+  // Launches, emergency launches and errors from the app (public: devices hold no key).
+  // Size-capped and rate-limited; an unknown app is accepted and dropped, like a 204.
+  app.post('/apps/:appId/events', limitAnonymous(v1), async c => {
+    const declared = Number(c.req.header('content-length') ?? '0');
+    if (declared > OTA_EVENTS_MAX_BYTES) {
+      return c.text('events are limited to 16 KB per request', 413);
+    }
+    const text = await c.req.text();
+    if (text.length > OTA_EVENTS_MAX_BYTES) {
+      return c.text('events are limited to 16 KB per request', 413);
+    }
+    const appId = c.req.param('appId');
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return c.text('the body must be JSON', 400);
+    }
+    const parsed = clientEventsRequestSchema.safeParse(json);
+    if (!parsed.success) {
+      return c.text(parsed.error.issues[0]?.message ?? 'invalid events', 400);
+    }
+    if (uuidSchema.safeParse(appId).success) {
+      await deps.metrics.recordEvents(appId, parsed.data);
+    }
+    return c.body(null, 202);
+  });
 
   app.get('/apps/:appId/manifest', async c => {
     if (c.req.header('expo-protocol-version') !== '1') {
@@ -58,6 +90,7 @@ export function createOtaServingRoutes(deps: OtaServingDeps): Hono {
       runtimeVersion,
       clientId: c.req.header('eas-client-id'),
       currentUpdateId: c.req.header('expo-current-update-id'),
+      embeddedUpdateId: c.req.header('expo-embedded-update-id'),
     });
     if (selection.kind === 'noop') {
       return noUpdate();

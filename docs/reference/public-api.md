@@ -71,6 +71,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |
+| `POST /v1/ota/apps/{otaAppId}/events` | none (devices; rate-limited per IP) | `202`; body `{ clientId, platform, events: [{ type, updateId, occurredAt?, detail? }] }` (≤ 50 events, ≤ 16 KB; `413` over) |
 | `GET /v1/ota/apps/{otaAppId}/releases/{releaseId}` | secret, `ota:write` | `{ id, status, runtimeVersion }` |
 | `POST /v1/ota/apps/{otaAppId}/releases/{releaseId}/promotions` | secret, `ota:write` | body `{ channel, rolloutPercent?, reason? }`; `201` applied, `202` approval pending (protected channel), `200` no-op: `{ channel, releaseId, kind, platforms, changed, outcome, requestId }`; `400`/`409` with a `detail` |
 | `POST /v1/ota/apps/{otaAppId}/channels/{channel}/pause` · `…/rollback` · `…/rollback-to-embedded` | secret, `ota:write` | `201 { kind, platforms, … }` — never gated; body `{ runtimeVersion?, platform?, reason? }`; `409` with a `detail` when nothing applies |

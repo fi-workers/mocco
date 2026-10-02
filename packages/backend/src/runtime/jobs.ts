@@ -31,9 +31,11 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
-import { createOtaHandlers, pruneUploadSessionsSchedule } from '@backend/domain/ota/jobs';
+import { createOtaHandlers, otaMetricsSchedules, pruneUploadSessionsSchedule } from '@backend/domain/ota/jobs';
+import { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
 import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
 import { OtaAssetRepo } from '@backend/domain/ota/repos/ota-asset.repo';
+import { OtaMetricsRepo } from '@backend/domain/ota/repos/ota-metrics.repo';
 import { OtaReleaseRepo } from '@backend/domain/ota/repos/ota-release.repo';
 import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certificate.repo';
 import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
@@ -118,7 +120,17 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     }),
     ...createStorageHandlers({ storage: deps.storage }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
-    ...createOtaHandlers({ uploads }),
+    ...createOtaHandlers({
+      uploads,
+      metrics: new OtaMetricsService({
+        apps: new OtaAppRepo(db),
+        metrics: new OtaMetricsRepo(db),
+        releases: new OtaReleaseRepo(db),
+        events: bus,
+        appOrigin: deps.appOrigin,
+        now: deps.now,
+      }),
+    }),
   ];
   self.runner = new JobRunner({
     jobs,
@@ -134,6 +146,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       ...inboundSchedules,
       rateLimitPruneSchedule,
       pruneUploadSessionsSchedule,
+      ...otaMetricsSchedules,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });
