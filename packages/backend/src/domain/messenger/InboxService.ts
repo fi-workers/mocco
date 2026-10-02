@@ -6,6 +6,7 @@ import { AuditActions } from '@mocco/common/audit';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 
 import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
+import { eraseContact } from '@backend/domain/messenger/erase';
 import { ContactNotFoundError, ConversationNotFoundError } from '@backend/domain/messenger/errors';
 import { pushMessengerReply } from '@backend/domain/messenger/jobs';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
@@ -179,5 +180,21 @@ export class InboxService {
       payload: { blocked: input.blocked },
     });
     return contact;
+  }
+
+  /** Erase a contact and everything they wrote (a privacy request). Can't be undone. */
+  async eraseContact(workspaceId: string, projectId: string, actorUserId: string, contactId: string): Promise<void> {
+    const contact = await new MessengerContactRepo(this.deps.db).find(workspaceId, projectId, contactId);
+    if (contact === undefined) {
+      throw new ContactNotFoundError(contactId);
+    }
+    await eraseContact(this.deps, contact);
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.messengerContactErased,
+      subjectType: 'messenger_contact',
+      subjectId: contact.id,
+      payload: { projectId, by: 'operator' },
+    });
   }
 }

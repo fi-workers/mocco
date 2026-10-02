@@ -122,6 +122,12 @@ export class MessengerContactRepo {
     return row;
   }
 
+  /** Delete the contact; their sessions, conversations, messages, attachments and push
+   * tokens go with it (the foreign keys cascade). */
+  async delete(workspaceId: string, contactId: string): Promise<void> {
+    await this.db.delete(c).where(and(eq(c.id, contactId), eq(c.workspaceId, workspaceId)));
+  }
+
   async insertSession(row: typeof sessions.$inferInsert) {
     return expectOne(await this.db.insert(sessions).values(row).returning());
   }

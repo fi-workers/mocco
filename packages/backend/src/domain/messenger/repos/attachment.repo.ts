@@ -40,6 +40,15 @@ export class MessengerAttachmentRepo {
     }
   }
 
+  /** The storage object behind every attachment the contact has, claimed or not. */
+  async objectIdsForContact(workspaceId: string, contactId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ objectId: a.objectId })
+      .from(a)
+      .where(and(eq(a.workspaceId, workspaceId), eq(a.contactId, contactId)));
+    return rows.map(row => row.objectId);
+  }
+
   async listForMessages(messageIds: readonly string[]): Promise<AttachmentRow[]> {
     if (messageIds.length === 0) {
       return [];

@@ -41,6 +41,7 @@ export interface MessengerServingDeps {
     | 'send'
     | 'markRead'
     | 'createAttachment'
+    | 'erase'
   >;
   push?: Pick<MessengerPushService, 'registerToken' | 'unregisterToken'>;
 }
@@ -234,6 +235,16 @@ export function createMessengerRoutes(deps: V1Deps, messenger: MessengerServingD
       return c.body(null, 204);
     });
   });
+
+  // The user erases everything they wrote (an app's "delete my account").
+  session.delete(
+    '/me',
+    async c =>
+      await answer(async () => {
+        await messenger.contacts.erase(c.var.contact);
+        return c.body(null, 204);
+      }),
+  );
 
   app.route('/', session);
   return app;

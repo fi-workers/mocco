@@ -25,7 +25,15 @@ import { StorageUrlSigner } from '@backend/domain/storage/signing';
 import { StorageService } from '@backend/domain/storage/StorageService';
 import { SecretBox } from '@backend/infra/crypto/secret-box';
 import { expectOne } from '@backend/infra/db/rows';
-import { messengerAttachments, objects, users, workspaces } from '@backend/infra/db/schema';
+import {
+  auditLog,
+  messengerAttachments,
+  messengerContacts,
+  messengerMessages,
+  objects,
+  users,
+  workspaces,
+} from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { MessengerRateLimits } from '@backend/transport/ext/v1/messenger';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
@@ -88,6 +96,16 @@ describe('/v1/messenger (pglite)', () => {
         body: JSON.stringify({ guest: true, ...body }),
       }),
     );
+
+  /** The storage key of an attachment's bytes. */
+  const keyOf = async (attachmentId: string) => {
+    const [row] = await t.db.select().from(messengerAttachments).where(eq(messengerAttachments.id, attachmentId));
+    const [object] = await t.db
+      .select()
+      .from(objects)
+      .where(eq(objects.id, row?.objectId ?? ''));
+    return object?.key ?? '';
+  };
 
   beforeEach(async () => {
     t = await createTestDb();
@@ -573,6 +591,55 @@ describe('/v1/messenger (pglite)', () => {
         ],
       });
       expect(team.messages.map(message => message.attachments.length)).toEqual([1, 1]);
+    });
+
+    it('erases a user who asks, with every conversation and screenshot, and keeps everyone else', async () => {
+      const minji = await sessionFor('minji');
+      const jun = await sessionFor('jun');
+      const { attachmentId } = await attach(minji);
+      await call('POST', '/conversations', {
+        token: minji,
+        body: { body: 'Delete my account please', clientMessageId: randomUUID(), attachmentIds: [attachmentId] },
+      });
+      await start(jun);
+      const objectKey = await keyOf(attachmentId);
+
+      const erased = await call('DELETE', '/me', { token: minji });
+      const afterwards = await call('GET', '/conversations', { token: minji });
+      const fresh = await call('GET', '/conversations', { token: await sessionFor('minji') });
+      const juns = await call('GET', '/conversations', { token: jun });
+      const audited = await t.db.select().from(auditLog).where(eq(auditLog.action, 'messenger.contact.erased'));
+
+      expect([erased.status, afterwards.status]).toEqual([204, 401]);
+      expect(await store.get(objectKey)).toBeNull();
+      expect(fresh.body).toEqual({ conversations: [] });
+      expect((juns.body as unknown as { conversations: unknown[] }).conversations).toHaveLength(1);
+      expect(await t.db.select().from(messengerAttachments)).toEqual([]);
+      expect(await t.db.select().from(messengerMessages)).toHaveLength(1);
+      expect(audited.map(entry => [entry.actorUserId, entry.payload])).toEqual([[null, { projectId, by: 'contact' }]]);
+    });
+
+    it('lets the team erase a user from the inbox, only within the project', async () => {
+      const minji = await sessionFor('minji');
+      const { attachmentId } = await attach(minji);
+      const started = await call('POST', '/conversations', {
+        token: minji,
+        body: { body: 'Please remove my data', clientMessageId: randomUUID(), attachmentIds: [attachmentId] },
+      });
+      const conversationId = (started.body as unknown as { conversation: { id: string } }).conversation.id;
+      const { contact } = await messenger.inbox.get(workspaceId, projectId, conversationId);
+      const other = await createProjectDomain(t.db).projects.create(workspaceId, { name: 'Other', handle: 'other' });
+      const objectKey = await keyOf(attachmentId);
+
+      await expect(messenger.inbox.eraseContact(workspaceId, other.id, operatorId, contact.id)).rejects.toThrow();
+      await messenger.inbox.eraseContact(workspaceId, projectId, operatorId, contact.id);
+
+      await expect(messenger.inbox.get(workspaceId, projectId, conversationId)).rejects.toThrow();
+      await expect(messenger.inbox.eraseContact(workspaceId, projectId, operatorId, contact.id)).rejects.toThrow();
+      expect(await t.db.select().from(messengerContacts)).toEqual([]);
+      expect(await store.get(objectKey)).toBeNull();
+      const afterwards = await call('GET', '/conversations', { token: minji });
+      expect(afterwards.status).toBe(401);
     });
 
     it("refuses another user's, an already used, a mis-uploaded or a non-image attachment", async () => {

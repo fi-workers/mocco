@@ -6,7 +6,7 @@ import type { Db } from '@backend/infra/db/types';
 import type { AttachmentDto } from '@mocco/common/messenger';
 
 /** The storage the messenger uses; absent on a deploy without object storage. */
-export type AttachmentStorage = Pick<StorageService, 'beginUpload' | 'completeUpload' | 'downloadUrl'>;
+export type AttachmentStorage = Pick<StorageService, 'beginUpload' | 'completeUpload' | 'downloadUrl' | 'delete'>;
 
 /** How long a served attachment link works. */
 export const ATTACHMENT_URL_TTL_SECONDS = 10 * 60;
