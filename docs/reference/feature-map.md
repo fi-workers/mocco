@@ -115,7 +115,9 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 
 | Capability | State | Notes |
 |---|---|---|
-| Sites, articles and revisions | Prototype | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback; no public pages or editor yet |
+| Sites, articles and revisions | Prototype | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback |
+| Public site | Prototype | `<slug>.<HELP_SITES_DOMAIN>`: a home per language and article pages, ISR every 60 seconds (ADR 0015, draft) |
+| Console editor | Prototype | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, publish and history ([customer guide](../customer/help/help-center.md)) |
 
 ### Deploy loop depth
 

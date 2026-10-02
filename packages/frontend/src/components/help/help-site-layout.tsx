@@ -1,28 +1,13 @@
 // The frame of a public help center (pages/_sites/**): the site's name, a language
 // switcher and the article tree. Links are plain anchors: the pages are served on the
 // site's own host, where paths are `/{locale}/...`.
+import { HELP_LOCALE_NAMES } from '@mocco/common/help';
 import Head from 'next/head';
 
 import { cn } from '@frontend/lib/utils';
 
 import type { HelpSiteNav } from '@frontend/lib/help-site';
 import type { ReactNode } from 'react';
-
-/** Each language in its own name, for the switcher. */
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  ko: '한국어',
-  ja: '日本語',
-  zh: '中文',
-  th: 'ไทย',
-  vi: 'Tiếng Việt',
-  id: 'Bahasa Indonesia',
-  es: 'Español',
-  pt: 'Português',
-  fr: 'Français',
-  de: 'Deutsch',
-  it: 'Italiano',
-};
 
 export default function HelpSiteLayout({
   nav,
@@ -58,7 +43,7 @@ export default function HelpSiteLayout({
                     'rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground',
                     locale === nav.locale && 'bg-muted font-medium text-foreground',
                   )}>
-                  {LANGUAGE_NAMES[locale] ?? locale}
+                  {(HELP_LOCALE_NAMES as Record<string, string>)[locale] ?? locale}
                 </a>
               ))}
             </nav>

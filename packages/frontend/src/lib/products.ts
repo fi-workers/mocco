@@ -28,6 +28,7 @@ export const ProjectSections = {
   otaHosting: 'otaHosting',
   flags: 'flags',
   inbox: 'inbox',
+  help: 'help',
   apiKeys: 'apiKeys',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
@@ -58,6 +59,7 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
   { key: ProjectSections.otaHosting, label: 'OTA hosting', href: Routes.projectOtaHosting, product: Products.ota },
   { key: ProjectSections.flags, label: 'Feature flags', href: Routes.projectFlags, product: Products.flags },
   { key: ProjectSections.inbox, label: 'Inbox', href: Routes.projectInbox, product: Products.messenger },
+  { key: ProjectSections.help, label: 'Help center', href: Routes.projectHelp, product: Products.helpcenter },
   { key: ProjectSections.apiKeys, label: 'API keys', href: Routes.projectApiKeys, product: null },
 ];
 
@@ -100,8 +102,8 @@ export const productCatalog: Readonly<Record<Product, { label: string; descripti
   },
   [Products.helpcenter]: {
     label: 'Help center',
-    description: 'Product docs with automatic translation.',
-    available: false,
+    description: 'A public help site for your product, written in Markdown and published per language.',
+    available: true,
   },
   [Products.forum]: { label: 'Forum', description: 'A community forum for your product.', available: false },
   [Products.links]: { label: 'Deep links', description: 'Smart links with deferred deep linking.', available: false },

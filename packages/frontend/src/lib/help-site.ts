@@ -3,7 +3,7 @@
 // render tree. Only getStaticProps calls it; nothing here reaches the browser bundle.
 import { getHelpDomain } from '@mocco/backend/helpcenter/instance';
 
-import { markdownToBlocks } from '@frontend/lib/markdown-blocks';
+import { helpArticleBlocks } from '@frontend/lib/help-markdown';
 
 import type { DocBlock } from '@frontend/lib/doc-ast';
 
@@ -53,19 +53,6 @@ export async function loadHelpNav(site: string, locale: string): Promise<HelpSit
   }
 }
 
-/** Links an article may carry: http(s) and mailto open as external, site paths and anchors stay. */
-// eslint-disable-next-line sonarjs/function-return-type -- null drops the link, as MarkdownResolvers defines
-function articleLink(href: string): { href: string; external: boolean } | null {
-  if (/^(?:https?:\/\/|mailto:)/u.test(href)) {
-    return { href, external: true };
-  }
-  // eslint-disable-next-line sonarjs/null-dereference -- a link's href, never null
-  if (href.startsWith('/') || href.startsWith('#')) {
-    return { href, external: false };
-  }
-  return null;
-}
-
 export async function loadHelpArticle(site: string, locale: string, ref: string) {
   const { helpPublic } = getHelpDomain();
   try {
@@ -73,10 +60,7 @@ export async function loadHelpArticle(site: string, locale: string, ref: string)
     if (article === undefined) {
       return undefined;
     }
-    const blocks: DocBlock[] = markdownToBlocks(article.body, {
-      link: articleLink,
-      image: (href, alt) => (/^https:\/\//u.test(href) ? { t: 'image', src: href, alt } : null),
-    });
+    const blocks: DocBlock[] = helpArticleBlocks(article.body);
     return {
       title: article.title,
       locale: article.locale,

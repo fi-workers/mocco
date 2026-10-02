@@ -1,6 +1,7 @@
 // Markdown → the small render tree in lib/doc-ast.ts, for the customer guides and the
-// public help center pages. Server-side only (getStaticProps): the browser gets plain
-// React elements, never an HTML string. Raw HTML in the Markdown renders as its text.
+// public help center pages (in getStaticProps), and the help editor's live preview. The
+// output is plain data rendered as React elements, never an HTML string; raw HTML in the
+// Markdown renders as its text.
 import { Lexer } from 'marked';
 
 import type { DocBlock, DocInline } from '@frontend/lib/doc-ast';
