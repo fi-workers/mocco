@@ -12,6 +12,7 @@ related:
   - ../specs/2026-09-24-messenger-design.md
   - ./public-api.md
   - ./project.md
+  - ../customer/messenger/contact-us.md
 code_refs:
   - packages/common/src/messenger.ts
   - packages/backend/src/domain/messenger/ContactMessengerService.ts
@@ -21,6 +22,8 @@ code_refs:
   - packages/backend/src/domain/messenger/repos/conversation.repo.ts
   - packages/backend/src/transport/ext/v1/messenger.ts
   - packages/backend/src/transport/trpc/routers/messenger.ts
+  - packages/frontend/src/components/messenger/inbox.tsx
+  - packages/frontend/src/components/messenger/conversation.tsx
 ---
 
 # Messenger
@@ -69,6 +72,10 @@ Another contact's conversation is a 404. Limits per contact, on top of the key's
 ## Inbox (tRPC)
 
 The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `write` (reply, or `internal: true` for a note), `setStatus`, `markRead`, `setContactBlocked`.
+
+## Console
+
+The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations and holds the settings; a conversation is `…/inbox/:conversationId`. Both poll every 15 s. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
 
 ## Events
 

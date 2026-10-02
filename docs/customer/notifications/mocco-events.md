@@ -34,7 +34,8 @@ On a channel's **Rules**, choose the **Mocco** preset and click **Apply**. It ad
 `gate.resumed`, `gate.rejected` and `run.failed`; the OTA events `ota.promotion.requested`,
 `ota.promotion.approved`, `ota.promotion.rejected` and `ota.emergency_launch.spike`; and the
 feature-flag events `flags.changeset.requested`, `flags.changeset.applied`,
-`flags.changeset.rejected`, `flags.flag.killed` and `flags.stale.digest`. It leaves out
+`flags.changeset.rejected`, `flags.flag.killed` and `flags.stale.digest`; and the messenger events
+`messenger.conversation.created` and `messenger.message.received`. It leaves out
 `run.succeeded`, which is often noisy; add it by hand if you want it. You can also use `gate.*` or `run.*` to get a whole family.
 
 Mocco events never come from a source, so a rule limited with **Only from source** never matches
