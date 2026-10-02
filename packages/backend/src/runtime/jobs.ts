@@ -31,6 +31,9 @@ import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { createPruneHandlers, pruneSchedule } from '@backend/domain/jobs/prune';
 import { JobScheduleRepo } from '@backend/domain/jobs/repos/job-schedule.repo';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
+import { createMessengerHandlers } from '@backend/domain/messenger/jobs';
+import { MessengerPushService } from '@backend/domain/messenger/MessengerPushService';
+import { ExpoPushSender } from '@backend/domain/messenger/push';
 import { createDiscordApiFromEnv } from '@backend/domain/notification/discord-config';
 import { createNotificationHandlers, notificationSchedules } from '@backend/domain/notification/jobs';
 import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
@@ -57,6 +60,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
 import type { Db } from '@backend/infra/db/types';
 
@@ -75,6 +79,8 @@ export interface JobRunnerRuntimeDeps {
   discord: DiscordMessenger | undefined;
   /** Object storage for the gc and OTA verify jobs; undefined when no store is configured. */
   storage: StorageService | undefined;
+  /** Sends messenger reply pushes (Expo's service by default). */
+  push?: PushSender;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -138,6 +144,9 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     }),
     ...createStorageHandlers({ storage: deps.storage }),
     ...createFlagHandlers({ governance: flagGovernance, stale: staleFlags }),
+    ...createMessengerHandlers({
+      push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
+    }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createOtaHandlers({
       uploads,
@@ -194,6 +203,7 @@ export function getJobRunner(): JobRunner {
       appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
       discord: createDiscordApiFromEnv(env, { fetch, now }),
       storage: storageFromEnv(env),
+      push: new ExpoPushSender({ accessToken: env.EXPO_ACCESS_TOKEN }),
     });
   }
   return state.runner;

@@ -117,6 +117,27 @@ export class MessengerConversationRepo {
     return row?.conversation;
   }
 
+  /** A conversation by id alone (for jobs, which carry only the id). */
+  async findById(conversationId: string) {
+    const [row] = await this.db.select().from(conv).where(eq(conv.id, conversationId));
+    return row;
+  }
+
+  /** What a reply push says: the public message's text and the project's name. */
+  async pushContent(conversationId: string, projectId: string, seq: number) {
+    const [message] = await this.db
+      .select({ body: msg.body })
+      .from(msg)
+      .where(
+        and(eq(msg.conversationId, conversationId), eq(msg.seq, seq), eq(msg.visibility, MessageVisibilities.public)),
+      );
+    const [project] = await this.db
+      .select({ name: schema.projects.name })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId));
+    return message === undefined ? undefined : { body: message.body, projectName: project?.name };
+  }
+
   async findInProject(workspaceId: string, projectId: string, conversationId: string) {
     const [row] = await this.db
       .select()

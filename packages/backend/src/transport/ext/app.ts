@@ -424,7 +424,7 @@ export async function extHandler(request: Request): Promise<Response> {
         telemetry: getFlagsDomain().flagTelemetry,
         streamTokens: flagStreamTokensFromEnv(env),
       },
-      messenger: { contacts: getMessengerDomain().contactMessenger },
+      messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
     },
     storage:
       storageStore instanceof FilesystemObjectStore

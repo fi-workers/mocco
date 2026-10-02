@@ -97,6 +97,10 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 `DISCORD_CLIENT_SECRET` (the bot install OAuth pair) configure notifications. All are optional;
 without the token, deliveries wait instead of sending. See [Notifications](./notifications.md#env).
 
+## Messenger vars
+
+`EXPO_ACCESS_TOKEN` (optional) is sent to Expo's push service with messenger reply notifications, for Expo projects that require an access token ("enhanced push security"). Without it, pushes go out unauthenticated, which Expo accepts unless the project requires one. Attachments use [object storage](./storage.md). See [Messenger](./messenger.md#push).
+
 ## Scripts
 
 - `yarn dev` (→ `run-frontend`), `yarn db:generate`, `yarn db:migrate` all run through `with-env`, so `next dev`/`drizzle-kit` see the merged `env/.env.local` → `env/.env`.

@@ -2,11 +2,15 @@
 // production singletons, tests call it with a pglite db.
 import { ContactMessengerService } from '@backend/domain/messenger/ContactMessengerService';
 import { InboxService } from '@backend/domain/messenger/InboxService';
+import { MessengerPushService } from '@backend/domain/messenger/MessengerPushService';
 import { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
+import { ExpoPushSender } from '@backend/domain/messenger/push';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
+import type { PushSender } from '@backend/domain/messenger/push';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
 
@@ -14,6 +18,7 @@ export interface MessengerDomain {
   messengerSettings: MessengerSettingsService;
   contactMessenger: ContactMessengerService;
   inbox: InboxService;
+  messengerPush: MessengerPushService;
 }
 
 export function createMessengerDomain(
@@ -22,6 +27,8 @@ export function createMessengerDomain(
     audit: AuditService;
     box: () => SecretBox;
     storage?: AttachmentStorage;
+    queue?: Pick<JobQueue, 'enqueue' | 'kick'>;
+    pushSender?: PushSender;
     events?: EventPublisher;
     appOrigin?: string;
     now?: () => Date;
@@ -33,7 +40,13 @@ export function createMessengerDomain(
     db,
     audit: deps.audit,
     ...(deps.storage !== undefined && { storage: deps.storage }),
+    ...(deps.queue !== undefined && { queue: deps.queue }),
     ...(deps.now !== undefined && { now: deps.now }),
   });
-  return { messengerSettings, contactMessenger, inbox };
+  const messengerPush = new MessengerPushService({
+    db,
+    sender: deps.pushSender ?? new ExpoPushSender(),
+    ...(deps.now !== undefined && { now: deps.now }),
+  });
+  return { messengerSettings, contactMessenger, inbox, messengerPush };
 }

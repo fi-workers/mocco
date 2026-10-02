@@ -83,6 +83,12 @@ A contact can attach up to 3 screenshots to a message or to the start of a conve
 
 Messages carry `attachments: [{ id, contentType, sizeBytes, url }]`, where `url` is a signed download link valid for 10 minutes. Without object storage configured, reserving an attachment answers 400. Abandoned uploads go with storage's own garbage collection; deleting the object deletes the attachment row.
 
+## Push
+
+A contact's device registers its Expo push token with `POST /v1/messenger/push-tokens` `{ provider: 'expo', token: 'ExponentPushToken[…]', platform }` (and removes it with `DELETE`, which the SDK does on sign out). Tokens are unique per project: a device that signs in as someone else moves to them (`mocco_messenger_push_tokens`, migration 0039).
+
+A team **reply** (never an internal note) enqueues `messenger.push.reply` `{ conversationId, seq }` in the reply's transaction and kicks it after the commit. The job skips a reply the contact has already read, then sends one notification per active device through the `PushSender` port: `ExpoPushSender` posts to `https://exp.host/--/api/v2/push/send` with `fetch`, 100 per request, with `EXPO_ACCESS_TOKEN` when set ([env](./env.md#messenger-vars)). The title is the project's name, the body the start of the reply, and `data` is `{ mocco: 'messenger', conversationId }` (`messengerConversationIdOf` in the SDK reads it). A ticket with `DeviceNotRegistered` disables that token; a refused request fails the job, which the runner retries.
+
 ## SDK
 
 `MessengerClient` in `@mocco/sdk-core` and the hooks in `@mocco/react-native/messenger` ([SDK packages](./sdk.md)) wrap these routes. The client asks the app for the signed identity (`identity()`, null while signed out), keeps the session in the app's storage under `mocco-messenger:session:v1` and reopens it on a 401, fetches threads incrementally by seq, and retries a send once on a network failure with the same `clientMessageId`. `transport/ext/v1/messenger.test.ts` runs it against the real routes.

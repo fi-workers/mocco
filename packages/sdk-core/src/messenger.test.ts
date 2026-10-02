@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MessengerClient } from './messenger';
+import { MessengerClient, messengerConversationIdOf } from './messenger';
 
 import type { MessengerStorage } from './messenger';
 import type { MessengerConversation, MessengerMessage } from './wire';
@@ -300,6 +300,21 @@ describe('MessengerClient', () => {
       body: 'See this',
       attachmentIds: ['att-1'],
     });
+  });
+
+  it('registers the push token, drops it on sign out, and reads conversation ids from pushes', async () => {
+    const server = fakeMessenger();
+    const client = clientFor(server);
+    await client.registerPushToken({ provider: 'expo', token: 'ExponentPushToken[abc]', platform: 'ios' });
+    await client.signOut();
+
+    expect(server.calls.filter(call => call.path === '/push-tokens').map(call => [call.method, call.body])).toEqual([
+      ['POST', { provider: 'expo', token: 'ExponentPushToken[abc]', platform: 'ios' }],
+      ['DELETE', { token: 'ExponentPushToken[abc]' }],
+    ]);
+    expect(messengerConversationIdOf({ mocco: 'messenger', conversationId: 'c1' })).toBe('c1');
+    expect(messengerConversationIdOf({ type: 'promo' })).toBeUndefined();
+    expect(messengerConversationIdOf(null)).toBeUndefined();
   });
 
   it('refuses a secret key', () => {

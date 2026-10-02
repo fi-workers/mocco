@@ -18,6 +18,7 @@ export type {
   MessengerConversationRequest,
   MessengerMessage,
   MessengerMessageRequest,
+  MessengerPushTokenRequest,
   MessengerSessionRequest,
   MessengerSessionResponse,
 } from './wire';
@@ -33,5 +34,5 @@ export type {
 } from './wire';
 export { DEFAULT_TELEMETRY_INTERVAL_MS, EvaluationCounter, TELEMETRY_PATH } from './telemetry';
 export type { EvaluationCount, EvaluationCounterOptions } from './telemetry';
-export { DEFAULT_MESSENGER_POLL_MS, MessengerClient } from './messenger';
+export { DEFAULT_MESSENGER_POLL_MS, MessengerClient, messengerConversationIdOf } from './messenger';
 export type { MessengerClientOptions, MessengerIdentity, MessengerState, MessengerStorage } from './messenger';

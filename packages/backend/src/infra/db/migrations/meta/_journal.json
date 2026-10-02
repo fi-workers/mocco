@@ -274,6 +274,13 @@
       "when": 1790925011679,
       "tag": "0038_equal_kinsey_walden",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790926126744,
+      "tag": "0039_legal_tattoo",
+      "breakpoints": true
     }
   ]
 }

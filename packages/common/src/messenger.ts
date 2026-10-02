@@ -170,3 +170,20 @@ export const messengerSessionSchema = z.object({
   categories: z.array(messengerCategorySchema),
 });
 export type MessengerSessionDto = z.infer<typeof messengerSessionSchema>;
+
+/** Where a contact's device takes push notifications (Expo's push service for now). */
+export const PushProviders = { expo: 'expo' } as const;
+export type PushProvider = (typeof PushProviders)[keyof typeof PushProviders];
+
+/** `POST /v1/messenger/push-tokens`: the device's Expo push token. */
+export const pushTokenInputSchema = z.object({
+  provider: z.literal(PushProviders.expo),
+  token: z
+    .string()
+    .max(200)
+    .regex(/^Expo(nent)?PushToken\[[^\]]+\]$/u, 'An Expo push token looks like ExponentPushToken[…]'),
+  platform: z.enum(['ios', 'android']),
+});
+export type PushTokenInput = z.infer<typeof pushTokenInputSchema>;
+
+export const pushTokenDeleteInputSchema = pushTokenInputSchema.pick({ token: true });

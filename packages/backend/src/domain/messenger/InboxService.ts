@@ -7,10 +7,12 @@ import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common
 
 import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
 import { ContactNotFoundError, ConversationNotFoundError } from '@backend/domain/messenger/errors';
+import { pushMessengerReply } from '@backend/domain/messenger/jobs';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
 import type { Db } from '@backend/infra/db/types';
 import type { ConversationStatus } from '@mocco/common/messenger';
@@ -19,6 +21,8 @@ export interface InboxDeps {
   db: Db;
   audit: AuditService;
   storage?: AttachmentStorage;
+  /** Queues the push for a reply; without it, replies aren't pushed. */
+  queue?: Pick<JobQueue, 'enqueue' | 'kick'>;
   now?: () => Date;
 }
 
@@ -102,9 +106,9 @@ export class InboxService {
   ) {
     await this.require(workspaceId, projectId, input.conversationId);
     const now = this.now();
-    return await this.deps.db.transaction(async tx => {
+    const { message, pushJobId } = await this.deps.db.transaction(async tx => {
       const repo = new MessengerConversationRepo(tx);
-      const { message } = await repo.append(
+      const { message: written } = await repo.append(
         workspaceId,
         input.conversationId,
         {
@@ -119,9 +123,21 @@ export class InboxService {
         preview(input.body),
       );
       // Writing means having read up to here.
-      await repo.markOperatorRead(workspaceId, input.conversationId, userId, message.seq);
-      return message;
+      await repo.markOperatorRead(workspaceId, input.conversationId, userId, written.seq);
+      const queued = input.internal
+        ? undefined
+        : await this.deps.queue?.enqueue(
+            pushMessengerReply,
+            { conversationId: input.conversationId, seq: written.seq },
+            { dedupeKey: `${input.conversationId}:${written.seq}`, workspaceId, executor: tx },
+          );
+      return { message: written, pushJobId: queued?.job.id };
     });
+    // Push at once, once the reply is committed; the job table is the fallback.
+    if (pushJobId !== undefined) {
+      this.deps.queue?.kick(pushJobId);
+    }
+    return message;
   }
 
   async setStatus(workspaceId: string, projectId: string, conversationId: string, status: ConversationStatus) {

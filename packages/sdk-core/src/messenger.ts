@@ -15,6 +15,7 @@ import type {
   MessengerContext,
   MessengerConversation,
   MessengerMessage,
+  MessengerPushTokenRequest,
   MessengerSessionRequest,
   MessengerSessionResponse,
 } from './wire';
@@ -90,6 +91,18 @@ async function problemOf(response: Response): Promise<{ type?: string; title?: s
   }
 }
 
+/**
+ * The conversation a messenger push notification is about, from its `data`
+ * (`{ mocco: 'messenger', conversationId }`), or undefined for any other notification.
+ */
+export function messengerConversationIdOf(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null) {
+    return undefined;
+  }
+  const { mocco, conversationId } = data as { mocco?: unknown; conversationId?: unknown };
+  return mocco === 'messenger' && typeof conversationId === 'string' ? conversationId : undefined;
+}
+
 const initialState: MessengerState = {
   status: 'idle',
   conversations: [],
@@ -120,6 +133,8 @@ export class MessengerClient {
   private readonly threadWatchers = new Map<string, number>();
 
   private timer: ReturnType<typeof setInterval> | undefined;
+
+  private pushToken: string | undefined;
 
   getState = (): MessengerState => this.state;
 
@@ -488,8 +503,28 @@ export class MessengerClient {
     }
   }
 
-  /** Forget the session (the user signed out of the app). */
+  /**
+   * Let team replies reach this device while the app is closed: pass the Expo push token
+   * (`(await Notifications.getExpoPushTokenAsync()).data`). Call again when it changes.
+   */
+  async registerPushToken(input: MessengerPushTokenRequest): Promise<void> {
+    await this.call('POST', '/push-tokens', input);
+    this.pushToken = input.token;
+  }
+
+  /** Forget the session (the user signed out of the app); this device stops getting their pushes. */
   async signOut(): Promise<void> {
+    if (this.pushToken !== undefined && this.session !== null) {
+      try {
+        await this.send('DELETE', '/push-tokens', {
+          body: { token: this.pushToken },
+          authorization: this.session.token,
+        });
+      } catch {
+        // Signing out must not fail on the network; the token is replaced on the next register.
+      }
+    }
+    this.pushToken = undefined;
     this.session = null;
     await this.writeStored(null);
     this.setState({ ...initialState, status: 'signed_out' });

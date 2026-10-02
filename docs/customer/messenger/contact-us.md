@@ -134,6 +134,24 @@ if (asset !== undefined) {
 
 Messages come back with `attachments`, each with a `url` that works for a few minutes; show it with `<Image source={{ uri: attachment.url }} />`.
 
+To get a notification when your team replies while the app is closed, register the device's Expo push token after sign-in, and open the conversation when the user taps the notification:
+
+```tsx
+import * as Notifications from 'expo-notifications';
+import { messengerConversationIdOf, useMessenger } from '@mocco/react-native/messenger';
+
+const messenger = useMessenger();
+const { data: token } = await Notifications.getExpoPushTokenAsync();
+await messenger.registerPushToken({ provider: 'expo', token, platform: Platform.OS === 'ios' ? 'ios' : 'android' });
+
+Notifications.addNotificationResponseReceivedListener(response => {
+  const conversationId = messengerConversationIdOf(response.notification.request.content.data);
+  if (conversationId !== undefined) navigation.navigate('ContactThread', { id: conversationId });
+});
+```
+
+The notification's title is your project's name and its text is the start of the reply; a reply the user has already read in the app isn't pushed. `signOut()` removes the device, so the next person to sign in on it doesn't get the previous user's replies.
+
 ### Any other client
 
 The SDK calls a small HTTP API you can use from anywhere. The base URL is `https://api.mocco.club/v1/messenger`.
@@ -162,6 +180,7 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 | `GET /conversations/{id}/messages?afterSeq=0` | The messages, oldest first. Each has a `seq`; pass the last one you have as `afterSeq` to get only new ones |
 | `POST /conversations/{id}/messages` | Reply: `{ "body": "…", "clientMessageId": "<uuid>" }` |
 | `POST /conversations/{id}/read` | `{ "seq": 5 }` once the user has seen up to that message |
+| `POST /push-tokens` | `{ "provider": "expo", "token": "ExponentPushToken[…]", "platform": "ios" }` so replies are pushed to the device; `DELETE /push-tokens` `{ "token": … }` on sign out |
 | `POST /attachments` | `{ "contentType": "image/png", "sizeBytes": 48213 }` → an `attachmentId` and an `upload` URL to `PUT` the bytes to; then list the id in `attachmentIds` when you start or reply |
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.

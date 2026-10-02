@@ -109,7 +109,7 @@ describe('/v1/messenger (pglite)', () => {
       createV1Routes({
         apiKeys,
         limiter: new MemoryRateLimiter(),
-        messenger: { contacts: messenger.contactMessenger },
+        messenger: { contacts: messenger.contactMessenger, push: messenger.messengerPush },
       }),
     );
     workspaceId = expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
@@ -337,6 +337,97 @@ describe('/v1/messenger (pglite)', () => {
     await expect(
       withoutStorage.contactMessenger.createAttachment(principal, { contentType: 'image/png', sizeBytes: 8 }),
     ).rejects.toThrow(/object storage isn't configured/u);
+  });
+
+  describe('reply push', () => {
+    const TOKEN = 'ExponentPushToken[abc123]';
+
+    it('registers a device, queues a push for team replies only, and sends it unless already read', async () => {
+      const queued: { payload: { conversationId: string; seq: number } }[] = [];
+      const sent: { to: string; title: string; body: string; data: Record<string, string> }[] = [];
+      const domain = createMessengerDomain(t.db, {
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
+        box: () => new SecretBox([{ id: 'k1', key: Buffer.alloc(32, 7) }]),
+        queue: {
+          enqueue: async (_job, payload) => {
+            queued.push({ payload: payload as { conversationId: string; seq: number } });
+            return await Promise.resolve({ job: { id: 'job-1' } as never, created: true });
+          },
+          kick: () => {},
+        },
+        pushSender: {
+          send: async messages => {
+            sent.push(...messages);
+            return await Promise.resolve(messages.map(entry => ({ to: entry.to, ok: true, isDeviceGone: false })));
+          },
+        },
+      });
+      const token = await sessionFor('u1');
+      const bad = await call('POST', '/push-tokens', {
+        token,
+        body: { provider: 'expo', token: 'nope', platform: 'ios' },
+      });
+      const registered = await call('POST', '/push-tokens', {
+        token,
+        body: { provider: 'expo', token: TOKEN, platform: 'ios' },
+      });
+      const { body } = await start(token);
+      const conversationId = (body as unknown as { conversation: { id: string } }).conversation.id;
+
+      await domain.inbox.write(workspaceId, projectId, operatorId, { conversationId, body: 'note', internal: true });
+      await domain.inbox.write(workspaceId, projectId, operatorId, {
+        conversationId,
+        body: 'Fixed in 3.8.1. Update and add the widget again.',
+        internal: false,
+      });
+      const delivered = await domain.messengerPush.deliverReply(queued[0]?.payload ?? { conversationId, seq: 0 });
+      await call('POST', `/conversations/${conversationId}/read`, { token, body: { seq: 3 } });
+      const afterRead = await domain.messengerPush.deliverReply({ conversationId, seq: 3 });
+
+      expect([bad.status, registered.status]).toEqual([400, 204]);
+      expect(queued.map(entry => entry.payload)).toEqual([{ conversationId, seq: 3 }]);
+      expect(delivered).toBe(1);
+      expect(sent).toEqual([
+        {
+          to: TOKEN,
+          title: 'ShowYourTime',
+          body: 'Fixed in 3.8.1. Update and add the widget again.',
+          data: { mocco: 'messenger', conversationId },
+        },
+      ]);
+      expect(afterRead).toBe(0);
+    });
+
+    it('stops pushing to a device the service says is gone, and to a token the user removed', async () => {
+      const sent: string[] = [];
+      const domain = createMessengerDomain(t.db, {
+        audit: new AuditService({ audit: new AuditRepo(t.db) }),
+        box: () => new SecretBox([{ id: 'k1', key: Buffer.alloc(32, 7) }]),
+        pushSender: {
+          send: async messages => {
+            sent.push(...messages.map(entry => entry.to));
+            return await Promise.resolve(
+              messages.map(entry => ({ to: entry.to, ok: false, isDeviceGone: entry.to === TOKEN })),
+            );
+          },
+        },
+      });
+      const token = await sessionFor('u1');
+      await call('POST', '/push-tokens', { token, body: { provider: 'expo', token: TOKEN, platform: 'ios' } });
+      const other = 'ExponentPushToken[other]';
+      await call('POST', '/push-tokens', { token, body: { provider: 'expo', token: other, platform: 'android' } });
+      const { body } = await start(token);
+      const conversationId = (body as unknown as { conversation: { id: string } }).conversation.id;
+      await domain.inbox.write(workspaceId, projectId, operatorId, { conversationId, body: 'one', internal: false });
+      await domain.messengerPush.deliverReply({ conversationId, seq: 2 });
+      const removed = await call('DELETE', '/push-tokens', { token, body: { token: other } });
+      await domain.inbox.write(workspaceId, projectId, operatorId, { conversationId, body: 'two', internal: false });
+      const second = await domain.messengerPush.deliverReply({ conversationId, seq: 3 });
+
+      expect(removed.status).toBe(204);
+      expect(sent).toEqual([TOKEN, other]);
+      expect(second).toBe(0);
+    });
   });
 
   describe('screenshots', () => {

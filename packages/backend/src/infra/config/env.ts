@@ -77,6 +77,8 @@ const schema = z.object({
   // and Supabase Storage's S3 endpoint; `filesystem` is for dev and single-box
   // self-host. Unset: filesystem locally, and not configured on Vercel.
   STORAGE_DRIVER: z.enum(['s3', 'filesystem']).optional(),
+  // Expo push access token, when the Expo project requires one ("enhanced security"); messenger reply push.
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
   STORAGE_BUCKET: z.string().min(1).optional(),
   /** Custom S3 endpoint (R2: `https://<account>.r2.cloudflarestorage.com`); omit for AWS. */
   STORAGE_ENDPOINT: z.url().optional(),
