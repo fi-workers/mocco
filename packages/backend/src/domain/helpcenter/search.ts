@@ -50,8 +50,8 @@ function snippetOf(text: string, term: string): string {
 
 /**
  * The forms of a term to look for. In free text a Korean word usually carries a particle
- * ("위젯이", "위젯을"), so a word of three or more letters also matches without its last
- * letter. Strip trailing punctuation first.
+ * ("위젯이", "위젯을"), so a Korean word of three or more letters also matches without
+ * its last letter. Strip trailing punctuation first.
  */
 function formsOf(term: string, match: SearchMatch): string[] {
   let word = term;
@@ -61,7 +61,8 @@ function formsOf(term: string, match: SearchMatch): string[] {
   if (match === 'all') {
     return [term];
   }
-  return [...word].length >= 3 ? [word, [...word].slice(0, -1).join('')] : [word];
+  // Only Hangul: in English, dropping a letter ("the" → "th") matches noise.
+  return [...word].length >= 3 && /\p{Script=Hangul}$/u.test(word) ? [word, [...word].slice(0, -1).join('')] : [word];
 }
 
 export function searchArticles(

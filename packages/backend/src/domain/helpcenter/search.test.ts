@@ -28,5 +28,7 @@ describe('help center search', () => {
     // "위젯이" matches "위젯"; "a" is too short to count.
     expect(searchArticles(articles, '위젯이 안 보여요 a', 10, 'any').map(hit => hit.path)).toEqual(['/ko/a', '/ko/b']);
     expect(searchArticles(articles, 'nothing here', 10, 'any')).toEqual([]);
+    // Only Korean words lose their last letter: "coupons" doesn't become "coupon".
+    expect(searchArticles(articles, 'couponz', 10, 'any')).toEqual([]);
   });
 });

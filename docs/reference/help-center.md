@@ -72,7 +72,7 @@ Each article has a translation per offered language in `mocco_help_translations`
 `searchArticles` (`domain/helpcenter/search.ts`) runs in memory over a site's published texts, in the reader's locale where translated and the source elsewhere. Matching is case-insensitive substring per term, so any script works without a tokenizer. Two modes:
 
 - `all` (default, the public site's search box): every term (up to 6) must appear in the title or the text.
-- `any` (free text, such as an inquiry being written in an app): one term is enough. Terms shorter than two letters are skipped, up to 24 are used, trailing punctuation is dropped, and a term of three or more letters also matches without its last letter, so a Korean word with a particle ("위젯이") finds "위젯".
+- `any` (free text, such as an inquiry being written in an app): one term is enough. Terms shorter than two letters are skipped, up to 24 are used, trailing punctuation is dropped, and a term of three or more letters ending in Hangul also matches without its last letter, so a Korean word with a particle ("위젯이") finds "위젯".
 
 Ranking: matched terms ×100, title matches ×10, text matches ×1. Each hit has a 140-character plain-text snippet around the first match in the text. Served at `/api/help/search` (public site, frontend) and `GET /v1/help/search` (`help:read`, publishable keys allowed; `q` up to 500 characters, `match=all|any`, `limit` up to 20); the SDK wraps the latter as `HelpClient.search` and `useHelpSearch` (`@mocco/react-native/messenger`).
 
