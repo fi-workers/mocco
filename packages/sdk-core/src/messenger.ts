@@ -150,6 +150,8 @@ export class MessengerClient {
 
   private pushToken: string | undefined;
 
+  private pushPlatform: MessengerPushTokenRequest['platform'] | undefined;
+
   getState = (): MessengerState => this.state;
 
   subscribe = (listener: () => void): (() => void) => {
@@ -570,6 +572,27 @@ export class MessengerClient {
   async registerPushToken(input: MessengerPushTokenRequest): Promise<void> {
     await this.call('POST', '/push-tokens', input);
     this.pushToken = input.token;
+    this.pushPlatform = input.platform;
+  }
+
+  /**
+   * The app's signed-in user changed (they signed in, or switched accounts): ask
+   * `identity` again and open their session. What this device wrote as a guest moves to
+   * the account, and a registered push token follows the new session.
+   */
+  async reidentify(): Promise<void> {
+    const { pushToken, pushPlatform } = this;
+    this.session = null;
+    this.pushToken = undefined;
+    this.setState({ ...initialState, status: 'loading' });
+    await this.refresh();
+    if (pushToken !== undefined && pushPlatform !== undefined && this.session !== null) {
+      try {
+        await this.registerPushToken({ provider: 'expo', token: pushToken, platform: pushPlatform });
+      } catch {
+        // The app registers again on its next launch.
+      }
+    }
   }
 
   /** Forget the session (the user signed out of the app); this device stops getting their pushes. */
@@ -585,6 +608,7 @@ export class MessengerClient {
       }
     }
     this.pushToken = undefined;
+    this.pushPlatform = undefined;
     this.session = null;
     await this.writeStored(null);
     this.setState({ ...initialState, status: 'signed_out' });
