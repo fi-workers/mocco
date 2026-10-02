@@ -34,7 +34,7 @@ code_refs:
 
 # Mocco-hosted OTA updates
 
-> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), trusted publishing (#130), gated promotion (#131), staged rollout, pause and rollback (#132), and adoption metrics (#133).
+> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), trusted publishing (#130), gated promotion (#131), staged rollout, pause and rollback (#132), adoption metrics (#133), and the release and channel pages (#134). Customer guides: [Host OTA updates on Mocco](../customer/ota/hosted-updates.md) and [Move to Mocco-hosted OTA](../customer/ota/migrate-to-hosted.md).
 
 ## OTA apps
 
@@ -144,10 +144,14 @@ Responses carry `expo-sfv-version: 0` and `cache-control: private, max-age=0`. E
 
 `GET /v1/ota/apps/{id}/assets/{hash}` (the URL inside every signed manifest) redirects (302) to the verified bytes in the store: the CDN or bucket URL, or the filesystem driver's route. Unknown or unverified hashes are 404.
 
-## Tables (migrations 0022–0028)
+## Console pages
+
+The OTA hosting tab links each channel to its page (`…/ota-hosting/channels/{id}?app=&platform=&range=`): what each head serves and rolls out with its controls and reach, the waiting requests, and its history from `mocco_ota_deployments` (actor, release, share change, approval, reason) for 7 days, 30 days or all. Platform and range are URL state. Each release has a page (`…/ota-hosting/releases/{id}?app=`): its signed updates including the pre-signed rollbacks, the heads serving it, its adoption, its approval requests and a Promote control. Each certificate shows the runtime versions that depend on it: finalize records which certificate verified each update (`mocco_ota_updates.certificate_id`). A release published with `--mandatory` carries `extra.mocco.mandatory`, which `useMoccoUpdate()` in `@mocco/react-native-ota` applies at the next safe point.
+
+## Tables (migrations 0022–0029)
 
 `mocco_ota_apps`, `mocco_ota_signing_certificates`, `mocco_ota_channels`, `mocco_ota_upload_sessions` (token hash only, one release per session, its trust policy and allowed channels), `mocco_ota_trust_policies`, plus the tables the next slices fill: `mocco_ota_releases`, `mocco_ota_updates` (the exact signed manifest bytes, never rewritten; the id is the Expo update id from CI), `mocco_ota_signed_directives`, `mocco_ota_assets` (content-addressed by base64url SHA-256, linked to `mocco_objects`), `mocco_ota_update_assets`, `mocco_ota_channel_heads` (serving state per channel, platform and runtime version) and `mocco_ota_deployments` (append-only channel history), `mocco_ota_devices`, `mocco_ota_client_events` and `mocco_ota_adoption_daily`. All are workspace-scoped with composite FKs.
 
 ## tRPC surface
 
-`ota.hosting.metrics.adoption | channelReach`, `ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | previewPromotion | promote | changeRollout | stop`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.
+`ota.hosting.metrics.adoption | channelReach`, `ota.hosting.apps.list | create`, `ota.hosting.releases.list | get`, `ota.hosting.certificates.usage`, `ota.hosting.channels.timeline`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | previewPromotion | promote | changeRollout | stop`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.

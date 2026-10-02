@@ -182,17 +182,18 @@ export class UploadService {
   }
 
   /** Check a body's signature: required on a `signing_required` app, and verified whenever given. */
-  private async checkSignature(app: OtaAppRow, signed: SignedBody, label: string): Promise<void> {
+  /** Check a body's signature; returns the certificate it verified against (null when unsigned). */
+  private async checkSignature(app: OtaAppRow, signed: SignedBody, label: string): Promise<string | null> {
     if (signed.signature === null) {
       if (app.signingRequired) {
         throw new OtaUploadRejectedError(`${label} is unsigned, and this app requires signed updates`);
       }
-      return;
+      return null;
     }
     const { keyid } = signed.signature;
     const check = await this.deps.signing.verify(app.id, signed.body, serializeSignatureHeader(signed.signature));
     if (check.ok) {
-      return;
+      return check.certificateId;
     }
     if (check.refusal === SignatureRefusals.unknownKey) {
       throw new OtaUploadRejectedError(
@@ -270,9 +271,18 @@ export class UploadService {
     // Checked one at a time, so the first problem is the one reported.
     await input.updates.reduce(async (previous, update) => {
       await previous;
-      const manifest = await this.checkManifest(app, release, update, labelOf('manifest', update.platform));
+      const { manifest, certificateId } = await this.checkManifest(
+        app,
+        release,
+        update,
+        labelOf('manifest', update.platform),
+      );
       originals.set(update.platform, { id: manifest.id, createdAt: new Date(manifest.createdAt) });
-      this.addUpdate(content, app, release, update, manifest, { contentOf: manifest.id, supersedes: null });
+      this.addUpdate(content, app, release, update, manifest, {
+        contentOf: manifest.id,
+        supersedes: null,
+        certificateId,
+      });
     }, Promise.resolve());
     const targets = input.republishes.map(republish => `${republish.platform}:${republish.targetUpdateId}`);
     if (new Set(targets).size !== targets.length) {
@@ -295,7 +305,7 @@ export class UploadService {
     release: OtaReleaseRow,
     signed: SignedBody,
     label: string,
-  ): Promise<ExpoManifest> {
+  ): Promise<{ manifest: ExpoManifest; certificateId: string | null }> {
     const manifest = parseBody(expoManifestSchema, signed.body, label);
     if (manifest.runtimeVersion !== release.runtimeVersion) {
       throw new OtaUploadRejectedError(
@@ -304,8 +314,8 @@ export class UploadService {
     }
     this.checkCommitTime(new Date(manifest.createdAt), label);
     checkAssetUrls(app, manifest, label);
-    await this.checkSignature(app, signed, label);
-    return manifest;
+    const certificateId = await this.checkSignature(app, signed, label);
+    return { manifest, certificateId };
   }
 
   private addUpdate(
@@ -314,7 +324,7 @@ export class UploadService {
     release: OtaReleaseRow,
     signed: SignedBody,
     manifest: ExpoManifest,
-    links: { contentOf: string; supersedes: string | null },
+    links: { contentOf: string; supersedes: string | null; certificateId: string | null },
   ): void {
     content.updates.push({
       id: manifest.id,
@@ -330,6 +340,7 @@ export class UploadService {
       manifestBody: signed.body,
       signature: signed.signature?.sig ?? null,
       keyid: signed.signature?.keyid ?? null,
+      certificateId: links.certificateId,
       launchAssetHash: manifest.launchAsset.hash,
       // Summed from the stored asset sizes in finalize.
       totalBytes: 0,
@@ -363,7 +374,7 @@ export class UploadService {
     if (original === undefined) {
       throw new OtaUploadRejectedError(`${label} needs this release's ${republish.platform} update`);
     }
-    const manifest = await this.checkManifest(app, release, republish, label);
+    const { manifest, certificateId } = await this.checkManifest(app, release, republish, label);
     const targetHashes = new Set(await this.deps.releases.assetHashesOf(target.id));
     const hashes = assetsOf(manifest).map(asset => asset.hash);
     const isSameContent =
@@ -381,6 +392,7 @@ export class UploadService {
     this.addUpdate(content, app, release, republish, manifest, {
       contentOf: target.contentOfUpdateId,
       supersedes: original.id,
+      certificateId,
     });
   }
 
@@ -684,6 +696,15 @@ export class UploadService {
       });
     }
     return OtaReleaseStatuses.failed;
+  }
+
+  /** One release of the app, or OtaReleaseNotFoundError. */
+  async getRelease(app: OtaAppRow, releaseId: string): Promise<OtaReleaseDto> {
+    const [row] = await this.deps.releases.listByApp(app.workspaceId, app.id, { releaseId, limit: 1 });
+    if (row === undefined) {
+      throw new OtaReleaseNotFoundError(releaseId);
+    }
+    return toReleaseDto(row);
   }
 
   async listReleases(app: OtaAppRow): Promise<OtaReleaseDto[]> {

@@ -7,7 +7,11 @@ import {
   ChannelPolicyOutcomes,
   otaAppSchema,
   otaChannelCreateInputSchema,
+  certificateUsageSchema,
   otaChannelHeadSchema,
+  otaDeploymentSchema,
+  otaReleaseDetailSchema,
+  timelineRangeSchema,
   otaChannelSchema,
   otaPlatformSchema,
   otaReleaseSchema,
@@ -116,6 +120,16 @@ export const otaHostingRouter = router({
   }),
 
   releases: router({
+    /** One release with its updates, where they're served and its approval history. */
+    get: otaProcedure
+      .input(appInput.extend({ releaseId: z.uuid() }))
+      .output(otaReleaseDetailSchema)
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        const release = await ctx.otaUploads.getRelease(app, input.releaseId);
+        return await ctx.otaChannels.releaseDetail(app, input.releaseId, release);
+      }),
+
     list: otaProcedure
       .input(appInput)
       .output(z.object({ releases: z.array(otaReleaseSchema) }))
@@ -145,6 +159,15 @@ export const otaHostingRouter = router({
   }),
 
   certificates: router({
+    /** Which runtime versions depend on which certificate. */
+    usage: otaProcedure
+      .input(appInput)
+      .output(z.object({ usage: z.array(certificateUsageSchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return { usage: await ctx.otaSigning.usage(app) };
+      }),
+
     list: otaProcedure
       .input(appInput)
       .output(z.object({ certificates: z.array(signingCertificateSchema) }))
@@ -208,6 +231,15 @@ export const otaHostingRouter = router({
       .query(async ({ ctx, input }) => {
         const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
         return await ctx.otaChannels.previewPromotion(app, input.channelId, input.releaseId);
+      }),
+
+    /** A channel's history (`mocco_ota_deployments`) within a range, newest first. */
+    timeline: otaProcedure
+      .input(appInput.extend({ channelId: z.uuid(), range: timelineRangeSchema.default('30d') }))
+      .output(z.object({ deployments: z.array(otaDeploymentSchema) }))
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return { deployments: await ctx.otaChannels.timeline(app, input.channelId, input.range) };
       }),
 
     /** What each channel head serves now. */

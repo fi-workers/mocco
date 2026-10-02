@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_ota_updates" ADD COLUMN "certificate_id" uuid;--> statement-breakpoint
+ALTER TABLE "mocco_ota_updates" ADD CONSTRAINT "mocco_ota_updates_certificate_id_mocco_ota_signing_certificates_id_fk" FOREIGN KEY ("certificate_id") REFERENCES "public"."mocco_ota_signing_certificates"("id") ON DELETE set null ON UPDATE no action;

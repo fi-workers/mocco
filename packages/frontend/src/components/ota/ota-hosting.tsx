@@ -48,7 +48,7 @@ interface Props {
   projectId: string;
 }
 
-interface AppProps extends Props {
+export interface AppProps extends Props {
   app: OtaAppDto;
   isAdmin: boolean;
 }
@@ -90,10 +90,31 @@ function SetupCard({ app, channels }: { app: OtaAppDto; channels: readonly OtaCh
   );
 }
 
+/** Which runtime versions depend on a certificate: binaries of those runtimes embed it. */
+function CertificateUsage({
+  runtimes,
+}: {
+  runtimes: readonly { runtimeVersion: string; updates: number }[] | undefined;
+}) {
+  if (runtimes === undefined || runtimes.length === 0) {
+    return <p className="text-xs text-muted-foreground">No update signed with it yet.</p>;
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      Runtime versions that depend on it:{' '}
+      {runtimes
+        .map(runtime => `${runtime.runtimeVersion} (${runtime.updates} update${runtime.updates === 1 ? '' : 's'})`)
+        .join(', ')}
+      . Retiring it stops their updates.
+    </p>
+  );
+}
+
 function Certificates({ workspaceId, projectId, app, isAdmin }: AppProps) {
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
   const certificatesQuery = trpc.ota.hosting.certificates.list.useQuery(input);
+  const usageQuery = trpc.ota.hosting.certificates.usage.useQuery(input);
   const [pem, setPem] = useState('');
   const [keyid, setKeyid] = useState(DEFAULT_SIGNING_KEY_ID);
   const invalidate = async () => {
@@ -149,6 +170,9 @@ function Certificates({ workspaceId, projectId, app, isAdmin }: AppProps) {
               keyid {certificate.keyid} · key {certificate.spkiSha256.slice(0, 16)}… · expires{' '}
               {certificate.notAfter.toLocaleDateString()}
             </p>
+            <CertificateUsage
+              runtimes={usageQuery.data?.usage.find(entry => entry.certificateId === certificate.id)?.runtimes}
+            />
           </li>
         ))}
       </ul>
@@ -410,7 +434,13 @@ function ReachNote({
 }
 
 /** What a channel serves and rolls out per runtime, with the rollout and rollback controls. */
-function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { channel: OtaChannelDto }) {
+export function HeadControls({
+  workspaceId,
+  projectId,
+  app,
+  channel,
+  platform,
+}: AppProps & { channel: OtaChannelDto; platform?: string }) {
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
   const headsQuery = trpc.ota.hosting.channels.heads.useQuery(input);
@@ -431,7 +461,9 @@ function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { cha
   };
   const rollout = trpc.ota.hosting.channels.changeRollout.useMutation({ onSuccess: onDone });
   const stop = trpc.ota.hosting.channels.stop.useMutation({ onSuccess: onDone });
-  const heads = (headsQuery.data?.heads ?? []).filter(head => head.channelId === channel.id);
+  const heads = (headsQuery.data?.heads ?? []).filter(
+    head => head.channelId === channel.id && (platform === undefined || head.platform === platform),
+  );
   if (headsQuery.isSuccess && heads.every(head => head.releaseId === null && head.candidateReleaseId === null)) {
     return <p className="text-xs text-muted-foreground">Serves nothing yet: builds keep their embedded bundle.</p>;
   }
@@ -551,7 +583,7 @@ function HeadControls({ workspaceId, projectId, app, channel }: AppProps & { cha
   );
 }
 
-const formatBytes = (bytes: number) =>
+export const formatBytes = (bytes: number) =>
   bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /** The pinned action of a promotion request (what the handler will apply). */
@@ -590,7 +622,7 @@ function PromotionDiff(props: AppProps & { channel: OtaChannelDto; releaseId: st
 }
 
 /** Promotions to a protected channel waiting for approval, with what they'd ship. */
-function PendingPromotionRequests(props: AppProps & { channel: OtaChannelDto }) {
+export function PendingPromotionRequests(props: AppProps & { channel: OtaChannelDto }) {
   const { workspaceId, projectId, app, channel } = props;
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
@@ -709,7 +741,11 @@ function ChannelRow(props: AppProps & { channel: OtaChannelDto }) {
     <li className="flex flex-col gap-2 rounded-xl border border-border px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2">
-          <span className="font-mono text-sm font-medium">{channel.name}</span>
+          <Link
+            href={Routes.projectOtaChannel(workspaceId, projectId, app.id, channel.id)}
+            className="font-mono text-sm font-medium underline-offset-2 hover:underline">
+            {channel.name}
+          </Link>
           {channel.isProtected ? (
             <StatusBadge tone={Tones.warn}>Protected</StatusBadge>
           ) : (
@@ -836,7 +872,7 @@ function promotionNotice(result: { channel: string; platforms: string[]; changed
 }
 
 /** Promote a ready release: at once to an open channel, as an approval request to a protected one. */
-function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { release: OtaReleaseDto }) {
+export function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { release: OtaReleaseDto }) {
   const utils = trpc.useUtils();
   const input = { workspaceId, projectId, appId: app.id };
   const channelsQuery = trpc.ota.hosting.channels.list.useQuery(input);
@@ -910,7 +946,7 @@ function PromoteControl({ workspaceId, projectId, app, release }: AppProps & { r
 }
 
 /** Devices on a release (24 h), emergency launches, and its last two weeks as bars. */
-function AdoptionLine({ adoption }: { adoption: ReleaseAdoptionDto | undefined }) {
+export function AdoptionLine({ adoption }: { adoption: ReleaseAdoptionDto | undefined }) {
   if (adoption === undefined || (adoption.activeDevices === 0 && adoption.daily.length === 0)) {
     return null;
   }
@@ -944,7 +980,11 @@ function ReleaseRow(props: AppProps & { release: OtaReleaseDto; adoption: Releas
   return (
     <li className="flex flex-col gap-1 rounded-xl border border-border px-4 py-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium">{release.message ?? 'Untitled release'}</span>
+        <Link
+          href={Routes.projectOtaRelease(props.workspaceId, props.projectId, props.app.id, release.id)}
+          className="font-medium underline-offset-2 hover:underline">
+          {release.message ?? 'Untitled release'}
+        </Link>
         <StatusBadge tone={releaseStatusTones[release.status]}>{releaseStatusLabels[release.status]}</StatusBadge>
         {release.isMandatory ? <StatusBadge tone={Tones.warn}>Mandatory</StatusBadge> : null}
       </div>

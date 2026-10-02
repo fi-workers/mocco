@@ -12,7 +12,7 @@ import { EntityNotFoundError, UniqueConstraintError } from '@backend/infra/db/er
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { OtaAppRow } from '@backend/domain/ota/repos/ota-app.repo';
 import type { SigningCertificateRepo, SigningCertificateRow } from '@backend/domain/ota/repos/signing-certificate.repo';
-import type { SigningCertificateDto, SigningCertificateInput } from '@mocco/common/ota-hosting';
+import type { CertificateUsageDto, SigningCertificateDto, SigningCertificateInput } from '@mocco/common/ota-hosting';
 
 export interface SigningServiceDeps {
   certificates: SigningCertificateRepo;
@@ -29,7 +29,8 @@ export const SignatureRefusals = {
 } as const;
 export type SignatureRefusal = (typeof SignatureRefusals)[keyof typeof SignatureRefusals];
 
-export type SignatureCheck = { ok: true; keyid: string; sig: string } | { ok: false; refusal: SignatureRefusal };
+export type SignatureCheck =
+  { ok: true; keyid: string; sig: string; certificateId: string } | { ok: false; refusal: SignatureRefusal };
 
 export function toCertificateDto(row: SigningCertificateRow): SigningCertificateDto {
   return {
@@ -60,6 +61,22 @@ export class SigningService {
   async list(app: OtaAppRow): Promise<SigningCertificateDto[]> {
     const rows = await this.deps.certificates.listByApp(app.workspaceId, app.id);
     return rows.map(row => toCertificateDto(row));
+  }
+
+  /** Which runtime versions depend on each certificate: the updates it verified, per runtime. */
+  async usage(app: OtaAppRow): Promise<CertificateUsageDto[]> {
+    const rows = await this.deps.certificates.listUsage(app.id);
+    const ids = rows.map(row => row.certificateId).filter((id, index, all) => id !== null && all.indexOf(id) === index);
+    return ids.map(certificateId => ({
+      certificateId: certificateId ?? '',
+      runtimes: rows
+        .filter(row => row.certificateId === certificateId)
+        .map(row => ({
+          runtimeVersion: row.runtimeVersion,
+          updates: row.updates,
+          lastCommitTime: new Date(row.lastCommitTime),
+        })),
+    }));
   }
 
   /** Register the certificate an app embeds. It must be an unexpired RSA X.509 certificate. */
@@ -142,9 +159,9 @@ export class SigningService {
     if (certificates.length === 0) {
       return { ok: false, refusal: SignatureRefusals.unknownKey };
     }
-    const isValid = certificates.some(certificate => isSignatureValid(body, parsed.sig, certificate.certificatePem));
-    return isValid
-      ? { ok: true, keyid: parsed.keyid, sig: parsed.sig }
-      : { ok: false, refusal: SignatureRefusals.invalid };
+    const verifying = certificates.find(certificate => isSignatureValid(body, parsed.sig, certificate.certificatePem));
+    return verifying === undefined
+      ? { ok: false, refusal: SignatureRefusals.invalid }
+      : { ok: true, keyid: parsed.keyid, sig: parsed.sig, certificateId: verifying.id };
   }
 }

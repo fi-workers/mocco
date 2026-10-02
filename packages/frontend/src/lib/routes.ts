@@ -27,6 +27,26 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/ota-hosting`;
     return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
   },
+  /** One hosted OTA channel: its heads, waiting requests and history (`platform`, `range` are view state). */
+  projectOtaChannel: (
+    id: string,
+    projectId: string,
+    appId: string,
+    channelId: string,
+    view: { platform?: string; range?: string } = {},
+  ) => {
+    const query = new URLSearchParams({ app: appId });
+    if (view.platform !== undefined) {
+      query.set('platform', view.platform);
+    }
+    if (view.range !== undefined) {
+      query.set('range', view.range);
+    }
+    return `/workspaces/${id}/p/${projectId}/ota-hosting/channels/${channelId}?${query.toString()}`;
+  },
+  /** One hosted OTA release: its updates, where it's served, adoption and approvals. */
+  projectOtaRelease: (id: string, projectId: string, appId: string, releaseId: string) =>
+    `/workspaces/${id}/p/${projectId}/ota-hosting/releases/${releaseId}?app=${encodeURIComponent(appId)}`,
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

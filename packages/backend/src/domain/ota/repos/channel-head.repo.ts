@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import * as schema from '@backend/infra/db/schema';
@@ -217,13 +217,45 @@ export class ChannelHeadRepo {
     });
   }
 
-  /** A channel's deployment history, newest first. */
-  async listDeployments(channelId: string, limit = 20) {
+  /** A channel's deployment history since `since` (all when null), newest first, with each
+   * release's message and SHA and the actor's name. */
+  async listDeployments(channelId: string, since: Date | null, limit = 200) {
     return await this.db
-      .select()
+      .select({
+        deployment: schema.otaDeployments,
+        releaseMessage: schema.otaReleases.message,
+        gitSha: schema.otaReleases.gitSha,
+        actorName: schema.users.name,
+      })
       .from(schema.otaDeployments)
-      .where(eq(schema.otaDeployments.channelId, channelId))
+      .leftJoin(schema.otaReleases, eq(schema.otaReleases.id, schema.otaDeployments.releaseId))
+      .leftJoin(schema.users, eq(schema.users.id, schema.otaDeployments.actorUserId))
+      .where(
+        since === null
+          ? eq(schema.otaDeployments.channelId, channelId)
+          : and(eq(schema.otaDeployments.channelId, channelId), gte(schema.otaDeployments.createdAt, since)),
+      )
       .orderBy(desc(schema.otaDeployments.createdAt))
       .limit(limit);
+  }
+
+  /** The heads of an app that serve (as active or candidate) any of `updateIds`. */
+  async listServing(appId: string, updateIds: readonly string[]) {
+    if (updateIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select({ head: schema.otaChannelHeads, channel: schema.otaChannels.name })
+      .from(schema.otaChannelHeads)
+      .innerJoin(schema.otaChannels, eq(schema.otaChannels.id, schema.otaChannelHeads.channelId))
+      .where(
+        and(
+          eq(schema.otaChannels.appId, appId),
+          or(
+            inArray(schema.otaChannelHeads.activeUpdateId, [...updateIds]),
+            inArray(schema.otaChannelHeads.candidateUpdateId, [...updateIds]),
+          ),
+        ),
+      );
   }
 }
