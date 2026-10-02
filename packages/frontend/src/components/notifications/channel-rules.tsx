@@ -19,7 +19,7 @@ import type { NotificationRuleDto, RuleFilter } from '@mocco/common/notification
 import type { RulePreset } from '@mocco/common/notification-presets';
 
 /** Every family of events, as the prefix wildcards a rule may name. */
-const WILDCARDS = ['gate.*', 'run.*', 'sentry.*', 'vercel.*', 'github.*'] as const;
+const WILDCARDS = ['gate.*', 'run.*', 'sentry.*', 'vercel.*', 'github.*', 'ota.*'] as const;
 const EVENT_TYPES = [...WILDCARDS, ...Object.values(DomainEventTypes)];
 
 const PRESET_LABELS: Record<RulePreset, string> = {

@@ -72,10 +72,12 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |
 | `GET /v1/ota/apps/{otaAppId}/releases/{releaseId}` | secret, `ota:write` | `{ id, status, runtimeVersion }` |
-| `POST /v1/ota/apps/{otaAppId}/releases/{releaseId}/promotions` | secret, `ota:write` | `201` (or `200` when nothing changed) `{ channel, releaseId, platforms, changed }`; `400`/`403`/`409` with a `detail` |
+| `POST /v1/ota/apps/{otaAppId}/releases/{releaseId}/promotions` | secret, `ota:write` | `201` applied, `202` approval pending (protected channel), `200` no-op: `{ channel, releaseId, platforms, changed, outcome, requestId }`; `400`/`409` with a `detail` |
+| `GET /v1/ota/apps/{otaAppId}/promotions/{requestId}` | secret, `ota:write` | `{ requestId, state }` (`pending`, `approved`, `rejected`, `superseded`, `expired`) |
 | `POST /v1/ota/auth/oidc` | none (a GitHub Actions OIDC token in the body) | `201 { sessionToken, expiresAt, allowedChannels }`, or a fixed `403` |
 | `GET /v1/ota/uploads/{releaseId}` | upload session | `{ id, status, runtimeVersion }` of the session's release |
 | `POST /v1/ota/uploads/{releaseId}/promotions` | upload session | like the key route, limited to the session's allowed channels |
+| `GET /v1/ota/uploads/{releaseId}/promotions/{requestId}` | upload session | `{ requestId, state }` |
 | `POST /v1/ota/apps/{otaAppId}/upload-sessions` | secret, `ota:write` | `201 { sessionToken, expiresAt }`: a 15-minute `mk_ups_` upload session |
 | `POST /v1/ota/uploads` | upload session | `201 { releaseId, assetBaseUrl, missing, rollbackTargets }`; see [Mocco-hosted OTA](./ota-hosting.md#uploads-from-ci) |
 | `POST /v1/ota/uploads/{releaseId}/finalize` | upload session | `200 { releaseId, status, updates }`, or `400 upload_rejected` whose `detail` says what to fix |

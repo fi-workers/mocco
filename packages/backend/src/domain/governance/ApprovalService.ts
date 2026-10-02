@@ -74,6 +74,8 @@ function approvalVoteError(denial: VoteDenial): Error {
 export class ApprovalService {
   private readonly handlers: Map<string, ApprovalHandler>;
 
+  private readonly rejectionListeners = new Map<string, ApprovalHandler>();
+
   constructor(private readonly deps: ApprovalServiceDeps) {
     this.handlers = new Map(deps.handlers);
   }
@@ -114,6 +116,19 @@ export class ApprovalService {
     return resolved;
   }
 
+  /** Run the subject's rejection listener, if any; its failure is logged, never thrown. */
+  private async tellRejected(request: ApprovalRequestRow): Promise<void> {
+    const listener = this.rejectionListeners.get(request.subjectType);
+    if (listener === undefined) {
+      return;
+    }
+    try {
+      await listener(request);
+    } catch (error) {
+      console.error(`[approvals] the rejection listener for ${request.subjectType} failed`, error);
+    }
+  }
+
   /** Bind the handler that applies approved `pre_approval` requests of a subject type.
    * Called once by the owning product's composition root (ota → governance, never the
    * reverse), so governance stays free of product imports. */
@@ -122,6 +137,12 @@ export class ApprovalService {
       throw new Error(`An approval handler for ${subjectType} is already registered`);
     }
     this.handlers.set(subjectType, handler);
+  }
+
+  /** Be told when a request of a subject type is rejected (to notify about it). Best
+   * effort: a failing listener is logged and never undoes the rejection. */
+  onRejected(subjectType: string, listener: ApprovalHandler): void {
+    this.rejectionListeners.set(subjectType, listener);
   }
 
   /** Open a request. Requirements are pinned here; a later policy edit never rewrites it. */
@@ -217,9 +238,12 @@ export class ApprovalService {
     const outcome = evaluateGate(request.requirements.resume, votes);
 
     if (outcome === GateStates.rejected) {
-      await this.resolve(request, ApprovalStates.rejected, AuditActions.approvalRejected, userId, {
+      const rejected = await this.resolve(request, ApprovalStates.rejected, AuditActions.approvalRejected, userId, {
         reason: check.reason ?? null,
       });
+      if (rejected !== undefined) {
+        await this.tellRejected(rejected);
+      }
     } else if (outcome === GateStates.resumed) {
       const approved = await this.resolve(request, ApprovalStates.approved, AuditActions.approvalApproved, userId, {
         principals: votes

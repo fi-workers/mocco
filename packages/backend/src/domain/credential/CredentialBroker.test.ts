@@ -308,7 +308,9 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       expect(result.credentials.value).toBe('stub-credential');
     }
     // Issued with the PINNED config's {provider, role, ttl} — never a request-body value.
-    expect(provider.calls).toEqual([{ workspaceId, runId, provider: 'aws', role: 'deployer', ttlSeconds: 900 }]);
+    expect(provider.calls).toEqual([
+      { workspaceId, runId, triggeredByUserId: expect.any(String), provider: 'aws', role: 'deployer', ttlSeconds: 900 },
+    ]);
   });
 
   it('DENIES (audited, never a throw) when the provider has no such credential', async () => {

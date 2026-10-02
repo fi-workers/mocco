@@ -34,7 +34,7 @@ code_refs:
 
 # Mocco-hosted OTA updates
 
-> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), and trusted publishing (#130); gated promotion (#131) and rollout and rollback (#132) build on it.
+> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), promotion and serving (#129), trusted publishing (#130) and gated promotion (#131); rollout and rollback (#132) build on it.
 
 ## OTA apps
 
@@ -98,9 +98,14 @@ In a workflow, `fi-workers/mocco/actions/ota-publish` runs `mocco-ota publish --
 
 ## Promotion
 
-Promoting a `ready` release to a channel points that channel's heads (one per platform and runtime version) at the release's updates. It is refused when the release isn't ready, when the channel is **protected** (that needs an approved request, which lands with gated promotion), and when the release is **older** than what the channel serves on a platform: devices load only a newer `commitTime`, so an older release would reach no one, and going back is a rollback. Promoting what a channel already serves changes nothing. Each promotion appends a `promote` deployment and is audited as `ota.channel.changed` with the actor (a user or `apikey:<id>`).
+Promoting a `ready` release to a channel points that channel's heads (one per platform and runtime version) at the release's updates. It is refused when the release isn't ready, and when the release is **older** than what the channel serves on a platform: devices load only a newer `commitTime`, so an older release would reach no one, and going back is a rollback. Promoting what a channel already serves changes nothing. Each change appends a `promote` deployment and is audited as `ota.channel.changed` with the actor (a user or `apikey:<id>`, `github:…`, `mocco:run:<id>`).
 
-Promote from the console (**Promote** on a ready release; protected channels are listed but disabled), with `mocco-ota promote --release <id> --channel <name>`, or with `mocco-ota publish --channel <name>`, which waits until the release is verified. Each channel row shows the release it serves per platform.
+- **An open channel** changes at once.
+- **A protected channel** gets a `pre_approval` request (`ota.channel_change`) under its current policy, pinned to the release, with one pending request per channel (a newer request supersedes the older one). The approval handler is the only way a protected head changes: it re-checks the release, applies the pinned promotion, and records the approvers and their roles on `ota.channel.changed` and the request id on the deployment. If the release can no longer be promoted when the approval lands (it was disabled, or the channel moved past it), nothing changes and `ota.channel.change_failed` is audited. Changing the channel's protection supersedes its pending promotions.
+- **Who requested it** is who can't approve it under `prevent_self`: the console user, or for CI the person the session acts for. That is the API key's creator, or the run's trigger for a broker session; a GitHub OIDC session acts for no one.
+- **Notifications:** `ota.promotion.requested`, `ota.promotion.approved` and `ota.promotion.rejected` events (facts `app`, `channel`, `release`) reach notification channels whose rules match; the Mocco preset includes them.
+
+Promote from the console (**Promote** on a ready release, or **Request approval** when the channel is protected), with `mocco-ota promote --release <id> --channel <name> [--wait]`, or with `mocco-ota publish --channel <name> [--wait]`, which waits until the release is verified (and, with `--wait`, for the approval). `/v1` answers `201` when heads changed, `202` with `requestId` when approval is pending, and `200` for a no-op; `GET …/promotions/{requestId}` reports the request's state. The channel row shows what it serves per platform and each waiting request: the release, its size, its git SHA, the assets devices would download compared with what the channel serves now, the reason, and what the policy needs.
 
 ## Serving devices
 

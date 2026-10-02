@@ -95,6 +95,13 @@ export class OtaHostingService {
   ): Promise<OtaChannelRow | undefined> {
     const updated = await this.deps.channels.setPolicyIfUnchanged(channel.id, policy, channel.updatedAt, this.now());
     if (updated !== undefined) {
+      // Pending promotions were asked under the old policy; a new policy supersedes them (invariant 8).
+      await this.deps.approvals.supersedePending(
+        workspaceId,
+        OtaHostingApprovalSubjects.channelChange,
+        channel.id,
+        actorUserId,
+      );
       await this.deps.audit.record(workspaceId, {
         actorUserId,
         action: AuditActions.otaChannelPolicyChanged,

@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_ota_upload_sessions" ADD COLUMN "acting_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "mocco_ota_upload_sessions" ADD CONSTRAINT "mocco_ota_upload_sessions_acting_user_id_mocco_users_id_fk" FOREIGN KEY ("acting_user_id") REFERENCES "public"."mocco_users"("id") ON DELETE set null ON UPDATE no action;

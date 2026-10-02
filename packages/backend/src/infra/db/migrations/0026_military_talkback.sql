@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_ota_updates" DROP CONSTRAINT "mocco_ota_updates_release_platform_kind_uq";--> statement-breakpoint
+ALTER TABLE "mocco_ota_updates" ADD CONSTRAINT "mocco_ota_updates_release_platform_kind_uq" UNIQUE NULLS NOT DISTINCT("release_id","platform","kind","supersedes_update_id","content_of_update_id");

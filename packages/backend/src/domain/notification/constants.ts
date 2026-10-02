@@ -23,6 +23,7 @@ export const NotificationSubscribers = {
   sentry: { pattern: 'sentry.*', name: 'notification.fan-out.sentry' },
   vercel: { pattern: 'vercel.*', name: 'notification.fan-out.vercel' },
   github: { pattern: 'github.*', name: 'notification.fan-out.github' },
+  ota: { pattern: 'ota.*', name: 'notification.fan-out.ota' },
 } as const;
 
 export const DeliveryPolicy = {

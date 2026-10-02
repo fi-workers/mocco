@@ -134,10 +134,31 @@ export const inboundEventPayloadSchemas = {
   [InboundEventTypes['github.workflow_run.succeeded']]: inboundEventPayloadSchema,
 } as const satisfies Record<InboundEventType, z.ZodType>;
 
+/** Mocco-hosted OTA: promotions to protected channels waiting for, or decided by, approval. */
+export const OtaEventTypes = {
+  otaPromotionRequested: 'ota.promotion.requested',
+  otaPromotionApproved: 'ota.promotion.approved',
+  otaPromotionRejected: 'ota.promotion.rejected',
+} as const;
+
+/** A product event that, like an inbound one, carries its message rendered when it
+ * happened, plus the flat facts rules filter on (`app`, `channel`, `release`). */
+export const renderedEventPayloadSchema = z.object({
+  facts: factsSchema,
+  message: neutralMessageSchema,
+});
+
+export const otaEventPayloadSchemas = {
+  [OtaEventTypes.otaPromotionRequested]: renderedEventPayloadSchema,
+  [OtaEventTypes.otaPromotionApproved]: renderedEventPayloadSchema,
+  [OtaEventTypes.otaPromotionRejected]: renderedEventPayloadSchema,
+} as const;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
   ...InboundEventTypes,
+  ...OtaEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
@@ -145,6 +166,7 @@ export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEvent
 export const domainEventPayloadSchemas = {
   ...governanceEventPayloadSchemas,
   ...inboundEventPayloadSchemas,
+  ...otaEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;

@@ -15,6 +15,8 @@ export interface ApiPrincipal {
   workspaceId: string;
   projectId: string;
   keyId: string;
+  /** Who created the key (null once they're deleted): what CI requests are attributed to. */
+  createdByUserId: string | null;
   kind: ApiKeyKind;
   scopes: readonly ApiScope[];
 }
@@ -184,6 +186,7 @@ export class ApiKeyService {
         workspaceId: row.workspaceId,
         projectId: row.projectId,
         keyId: row.id,
+        createdByUserId: row.createdByUserId,
         kind: row.kind,
         scopes: row.scopes,
       },

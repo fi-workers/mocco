@@ -13,6 +13,7 @@ import {
   otaReleaseSchema,
   otaTrustPolicyInputSchema,
   otaTrustPolicySchema,
+  promotionPreviewSchema,
   signingCertificateInputSchema,
   signingCertificateSchema,
 } from '@mocco/common/ota-hosting';
@@ -154,6 +155,15 @@ export const otaHostingRouter = router({
         return await ctx.otaHosting.changeChannelPolicy(app, ctx.session.user.id, input.channelId, input.policy);
       }),
 
+    /** What promoting a release to a channel would change (the approval card's diff). */
+    previewPromotion: otaProcedure
+      .input(appInput.extend({ channelId: z.uuid(), releaseId: z.uuid() }))
+      .output(promotionPreviewSchema)
+      .query(async ({ ctx, input }) => {
+        const app = await ctx.otaHosting.requireApp(input.workspaceId, input.projectId, input.appId);
+        return await ctx.otaChannels.previewPromotion(app, input.channelId, input.releaseId);
+      }),
+
     /** What each channel head serves now. */
     heads: otaProcedure
       .input(appInput)
@@ -163,7 +173,7 @@ export const otaHostingRouter = router({
         return { heads: await ctx.otaChannels.listHeads(app) };
       }),
 
-    /** Promote a ready release to an unprotected channel (protected ones need an approval). */
+    /** Promote a ready release: at once to an open channel, as an approval request to a protected one. */
     promote: otaProcedure
       .input(
         appInput.extend({
@@ -178,6 +188,8 @@ export const otaHostingRouter = router({
           releaseId: z.uuid(),
           platforms: z.array(otaPlatformSchema),
           changed: z.boolean(),
+          outcome: z.enum([ChannelPolicyOutcomes.applied, ChannelPolicyOutcomes.pendingApproval]),
+          requestId: z.uuid().nullable(),
         }),
       )
       .mutation(async ({ ctx, input }) => {

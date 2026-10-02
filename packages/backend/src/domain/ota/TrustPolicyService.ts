@@ -139,6 +139,8 @@ export class TrustPolicyService {
     return await this.deps.uploads.mintSession(app, {
       principal: `github:repo:${claims.repository_id}:ref:${claims.ref}`,
       trustPolicyId: policy.id,
+      // A GitHub job isn't tied to a Mocco user.
+      actingUserId: null,
       allowedChannels: policy.allowedChannels,
     });
   }

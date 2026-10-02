@@ -12,6 +12,8 @@ export interface CredentialIssueRequest {
   workspaceId: string;
   /** The run the credential is for — a provider that mints run-bound credentials records it. */
   runId: string;
+  /** Who triggered the run (null for a system trigger or a deleted user). */
+  triggeredByUserId: string | null;
   provider: string;
   role: string;
   ttlSeconds: number;

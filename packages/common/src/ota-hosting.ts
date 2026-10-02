@@ -283,13 +283,16 @@ export const promotionRequestSchema = z.object({
 });
 export type PromotionRequest = z.infer<typeof promotionRequestSchema>;
 
-/** The result of a promotion: the platforms whose heads now serve the release. */
+/** The result of a promotion: applied now (an open channel), or waiting for approval
+ * (a protected channel — `requestId` is the approval request). */
 export interface PromotionResult {
   channel: string;
   releaseId: string;
   platforms: OtaPlatform[];
-  /** False when the channel already served this release (nothing changed). */
+  /** True when heads changed now; false when they already served it or approval is pending. */
   changed: boolean;
+  outcome: ChannelPolicyOutcome;
+  requestId: string | null;
 }
 
 /** A ref pattern: an exact ref, or `*` as a wildcard within it (`refs/tags/v*`). */
@@ -329,3 +332,20 @@ export const oidcExchangeRequestSchema = z.object({
 
 /** The broker provider id a gated Mocco run step names to get an upload session. */
 export const MOCCO_OTA_CREDENTIAL_PROVIDER = 'mocco-ota';
+
+/** What a promotion would change on a channel, per platform (for the approval card). */
+export const promotionPreviewSchema = z.object({
+  channel: z.string(),
+  releaseId: z.uuid(),
+  platforms: z.array(
+    z.object({
+      platform: otaPlatformSchema,
+      replacesUpdateId: z.uuid().nullable(),
+      /** Assets devices on the channel would download that they don't have. */
+      newAssets: z.number(),
+      newBytes: z.number(),
+      removedAssets: z.number(),
+    }),
+  ),
+});
+export type PromotionPreview = z.infer<typeof promotionPreviewSchema>;

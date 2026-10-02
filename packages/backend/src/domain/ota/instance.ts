@@ -5,6 +5,7 @@ import { OtaApprovalSubjects } from '@mocco/common/ota';
 import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
 
 import { getAudit } from '@backend/domain/audit/instance';
+import { getEventBus } from '@backend/domain/events/instance';
 import { resolveBaseOrigin, schemeFor } from '@backend/domain/execution/endpoints';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { GitHubOidcVerifier } from '@backend/domain/integration/github/oidc';
@@ -37,6 +38,7 @@ import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
@@ -92,10 +94,23 @@ export function createOtaDomain(
     queue?: JobQueue;
     /** GitHub's OIDC keys; tests pass a local key set. */
     oidcKeys?: JWTVerifyGetKey;
+    /** Where promotion requests and decisions are published; omitted in most tests. */
+    events?: EventPublisher;
+    /** The app origin, for links in notification messages. */
+    appOrigin?: string;
   },
 ): OtaDomain {
   const policies = new AppVersionPolicyRepo(db);
-  const { secretBox = getSecretBox, publicApiBase, storage, queue = lazyQueue, oidcKeys, ...services } = deps;
+  const {
+    secretBox = getSecretBox,
+    publicApiBase,
+    storage,
+    queue = lazyQueue,
+    oidcKeys,
+    events,
+    appOrigin,
+    ...services
+  } = deps;
   const versionPolicies = new VersionPolicyService({
     policies,
     changes: new AppVersionPolicyChangeRepo(db),
@@ -121,6 +136,24 @@ export function createOtaDomain(
   const releases = new OtaReleaseRepo(db);
   const heads = new ChannelHeadRepo(db);
   const assets = new OtaAssetRepo(db);
+  const channelService = new OtaChannelService({
+    apps: new OtaAppRepo(db),
+    channels: new OtaChannelRepo(db),
+    releases,
+    heads,
+    assets,
+    approvals: services.approvals,
+    audit: services.audit,
+    cache,
+    ...(events !== undefined && { events }),
+    ...(appOrigin !== undefined && { appOrigin }),
+  });
+  deps.approvals.registerHandler(OtaHostingApprovalSubjects.channelChange, async request => {
+    await channelService.applyApproved(request);
+  });
+  deps.approvals.onRejected(OtaHostingApprovalSubjects.channelChange, async request => {
+    await channelService.notifyRejected(request);
+  });
   const uploads = new UploadService({
     apps: new OtaAppRepo(db),
     sessions: new UploadSessionRepo(db),
@@ -143,14 +176,7 @@ export function createOtaDomain(
     otaHosting: hosting,
     otaSigning: signing,
     otaUploads: uploads,
-    otaChannels: new OtaChannelService({
-      apps: new OtaAppRepo(db),
-      channels: new OtaChannelRepo(db),
-      releases,
-      heads,
-      audit: services.audit,
-      cache,
-    }),
+    otaChannels: channelService,
     otaUpdateChecks: new UpdateCheckService({ heads, assets, storage, cache }),
     otaTrustPolicies: new TrustPolicyService({
       apps: new OtaAppRepo(db),
@@ -179,6 +205,8 @@ export function getOtaDomain(): OtaDomain {
     audit: getAudit().audit,
     publicApiBase: publicApiBaseFromEnv(getEnv()),
     storage: getStorageDomain()?.storage,
+    events: getEventBus(),
+    appOrigin: resolveBaseOrigin({ serviceDomain: getEnv().SERVICE_DOMAIN, vercelUrl: getEnv().VERCEL_URL }),
   });
   return state.ota;
 }
