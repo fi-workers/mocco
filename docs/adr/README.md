@@ -39,6 +39,7 @@ related:
 | [0022](./0022-ota-signing-key-stays-in-ci.md) | OTA code signing: the key stays in CI, rollbacks are pre-signed | draft | 2026-10-01 |
 | [0023](./0023-flag-targets-are-evaluation-scopes.md) | Flag targets are evaluation scopes, not governance types | draft | 2026-10-02 |
 | [0024](./0024-flags-openfeature-flagd-ruleset-ofrep.md) | Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs | draft | 2026-10-02 |
+| [0025](./0025-every-product-surface-ships-mcp-tools.md) | Every product surface ships MCP tools: thin adapters, caller identity, decisions need a person | draft | 2026-10-02 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 
