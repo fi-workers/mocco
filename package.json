@@ -40,7 +40,7 @@
     "sdk:size": "node scripts/sdk-size-check.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "yarn sdk:build && changeset publish",
+    "release": "yarn sdk:build && node scripts/publish-packages.mjs",
     "db:drift": "sh scripts/drift-check.sh",
     "schema:gen": "tsx scripts/gen-mocco-schema.ts",
     "schema:drift": "yarn schema:gen && git diff --exit-code docs/reference/mocco.schema.json"

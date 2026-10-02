@@ -4,7 +4,7 @@ description: Supply-chain hardening rules the CI workflows must follow — SHA-p
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-09-27
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [reference, ci, security, supply-chain, github-actions]
@@ -27,6 +27,8 @@ tags: [reference, ci, security, supply-chain, github-actions]
 ## Initial workflows (the CI PR)
 
 - `ci.yml` — on `pull_request` + `merge_group` + `push` to main: install (immutable, dependency scripts disabled) → format check → lint (backend+frontend, incl. ts-check) → test (pglite) → migration-drift check → frontend build. No secrets, `permissions: contents: read`, SHA-pinned actions, `pr-` scoped cache (or none).
-- Publishing/release workflows do not exist yet; when they do, they follow rules 3–5 and get their own review.
+- `publish.yml` — on `push` to main: install → `yarn sdk:build` → `yarn test-sdk` → `changesets/action`, which opens or updates the "chore: version packages" PR and, when that PR lands, runs `yarn release` to upload. It is the only workflow with `id-token: write`.
+  - **The upload uses the npm CLI, not `changeset publish`.** Changesets publishes through the detected package manager, and yarn has no support for npm's trusted publishing — it only looks for a stored `npmAuthToken` and fails with `YN0033: No authentication configured`, whatever OIDC the job was granted. `scripts/publish-packages.mjs` runs `npm publish --provenance` per public workspace instead, in dependency order, skipping versions already on the registry so a re-run is safe, and printing the `New tag:` lines `changesets/action` reads to tag the commit. The job installs a pinned npm first, because trusted publishing needs 11.5.1+ and Node 22 bundles npm 10.
+  - It needs the `@mocco` scope linked to this repository as a trusted publisher on npmjs.com. Without that link the publish fails at the registry rather than at the credential, which is the point: no long-lived npm token exists to leak.
 - `migrate.yml` — on `push` to main when a migration, `drizzle.config.ts` or the workflow changes, and on manual dispatch: install (immutable, dependency scripts disabled) → `node scripts/migrate-production.mjs` (drizzle-orm's migrator; prints the driver error code on failure) against production. Its only secret, `DATABASE_URL`, lives in the `migrations` GitHub environment, which only `main` may deploy from. It never runs on pull requests. It doesn't use `yarn db:migrate` because `yarn db:migrate` goes through `with-env`, where the committed local `DATABASE_URL` wins over the process environment.
 - **Required checks**: after `ci.yml` lands, branch protection on `main` must require the `ci` check (checks that only advise don't gate — write ≠ deploy applies to us too).

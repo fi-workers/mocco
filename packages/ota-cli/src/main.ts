@@ -10,6 +10,7 @@ import { DEFAULT_SIGNING_KEY_ID, OtaPlatforms } from '@mocco/common/ota-hosting'
 import { MoccoApi } from './api';
 import { isFingerprintPolicy, keyidOf, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
 import { CliError } from './errors';
+import { exportCommandOf } from './expo-export';
 import { fingerprintOf } from './fingerprint';
 import { isPresent } from './fs';
 import { init, KEY_FILE } from './init';
@@ -77,21 +78,11 @@ function platformsOf(value: string): OtaPlatform[] {
   throw new CliError(`--platform must be ios, android or all (got ${value})`);
 }
 
-/**
- * Export the bundles for `platforms`, naming each one.
- *
- * Never `--platform all`: that means every platform the Expo config declares, so a project
- * that also targets web exports web too — bytes OTA never serves, and a web-only bundling
- * failure that fails the publish (`expo-sqlite`'s wasm import is one).
- */
+/** Run `expo export` for `platforms` (the command itself is `exportCommandOf`). */
 async function expoExport(projectDir: string, platforms: readonly OtaPlatform[], distDir: string): Promise<void> {
-  const args = platforms.flatMap(platform => ['--platform', platform]);
-  log(`Running expo export ${args.join(' ')}…`);
-  // eslint-disable-next-line sonarjs/no-os-command-from-path -- runs the project's own Expo CLI, as a developer would
-  const child = spawn('npx', ['expo', 'export', ...args, '--output-dir', distDir], {
-    cwd: projectDir,
-    stdio: 'inherit',
-  });
+  const { command, args } = exportCommandOf(platforms, distDir);
+  log(`Running ${command} ${args.join(' ')}…`);
+  const child = spawn(command, args, { cwd: projectDir, stdio: 'inherit' });
   const code = await new Promise<number | null>(resolve => {
     child.on('close', resolve);
   });
