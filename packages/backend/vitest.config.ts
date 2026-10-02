@@ -1,9 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
 // Resolve @backend/* (tsconfig paths) natively — Vite 4 reads tsconfig paths
-// without a plugin.
+// without a plugin. The SDK packages resolve to their sources (the "@mocco/source"
+// export condition), so the end-to-end SDK tests run without building them first.
 export default defineConfig({
   resolve: { tsconfigPaths: true },
+  // Vite's default server conditions follow, without "module": it picks packages' untranspiled ESM builds.
+  ssr: { resolve: { conditions: ['@mocco/source', 'node', 'development|production'] } },
   test: {
     // Default backend include, plus the repo-root infra/local/scripts
     // loaders (with-env.ts etc.) — their tests import the script by

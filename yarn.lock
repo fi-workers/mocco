@@ -2476,10 +2476,17 @@ __metadata:
     "@aws-sdk/s3-request-presigner": "npm:3.1144.0"
     "@electric-sql/pglite": "npm:0.5.4"
     "@mocco/common": "workspace:*"
+    "@mocco/flags-core": "workspace:*"
+    "@mocco/openfeature-server": "workspace:*"
     "@mocco/sdk-core": "workspace:*"
     "@octokit/app": "npm:16.1.2"
     "@octokit/plugin-retry": "npm:8.1.0"
     "@octokit/plugin-throttling": "npm:11.0.3"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/flagd-core": "npm:4.0.1"
+    "@openfeature/ofrep-web-provider": "npm:0.4.3"
+    "@openfeature/server-sdk": "npm:1.23.0"
+    "@openfeature/web-sdk": "npm:1.10.0"
     "@trpc/server": "npm:11.18.0"
     "@types/pg": "npm:8.20.0"
     "@vercel/functions": "npm:3.7.5"
@@ -2520,6 +2527,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@mocco/flags-core@workspace:*, @mocco/flags-core@workspace:packages/sdk-flags-core":
+  version: 0.0.0-use.local
+  resolution: "@mocco/flags-core@workspace:packages/sdk-flags-core"
+  dependencies:
+    "@types/node": "npm:22.20.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+  languageName: unknown
+  linkType: soft
+
 "@mocco/frontend@workspace:packages/frontend":
   version: 0.0.0-use.local
   resolution: "@mocco/frontend@workspace:packages/frontend"
@@ -2529,6 +2548,7 @@ __metadata:
     "@hookform/resolvers": "npm:5.4.0"
     "@mocco/backend": "workspace:*"
     "@mocco/common": "workspace:*"
+    "@mocco/flags-core": "workspace:*"
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@sentry/nextjs": "npm:10.65.0"
     "@tailwindcss/postcss": "npm:4.1.17"
@@ -2584,6 +2604,24 @@ __metadata:
     tsup: "npm:8.5.1"
     typescript: "npm:5.9.3"
     vitest: "npm:4.1.9"
+  languageName: unknown
+  linkType: soft
+
+"@mocco/openfeature-server@workspace:*, @mocco/openfeature-server@workspace:packages/sdk-openfeature-server":
+  version: 0.0.0-use.local
+  resolution: "@mocco/openfeature-server@workspace:packages/sdk-openfeature-server"
+  dependencies:
+    "@mocco/flags-core": "workspace:*"
+    "@mocco/sdk-core": "workspace:*"
+    "@openfeature/core": "npm:1.12.0"
+    "@openfeature/server-sdk": "npm:1.23.0"
+    "@types/node": "npm:22.20.0"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+  peerDependencies:
+    "@openfeature/server-sdk": ^1.23.0
   languageName: unknown
   linkType: soft
 
@@ -3053,6 +3091,65 @@ __metadata:
     "@octokit/request-error": "npm:^7.0.0"
     "@octokit/webhooks-methods": "npm:^6.0.0"
   checksum: 10/8d2ebd7ba9c89c10525ae934ccd05c3cd14fa3b0b3cd383831433f5ee7f43d145ff48413882d7ca95624571f1daa8d51883742d132d97e247709b4167895bd1f
+  languageName: node
+  linkType: hard
+
+"@openfeature/core@npm:1.12.0":
+  version: 1.12.0
+  resolution: "@openfeature/core@npm:1.12.0"
+  checksum: 10/d95bd67bf86397e358738914268f50a1bd45b6fc8648c8f197bddc9d968c6eb03bf9bd5f98e89f0b39a8f89f8043ed17c1d3a73e239b41f87773ccbbee38f4c4
+  languageName: node
+  linkType: hard
+
+"@openfeature/flagd-core@npm:4.0.1":
+  version: 4.0.1
+  resolution: "@openfeature/flagd-core@npm:4.0.1"
+  dependencies:
+    imurmurhash: "npm:^0.1.4"
+    json-logic-engine: "npm:5.0.7"
+    object-hash: "npm:^3.0.0"
+    semver: "npm:^7.6.3"
+  peerDependencies:
+    "@openfeature/core": ">=1.6.0"
+  checksum: 10/a77aa929540bbb6e701154ebc17c7490a022b8df11f1f2236ca2d61f95ea1e94e1afea0cb4803f60a9dffdc1123a1f59c37466adce14b160691cab25cbc0209e
+  languageName: node
+  linkType: hard
+
+"@openfeature/ofrep-core@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "@openfeature/ofrep-core@npm:2.3.0"
+  peerDependencies:
+    "@openfeature/core": ^1.6.0
+  checksum: 10/29bfd56d4400c0e8426153cb753c81f11d4120694301a65c6501277c70520d99a5055e0131f7a8a1839f2712e537b6ac5570cec52bf3824572b08f4681b17f06
+  languageName: node
+  linkType: hard
+
+"@openfeature/ofrep-web-provider@npm:0.4.3":
+  version: 0.4.3
+  resolution: "@openfeature/ofrep-web-provider@npm:0.4.3"
+  dependencies:
+    "@openfeature/ofrep-core": "npm:^2.3.0"
+  peerDependencies:
+    "@openfeature/web-sdk": ^1.10.0
+  checksum: 10/3284a5a65b88f0da64e24cf55c158e13fc49e777fcd9e0f808c69fcb5c45c46a86b8f4dc263332ee63d85be349311bb6a533b1441949c57902d7030175213bb2
+  languageName: node
+  linkType: hard
+
+"@openfeature/server-sdk@npm:1.23.0":
+  version: 1.23.0
+  resolution: "@openfeature/server-sdk@npm:1.23.0"
+  peerDependencies:
+    "@openfeature/core": ^1.12.0
+  checksum: 10/74061b5d177fe7d15dfb8e1ac08d311efc25479a8ff643c080c1c11d1d7b8c06c092d569a6132711a5d52138ea2a9e2ca2c4e530cec956f166c2e34f370a0705
+  languageName: node
+  linkType: hard
+
+"@openfeature/web-sdk@npm:1.10.0":
+  version: 1.10.0
+  resolution: "@openfeature/web-sdk@npm:1.10.0"
+  peerDependencies:
+    "@openfeature/core": ^1.12.0
+  checksum: 10/a9dcfaa93c3093580526db4ee24ffbb3ff81a2c2bf52827d8e64a0e673e5faae5dda9ca31f58801739a7d0b92d5cc5d76111bbc2fc00621e4e002cd964a3dc09
   languageName: node
   linkType: hard
 
@@ -9596,6 +9693,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"json-logic-engine@npm:5.0.7":
+  version: 5.0.7
+  resolution: "json-logic-engine@npm:5.0.7"
+  checksum: 10/09ca62af1c899a9221ea1741da4877f1bc237021f08de66deddcab2ea4655f9ada0e7c9129fbb5860a56c89319c374f0c43206859b766869bd1fabeb3679f7ec
+  languageName: node
+  linkType: hard
+
 "json-parse-even-better-errors@npm:^2.3.0":
   version: 2.3.1
   resolution: "json-parse-even-better-errors@npm:2.3.1"
@@ -10568,6 +10672,13 @@ __metadata:
   version: 4.1.1
   resolution: "object-assign@npm:4.1.1"
   checksum: 10/fcc6e4ea8c7fe48abfbb552578b1c53e0d194086e2e6bbbf59e0a536381a292f39943c6e9628af05b5528aa5e3318bb30d6b2e53cadaf5b8fe9e12c4b69af23f
+  languageName: node
+  linkType: hard
+
+"object-hash@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "object-hash@npm:3.0.0"
+  checksum: 10/f498d456a20512ba7be500cef4cf7b3c183cc72c65372a549c9a0e6dd78ce26f375e9b1315c07592d3fde8f10d5019986eba35970570d477ed9a2a702514432a
   languageName: node
   linkType: hard
 

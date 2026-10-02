@@ -1,10 +1,12 @@
-import { FLAG_ENVIRONMENT_KEY_PATTERN, FLAG_KEY_PATTERN } from '@mocco/common/flags';
+import { FLAG_ENVIRONMENT_KEY_PATTERN, FLAG_KEY_PATTERN, FlagTypes } from '@mocco/common/flags';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import ChangesetRow from '@frontend/components/flags/changeset-row';
+import Protection from '@frontend/components/flags/protection';
+import Segments from '@frontend/components/flags/segments';
 import {
-  Ago,
   errorMessage,
   inputClass,
   labelClass,
@@ -16,7 +18,7 @@ import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { ChangeDiffEntry, ChangesetDto, FlagConfigDto, FlagDto, FlagEnvironmentDto } from '@mocco/common/flags';
+import type { FlagConfigDto, FlagDto, FlagEnvironmentDto, FlagType } from '@mocco/common/flags';
 
 interface Props {
   workspaceId: string;
@@ -43,7 +45,11 @@ function Environments({ workspaceId, projectId, environments }: Props & { enviro
         <h2 className="text-sm font-medium">Environments</h2>
         <p className="text-xs text-muted-foreground">
           Each environment is its own ruleset, and each SDK key reads exactly one. The name is a label only: nothing in
-          Mocco treats an environment called production differently.
+          Mocco treats an environment called production differently.{' '}
+          <Link href={Routes.guide('flags', 'quickstart')} className="underline underline-offset-2">
+            Evaluate flags from your server
+          </Link>
+          .
         </p>
       </div>
       <ul className="flex flex-wrap gap-2">
@@ -54,6 +60,7 @@ function Environments({ workspaceId, projectId, environments }: Props & { enviro
             <span className="font-medium">{environment.name}</span>
             <span className="font-mono text-xs text-muted-foreground">{environment.key}</span>
             <StatusBadge tone={Tones.neutral}>v{environment.currentVersion}</StatusBadge>
+            {environment.changeGate === null ? null : <StatusBadge tone={Tones.warn}>Protected</StatusBadge>}
           </li>
         ))}
       </ul>
@@ -112,7 +119,11 @@ function FlagCell({
 }: Props & { flag: FlagWithConfigs; environment: FlagEnvironmentDto }) {
   const utils = trpc.useUtils();
   const config = flag.configs.find(candidate => candidate.environmentId === environment.id);
+  const [isSentForApproval, setIsSentForApproval] = useState(false);
   const change = trpc.flags.applyChangeset.useMutation({
+    onSuccess: result => {
+      setIsSentForApproval(result.outcome === 'pending_approval');
+    },
     onSettled: async () => {
       await Promise.all([
         utils.flags.environments.invalidate(),
@@ -146,9 +157,132 @@ function FlagCell({
           }}>
           {config.enabled ? 'On' : 'Off'}
         </Button>
+        {config.killed ? <StatusBadge tone={Tones.danger}>Killed</StatusBadge> : null}
+        {isSentForApproval ? <span className="text-xs text-muted-foreground">Sent for approval</span> : null}
         {change.error ? <span className="text-xs text-destructive">{errorMessage(change.error)}</span> : null}
       </div>
     </td>
+  );
+}
+
+const variantPlaceholders: Record<Exclude<FlagType, 'boolean'>, string> = {
+  [FlagTypes.string]: '{ "short": "Pay", "long": "Pay securely" }',
+  [FlagTypes.number]: '{ "small": 10, "large": 100 }',
+  [FlagTypes.json]: '{ "a": { "columns": 2 }, "b": { "columns": 3 } }',
+};
+
+/** Create a boolean flag, or a string, number or JSON flag with its variants. */
+function CreateFlagForm({ workspaceId, projectId }: Props) {
+  const utils = trpc.useUtils();
+  const [key, setKey] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState<FlagType>(FlagTypes.boolean);
+  const [variantsText, setVariantsText] = useState('');
+  const [parseError, setParseError] = useState<string | null>(null);
+  const onCreated = async () => {
+    setKey('');
+    setDescription('');
+    setVariantsText('');
+    await Promise.all([utils.flags.environments.invalidate(), utils.flags.list.invalidate()]);
+  };
+  const booleanCreation = trpc.flags.createBoolean.useMutation({ onSuccess: onCreated });
+  const typedCreation = trpc.flags.create.useMutation({ onSuccess: onCreated });
+  const error = parseError ?? errorMessage(booleanCreation.error ?? typedCreation.error);
+  // eslint-disable-next-line sonarjs/null-dereference -- a useState<string>, never null
+  const hasVariants = variantsText.trim() !== '';
+
+  return (
+    <form
+      aria-label="Create a flag"
+      className="flex flex-col gap-2"
+      onSubmit={event => {
+        event.preventDefault();
+        const flagDescription = description === '' ? null : description;
+        if (type === FlagTypes.boolean) {
+          booleanCreation.mutate({ workspaceId, projectId, key, description: flagDescription });
+          return;
+        }
+        let variants: Record<string, unknown>;
+        try {
+          variants = JSON.parse(variantsText) as Record<string, unknown>;
+        } catch {
+          setParseError('Variants must be a JSON object of name → value.');
+          return;
+        }
+        setParseError(null);
+        // The first variant is the default (and what a kill serves) until changed.
+        const [first = ''] = Object.keys(variants);
+        typedCreation.mutate({
+          workspaceId,
+          projectId,
+          flag: { key, type, variants, defaultVariant: first, offVariant: first, description: flagDescription },
+        });
+      }}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={labelClass}>
+          Key
+          <input
+            required
+            value={key}
+            pattern={FLAG_KEY_PATTERN.source}
+            placeholder="new-checkout"
+            onChange={event => {
+              setKey(event.target.value);
+            }}
+            className={`${inputClass} font-mono`}
+          />
+        </label>
+        <label className={labelClass}>
+          Type
+          <select
+            value={type}
+            className={inputClass}
+            onChange={event => {
+              setType(event.target.value as FlagType);
+            }}>
+            {Object.values(FlagTypes).map(value => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={labelClass}>
+          Description
+          <input
+            value={description}
+            placeholder="Optional"
+            onChange={event => {
+              setDescription(event.target.value);
+            }}
+            className={inputClass}
+          />
+        </label>
+        <Button
+          type="submit"
+          variant="outline"
+          pending={booleanCreation.isPending || typedCreation.isPending}
+          disabled={key === '' || (type !== FlagTypes.boolean && !hasVariants)}
+          className="text-sm">
+          Create {type} flag
+        </Button>
+      </div>
+      {type === FlagTypes.boolean ? null : (
+        <label className={labelClass}>
+          Variants (JSON: name → value; the first is the default and the kill value)
+          <textarea
+            rows={3}
+            value={variantsText}
+            placeholder={variantPlaceholders[type]}
+            className={`${inputClass} h-auto py-1.5 font-mono text-xs`}
+            onChange={event => {
+              setVariantsText(event.target.value);
+            }}
+          />
+        </label>
+      )}
+      {error === null ? null : <p className="text-sm text-destructive">{error}</p>}
+    </form>
   );
 }
 
@@ -158,17 +292,6 @@ function Flags({
   environments,
   flags,
 }: Props & { environments: FlagEnvironmentDto[]; flags: FlagWithConfigs[] }) {
-  const utils = trpc.useUtils();
-  const [key, setKey] = useState('');
-  const [description, setDescription] = useState('');
-  const creation = trpc.flags.createBoolean.useMutation({
-    onSuccess: async () => {
-      setKey('');
-      setDescription('');
-      await Promise.all([utils.flags.environments.invalidate(), utils.flags.list.invalidate()]);
-    },
-  });
-
   return (
     <section className="flex flex-col gap-3">
       <div>
@@ -197,7 +320,16 @@ function Flags({
               {flags.map(flag => (
                 <tr key={flag.id} className="border-t border-border">
                   <td className="px-3 py-2">
-                    <div className="font-mono">{flag.key}</div>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={Routes.projectFlag(workspaceId, projectId, flag.key)}
+                        className="font-mono underline-offset-2 hover:underline">
+                        {flag.key}
+                      </Link>
+                      {flag.type === FlagTypes.boolean ? null : (
+                        <StatusBadge tone={Tones.neutral}>{flag.type}</StatusBadge>
+                      )}
+                    </div>
                     {flag.description ? <div className="text-xs text-muted-foreground">{flag.description}</div> : null}
                   </td>
                   {environments.map(environment => (
@@ -215,120 +347,61 @@ function Flags({
           </table>
         </div>
       )}
-      <form
-        aria-label="Create a flag"
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={event => {
-          event.preventDefault();
-          creation.mutate({ workspaceId, projectId, key, description: description === '' ? null : description });
-        }}>
-        <label className={labelClass}>
-          Key
-          <input
-            required
-            value={key}
-            pattern={FLAG_KEY_PATTERN.source}
-            placeholder="new-checkout"
-            onChange={event => {
-              setKey(event.target.value);
-            }}
-            className={`${inputClass} font-mono`}
-          />
-        </label>
-        <label className={labelClass}>
-          Description
-          <input
-            value={description}
-            placeholder="Optional"
-            onChange={event => {
-              setDescription(event.target.value);
-            }}
-            className={inputClass}
-          />
-        </label>
-        <Button type="submit" variant="outline" pending={creation.isPending} disabled={key === ''} className="text-sm">
-          Create boolean flag
-        </Button>
-      </form>
-      {creation.error ? <p className="text-sm text-destructive">{errorMessage(creation.error)}</p> : null}
+      <CreateFlagForm workspaceId={workspaceId} projectId={projectId} />
     </section>
   );
 }
 
-const fieldLabels: Record<string, string> = {
-  enabled: 'on',
-  killed: 'killed',
-  defaultVariant: 'default variant',
-  offVariant: 'off variant',
-};
+function History({ workspaceId, projectId, environment }: Props & { environment: FlagEnvironmentDto }) {
+  const historyQuery = trpc.flags.history.useQuery({ workspaceId, projectId, environmentId: environment.id });
 
-function describeDiff(entry: ChangeDiffEntry): string {
-  const field = fieldLabels[entry.field] ?? entry.field;
-  if (entry.before === null) {
-    return `${entry.flagKey}: ${field} = ${String(entry.after)}`;
-  }
-  return `${entry.flagKey}: ${field} ${String(entry.before)} → ${String(entry.after)}`;
-}
-
-function ChangesetRow({ changeset }: { changeset: ChangesetDto }) {
   return (
-    <li className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={Tones.ok}>v{changeset.appliedVersion}</StatusBadge>
-        <span className="text-xs text-muted-foreground">
-          <Ago date={changeset.createdAt} />
-        </span>
-      </div>
-      <ul className="font-mono text-xs">
-        {changeset.diff.map(entry => (
-          <li key={`${entry.flagKey}:${entry.field}`}>{describeDiff(entry)}</li>
+    <section className="flex flex-col gap-3">
+      <h2 className="text-sm font-medium">History of {environment.name}</h2>
+      {historyQuery.isLoading ? <Spinner /> : null}
+      <ul className="flex flex-col gap-2">
+        {(historyQuery.data?.changesets ?? []).map(changeset => (
+          <ChangesetRow key={changeset.id} workspaceId={workspaceId} projectId={projectId} changeset={changeset} />
         ))}
       </ul>
-    </li>
+    </section>
   );
 }
 
-function History({ workspaceId, projectId, environments }: Props & { environments: FlagEnvironmentDto[] }) {
+/** Segments and history of the environment chosen in the tabs (`?env=`). */
+function PerEnvironment({ workspaceId, projectId, environments }: Props & { environments: FlagEnvironmentDto[] }) {
   const router = useRouter();
   const selectedId = typeof router.query.env === 'string' ? router.query.env : undefined;
   const environment = environments.find(candidate => candidate.id === selectedId) ?? environments[0];
-  const historyQuery = trpc.flags.history.useQuery(
-    { workspaceId, projectId, environmentId: environment?.id ?? '' },
-    { enabled: environment !== undefined },
-  );
   if (environment === undefined) {
     return null;
   }
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium">History</h2>
-        <nav aria-label="History environment" className="flex gap-1">
-          {environments.map(candidate => (
-            <Link
-              key={candidate.id}
-              href={Routes.projectFlags(workspaceId, projectId, candidate.id)}
-              aria-current={candidate.id === environment.id ? 'page' : undefined}
-              className={`rounded-md px-2 py-0.5 text-xs ${
-                candidate.id === environment.id ? 'bg-muted font-medium' : 'text-muted-foreground'
-              }`}>
-              {candidate.name}
-            </Link>
-          ))}
-        </nav>
-      </div>
-      {historyQuery.isLoading ? <Spinner /> : null}
-      <ul className="flex flex-col gap-2">
-        {(historyQuery.data?.changesets ?? []).map(changeset => (
-          <ChangesetRow key={changeset.id} changeset={changeset} />
+    <div className="flex flex-col gap-6">
+      <nav aria-label="Environment" className="flex gap-1 border-b border-border">
+        {environments.map(candidate => (
+          <Link
+            key={candidate.id}
+            href={Routes.projectFlags(workspaceId, projectId, candidate.id)}
+            aria-current={candidate.id === environment.id ? 'page' : undefined}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
+              candidate.id === environment.id
+                ? 'border-foreground font-medium'
+                : 'border-transparent text-muted-foreground'
+            }`}>
+            {candidate.name}
+          </Link>
         ))}
-      </ul>
-    </section>
+      </nav>
+      <Protection workspaceId={workspaceId} projectId={projectId} environment={environment} />
+      <Segments workspaceId={workspaceId} projectId={projectId} environment={environment} />
+      <History workspaceId={workspaceId} projectId={projectId} environment={environment} />
+    </div>
   );
 }
 
-/** The flags screen: environments, the flag × environment switches and the history. */
+/** The flags screen: environments, the flag × environment switches, and per environment its segments and history. */
 export default function FeatureFlags({ workspaceId, projectId }: Props) {
   const input = { workspaceId, projectId };
   const environmentsQuery = trpc.flags.environments.useQuery(input);
@@ -347,7 +420,7 @@ export default function FeatureFlags({ workspaceId, projectId }: Props) {
     <div className="flex flex-col gap-8">
       <Environments workspaceId={workspaceId} projectId={projectId} environments={environments} />
       <Flags workspaceId={workspaceId} projectId={projectId} environments={environments} flags={flags} />
-      <History workspaceId={workspaceId} projectId={projectId} environments={environments} />
+      <PerEnvironment workspaceId={workspaceId} projectId={projectId} environments={environments} />
     </div>
   );
 }

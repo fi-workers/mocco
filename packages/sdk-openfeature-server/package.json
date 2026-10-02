@@ -1,0 +1,52 @@
+{
+  "name": "@mocco/openfeature-server",
+  "version": "0.0.0",
+  "description": "An OpenFeature server provider for Mocco feature flags: local evaluation of the ETag-polled ruleset.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/openfeature-server.ts",
+      "types": "./dist/openfeature-server.d.ts",
+      "import": "./dist/openfeature-server.js",
+      "require": "./dist/openfeature-server.cjs"
+    }
+  },
+  "main": "./dist/openfeature-server.cjs",
+  "module": "./dist/openfeature-server.js",
+  "types": "./dist/openfeature-server.d.ts",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mocco/flags-core": "workspace:*",
+    "@mocco/sdk-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@openfeature/server-sdk": "^1.23.0"
+  },
+  "devDependencies": {
+    "@openfeature/core": "1.12.0",
+    "@openfeature/server-sdk": "1.23.0",
+    "@types/node": "22.20.0",
+    "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

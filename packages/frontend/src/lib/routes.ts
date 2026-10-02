@@ -52,6 +52,11 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/flags`;
     return environmentId === undefined ? path : `${path}?env=${encodeURIComponent(environmentId)}`;
   },
+  /** One flag's targeting in an environment (`environmentId` selects it). */
+  projectFlag: (id: string, projectId: string, flagKey: string, environmentId?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/flags/${encodeURIComponent(flagKey)}`;
+    return environmentId === undefined ? path : `${path}?env=${encodeURIComponent(environmentId)}`;
+  },
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

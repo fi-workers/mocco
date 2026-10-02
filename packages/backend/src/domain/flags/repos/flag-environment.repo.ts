@@ -6,6 +6,7 @@ import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
 import type { Db } from '@backend/infra/db/types';
+import type { GateRequirements } from '@mocco/common/governance';
 
 export type FlagEnvironmentRow = typeof schema.flagEnvironments.$inferSelect;
 
@@ -55,6 +56,29 @@ export class FlagEnvironmentRepo {
         ),
       );
     return row;
+  }
+
+  /** An environment by id alone (no project filter, no lock). */
+  async byId(workspaceId: string, environmentId: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.flagEnvironments)
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
+    return row;
+  }
+
+  async setChangeGate(workspaceId: string, environmentId: string, changeGate: GateRequirements | null) {
+    await this.db
+      .update(schema.flagEnvironments)
+      .set({ changeGate })
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
+  }
+
+  async setKillRoles(workspaceId: string, environmentId: string, killRoles: string[]) {
+    await this.db
+      .update(schema.flagEnvironments)
+      .set({ killRoles })
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
   }
 
   /** Take the environment's publish lock for the rest of the transaction and read its

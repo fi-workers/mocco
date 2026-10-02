@@ -1,4 +1,4 @@
-import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@backend/domain/errors';
 
 /** An environment the project doesn't have — NOT_FOUND. */
 export class FlagEnvironmentNotFoundError extends NotFoundError {
@@ -46,11 +46,54 @@ export class ChangesetConflictError extends ConflictError {
   }
 }
 
-/** A change to a protected environment needs approval, which arrives with gated
- * changesets (#141); until then it is refused rather than applied ungated — BAD_REQUEST. */
-export class ProtectedEnvironmentError extends BadRequestError {
-  constructor(environmentId: string, options?: ErrorOptions) {
-    super(`Environment ${environmentId} is protected; its changes need approval`, options);
-    this.name = 'ProtectedEnvironmentError';
+/** The changeset was already applied, rejected, withdrawn, superseded or expired — CONFLICT. */
+export class ChangesetNotPendingError extends ConflictError {
+  constructor(changesetId: string, state: string, options?: ErrorOptions) {
+    super(`Changeset ${changesetId} is ${state}, not pending`, options);
+    this.name = 'ChangesetNotPendingError';
+  }
+}
+
+/** A vote names a content hash the changeset doesn't have (the reviewer saw an older
+ * proposal) — CONFLICT. */
+export class ChangesetHashMismatchError extends ConflictError {
+  constructor(options?: ErrorOptions) {
+    super('This changeset is not the one you reviewed; reload and review it again', options);
+    this.name = 'ChangesetHashMismatchError';
+  }
+}
+
+/** Only the person who proposed a changeset can withdraw or rebase it — FORBIDDEN. */
+export class NotChangesetProposerError extends ForbiddenError {
+  constructor(options?: ErrorOptions) {
+    super('Only the person who proposed this changeset can withdraw or rebase it', options);
+    this.name = 'NotChangesetProposerError';
+  }
+}
+
+/** A changeset that isn't on file — NOT_FOUND. */
+export class ChangesetNotFoundError extends NotFoundError {
+  constructor(changesetId: string, options?: ErrorOptions) {
+    super(`Changeset ${changesetId} was not found`, options);
+    this.name = 'ChangesetNotFoundError';
+  }
+}
+
+/** The compiled ruleset would exceed its size limit — BAD_REQUEST. */
+export class RulesetTooLargeError extends BadRequestError {
+  constructor(bytes: number, limit: number, options?: ErrorOptions) {
+    super(
+      `This change makes the environment's ruleset ${Math.ceil(bytes / 1024)} KB, over the ${limit / 1024 / 1024} MB limit; move large key lists out of segments`,
+      options,
+    );
+    this.name = 'RulesetTooLargeError';
+  }
+}
+
+/** The caller isn't in the environment's kill roles — FORBIDDEN. */
+export class KillNotAllowedError extends ForbiddenError {
+  constructor(roles: readonly string[], options?: ErrorOptions) {
+    super(`Only members of ${roles.join(', ')} can kill flags in this environment`, options);
+    this.name = 'KillNotAllowedError';
   }
 }

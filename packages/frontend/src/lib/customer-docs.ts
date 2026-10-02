@@ -32,6 +32,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
     'troubleshooting',
   ],
   [GuideSets.ota]: ['overview', 'force-update', 'pipeline', 'gate-eas-update', 'gate-codepush', 'gate-hot-updater'],
+  [GuideSets.flags]: ['quickstart'],
 };
 
 const SLUG = /^[a-z0-9-]+$/u;

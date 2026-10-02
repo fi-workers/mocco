@@ -1,6 +1,7 @@
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
+import { WorkspaceMemberRoles } from '@mocco/common/workspace';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -24,7 +25,7 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { auditLog } from '@backend/infra/db/schema';
+import { auditLog, members } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
@@ -171,6 +172,129 @@ describe('flags router on pglite', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(api.flags.createBoolean({ ...scope, key: 'a' })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('creates typed flags, checks variant types, and previews unsaved rules', async () => {
+    const { api, scope } = await setup();
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    const flag = {
+      key: 'max-items',
+      type: 'number' as const,
+      variants: { small: 10, large: 100 },
+      defaultVariant: 'small',
+      offVariant: 'small',
+    };
+
+    await expect(
+      api.flags.create({ ...scope, flag: { ...flag, variants: { small: 10, large: 'many' } } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await api.flags.create({ ...scope, flag });
+    const { results } = await api.flags.preview({
+      ...scope,
+      environmentId: environment.id,
+      context: { targetingKey: 'u1', plan: 'pro' },
+      ops: [
+        { op: 'set_enabled', flagKey: 'max-items', enabled: true },
+        {
+          op: 'set_rules',
+          flagKey: 'max-items',
+          rules: [{ clauses: [{ attribute: 'plan', op: 'in', values: ['pro'] }], serve: { variant: 'large' } }],
+        },
+      ],
+    });
+    const { segments } = await api.flags.segments({ ...scope, environmentId: environment.id });
+
+    expect(results).toEqual([
+      { flagKey: 'max-items', value: 100, variant: 'large', reason: 'TARGETING_MATCH', errorCode: null },
+    ]);
+    expect(segments).toEqual([]);
+    await expect(
+      api.flags.applyChangeset({
+        ...scope,
+        environmentId: environment.id,
+        baseVersion: 1,
+        ops: [
+          {
+            op: 'set_rules',
+            flagKey: 'max-items',
+            rules: [{ clauses: [{ attribute: 'seats', op: 'gt', values: ['ten'] }], serve: { variant: 'large' } }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it("proposes changes to a protected environment and applies them on another member's approval", async () => {
+    const owner = await setup();
+    const { api, scope } = owner;
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    await api.flags.createBoolean({ ...scope, key: 'checkout' });
+    const member = await signedInCaller('member@example.com');
+    await t.db
+      .insert(members)
+      .values({ organizationId: scope.workspaceId, userId: member.userId, role: WorkspaceMemberRoles.member });
+    const { role } = await api.role.create({ workspaceId: scope.workspaceId, name: 'release' });
+    await api.role.addMember({ workspaceId: scope.workspaceId, roleId: role.id, userId: member.userId });
+    const gate = { resume: [{ role: 'release', count: 1 }], prevent_self: true, reason_required: false };
+
+    await expect(api.flags.setChangeGate({ ...scope, environmentId: environment.id, gate })).resolves.toMatchObject({
+      outcome: 'applied',
+    });
+    const proposed = await api.flags.applyChangeset({
+      ...scope,
+      environmentId: environment.id,
+      baseVersion: 1,
+      ops: [{ op: 'set_enabled', flagKey: 'checkout', enabled: true }],
+      reason: 'launch',
+    });
+    const vote = { ...scope, changesetId: proposed.changeset.id, decision: 'approve' as const };
+
+    expect(proposed).toMatchObject({
+      outcome: 'pending_approval',
+      changeset: { state: 'pending', requirements: gate },
+    });
+    await expect(member.api.flags.voteChangeset({ ...vote, contentHash: 'stale' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    const { changeset } = await member.api.flags.voteChangeset({
+      ...vote,
+      contentHash: proposed.changeset.contentHash,
+    });
+    const detail = await api.flags.changeset({ ...scope, changesetId: changeset.id });
+
+    expect(changeset).toMatchObject({ state: 'applied', appliedVersion: 2 });
+    expect(detail.votes).toEqual([expect.objectContaining({ userId: member.userId, decision: 'approve' })]);
+    await expect(
+      api.flags.setChangeGate({ ...scope, environmentId: environment.id, gate: null }),
+    ).resolves.toMatchObject({
+      outcome: 'pending_approval',
+    });
+  });
+
+  it('kills a flag at once, and lets only admins choose who may kill', async () => {
+    const { api, scope } = await setup();
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    await api.flags.createBoolean({ ...scope, key: 'checkout' });
+    const member = await signedInCaller('member@example.com');
+    await t.db
+      .insert(members)
+      .values({ organizationId: scope.workspaceId, userId: member.userId, role: WorkspaceMemberRoles.member });
+    const target = { ...scope, environmentId: environment.id };
+
+    await expect(member.api.flags.setKillRoles({ ...target, roles: [] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await api.flags.setKillRoles({ ...target, roles: ['oncall'] });
+    await expect(member.api.flags.kill({ ...target, flagKey: 'checkout', reason: 'errors' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await api.flags.setKillRoles({ ...target, roles: [] });
+    const killed = await member.api.flags.kill({ ...target, flagKey: 'checkout', reason: 'errors' });
+    const { flags } = await api.flags.list(scope);
+
+    expect(killed).toMatchObject({ changeset: { source: 'kill', state: 'applied' }, reviewRequestId: null });
+    expect(flags[0]?.configs[0]).toMatchObject({ killed: true });
   });
 
   it("never reaches another workspace's environment", async () => {

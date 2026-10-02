@@ -43,12 +43,15 @@ import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type {
+  AttributeClause,
   ChangeDiffEntry,
   ChangeOp,
   ChangesetSource,
   ChangesetState,
   FlagLifecycle,
   FlagType,
+  RolloutEntry,
+  Rule,
 } from '@mocco/common/flags';
 import type {
   ApprovalDecision,
@@ -1553,6 +1556,11 @@ export const flagEnvironments = pgTable(
     name: text().notNull(),
     // Set exactly when the environment is protected: changes then need this gate's approval.
     changeGate: jsonb('change_gate').$type<GateRequirements>(),
+    // Roles whose members may kill a flag (ungated); empty: any workspace member.
+    killRoles: text('kill_roles')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     // The version of the latest applied changeset; 0 until the first one.
     currentVersion: integer('current_version').notNull().default(0),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -1582,6 +1590,9 @@ export const flags = pgTable(
     variants: jsonb().$type<Record<string, unknown>>().notNull(),
     description: text(),
     lifecycle: text().$type<FlagLifecycle>().notNull().default(FlagLifecycles.temporary),
+    // Whether publishable keys (browsers, apps) get this flag over OFREP; off by default so
+    // internal flags can't be enumerated from a client.
+    clientVisible: boolean('client_visible').notNull().default(false),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
   },
@@ -1610,6 +1621,10 @@ export const flagConfigs = pgTable(
     defaultVariant: text('default_variant').notNull(),
     // What a killed flag serves (ADR 0024).
     offVariant: text('off_variant').notNull(),
+    // Ordered targeting rules; the first whose clauses all match serves.
+    rules: jsonb().$type<Rule[]>().notNull().default([]),
+    // When set, no-rule callers with a targeting key get this percentage rollout.
+    rollout: jsonb().$type<RolloutEntry[]>(),
     // Mixed into percentage bucketing (`mocco-v1`); changed only by a changeset.
     salt: text()
       .notNull()
@@ -1632,6 +1647,38 @@ export const flagConfigs = pgTable(
   ],
 );
 
+/** A named group of targeting keys and attribute rules in one environment, used by flag
+ * rules. Environment-scoped, so editing it is governed by that environment's gate. */
+export const flagSegments = pgTable(
+  'mocco_flag_segments',
+  {
+    environmentId: uuid('environment_id').notNull(),
+    key: text().notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    name: text().notNull(),
+    includedKeys: text('included_keys')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    excludedKeys: text('excluded_keys')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    // OR of AND groups of attribute clauses.
+    rules: jsonb().$type<AttributeClause[][]>().notNull().default([]),
+    // The environment version that last changed this segment.
+    version: integer().notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.environmentId, t.key], name: 'mocco_flag_segments_pk' }),
+    foreignKey({
+      columns: [t.environmentId, t.workspaceId],
+      foreignColumns: [flagEnvironments.id, flagEnvironments.workspaceId],
+      name: 'mocco_flag_segments_environment_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
 /** A proposed change to one environment: ordered ops against `base_version`. */
 export const flagChangesets = pgTable(
   'mocco_flag_changesets',
@@ -1650,11 +1697,19 @@ export const flagChangesets = pgTable(
     appliedVersion: integer('applied_version'),
     proposedByUserId: uuid('proposed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     reason: text(),
+    // A protected environment's changeset: the approval request deciding it, the gate it
+    // was proposed under (pinned) and when it stops waiting.
+    approvalRequestId: uuid('approval_request_id').references(() => approvalRequests.id, { onDelete: 'set null' }),
+    requirements: jsonb().$type<GateRequirements>(),
+    expiresAt: timestamp('expires_at'),
     createdAt,
     resolvedAt: timestamp('resolved_at'),
   },
   t => [
     index('mocco_flag_changesets_environment_idx').on(t.environmentId, t.createdAt),
+    index('mocco_flag_changesets_pending_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.state} = 'pending'`),
     uniqueIndex('mocco_flag_changesets_applied_version_uq').on(t.environmentId, t.appliedVersion),
     foreignKey({
       columns: [t.environmentId, t.workspaceId],
