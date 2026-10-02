@@ -4,7 +4,7 @@ description: How a project's React Native app becomes a Mocco-hosted OTA app ser
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-02
 confidence: high
 owner: andrea
 tags: [reference, ota, expo-updates, signing, channels]
@@ -69,7 +69,7 @@ Every change is audited as `ota.channel.policy_changed` (with the approval id wh
 CI publishes with `@mocco/ota-cli` (`mocco-ota`):
 
 1. **`mocco-ota init --manifest-url <url>`**, once, in the Expo project. It makes an RSA key pair and a self-signed certificate (`keys/private-key.pem`, git-ignored, and `certs/certificate.pem`), and writes the `expo.updates` block into `app.json`. Register the certificate in the console and store the private key as the CI secret `MOCCO_OTA_SIGNING_KEY`.
-2. **`mocco-ota publish`** with `MOCCO_API_KEY` set to a secret key with `ota:write`. It runs `expo export` (or uses `dist/` with `--skip-export`), reads the API base and app id from `updates.url` and the runtime version from `app.json` (a literal or the `appVersion` policy; otherwise pass `--runtime-version`), then:
+2. **`mocco-ota publish`** with `MOCCO_API_KEY` set to a secret key with `ota:write`. It runs `expo export` (or uses `dist/` with `--skip-export`), reads the API base and app id from `updates.url` and the runtime version from `app.json` (a literal, the `appVersion` policy, or the `fingerprint` policy — resolved per platform by running the project's own `expo-updates fingerprint:generate`, so the value published under is the one the build asks for; `--runtime-version` overrides all of them). A release carries one runtime version, so platforms that resolve to different fingerprints become separate releases, published one after another. Then it:
    - exchanges the key for a 15-minute upload session (`ota.upload.authorized`);
    - declares the release and its assets by base64url SHA-256. Mocco answers with presigned PUTs for **only the hashes it doesn't already store** (assets are deduplicated per app), the asset base URL, and the current head of each channel on that runtime;
    - signs one manifest per platform (`extra.expoClient` carries the static Expo config, `extra.mocco` the release id, git SHA and `mandatory`), a republish of each channel head dated 1 ms later, and a `rollBackToEmbedded` directive, then finalizes.

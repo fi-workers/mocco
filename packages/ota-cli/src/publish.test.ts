@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
+import { isFingerprintPolicy, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-config';
 import { CERTIFICATE_FILE, init, KEY_FILE } from './init';
 import { publish } from './publish';
 
@@ -222,5 +222,12 @@ describe('mocco-ota', () => {
     expect(() => runtimeVersionOf({ runtimeVersion: { policy: 'fingerprint' } }, 'ios')).toThrow(
       /pass --runtime-version/u,
     );
+  });
+
+  it('singles out the fingerprint policy, which only the project Expo CLI can resolve', () => {
+    expect(isFingerprintPolicy({ runtimeVersion: { policy: 'fingerprint' } })).toBe(true);
+    expect(isFingerprintPolicy({ runtimeVersion: { policy: 'appVersion' } })).toBe(false);
+    expect(isFingerprintPolicy({ runtimeVersion: '2.0' })).toBe(false);
+    expect(isFingerprintPolicy({})).toBe(false);
   });
 });
