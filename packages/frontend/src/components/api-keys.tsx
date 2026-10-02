@@ -40,6 +40,7 @@ const scopeLabels: Record<ApiScope, string> = {
   [ApiScopes.otaWrite]: 'ota:write — upload and publish OTA updates',
   [ApiScopes.flagsRead]: 'flags:read — evaluate feature flags',
   [ApiScopes.flagsWrite]: 'flags:write — change feature flags',
+  [ApiScopes.messengerChat]: 'messenger:chat — let signed-in users contact you',
 };
 
 const ALL_SCOPES = Object.values(ApiScopes);

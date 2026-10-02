@@ -96,6 +96,16 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Telemetry and stale flags | Live | SDKs send per-minute evaluation counts (`POST /v1/flags/telemetry`, hourly rollups); a daily job finds unused, never-evaluated and fully rolled-out flags; badges, dismiss-until and a weekly digest |
 | Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate |
 
+### Product line 3 — Messenger (#95)
+
+The first slice of the [messenger design](../specs/2026-09-24-messenger-design.md): in-app "contact us" for signed-in users ([reference](./messenger.md)).
+
+| Feature | Status | Notes |
+|---|---|---|
+| Conversations and identity | Prototype | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
+| Team inbox | Prototype | tRPC inbox, replies, internal notes, open/closed, blocking, Discord alerts through the Mocco preset; the console screens come next |
+| Attachments, React Native SDK, push replies | Not drawn | Screenshots, `@mocco/messenger-react-native`, Expo push when the team replies |
+
 ### Deploy loop depth
 
 | Feature | Status | Description |

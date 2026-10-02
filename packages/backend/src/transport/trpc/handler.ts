@@ -9,6 +9,7 @@ import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
@@ -30,6 +31,8 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { InboxService } from '@backend/domain/messenger/InboxService';
+import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
@@ -72,6 +75,8 @@ export interface TrpcDeps extends Services {
   flagKillSwitch: KillSwitchService;
   flagTelemetry: FlagTelemetryService;
   staleFlags: StaleFlagDetector;
+  messengerSettings: MessengerSettingsService;
+  inbox: InboxService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -120,6 +125,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         flagKillSwitch: deps.flagKillSwitch,
         flagTelemetry: deps.flagTelemetry,
         staleFlags: deps.staleFlags,
+        messengerSettings: deps.messengerSettings,
+        inbox: deps.inbox,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -162,6 +169,8 @@ export function productionServices(): TrpcDeps {
     flagKillSwitch: getFlagsDomain().flagKillSwitch,
     flagTelemetry: getFlagsDomain().flagTelemetry,
     staleFlags: getFlagsDomain().staleFlags,
+    messengerSettings: getMessengerDomain().messengerSettings,
+    inbox: getMessengerDomain().inbox,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,

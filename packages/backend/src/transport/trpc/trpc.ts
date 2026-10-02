@@ -19,6 +19,8 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { InboxService } from '@backend/domain/messenger/InboxService';
+import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
@@ -88,6 +90,9 @@ export interface Context {
   flagTelemetry: FlagTelemetryService;
   /** Stale-flag findings (#144). */
   staleFlags: StaleFlagDetector;
+  /** The messenger's settings and the team inbox (#95). */
+  messengerSettings: MessengerSettingsService;
+  inbox: InboxService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);

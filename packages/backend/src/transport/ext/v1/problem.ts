@@ -18,6 +18,8 @@ export const ProblemCodes = {
   forbidden: 'forbidden',
   invalidSession: 'invalid_session',
   uploadRejected: 'upload_rejected',
+  identityNotVerified: 'identity_not_verified',
+  contactBlocked: 'contact_blocked',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

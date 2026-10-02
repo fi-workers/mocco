@@ -260,6 +260,13 @@
       "when": 1790918812066,
       "tag": "0036_colossal_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790921694242,
+      "tag": "0037_fat_electro",
+      "breakpoints": true
     }
   ]
 }

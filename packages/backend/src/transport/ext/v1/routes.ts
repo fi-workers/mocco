@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 
 import { createFlagServingRoutes } from '@backend/transport/ext/v1/flags';
+import { createMessengerRoutes } from '@backend/transport/ext/v1/messenger';
 import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
 import { createOfrepRoutes } from '@backend/transport/ext/v1/ofrep';
 import { createOtaServingRoutes } from '@backend/transport/ext/v1/ota-manifest';
@@ -25,6 +26,10 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   if (deps.ota !== undefined) {
     app.route('/ota', createOtaServingRoutes(deps, deps.ota));
     app.route('/ota', createOtaUploadRoutes(deps, deps.ota));
+  }
+
+  if (deps.messenger !== undefined) {
+    app.route('/messenger', createMessengerRoutes(deps, deps.messenger));
   }
 
   if (deps.flags !== undefined) {

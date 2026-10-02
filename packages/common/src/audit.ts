@@ -57,6 +57,10 @@ export const AuditActions = {
   flagKillRolesChanged: 'flag.kill_roles.changed',
   flagClientVisibilityChanged: 'flag.client_visible.changed',
   flagStaleDismissed: 'flag.stale.dismissed',
+  messengerEnabled: 'messenger.enabled',
+  messengerSecretRotated: 'messenger.secret.rotated',
+  messengerCategoriesChanged: 'messenger.categories.changed',
+  messengerContactBlocked: 'messenger.contact.blocked',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
 } as const;

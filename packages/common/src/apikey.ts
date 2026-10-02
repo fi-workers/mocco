@@ -25,12 +25,20 @@ export const ApiScopes = {
   otaWrite: 'ota:write',
   flagsRead: 'flags:read',
   flagsWrite: 'flags:write',
+  /** Start and continue conversations as the app's users (#95); every call also needs
+   * the user's identity signed by the app's server. */
+  messengerChat: 'messenger:chat',
 } as const;
 export type ApiScope = (typeof ApiScopes)[keyof typeof ApiScopes];
 export const apiScopeSchema = z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]]);
 
-/** Scopes a publishable key may hold: reads a client app needs, nothing that changes state. */
-export const PUBLISHABLE_SCOPES: readonly ApiScope[] = [ApiScopes.otaRead, ApiScopes.flagsRead];
+/** Scopes a publishable key may hold: reads a client app needs, and messenger chat, which
+ * acts only for a user whose identity the app's server signed. Nothing else changes state. */
+export const PUBLISHABLE_SCOPES: readonly ApiScope[] = [
+  ApiScopes.otaRead,
+  ApiScopes.flagsRead,
+  ApiScopes.messengerChat,
+];
 
 /** A key as the console lists it — never the token or its hash. */
 export const apiKeySchema = z.object({

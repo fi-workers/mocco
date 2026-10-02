@@ -28,6 +28,7 @@ import { GithubApiError } from '@backend/domain/integration/github/errors';
 import { parseWebhook, verify } from '@backend/domain/integration/github/provider';
 import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
+import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getRateLimiter } from '@backend/domain/ratelimit/instance';
@@ -423,6 +424,7 @@ export async function extHandler(request: Request): Promise<Response> {
         telemetry: getFlagsDomain().flagTelemetry,
         streamTokens: flagStreamTokensFromEnv(env),
       },
+      messenger: { contacts: getMessengerDomain().contactMessenger },
     },
     storage:
       storageStore instanceof FilesystemObjectStore
