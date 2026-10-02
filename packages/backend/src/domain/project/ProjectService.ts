@@ -133,6 +133,19 @@ export class ProjectService {
   }
 
   /** Remove an app from a project. Throws ProjectAppNotFoundError for an app outside the project. */
+  /** Replace the web origins whose pages may use the project's publishable keys. */
+  async setAppWebOrigins(workspaceId: string, projectId: string, appId: string, webOrigins: string[]) {
+    await this.requireActiveProject(workspaceId, projectId);
+    try {
+      return await this.deps.apps.setWebOrigins(workspaceId, projectId, appId, [...new Set(webOrigins)]);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new ProjectAppNotFoundError(appId, { cause: error });
+      }
+      throw error;
+    }
+  }
+
   async removeApp(workspaceId: string, projectId: string, appId: string): Promise<void> {
     await this.requireActiveProject(workspaceId, projectId);
     try {

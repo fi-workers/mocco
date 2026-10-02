@@ -1,4 +1,4 @@
-import { AppPlatforms } from '@mocco/common/project';
+import { AppPlatforms, webOriginsSchema } from '@mocco/common/project';
 import { useState } from 'react';
 
 import {
@@ -12,7 +12,7 @@ import {
 import { Button } from '@frontend/components/ui/button';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { AppPlatform } from '@mocco/common/project';
+import type { AppPlatform, ProjectAppDto } from '@mocco/common/project';
 
 interface Props {
   workspaceId: string;
@@ -35,12 +35,25 @@ const storeLabels: Partial<Record<AppPlatform, string>> = {
   [AppPlatforms.android]: 'Play package (if different)',
 };
 
+/** Origins typed one per line, or separated by spaces or commas. */
+// eslint-disable-next-line sonarjs/null-dereference -- text is a string, never null
+const splitOrigins = (text: string): string[] => text.split(/[\s,]+/u).filter(value => value !== '');
+
+/** What is wrong with the typed origins, or null when they are fine. */
+function originsProblem(text: string): string | null {
+  const check = webOriginsSchema.safeParse(splitOrigins(text));
+  return check.success ? null : (check.error.issues[0]?.message ?? 'Check the origins');
+}
+
+const originsHint = "The sites whose pages may use this project's publishable keys, like https://app.acme.com.";
+
 function AddAppForm({ workspaceId, projectId, onDone }: Props & { onDone: () => void }) {
   const utils = trpc.useUtils();
   const [platform, setPlatform] = useState<AppPlatform>(AppPlatforms.ios);
   const [name, setName] = useState('');
   const [bundleId, setBundleId] = useState('');
   const [storeAppId, setStoreAppId] = useState('');
+  const [origins, setOrigins] = useState('');
   const appAddition = trpc.project.addApp.useMutation({
     onSuccess: async () => {
       await utils.project.listApps.invalidate({ workspaceId, projectId });
@@ -55,6 +68,9 @@ function AddAppForm({ workspaceId, projectId, onDone }: Props & { onDone: () => 
   const trimmedStoreAppId = storeAppId.trim();
   const bundleLabel = bundleLabels[platform];
   const storeLabel = storeLabels[platform];
+  const isWeb = platform === AppPlatforms.web;
+  const webOrigins = splitOrigins(origins);
+  const problem = isWeb ? originsProblem(origins) : null;
 
   return (
     <form
@@ -69,6 +85,7 @@ function AddAppForm({ workspaceId, projectId, onDone }: Props & { onDone: () => 
           name: trimmedName,
           ...(bundleLabel && trimmedBundleId !== '' && { bundleId: trimmedBundleId }),
           ...(storeLabel && trimmedStoreAppId !== '' && { storeAppId: trimmedStoreAppId }),
+          ...(isWeb && webOrigins.length > 0 && { webOrigins }),
         });
       }}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -125,11 +142,80 @@ function AddAppForm({ workspaceId, projectId, onDone }: Props & { onDone: () => 
             />
           </label>
         ) : null}
+        {isWeb ? (
+          <label className={`${labelClass} sm:col-span-2`}>
+            Web origins
+            <input
+              value={origins}
+              placeholder="https://app.acme.com"
+              aria-describedby="web-origins-hint"
+              onChange={event => {
+                setOrigins(event.target.value);
+              }}
+              className={`${inputClass} font-mono`}
+            />
+            <span id="web-origins-hint" className="text-xs font-normal text-muted-foreground">
+              {originsHint}
+            </span>
+            {problem !== null && webOrigins.length > 0 ? (
+              <span className="text-xs font-normal text-destructive">{problem}</span>
+            ) : null}
+          </label>
+        ) : null}
       </div>
       {appAddition.error ? <p className="text-sm text-destructive">{errorMessage(appAddition.error)}</p> : null}
-      <Button type="submit" pending={appAddition.isPending} disabled={trimmedName === ''} className="w-fit text-sm">
+      <Button
+        type="submit"
+        pending={appAddition.isPending}
+        disabled={trimmedName === '' || problem !== null}
+        className="w-fit text-sm">
         Add app
       </Button>
+    </form>
+  );
+}
+
+function WebOriginsEditor({ workspaceId, projectId, app, onDone }: Props & { app: ProjectAppDto; onDone: () => void }) {
+  const utils = trpc.useUtils();
+  const [origins, setOrigins] = useState((app.webOrigins ?? []).join(' '));
+  const problem = originsProblem(origins);
+  const update = trpc.project.setAppWebOrigins.useMutation({
+    onSuccess: async () => {
+      await utils.project.listApps.invalidate({ workspaceId, projectId });
+      onDone();
+    },
+  });
+
+  return (
+    <form
+      aria-label={`Web origins of ${app.name}`}
+      className="flex flex-col gap-2"
+      onSubmit={event => {
+        event.preventDefault();
+        update.mutate({ workspaceId, projectId, appId: app.id, webOrigins: splitOrigins(origins) });
+      }}>
+      <label className={labelClass}>
+        Web origins
+        <input
+          value={origins}
+          placeholder="https://app.acme.com"
+          onChange={event => {
+            setOrigins(event.target.value);
+          }}
+          className={`${inputClass} font-mono`}
+        />
+        <span className="text-xs font-normal text-muted-foreground">{originsHint}</span>
+        {problem === null ? null : <span className="text-xs font-normal text-destructive">{problem}</span>}
+      </label>
+      {update.error ? <p className="text-sm text-destructive">{errorMessage(update.error)}</p> : null}
+      <span className="flex gap-2">
+        <Button type="submit" pending={update.isPending} disabled={problem !== null} className="w-fit text-sm">
+          Save origins
+        </Button>
+        <Button type="button" variant="ghost" className="text-sm" onClick={onDone}>
+          Cancel
+        </Button>
+      </span>
     </form>
   );
 }
@@ -143,6 +229,7 @@ function AppsSection({ workspaceId, projectId, isArchived }: Props & { isArchive
     },
   });
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const apps = appsQuery.data?.apps ?? [];
 
   return (
@@ -182,28 +269,50 @@ function AppsSection({ workspaceId, projectId, isArchived }: Props & { isArchive
       ) : null}
       <ul className="flex flex-col gap-2">
         {apps.map(app => (
-          <li
-            key={app.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
-            <span className="flex min-w-0 flex-col">
-              <span className="text-sm font-medium">
-                {app.name} <span className="text-xs text-muted-foreground">· {platformLabels[app.platform]}</span>
+          <li key={app.id} className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3">
+            <span className="flex items-center justify-between gap-3">
+              <span className="flex min-w-0 flex-col">
+                <span className="text-sm font-medium">
+                  {app.name} <span className="text-xs text-muted-foreground">· {platformLabels[app.platform]}</span>
+                </span>
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {[app.bundleId, app.storeAppId, ...(app.webOrigins ?? [])].filter(Boolean).join(' · ') || '—'}
+                </span>
               </span>
-              <span className="truncate font-mono text-xs text-muted-foreground">
-                {[app.bundleId, app.storeAppId].filter(Boolean).join(' · ') || '—'}
-              </span>
+              {isArchived ? null : (
+                <span className="flex shrink-0 gap-1">
+                  {app.platform === AppPlatforms.web && editingId !== app.id ? (
+                    <Button
+                      variant="ghost"
+                      className="text-sm"
+                      onClick={() => {
+                        setEditingId(app.id);
+                      }}>
+                      Edit origins
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    className="text-sm"
+                    pending={appRemoval.isPending && appRemoval.variables?.appId === app.id}
+                    onClick={() => {
+                      appRemoval.mutate({ workspaceId, projectId, appId: app.id });
+                    }}>
+                    Remove
+                  </Button>
+                </span>
+              )}
             </span>
-            {isArchived ? null : (
-              <Button
-                variant="ghost"
-                className="text-sm"
-                pending={appRemoval.isPending && appRemoval.variables?.appId === app.id}
-                onClick={() => {
-                  appRemoval.mutate({ workspaceId, projectId, appId: app.id });
-                }}>
-                Remove
-              </Button>
-            )}
+            {editingId === app.id ? (
+              <WebOriginsEditor
+                workspaceId={workspaceId}
+                projectId={projectId}
+                app={app}
+                onDone={() => {
+                  setEditingId(null);
+                }}
+              />
+            ) : null}
           </li>
         ))}
       </ul>

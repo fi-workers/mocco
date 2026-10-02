@@ -7,6 +7,7 @@ import {
   projectCreateInputSchema,
   projectRepoSchema,
   projectSchema,
+  webOriginsSchema,
 } from '@mocco/common/project';
 import { z } from 'zod';
 
@@ -66,6 +67,13 @@ export const projectRouter = router({
     .input(projectInput)
     .output(z.object({ apps: z.array(projectAppSchema) }))
     .query(async ({ ctx, input }) => ({ apps: await ctx.projects.listApps(input.workspaceId, input.projectId) })),
+
+  setAppWebOrigins: protectedProjectProcedure
+    .input(projectInput.extend({ appId: z.uuid(), webOrigins: webOriginsSchema }))
+    .output(z.object({ app: projectAppSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      app: await ctx.projects.setAppWebOrigins(input.workspaceId, input.projectId, input.appId, input.webOrigins),
+    })),
 
   removeApp: protectedProjectProcedure
     .input(projectInput.extend({ appId: z.uuid() }))

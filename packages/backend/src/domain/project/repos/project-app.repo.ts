@@ -44,6 +44,22 @@ export class ProjectAppRepo {
     return getOrThrow(rows, `App ${appId} was not found`);
   }
 
+  /** Replace an app's web origins. Scoped by workspace and project. */
+  async setWebOrigins(workspaceId: string, projectId: string, appId: string, webOrigins: string[]) {
+    const rows = await this.db
+      .update(schema.projectApps)
+      .set({ webOrigins, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.projectApps.id, appId),
+          eq(schema.projectApps.workspaceId, workspaceId),
+          eq(schema.projectApps.projectId, projectId),
+        ),
+      )
+      .returning();
+    return getOrThrow(rows, `App ${appId} was not found`);
+  }
+
   /** Delete an app of the project. Scoped by workspace and project. */
   async delete(workspaceId: string, projectId: string, appId: string) {
     await this.db

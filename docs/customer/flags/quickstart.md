@@ -9,6 +9,7 @@ confidence: high
 owner: andrea
 tags: [customer, flags, openfeature, guide]
 related:
+  - ./browsers-and-apps.md
   - ../../reference/flags.md
   - ../../reference/sdk.md
 ---
@@ -94,7 +95,7 @@ if (await flags.getBooleanValue('new-checkout', false, { targetingKey: user.id, 
 }
 ```
 
-The provider checks Mocco for new rules every 30 seconds (`pollIntervalMs` changes that). When nothing changed, Mocco answers with an empty `304 Not Modified`. When you switch a flag in the console, servers pick it up on their next check, and OpenFeature emits `PROVIDER_CONFIGURATION_CHANGED` with the flags that changed.
+The provider listens to Mocco's change stream, so when you switch a flag in the console, servers pick it up within a second or two, and OpenFeature emits `PROVIDER_CONFIGURATION_CHANGED` with the flags that changed. It also checks every 30 seconds in case the stream drops (`pollIntervalMs` changes that); when nothing changed, Mocco answers with an empty `304 Not Modified`.
 
 If Mocco can't be reached, the provider keeps answering from the last rules it received and reports `PROVIDER_STALE` until it reconnects. To start even when Mocco is unreachable at boot, pass a saved copy of the rules as `bootstrap`.
 
@@ -109,3 +110,7 @@ flagd start --sources='[{"uri":"https://api.mocco.club/v1/flags/ruleset","provid
 ```
 
 flagd sends the last `ETag` with each poll, so unchanged rules cost one small request.
+
+## Browsers and apps
+
+For web pages, React and React Native apps, see [Feature flags in browsers and apps](./browsers-and-apps.md): devices get only the answers, never the rules.

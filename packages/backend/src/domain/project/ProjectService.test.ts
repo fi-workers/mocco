@@ -177,6 +177,29 @@ describe('ProjectService (pglite)', () => {
       await expect(service.removeApp(workspaceId, other.id, app.id)).rejects.toBeInstanceOf(ProjectAppNotFoundError);
       expect(await service.listApps(workspaceId, acme.id)).toHaveLength(1);
     });
+
+    it("replaces an app's web origins (deduplicated), only within its project", async () => {
+      const workspaceId = await seedWorkspace();
+      const acme = await service.create(workspaceId, { name: 'Acme', handle: 'acme' });
+      const other = await service.create(workspaceId, { name: 'Other', handle: 'other' });
+      const app = await service.addApp(workspaceId, acme.id, {
+        platform: AppPlatforms.web,
+        name: 'Site',
+        webOrigins: ['https://app.acme.test'],
+      });
+
+      const updated = await service.setAppWebOrigins(workspaceId, acme.id, app.id, [
+        'https://app.acme.test',
+        'http://localhost:5180',
+        'https://app.acme.test',
+      ]);
+      expect(updated.webOrigins).toEqual(['https://app.acme.test', 'http://localhost:5180']);
+      await expect(
+        service.setAppWebOrigins(workspaceId, other.id, app.id, ['https://evil.test']),
+      ).rejects.toBeInstanceOf(ProjectAppNotFoundError);
+      const [stored] = await service.listApps(workspaceId, acme.id);
+      expect(stored?.webOrigins).toEqual(['https://app.acme.test', 'http://localhost:5180']);
+    });
   });
 
   describe('repo links', () => {
