@@ -1,6 +1,6 @@
 ---
 title: SDK packages
-description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin) and @mocco/ota-cli — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and npm trusted publishing.
+description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin) and @mocco/ota-cli — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and an npm token, with provenance.
 type: reference
 status: active
 created: 2026-10-02
@@ -51,6 +51,6 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 
 ## Publishing
 
-[changesets](https://github.com/changesets/changesets): add a changeset (`yarn changeset`) to a PR that changes a published package. On `main`, `.github/workflows/publish.yml` (SHA-pinned actions) opens or updates the "Version packages" PR; merging it runs `yarn release` (`sdk:build` + `changeset publish`) with **npm trusted publishing** (the job's OIDC token, no npm token) and **provenance**. The app packages (`backend`, `frontend`, `common`, `e2e`) are private and ignored.
+[changesets](https://github.com/changesets/changesets): add a changeset (`yarn changeset`) to a PR that changes a published package. On `main`, `.github/workflows/publish.yml` (SHA-pinned actions) opens or updates the "Version packages" PR; merging it runs `yarn release` (`sdk:build` + `changeset publish`, which runs `yarn npm publish`) authenticated by the `NPM_TOKEN` secret (`YARN_NPM_AUTH_TOKEN`) and with **provenance** (`YARN_NPM_PUBLISH_PROVENANCE`). yarn reads neither setup-node's `.npmrc` nor npm's OIDC exchange, so trusted publishing would need the npm CLI. The app packages (`backend`, `frontend`, `common`, `e2e`) are private and ignored.
 
-Before the first release, someone with npm access must claim the `@mocco` scope (fallback `@moccohq`) and add this repository's `publish.yml` as each package's trusted publisher on npmjs.com. Until then the workflow's publish step fails without publishing anything.
+Before the first release, someone with npm access must claim the `@mocco` scope (fallback `@moccohq`) and store an npm token that may publish `@mocco/*` (a granular access token, or an automation token) as the repository secret `NPM_TOKEN`. Until then the publish step fails with `YN0033: No authentication configured` and publishes nothing. A changeset merged while a "Version packages" PR is open moves the release back to that PR; publishing happens on the merge that leaves no changeset pending.

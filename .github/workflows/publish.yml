@@ -1,7 +1,10 @@
 # Publish the SDK packages (changesets). On main, the action opens or updates the
-# "Version packages" PR; merging that PR publishes to npm with trusted publishing
-# (OIDC — no npm token) and provenance. The @mocco scope must be linked to this
-# repository as a trusted publisher on npmjs.com first.
+# "Version packages" PR; merging that PR publishes to npm with provenance.
+# `changeset publish` runs `yarn npm publish` here, and yarn reads neither the .npmrc
+# setup-node writes nor npm's OIDC exchange, so it authenticates with the NPM_TOKEN
+# secret (an npm automation or granular token that may publish @mocco/*). npm trusted
+# publishing can only be set on packages that already exist, so the first release
+# needs the token either way.
 #
 # The upload goes through the npm CLI (`scripts/publish-packages.mjs`), not
 # `changeset publish`. Changesets publishes through the detected package manager, and
@@ -50,4 +53,5 @@ jobs:
           commit-message: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'
+          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          YARN_NPM_PUBLISH_PROVENANCE: 'true'
