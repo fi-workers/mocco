@@ -29,7 +29,7 @@ export class MessengerSettingsRepo {
   async update(
     workspaceId: string,
     projectId: string,
-    values: { identitySecretSealed?: string; categories?: MessengerCategory[] },
+    values: { identitySecretSealed?: string; categories?: MessengerCategory[]; allowGuests?: boolean },
   ) {
     return expectOne(
       await this.db

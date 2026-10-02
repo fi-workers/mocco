@@ -250,13 +250,16 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
         </section>
         <aside aria-label="About the user" className="flex flex-col gap-4 lg:border-l lg:border-border lg:pl-6">
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-medium">User</h3>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              User
+              {contact.externalUserId === null ? <StatusBadge tone={Tones.neutral}>Not signed in</StatusBadge> : null}
+            </h3>
             <Facts
               rows={
                 [
                   ['Name', contact.name ?? ''],
                   ['Email', contact.email ?? ''],
-                  ['User id', contact.externalUserId],
+                  ['User id', contact.externalUserId ?? ''],
                   ['Last seen', contact.lastSeenAt.toLocaleString()],
                   ...traits,
                 ].filter(([, value]) => value !== '') as [string, string][]

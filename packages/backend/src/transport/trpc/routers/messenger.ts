@@ -45,6 +45,19 @@ export const messengerRouter = router({
         ),
     ),
 
+  /** Let people who aren't signed in write, leaving an email (off by default). */
+  setAllowGuests: messengerProcedure
+    .input(projectInput.extend({ allowGuests: z.boolean() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.messengerSettings.setAllowGuests(
+          input.workspaceId,
+          input.projectId,
+          ctx.session.user.id,
+          input.allowGuests,
+        ),
+    ),
+
   inbox: messengerProcedure
     .input(projectInput.extend({ status: conversationStatusSchema.default('open'), before: z.date().optional() }))
     .query(async ({ ctx, input }) => ({

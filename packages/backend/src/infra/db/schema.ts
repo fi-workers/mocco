@@ -1828,6 +1828,8 @@ export const messengerSettings = pgTable(
     // HMAC key for `userHash`; SecretBox-sealed (AAD = project id), never returned.
     identitySecretSealed: text('identity_secret_sealed').notNull(),
     categories: jsonb().$type<MessengerCategory[]>().notNull(),
+    // People who aren't signed in may write too, leaving an email to be reached at.
+    allowGuests: boolean('allow_guests').notNull().default(false),
     createdAt,
     updatedAt,
   },
@@ -1847,9 +1849,12 @@ export const messengerContacts = pgTable(
     id: uuid().primaryKey().defaultRandom(),
     workspaceId: uuid('workspace_id').notNull(),
     projectId: uuid('project_id').notNull(),
-    externalUserId: text('external_user_id').notNull(),
+    // The app's user id; null for a guest (not signed in), who is known by email.
+    externalUserId: text('external_user_id'),
     name: text(),
     email: text(),
+    // A guest's long-lived device token (hashed), so the same device finds them again.
+    guestTokenHash: text('guest_token_hash'),
     traits: jsonb().$type<Record<string, string | number | boolean>>().notNull().default({}),
     lastContext: jsonb('last_context').$type<MessengerContext>().notNull().default({}),
     lastSeenAt: timestamp('last_seen_at').notNull(),
@@ -1858,6 +1863,11 @@ export const messengerContacts = pgTable(
   },
   t => [
     uniqueIndex('mocco_messenger_contacts_project_user_uq').on(t.projectId, t.externalUserId),
+    uniqueIndex('mocco_messenger_contacts_guest_token_uq').on(t.guestTokenHash),
+    check(
+      'mocco_messenger_contacts_identity_check',
+      sql`${t.externalUserId} IS NOT NULL OR (${t.email} IS NOT NULL AND ${t.guestTokenHash} IS NOT NULL)`,
+    ),
     unique('mocco_messenger_contacts_id_workspace_uq').on(t.id, t.workspaceId),
     foreignKey({
       columns: [t.projectId, t.workspaceId],
