@@ -88,6 +88,6 @@ Readers who pick a language see its translation, and the article list shows tran
 
 ## 5. What readers see
 
-The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change appears on the site within a minute.
+The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change, an unpublished or deleted article, and a new translation appear on the article and the site's home right away; the article lists on other pages catch up within a minute.
 
 ![A published article on the public help site, with the article list and the language switcher](./images/public-article.png)

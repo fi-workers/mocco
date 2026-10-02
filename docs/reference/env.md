@@ -78,7 +78,7 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 ## Job tick vars
 
-`CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. See [Background jobs and schedules](./jobs.md#env).
+`CRON_SECRET` (the name Vercel Cron sends as a bearer), `JOBS_TICK_SECRET` (our self-host alias) and `JOBS_TICK_BUDGET_MS` (default 50000) configure the background-job tick. All are optional; with neither secret set the tick route answers 503. The same secret lets the backend ask `/api/help/revalidate` to rebuild help center pages right after a change; without it they refresh within a minute. See [Background jobs and schedules](./jobs.md#env).
 
 ## Public API host
 
