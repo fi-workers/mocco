@@ -207,6 +207,15 @@ export class HelpPublicReadService {
     return { locale: served, hits: searchArticles(searchable, query, limit) };
   }
 
+  /** Search the help center of a project (the /v1 surface, where a key names the project). */
+  async searchInProject(workspaceId: string, projectId: string, locale: string, query: string, limit = 10) {
+    const site = await new HelpSiteRepo(this.deps.db).find(workspaceId, projectId);
+    if (site === undefined) {
+      throw new HelpSiteNotFoundError(`project ${projectId}`);
+    }
+    return { slug: site.slug, ...(await this.search(site.slug, locale, query, limit)) };
+  }
+
   /** Where an old path (an imported site's URL) now lives, or undefined. */
   async redirect(slug: string, fromPath: string): Promise<string | undefined> {
     const site = await this.requireSite(slug);

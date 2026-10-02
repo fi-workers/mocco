@@ -2,12 +2,14 @@
 // Headless: hooks give the app the data and actions, and the app draws the screens in
 // its own design and languages. Create one client with `createMessenger`, wrap the app
 // in `<MessengerProvider>`, then use the hooks. Pure JS, so it runs in Expo Go.
-import { MessengerClient } from '@mocco/sdk-core';
+import { HelpClient, MessengerClient } from '@mocco/sdk-core';
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 // eslint-disable-next-line import-x/no-unresolved -- a peer dependency the app installs
 import { AppState } from 'react-native';
 
 import type {
+  HelpArticleHit,
+  HelpClientOptions,
   MessengerCategory,
   MessengerClientOptions,
   MessengerConversation,
@@ -17,6 +19,8 @@ import type {
 import type { ReactNode } from 'react';
 
 export type {
+  HelpArticleHit,
+  HelpClientOptions,
   MessengerAttachment,
   MessengerCategory,
   MessengerClientOptions,
@@ -26,7 +30,7 @@ export type {
   MessengerState,
   MessengerStorage,
 } from '@mocco/sdk-core';
-export { MessengerClient, MoccoError, MoccoNetworkError, messengerConversationIdOf } from '@mocco/sdk-core';
+export { HelpClient, MessengerClient, MoccoError, MoccoNetworkError, messengerConversationIdOf } from '@mocco/sdk-core';
 
 /** One client for the app; create it once (outside a component). */
 export function createMessenger(options: MessengerClientOptions): MessengerClient {
@@ -168,4 +172,52 @@ export function useConversation(
     error: sendError,
     markRead,
   };
+}
+
+/** A help center client for the app (needs a key with help:read); create it once. */
+export function createHelp(options: HelpClientOptions): HelpClient {
+  return new HelpClient(options);
+}
+
+/**
+ * Help articles matching what the user is typing, e.g. on a contact screen: searches
+ * 300 ms after the text stops changing. Failures leave the last hits in place.
+ */
+export function useHelpSearch(
+  help: HelpClient,
+  query: string,
+  opts: { locale?: string; limit?: number } = {},
+): { hits: HelpArticleHit[]; isSearching: boolean } {
+  const [hits, setHits] = useState<HelpArticleHit[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const { locale, limit } = opts;
+  useEffect(() => {
+    let isCurrent = true;
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      // eslint-disable-next-line no-void -- a timer callback can't await; the promise handles its own failure
+      void (async () => {
+        try {
+          const found = await help.search(query, {
+            ...(locale !== undefined && { locale }),
+            ...(limit !== undefined && { limit }),
+          });
+          if (isCurrent) {
+            setHits(found);
+          }
+        } catch {
+          // Offline or refused: keep the last hits.
+        } finally {
+          if (isCurrent) {
+            setIsSearching(false);
+          }
+        }
+      })();
+    }, 300);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [help, query, locale, limit]);
+  return { hits, isSearching };
 }

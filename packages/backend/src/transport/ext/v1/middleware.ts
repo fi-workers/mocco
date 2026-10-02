@@ -12,6 +12,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
 import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
+import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
@@ -30,6 +31,7 @@ export interface V1Deps {
   messenger?: MessengerServingDeps;
   /** Run reads for a project's repositories; undefined leaves /v1/runs unmounted. */
   runs?: RunReadDeps;
+  help?: HelpServingDeps;
 }
 
 export interface V1Env {
