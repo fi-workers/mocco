@@ -173,6 +173,57 @@ describe('flags router on pglite', () => {
     await expect(api.flags.createBoolean({ ...scope, key: 'a' })).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
+  it('creates typed flags, checks variant types, and previews unsaved rules', async () => {
+    const { api, scope } = await setup();
+    await api.product.enable({ workspaceId: scope.workspaceId, product: Products.flags });
+    const { environment } = await api.flags.createEnvironment({ ...scope, key: 'production', name: 'Production' });
+    const flag = {
+      key: 'max-items',
+      type: 'number' as const,
+      variants: { small: 10, large: 100 },
+      defaultVariant: 'small',
+      offVariant: 'small',
+    };
+
+    await expect(
+      api.flags.create({ ...scope, flag: { ...flag, variants: { small: 10, large: 'many' } } }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await api.flags.create({ ...scope, flag });
+    const { results } = await api.flags.preview({
+      ...scope,
+      environmentId: environment.id,
+      context: { targetingKey: 'u1', plan: 'pro' },
+      ops: [
+        { op: 'set_enabled', flagKey: 'max-items', enabled: true },
+        {
+          op: 'set_rules',
+          flagKey: 'max-items',
+          rules: [{ clauses: [{ attribute: 'plan', op: 'in', values: ['pro'] }], serve: { variant: 'large' } }],
+        },
+      ],
+    });
+    const { segments } = await api.flags.segments({ ...scope, environmentId: environment.id });
+
+    expect(results).toEqual([
+      { flagKey: 'max-items', value: 100, variant: 'large', reason: 'TARGETING_MATCH', errorCode: null },
+    ]);
+    expect(segments).toEqual([]);
+    await expect(
+      api.flags.applyChangeset({
+        ...scope,
+        environmentId: environment.id,
+        baseVersion: 1,
+        ops: [
+          {
+            op: 'set_rules',
+            flagKey: 'max-items',
+            rules: [{ clauses: [{ attribute: 'seats', op: 'gt', values: ['ten'] }], serve: { variant: 'large' } }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it("never reaches another workspace's environment", async () => {
     const owner = await setup();
     await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.flags });

@@ -2483,6 +2483,7 @@ __metadata:
     "@octokit/plugin-retry": "npm:8.1.0"
     "@octokit/plugin-throttling": "npm:11.0.3"
     "@openfeature/core": "npm:1.12.0"
+    "@openfeature/flagd-core": "npm:4.0.1"
     "@openfeature/server-sdk": "npm:1.23.0"
     "@trpc/server": "npm:11.18.0"
     "@types/pg": "npm:8.20.0"
@@ -2545,6 +2546,7 @@ __metadata:
     "@hookform/resolvers": "npm:5.4.0"
     "@mocco/backend": "workspace:*"
     "@mocco/common": "workspace:*"
+    "@mocco/flags-core": "workspace:*"
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@sentry/nextjs": "npm:10.65.0"
     "@tailwindcss/postcss": "npm:4.1.17"
@@ -3094,6 +3096,20 @@ __metadata:
   version: 1.12.0
   resolution: "@openfeature/core@npm:1.12.0"
   checksum: 10/d95bd67bf86397e358738914268f50a1bd45b6fc8648c8f197bddc9d968c6eb03bf9bd5f98e89f0b39a8f89f8043ed17c1d3a73e239b41f87773ccbbee38f4c4
+  languageName: node
+  linkType: hard
+
+"@openfeature/flagd-core@npm:4.0.1":
+  version: 4.0.1
+  resolution: "@openfeature/flagd-core@npm:4.0.1"
+  dependencies:
+    imurmurhash: "npm:^0.1.4"
+    json-logic-engine: "npm:5.0.7"
+    object-hash: "npm:^3.0.0"
+    semver: "npm:^7.6.3"
+  peerDependencies:
+    "@openfeature/core": ">=1.6.0"
+  checksum: 10/a77aa929540bbb6e701154ebc17c7490a022b8df11f1f2236ca2d61f95ea1e94e1afea0cb4803f60a9dffdc1123a1f59c37466adce14b160691cab25cbc0209e
   languageName: node
   linkType: hard
 
@@ -9646,6 +9662,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"json-logic-engine@npm:5.0.7":
+  version: 5.0.7
+  resolution: "json-logic-engine@npm:5.0.7"
+  checksum: 10/09ca62af1c899a9221ea1741da4877f1bc237021f08de66deddcab2ea4655f9ada0e7c9129fbb5860a56c89319c374f0c43206859b766869bd1fabeb3679f7ec
+  languageName: node
+  linkType: hard
+
 "json-parse-even-better-errors@npm:^2.3.0":
   version: 2.3.1
   resolution: "json-parse-even-better-errors@npm:2.3.1"
@@ -10618,6 +10641,13 @@ __metadata:
   version: 4.1.1
   resolution: "object-assign@npm:4.1.1"
   checksum: 10/fcc6e4ea8c7fe48abfbb552578b1c53e0d194086e2e6bbbf59e0a536381a292f39943c6e9628af05b5528aa5e3318bb30d6b2e53cadaf5b8fe9e12c4b69af23f
+  languageName: node
+  linkType: hard
+
+"object-hash@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "object-hash@npm:3.0.0"
+  checksum: 10/f498d456a20512ba7be500cef4cf7b3c183cc72c65372a549c9a0e6dd78ce26f375e9b1315c07592d3fde8f10d5019986eba35970570d477ed9a2a702514432a
   languageName: node
   linkType: hard
 

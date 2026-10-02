@@ -35,7 +35,13 @@ An **environment** (`mocco_flag_environments`) is a flag target in the sense of 
 
 A **flag** (`mocco_flags`) is defined once per project: its key, type, variants, lifecycle and description. Today the console creates boolean flags with the variants `on: true` and `off: false`.
 
-A **config** (`mocco_flag_configs`) is a flag's state in one environment: `enabled`, `killed`, the default variant, the off variant (what a killed flag serves) and a random bucketing `salt`. Configs are written only by applied changesets, and each records the environment version that last changed it.
+A flag's **type** is `boolean`, `string`, `number` or `json`, and every variant's value must match it (`json`: an object or an array); `flags.create` refuses a mismatch.
+
+A **config** (`mocco_flag_configs`) is a flag's state in one environment: `enabled`, `killed`, the default variant, the off variant (what a killed flag serves), ordered `rules`, an optional fallthrough `rollout`, and a random bucketing `salt`. Configs are written only by applied changesets, and each records the environment version that last changed it.
+
+A **rule** is a list of clauses that must all match and what it serves: a variant, or a percentage rollout (`[{ variant, weight }]`, order kept). A clause is either an attribute comparison (`in`, `not_in`, `starts_with`, `ends_with`, `lt`, `lte`, `gt`, `gte`, `semver_eq/lt/lte/gt/gte`) or segment membership (`{ segment, negate }`).
+
+A **segment** (`mocco_flag_segments`) belongs to one environment, so editing it is a changeset on that environment and is governed by its gate. It has included and excluded targeting keys and OR-of-AND groups of attribute clauses. Segments are changed by `set_segment` and `delete_segment` ops; a segment a rule still uses can't be deleted.
 
 A **changeset** (`mocco_flag_changesets`) is an ordered list of ops against a base version:
 
@@ -43,7 +49,10 @@ A **changeset** (`mocco_flag_changesets`) is an ordered list of ops against a ba
 |---|---|
 | `add_flag` | Adds a flag to the environment, disabled, with its default and off variants |
 | `set_enabled` | Switches the flag on or off |
-| `set_default_variant` | Changes the variant an enabled flag serves |
+| `set_default_variant` | Changes the variant served when no rule matches (and to keyless callers under a rollout) |
+| `set_rules` | Replaces the flag's rules |
+| `set_rollout` | Sets or clears the fallthrough percentage rollout |
+| `set_segment`, `delete_segment` | Create, replace or delete a segment |
 
 A changeset stores its ops, the rendered diff (before and after per field), and a `content_hash`: sha-256 over the canonical JSON of `{environmentId, baseVersion, ops}`. The hash is what a later approval will pin.
 
@@ -55,8 +64,9 @@ A **ruleset snapshot** (`mocco_flag_ruleset_snapshots`) is the compiled document
 
 1. It takes the environment's advisory lock (`AdvisoryLockNamespaces.flagEnvironment`) and reads the current version.
 2. It refuses the changeset with `ChangesetConflictError` (CONFLICT) if the base version is not the current one. A caller that read an older version must reload, so a stale toggle never overwrites a newer change.
-3. It applies the ops with the pure `applyOps`. An unknown flag or variant, or a flag added twice, is `InvalidChangeError` (BAD_REQUEST). So is a changeset that changes nothing.
-4. It writes the changeset as `applied`, upserts the changed configs, compiles the ruleset, writes the snapshot and sets `current_version` to base + 1.
+3. It applies the ops with the pure `applyOps`. An unknown flag, variant or segment, a flag added twice, or deleting a segment in use is `InvalidChangeError` (BAD_REQUEST). So is a changeset that changes nothing.
+4. A compiled ruleset over 5 MB is `RulesetTooLargeError` (BAD_REQUEST). Rules, clause values, rollout entries and segment keys (10,000 per list) have their own limits (`FlagLimits` in `@mocco/common/flags`).
+5. It writes the changeset as `applied`, upserts the changed configs and segments, compiles the ruleset, writes the snapshot and sets `current_version` to base + 1.
 
 After the commit, `FlagService` records `flag.changeset.applied` in the audit log with the changeset id, version, source, content hash and diff.
 
@@ -88,6 +98,14 @@ The snapshot is a flagd flag-definition document, valid against flagd's v0 schem
   }
 }
 ```
+
+Targeting compiles to `if: [rule₁ condition, rule₁ serve, …, fallthrough]`:
+
+- Attribute clauses become `in`, `!`, `starts_with` / `ends_with` (an `or` over the values), `sem_ver`, and numeric comparisons guarded by `!(x in [null])`, so a missing attribute never compares as 0. That guard is the presence test the JsonLogic engines agree on (json-logic-engine reads `0 != null` as false).
+- Segments are inlined: not excluded, and included or matching a group. That is why the ruleset is server-key-only.
+- A rollout is `if: [targetingKey, fractional: [cat: [salt, targetingKey], [variant, weight]…], null]`. Callers without a targeting key fall back to the default variant.
+
+`flagd-crosscheck.test.ts` evaluates a compiled ruleset with every clause kind, segments and rollouts against 3,000 generated contexts with both `@mocco/flags-core` and `@openfeature/flagd-core`, and requires identical results. `compile-ruleset.test.ts` checks that 100K keys land within ±1% of the weights and that keys in at 10% stay in at 20%.
 
 A disabled flag is emitted as `state: DISABLED`. A killed flag is emitted as `ENABLED` with its off variant as the default and no targeting, so even a stale or third-party flagd client serves the off variant ([ADR 0024](../adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)).
 
@@ -122,9 +140,11 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | Procedure | Purpose |
 |---|---|
 | `environments`, `createEnvironment` | List and create environments |
-| `list`, `createBoolean` | List flags with their config in every environment; create a boolean flag |
+| `list`, `create`, `createBoolean` | List flags with their config in every environment; create a typed flag, or a boolean one |
+| `segments` | An environment's segments |
+| `preview` | Evaluate every flag for a context, with unsaved ops applied (nothing is written) |
 | `applyChangeset` | Apply ops to an unprotected environment against `baseVersion` |
 | `history` | An environment's last 50 changesets, newest first |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
 
-The console page is **Feature flags** in the project tabs (`/workspaces/:id/p/:projectId/flags`).
+The console page is **Feature flags** in the project tabs (`/workspaces/:id/p/:projectId/flags`), with environments, flags, and per environment its segments and history. Each flag has a page (`…/flags/:flagKey?env=`) with its rules, fallthrough and preview.

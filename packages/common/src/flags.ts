@@ -43,27 +43,180 @@ export type ChangesetState = (typeof ChangesetStates)[keyof typeof ChangesetStat
 /** A variant's value: JSON for `json` flags, otherwise the flag's type. */
 export type VariantValue = boolean | string | number | Record<string, unknown> | unknown[];
 
-/** One change to an environment's flag configs. A changeset is an ordered list of these. */
+/** A segment key: a lowercase slug, unique per environment. */
+export const SEGMENT_KEY_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
+/** An evaluation-context attribute a clause reads (`plan`, `org.tier`, `targetingKey`). */
+export const ATTRIBUTE_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$/;
+
+/** Limits the compiler and the evaluator rely on (feature flags design §11). */
+export const FlagLimits = {
+  rulesPerFlag: 50,
+  clausesPerRule: 20,
+  valuesPerClause: 1000,
+  rolloutVariants: 20,
+  segmentKeys: 10_000,
+  segmentRuleGroups: 20,
+  variantsPerFlag: 50,
+  /** The compiled ruleset of one environment, serialized. */
+  rulesetBytes: 5 * 1024 * 1024,
+} as const;
+
+export const ClauseOps = {
+  in: 'in',
+  notIn: 'not_in',
+  startsWith: 'starts_with',
+  endsWith: 'ends_with',
+  lt: 'lt',
+  lte: 'lte',
+  gt: 'gt',
+  gte: 'gte',
+  semverEq: 'semver_eq',
+  semverLt: 'semver_lt',
+  semverLte: 'semver_lte',
+  semverGt: 'semver_gt',
+  semverGte: 'semver_gte',
+} as const;
+export type ClauseOp = (typeof ClauseOps)[keyof typeof ClauseOps];
+
+/** Ops that compare against one value; the others match any of their values. */
+export const SINGLE_VALUE_OPS: readonly ClauseOp[] = [
+  ClauseOps.lt,
+  ClauseOps.lte,
+  ClauseOps.gt,
+  ClauseOps.gte,
+  ClauseOps.semverEq,
+  ClauseOps.semverLt,
+  ClauseOps.semverLte,
+  ClauseOps.semverGt,
+  ClauseOps.semverGte,
+];
+const NUMERIC_OPS: ReadonlySet<ClauseOp> = new Set([ClauseOps.lt, ClauseOps.lte, ClauseOps.gt, ClauseOps.gte]);
+const STRING_OPS: ReadonlySet<ClauseOp> = new Set([
+  ClauseOps.startsWith,
+  ClauseOps.endsWith,
+  ClauseOps.semverEq,
+  ClauseOps.semverLt,
+  ClauseOps.semverLte,
+  ClauseOps.semverGt,
+  ClauseOps.semverGte,
+]);
+
+/** `attribute op values`: e.g. `plan in [pro, enterprise]`, `appVersion semver_gte 2.4.0`. */
+export const attributeClauseSchema = z
+  .object({
+    attribute: z.string().regex(ATTRIBUTE_PATTERN).max(100),
+    op: z.enum(Object.values(ClauseOps) as [ClauseOp, ...ClauseOp[]]),
+    values: z
+      .array(z.union([z.string().max(500), z.number()]))
+      .min(1)
+      .max(FlagLimits.valuesPerClause),
+  })
+  .refine(clause => !SINGLE_VALUE_OPS.includes(clause.op) || clause.values.length === 1, {
+    message: 'This operator compares against exactly one value',
+    path: ['values'],
+  })
+  .refine(clause => !NUMERIC_OPS.has(clause.op) || clause.values.every(value => typeof value === 'number'), {
+    message: 'Numeric comparisons take a number',
+    path: ['values'],
+  })
+  .refine(clause => !STRING_OPS.has(clause.op) || clause.values.every(value => typeof value === 'string'), {
+    message: 'This operator takes text',
+    path: ['values'],
+  });
+export type AttributeClause = z.infer<typeof attributeClauseSchema>;
+
+/** Membership of a segment of the same environment (`negate`: not a member). */
+export const segmentClauseSchema = z.object({
+  segment: z.string().regex(SEGMENT_KEY_PATTERN),
+  negate: z.boolean().default(false),
+});
+export type SegmentClause = z.infer<typeof segmentClauseSchema>;
+
+export const clauseSchema = z.union([attributeClauseSchema, segmentClauseSchema]);
+export type Clause = z.infer<typeof clauseSchema>;
+
+/** One variant's share of a percentage rollout. Order matters: raising a share only adds keys. */
+export const rolloutEntrySchema = z.object({
+  variant: z.string().regex(VARIANT_NAME_PATTERN),
+  weight: z.number().int().min(0).max(100_000),
+});
+export type RolloutEntry = z.infer<typeof rolloutEntrySchema>;
+
+/** What a rule (or the fallthrough) serves: one variant, or a percentage rollout. */
+export const serveSchema = z.union([
+  z.object({ variant: z.string().regex(VARIANT_NAME_PATTERN) }),
+  z.object({
+    rollout: z
+      .array(rolloutEntrySchema)
+      .min(1)
+      .max(FlagLimits.rolloutVariants)
+      .refine(entries => entries.some(entry => entry.weight > 0), { message: 'At least one weight above 0' }),
+  }),
+]);
+export type Serve = z.infer<typeof serveSchema>;
+
+/** A targeting rule: all its clauses match → it serves. Rules are tried in order. */
+export const ruleSchema = z.object({
+  clauses: z.array(clauseSchema).min(1).max(FlagLimits.clausesPerRule),
+  serve: serveSchema,
+});
+export type Rule = z.infer<typeof ruleSchema>;
+
+/** A segment's definition in one environment. Keys are targeting keys. */
+export const segmentDefinitionSchema = z.object({
+  name: z.string().min(1).max(80),
+  includedKeys: z.array(z.string().min(1).max(256)).max(FlagLimits.segmentKeys),
+  excludedKeys: z.array(z.string().min(1).max(256)).max(FlagLimits.segmentKeys),
+  /** OR of AND groups of attribute clauses. */
+  rules: z
+    .array(z.array(attributeClauseSchema).min(1).max(FlagLimits.clausesPerRule))
+    .max(FlagLimits.segmentRuleGroups),
+});
+export type SegmentDefinition = z.infer<typeof segmentDefinitionSchema>;
+
+const flagKeySchema = z.string().regex(FLAG_KEY_PATTERN);
+
+/** One change to an environment's flag configs or segments. A changeset is an ordered list of these. */
 export const changeOpSchema = z.discriminatedUnion('op', [
   /** Add a flag to the environment, disabled (callers get their code default) until enabled. */
   z.object({
     op: z.literal('add_flag'),
-    flagKey: z.string().regex(FLAG_KEY_PATTERN),
+    flagKey: flagKeySchema,
     defaultVariant: z.string().regex(VARIANT_NAME_PATTERN),
     offVariant: z.string().regex(VARIANT_NAME_PATTERN),
   }),
-  z.object({ op: z.literal('set_enabled'), flagKey: z.string().regex(FLAG_KEY_PATTERN), enabled: z.boolean() }),
+  z.object({ op: z.literal('set_enabled'), flagKey: flagKeySchema, enabled: z.boolean() }),
+  /** The variant served when no rule matches (and to keyless callers under a rollout). */
   z.object({
     op: z.literal('set_default_variant'),
-    flagKey: z.string().regex(FLAG_KEY_PATTERN),
+    flagKey: flagKeySchema,
     variant: z.string().regex(VARIANT_NAME_PATTERN),
   }),
+  /** Replace the flag's targeting rules. */
+  z.object({
+    op: z.literal('set_rules'),
+    flagKey: flagKeySchema,
+    rules: z.array(ruleSchema).max(FlagLimits.rulesPerFlag),
+  }),
+  /** Serve a percentage rollout when no rule matches; null serves the default variant. */
+  z.object({
+    op: z.literal('set_rollout'),
+    flagKey: flagKeySchema,
+    rollout: serveSchema.options[1].shape.rollout.nullable(),
+  }),
+  z.object({
+    op: z.literal('set_segment'),
+    segmentKey: z.string().regex(SEGMENT_KEY_PATTERN),
+    segment: segmentDefinitionSchema,
+  }),
+  z.object({ op: z.literal('delete_segment'), segmentKey: z.string().regex(SEGMENT_KEY_PATTERN) }),
 ]);
 export type ChangeOp = z.infer<typeof changeOpSchema>;
 
-/** One line of a changeset's rendered diff. */
+/** One line of a changeset's rendered diff: a field of a flag's config or of a segment. */
 export const changeDiffEntrySchema = z.object({
-  flagKey: z.string(),
+  subject: z.enum(['flag', 'segment']),
+  key: z.string(),
   field: z.string(),
   before: z.unknown(),
   after: z.unknown(),
@@ -109,9 +262,59 @@ export const flagConfigSchema = z.object({
   killed: z.boolean(),
   defaultVariant: z.string(),
   offVariant: z.string(),
+  rules: z.array(ruleSchema),
+  rollout: z.array(rolloutEntrySchema).nullable(),
   version: z.number(),
 });
 export type FlagConfigDto = z.infer<typeof flagConfigSchema>;
+
+/** Whether a variant value fits the flag's type (`json`: an object or an array). */
+export function isVariantOfType(type: FlagType, value: unknown): boolean {
+  if (type === FlagTypes.json) {
+    return typeof value === 'object' && value !== null;
+  }
+  if (type === FlagTypes.number) {
+    return typeof value === 'number' && Number.isFinite(value);
+  }
+  return typeof value === type;
+}
+
+/** Create a flag of any type with its variants; it is added disabled to every environment. */
+export const flagCreateInputSchema = z
+  .object({
+    key: z.string().regex(FLAG_KEY_PATTERN),
+    type: z.enum([FlagTypes.boolean, FlagTypes.string, FlagTypes.number, FlagTypes.json]),
+    variants: z.record(z.string().regex(VARIANT_NAME_PATTERN), z.unknown()).refine(variants => {
+      const count = Object.keys(variants).length;
+      return count >= 1 && count <= FlagLimits.variantsPerFlag;
+    }, 'Between 1 and 50 variants'),
+    /** Served once enabled, when no rule matches. */
+    defaultVariant: z.string().regex(VARIANT_NAME_PATTERN),
+    /** Served when the flag is killed. */
+    offVariant: z.string().regex(VARIANT_NAME_PATTERN),
+    description: z.string().max(500).nullable().default(null),
+    lifecycle: z.enum([FlagLifecycles.temporary, FlagLifecycles.permanent]).default(FlagLifecycles.temporary),
+  })
+  .refine(input => Object.values(input.variants).every(value => isVariantOfType(input.type, value)), {
+    message: 'Every variant value must match the flag type',
+    path: ['variants'],
+  })
+  .refine(
+    input => Object.hasOwn(input.variants, input.defaultVariant) && Object.hasOwn(input.variants, input.offVariant),
+    {
+      message: 'The default and off variants must be among the variants',
+      path: ['defaultVariant'],
+    },
+  );
+export type FlagCreateInput = z.infer<typeof flagCreateInputSchema>;
+
+/** A segment as the console lists it. */
+export const flagSegmentSchema = segmentDefinitionSchema.extend({
+  key: z.string(),
+  environmentId: z.uuid(),
+  version: z.number(),
+});
+export type FlagSegmentDto = z.infer<typeof flagSegmentSchema>;
 
 /** Create a boolean flag (variants `on` / `off`); it is added disabled to every environment. */
 export const booleanFlagCreateInputSchema = z.object({
