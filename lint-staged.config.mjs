@@ -5,5 +5,6 @@ export default {
   'packages/frontend/**/*.{ts,tsx}': () => 'yarn lint-frontend',
   'packages/e2e/**/*.ts': () => 'yarn lint-e2e',
   'packages/ota-cli/**/*.ts': () => 'yarn lint-ota-cli',
+  'packages/sdk-*/**/*.{ts,tsx}': () => 'yarn lint-sdk',
   '*.{ts,tsx,mjs,cjs,json,md,yml,yaml}': 'prettier --write',
 };

@@ -1,0 +1,42 @@
+{
+  "name": "@mocco/sdk-core",
+  "version": "0.0.0",
+  "description": "The shared client of Mocco's SDKs: the /v1 fetch client, retries, keys and errors.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/sdk-core.ts",
+      "types": "./dist/sdk-core.d.ts",
+      "import": "./dist/sdk-core.js",
+      "require": "./dist/sdk-core.cjs"
+    }
+  },
+  "main": "./dist/sdk-core.cjs",
+  "module": "./dist/sdk-core.js",
+  "types": "./dist/sdk-core.d.ts",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

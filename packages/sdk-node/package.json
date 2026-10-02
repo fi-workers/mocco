@@ -1,0 +1,43 @@
+{
+  "name": "@mocco/node",
+  "version": "0.0.0",
+  "description": "Mocco for servers: a secret-key client, identity signing and webhook verification.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/mocco-node.ts",
+      "types": "./dist/mocco-node.d.ts",
+      "import": "./dist/mocco-node.js",
+      "require": "./dist/mocco-node.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mocco/sdk-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "eslint": "10.6.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

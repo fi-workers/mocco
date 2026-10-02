@@ -10,7 +10,7 @@ import { signBody } from './sign';
 
 import type { FinalizeResult } from './api';
 import type { ExportedFile, PlatformExport } from './expo-export';
-import type { FinalizeRequest, OtaPlatform } from '@mocco/common/ota-hosting';
+import type { OtaFinalizeRequest as FinalizeRequest, OtaPlatform } from '@mocco/sdk-core';
 
 export interface PublishOptions {
   apiBase: string;

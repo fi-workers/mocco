@@ -61,6 +61,27 @@ steps:
 
 Elsewhere, create a secret API key with `ota:write` under **API keys** and run `MOCCO_API_KEY=… npx mocco-ota publish --channel staging`. `publish` runs `expo export`, uploads only the files Mocco doesn't have yet, signs the manifest (and pre-signs rollbacks), and waits until Mocco has verified the upload before promoting. Add `--mandatory` for an update the app should apply at the next safe point.
 
+## In the app
+
+`expo-updates` checks for updates on launch by itself. For adoption numbers, the crash-fallback alert and mandatory updates, add `@mocco/react-native`:
+
+```tsx
+import { MoccoOta, useMoccoUpdate } from '@mocco/react-native/ota';
+
+export default function App() {
+  const update = useMoccoUpdate(); // { status, isMandatory, applyNow }
+  return (
+    <>
+      <MoccoOta appId="<your OTA app id>" clientId={installId} />
+      {update.status === 'ready' && !update.isMandatory ? <Button title="Restart to update" onPress={update.applyNow} /> : null}
+      {/* …your app… */}
+    </>
+  );
+}
+```
+
+`<MoccoOta>` reports each launch, including emergency launches (the update crashed and the embedded bundle took over). `useMoccoUpdate()` downloads an available update in the background; a mandatory one (`--mandatory`) applies when the app next comes back to the foreground. `clientId` is any stable per-install id (for example from `expo-application`); Mocco stores only a hash of it. Instead of `mocco-ota init` writing `app.json`, you can use the config plugin: `"plugins": [["@mocco/react-native", { "manifestUrl": "…", "channel": "production" }]]`.
+
 ## 5. Roll out and roll back
 
 Promote a release to a share of devices (`--rollout 10`, or the percent field next to **Promote**). The channel page shows what each platform serves, how many devices checked in and how many run the candidate, and the history of every change.

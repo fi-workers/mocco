@@ -1,0 +1,58 @@
+{
+  "name": "@mocco/react-native",
+  "version": "0.0.0",
+  "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate) and the Expo config plugin.",
+  "license": "MIT",
+  "type": "commonjs",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@mocco/source": "./src/mocco-react-native.ts",
+      "types": "./dist/mocco-react-native.d.ts",
+      "import": "./dist/mocco-react-native.mjs",
+      "require": "./dist/mocco-react-native.js"
+    },
+    "./ota": {
+      "@mocco/source": "./src/ota.ts",
+      "types": "./dist/ota.d.ts",
+      "import": "./dist/ota.mjs",
+      "require": "./dist/ota.js"
+    },
+    "./app.plugin.js": "./app.plugin.js"
+  },
+  "files": [
+    "dist",
+    "app.plugin.js",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "ts-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mocco/sdk-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.1",
+    "eslint": "10.6.0",
+    "react": "19.2.1",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "expo-updates": ">=0.24.0",
+    "react": ">=18",
+    "react-native": ">=0.73"
+  },
+  "main": "./dist/mocco-react-native.js"
+}

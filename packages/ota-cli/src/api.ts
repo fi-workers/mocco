@@ -2,7 +2,12 @@
 // `detail` says what to fix; MoccoApiError carries it as the message.
 import { MoccoApiError } from './api-error';
 
-import type { FinalizeRequest, PromotionResult, UploadRequest, UploadResponse } from '@mocco/common/ota-hosting';
+import type {
+  OtaFinalizeRequest as FinalizeRequest,
+  OtaPromotionResult as PromotionResult,
+  OtaUploadRequest as UploadRequest,
+  OtaUploadResponse as UploadResponse,
+} from '@mocco/sdk-core';
 
 interface Problem {
   title?: string;

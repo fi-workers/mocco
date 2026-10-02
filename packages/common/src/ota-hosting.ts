@@ -389,7 +389,7 @@ export const promotionPreviewSchema = z.object({
 });
 export type PromotionPreview = z.infer<typeof promotionPreviewSchema>;
 
-/** What the app reports from devices (`@mocco/react-native-ota`). */
+/** What the app reports from devices (`<MoccoOta>` in `@mocco/react-native/ota`). */
 export const OtaClientEventTypes = {
   launched: 'launched',
   emergencyLaunch: 'emergency_launch',
