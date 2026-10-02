@@ -30,7 +30,7 @@
   "dependencies": {
     "@expo/code-signing-certificates": "0.0.7",
     "@mocco/sdk-core": "workspace:*",
-    "zod": "4.1.13"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@mocco/common": "workspace:*",
