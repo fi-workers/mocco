@@ -235,6 +235,23 @@ export class FlagService {
     return await new FlagChangesetRepo(this.deps.db).listByEnvironment(workspaceId, environmentId, HISTORY_LIMIT);
   }
 
+  /**
+   * The ruleset a `flags:read` key serves (`GET /v1/flags/ruleset`). When the caller
+   * already holds the current ETag only the head is read, so a 304 never loads the
+   * document. Undefined if the environment is gone.
+   */
+  async servingRuleset(workspaceId: string, environmentId: string, heldEtags: readonly string[]) {
+    const snapshots = new FlagRulesetSnapshotRepo(this.deps.db);
+    const head = await snapshots.latestHead(workspaceId, environmentId);
+    if (head === undefined || heldEtags.includes(head.etag)) {
+      return head === undefined ? undefined : { ...head, document: undefined };
+    }
+    const snapshot = await snapshots.latest(workspaceId, environmentId);
+    return snapshot === undefined
+      ? undefined
+      : { version: snapshot.version, etag: snapshot.etag, document: snapshot.document };
+  }
+
   /** The environment's current compiled ruleset. */
   async ruleset(workspaceId: string, projectId: string, environmentId: string) {
     await this.requireEnvironment(workspaceId, projectId, environmentId);

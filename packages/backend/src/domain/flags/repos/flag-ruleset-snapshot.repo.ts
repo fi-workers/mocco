@@ -12,6 +12,22 @@ export class FlagRulesetSnapshotRepo {
     await this.db.insert(schema.flagRulesetSnapshots).values(row);
   }
 
+  /** The newest snapshot's version and ETag, without its document. */
+  async latestHead(workspaceId: string, environmentId: string) {
+    const [row] = await this.db
+      .select({ version: schema.flagRulesetSnapshots.version, etag: schema.flagRulesetSnapshots.etag })
+      .from(schema.flagRulesetSnapshots)
+      .where(
+        and(
+          eq(schema.flagRulesetSnapshots.workspaceId, workspaceId),
+          eq(schema.flagRulesetSnapshots.environmentId, environmentId),
+        ),
+      )
+      .orderBy(desc(schema.flagRulesetSnapshots.version))
+      .limit(1);
+    return row;
+  }
+
   /** The environment's newest snapshot. */
   async latest(workspaceId: string, environmentId: string) {
     const [row] = await this.db

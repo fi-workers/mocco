@@ -20,11 +20,12 @@ code_refs:
   - packages/backend/src/domain/flags/apply-ops.ts
   - packages/backend/src/domain/flags/compile-ruleset.ts
   - packages/backend/src/transport/trpc/routers/flags.ts
+  - packages/backend/src/transport/ext/v1/flags.ts
 ---
 
 # Feature flags
 
-Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: SDK keys and the ruleset endpoint, targeting rules, gated changesets, the kill switch and the SDKs.
+Feature flags are product line 2 (#101). They are enabled per workspace (`Products.flags`) and scoped to a project. This page describes what exists today. The [feature map](./feature-map.md) lists what comes next: targeting rules, gated changesets, the kill switch and the SDKs.
 
 ## Model
 
@@ -87,6 +88,24 @@ The snapshot is a flagd flag-definition document, valid against flagd's v0 schem
 ```
 
 A disabled flag is emitted as `state: DISABLED`. A killed flag is emitted as `ENABLED` with its off variant as the default and no targeting, so even a stale or third-party flagd client serves the off variant ([ADR 0024](../adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)).
+
+## Serving server SDKs
+
+`GET /v1/flags/ruleset` returns the current snapshot of the environment the key is bound to. It needs a secret key with `flags:read`. A ruleset holds every targeting rule, so publishable keys (403) and secret keys sent from a browser (401) are refused; browsers and apps will use OFREP (#143).
+
+```http
+GET /v1/flags/ruleset
+Authorization: Bearer mk_sec_…
+If-None-Match: "kq3…"
+
+HTTP/1.1 304 Not Modified
+ETag: "kq3…"
+Cache-Control: private, no-cache
+```
+
+The response is the flagd document with `ETag` and `Cache-Control: private, no-cache`. A request whose `If-None-Match` lists the current tag (weak or strong, or `*`) gets a `304`. The endpoint reads only the head of the newest snapshot (version and ETag) and loads the document only when the caller doesn't hold it, so polling costs one small query. Server SDKs keep the last good ruleset when Mocco is unreachable.
+
+A key is bound to one environment when it is created: `flagEnvironmentId` is required with `flags:read` and refused without it ([public API](./public-api.md#keys)).
 
 ## API
 

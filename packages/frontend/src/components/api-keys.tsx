@@ -48,6 +48,13 @@ const ALL_SCOPES = Object.values(ApiScopes);
 const scopesFor = (kind: ApiKeyKind): readonly ApiScope[] =>
   kind === ApiKeyKinds.publishable ? PUBLISHABLE_SCOPES : ALL_SCOPES;
 
+/** The project's flag environments, for binding a flags:read key; empty while loading or
+ * when the flags product is off. */
+function useFlagEnvironments(workspaceId: string, projectId: string, isEnabled: boolean) {
+  const query = trpc.flags.environments.useQuery({ workspaceId, projectId }, { enabled: isEnabled, retry: false });
+  return { environments: query.data?.environments ?? [], error: query.error };
+}
+
 function CreatedKey({ token, onDone }: { token: string; onDone: () => void }) {
   return (
     <div className="flex flex-col gap-2">
@@ -68,6 +75,7 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
   const [kind, setKind] = useState<ApiKeyKind>(ApiKeyKinds.secret);
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<ApiScope[]>([]);
+  const [environmentId, setEnvironmentId] = useState('');
   const creation = trpc.apiKey.create.useMutation({
     onSuccess: async result => {
       await utils.apiKey.list.invalidate({ workspaceId, projectId });
@@ -81,6 +89,8 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
   const chosen = scopes.filter(scope => allowed.includes(scope));
   // eslint-disable-next-line sonarjs/null-dereference -- name is a useState<string>, never null
   const trimmedName = name.trim();
+  const isEnvironmentNeeded = chosen.includes(ApiScopes.flagsRead);
+  const { environments, error: environmentsError } = useFlagEnvironments(workspaceId, projectId, isEnvironmentNeeded);
 
   return (
     <form
@@ -88,7 +98,14 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
       className="flex flex-col gap-3 rounded-xl bg-muted/40 p-4"
       onSubmit={event => {
         event.preventDefault();
-        creation.mutate({ workspaceId, projectId, kind, name: trimmedName, scopes: chosen });
+        creation.mutate({
+          workspaceId,
+          projectId,
+          kind,
+          name: trimmedName,
+          scopes: chosen,
+          flagEnvironmentId: isEnvironmentNeeded ? environmentId : null,
+        });
       }}>
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-xs font-medium text-muted-foreground">Kind</legend>
@@ -139,6 +156,34 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
           </label>
         ))}
       </fieldset>
+      {isEnvironmentNeeded ? (
+        <label className={labelClass}>
+          Flag environment
+          <select
+            required
+            aria-describedby="flag-environment-hint"
+            value={environmentId}
+            onChange={event => {
+              setEnvironmentId(event.target.value);
+            }}
+            className={inputClass}>
+            <option value="" disabled>
+              Choose the environment this key reads
+            </option>
+            {environments.map(environment => (
+              <option key={environment.id} value={environment.id}>
+                {environment.name} ({environment.key})
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {isEnvironmentNeeded ? (
+        <p id="flag-environment-hint" className="-mt-2 text-xs text-muted-foreground">
+          A flags key reads exactly one environment&apos;s flags. Create another key for each environment.
+          {environmentsError ? <span className="block text-destructive">{errorMessage(environmentsError)}</span> : null}
+        </p>
+      ) : null}
       {kind === ApiKeyKinds.publishable ? (
         <p className="text-xs text-muted-foreground">
           From a browser, the key works only on the web origins of the project&apos;s apps.{' '}
@@ -152,7 +197,7 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
       <Button
         type="submit"
         pending={creation.isPending}
-        disabled={trimmedName === '' || chosen.length === 0}
+        disabled={trimmedName === '' || chosen.length === 0 || (isEnvironmentNeeded && environmentId === '')}
         className="w-fit text-sm">
         Create key
       </Button>
@@ -160,7 +205,13 @@ function CreateKeyForm({ workspaceId, projectId, onCreated }: Props & { onCreate
   );
 }
 
-function KeyRow({ workspaceId, projectId, apiKey, isAdmin }: Props & { apiKey: ApiKeyDto; isAdmin: boolean }) {
+function KeyRow({
+  workspaceId,
+  projectId,
+  apiKey,
+  isAdmin,
+  environmentName,
+}: Props & { apiKey: ApiKeyDto; isAdmin: boolean; environmentName: string | undefined }) {
   const utils = trpc.useUtils();
   const [isConfirming, setIsConfirming] = useState(false);
   const revocation = trpc.apiKey.revoke.useMutation({
@@ -199,6 +250,7 @@ function KeyRow({ workspaceId, projectId, apiKey, isAdmin }: Props & { apiKey: A
       </div>
       <p className="font-mono text-xs text-muted-foreground">
         {apiKey.hint} · {apiKey.scopes.join(', ')}
+        {apiKey.flagEnvironmentId === null ? null : ` · reads ${environmentName ?? 'a flag environment'}`}
       </p>
       <p className="text-xs text-muted-foreground">
         Created <Ago date={apiKey.createdAt} /> ·{' '}
@@ -253,6 +305,11 @@ export default function ApiKeys({ workspaceId, projectId }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const keys = keysQuery.data?.keys ?? [];
+  const { environments } = useFlagEnvironments(
+    workspaceId,
+    projectId,
+    keys.some(apiKey => apiKey.flagEnvironmentId !== null),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -299,7 +356,14 @@ export default function ApiKeys({ workspaceId, projectId }: Props) {
       ) : null}
       <ul className="flex flex-col gap-2">
         {keys.map(apiKey => (
-          <KeyRow key={apiKey.id} workspaceId={workspaceId} projectId={projectId} apiKey={apiKey} isAdmin={isAdmin} />
+          <KeyRow
+            key={apiKey.id}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            apiKey={apiKey}
+            isAdmin={isAdmin}
+            environmentName={environments.find(environment => environment.id === apiKey.flagEnvironmentId)?.name}
+          />
         ))}
       </ul>
     </div>

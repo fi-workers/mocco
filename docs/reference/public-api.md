@@ -34,6 +34,8 @@ A key belongs to one project and has a kind:
 
 The token is returned once, by `apiKey.create`, and only its SHA-256 is stored; the console shows `mk_sec_…abcd`. Keys are managed on the project's **API keys** tab (`/workspaces/{id}/p/{projectId}/api-keys`): pick the kind (publishable keys offer only client scopes), name it and choose scopes, copy the token from the one-time notice, and revoke with an inline confirmation. Owners and admins create and revoke keys (`apikey.created`, `apikey.revoked` in the audit log); members can list them. A key may expire (`expiresAt`), and its `lastUsedAt` is updated at most once a minute.
 
+A key with `flags:read` is bound to exactly one flag environment of its project (`flagEnvironmentId`, ADR 0024), and a key without it names none; the database enforces both. The console asks for the environment when `flags:read` is ticked.
+
 ## Authentication
 
 Send the key as `Authorization: Bearer <token>` (or `X-Mocco-Key: <token>`). `requireKey({ kinds?, scope? })` resolves it and sets `c.var.principal = { workspaceId, projectId, keyId, kind, scopes }`. Routes scope every query by the principal, never by request input.
@@ -69,6 +71,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/ping` | none | `{ "ok": true, "api": "v1" }` |
 | `GET /v1/whoami` | any | `{ projectId, kind, scopes }` |
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
+| `GET /v1/flags/ruleset` | secret, `flags:read` | The key's environment as a flagd v0 document, with a strong `ETag` and `Cache-Control: private, no-cache`; `If-None-Match` with the current tag → `304` (the document isn't loaded); see [Feature flags](./flags.md#serving-server-sdks) |
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |
 | `POST /v1/ota/apps/{otaAppId}/events` | none (devices; rate-limited per IP) | `202`; body `{ clientId, platform, events: [{ type, updateId, occurredAt?, detail? }] }` (≤ 50 events, ≤ 16 KB; `413` over) |
