@@ -176,6 +176,8 @@ function EnvironmentEditor({
   const [reason, setReason] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const isProtected = environment.changeGate !== null;
+  // `.mocco/flags.yml` owns this flag: everything but the kill switch is read-only here.
+  const isRepoManaged = flag.managedBy === 'repo';
   const save = trpc.flags.applyChangeset.useMutation({
     onSuccess: async result => {
       if (result.outcome === 'pending_approval') {
@@ -200,66 +202,68 @@ function EnvironmentEditor({
           Changes here need approval under the environment&apos;s change gate.
         </Notice>
       )}
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={draft.enabled}
-          onChange={event => {
-            setDraft({ ...draft, enabled: event.target.checked });
-          }}
-        />
-        Enabled in {environment.name}
-        <span className="text-xs text-muted-foreground">(when off, callers get the default in their code)</span>
-      </label>
-      <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">Rules</h3>
-        <p className="text-xs text-muted-foreground">
-          Tried in order; the first rule whose conditions all match serves. Attributes come from the evaluation context
-          your code passes (for example <span className="font-mono">plan</span> or{' '}
-          <span className="font-mono">appVersion</span>); rollouts bucket on its{' '}
-          <span className="font-mono">targetingKey</span>.
-        </p>
-        <RulesEditor
-          rules={draft.rules}
-          variants={variants}
-          segmentKeys={segmentKeys}
-          onChange={rules => {
-            setDraft({ ...draft, rules });
-          }}
-        />
-      </section>
-      <section className="flex flex-col gap-1">
-        <h3 className="text-sm font-medium">When no rule matches</h3>
-        <ServeEditor
-          label="serve"
-          draft={draft.fallthrough}
-          variants={variants}
-          onChange={fallthrough => {
-            setDraft({ ...draft, fallthrough });
-          }}
-        />
-        {draft.fallthrough.kind === 'rollout' ? (
+      <fieldset disabled={isRepoManaged} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={event => {
+              setDraft({ ...draft, enabled: event.target.checked });
+            }}
+          />
+          Enabled in {environment.name}
+          <span className="text-xs text-muted-foreground">(when off, callers get the default in their code)</span>
+        </label>
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Rules</h3>
           <p className="text-xs text-muted-foreground">
-            Callers without a targeting key get <span className="font-mono">{config.defaultVariant}</span>. Raising a
-            share only adds keys to that variant.
+            Tried in order; the first rule whose conditions all match serves. Attributes come from the evaluation
+            context your code passes (for example <span className="font-mono">plan</span> or{' '}
+            <span className="font-mono">appVersion</span>); rollouts bucket on its{' '}
+            <span className="font-mono">targetingKey</span>.
           </p>
-        ) : null}
-      </section>
-      <label className={`${labelClass} w-fit`}>
-        Off variant (what a kill serves)
-        <select
-          value={draft.offVariant}
-          className={`${inputClass} font-mono`}
-          onChange={event => {
-            setDraft({ ...draft, offVariant: event.target.value });
-          }}>
-          {variants.map(variant => (
-            <option key={variant} value={variant}>
-              {variant}
-            </option>
-          ))}
-        </select>
-      </label>
+          <RulesEditor
+            rules={draft.rules}
+            variants={variants}
+            segmentKeys={segmentKeys}
+            onChange={rules => {
+              setDraft({ ...draft, rules });
+            }}
+          />
+        </section>
+        <section className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium">When no rule matches</h3>
+          <ServeEditor
+            label="serve"
+            draft={draft.fallthrough}
+            variants={variants}
+            onChange={fallthrough => {
+              setDraft({ ...draft, fallthrough });
+            }}
+          />
+          {draft.fallthrough.kind === 'rollout' ? (
+            <p className="text-xs text-muted-foreground">
+              Callers without a targeting key get <span className="font-mono">{config.defaultVariant}</span>. Raising a
+              share only adds keys to that variant.
+            </p>
+          ) : null}
+        </section>
+        <label className={`${labelClass} w-fit`}>
+          Off variant (what a kill serves)
+          <select
+            value={draft.offVariant}
+            className={`${inputClass} font-mono`}
+            onChange={event => {
+              setDraft({ ...draft, offVariant: event.target.value });
+            }}>
+            {variants.map(variant => (
+              <option key={variant} value={variant}>
+                {variant}
+              </option>
+            ))}
+          </select>
+        </label>
+      </fieldset>
       <Preview
         workspaceId={workspaceId}
         projectId={projectId}
@@ -267,7 +271,7 @@ function EnvironmentEditor({
         flagKey={flag.key}
         ops={ops}
       />
-      {isProtected ? (
+      {isProtected && !isRepoManaged ? (
         <label className={labelClass}>
           Reason for the approvers (optional)
           <input
@@ -280,26 +284,28 @@ function EnvironmentEditor({
           />
         </label>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          pending={save.isPending}
-          disabled={ops.length === 0}
-          className="text-sm"
-          onClick={() => {
-            setNotice(null);
-            save.mutate({
-              workspaceId,
-              projectId,
-              environmentId: environment.id,
-              baseVersion: environment.currentVersion,
-              ops,
-              reason: reason === '' ? null : reason,
-            });
-          }}>
-          {isProtected ? `Propose changes to ${environment.name}` : `Save changes to ${environment.name}`}
-        </Button>
-        <span className="text-xs text-muted-foreground">{pendingText(ops.length)}</span>
-      </div>
+      {isRepoManaged ? null : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            pending={save.isPending}
+            disabled={ops.length === 0}
+            className="text-sm"
+            onClick={() => {
+              setNotice(null);
+              save.mutate({
+                workspaceId,
+                projectId,
+                environmentId: environment.id,
+                baseVersion: environment.currentVersion,
+                ops,
+                reason: reason === '' ? null : reason,
+              });
+            }}>
+            {isProtected ? `Propose changes to ${environment.name}` : `Save changes to ${environment.name}`}
+          </Button>
+          <span className="text-xs text-muted-foreground">{pendingText(ops.length)}</span>
+        </div>
+      )}
       {notice === null ? null : (
         <Notice tone={Tones.warn} title="Waiting for approval">
           {notice}
@@ -331,7 +337,7 @@ function ClientVisibility({ workspaceId, projectId, flag }: Omit<Props, 'flagKey
         <input
           type="checkbox"
           checked={flag.clientVisible}
-          disabled={change.isPending}
+          disabled={change.isPending || flag.managedBy === 'repo'}
           onChange={event => {
             change.mutate({ workspaceId, projectId, flagKey: flag.key, clientVisible: event.target.checked });
           }}
@@ -381,6 +387,12 @@ export default function FlagDetail({ workspaceId, projectId, flagKey }: Props) {
         </div>
         {flag.description ? <p className="text-sm text-muted-foreground">{flag.description}</p> : null}
       </div>
+      {flag.managedBy === 'repo' ? (
+        <Notice tone={Tones.neutral} title="Managed by .mocco/flags.yml">
+          This flag is defined in your repository. Change it there and merge to the default branch: unprotected
+          environments update at once, protected ones wait for approval. The kill switch still works here.
+        </Notice>
+      ) : null}
       <ClientVisibility workspaceId={workspaceId} projectId={projectId} flag={flag} />
       <FlagUsage scope={input} flagKey={flag.key} />
       <section className="flex flex-col gap-1">

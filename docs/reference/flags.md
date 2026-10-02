@@ -204,7 +204,7 @@ Telemetry is advisory: anyone with a key can send counts, so they only raise or 
 
 ## Flags as code (`.mocco/flags.yml`)
 
-Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). A push to a connected repo's default branch syncs the file into every project the repo is linked to. The console's read-only view of repo-managed flags comes in the next slice.
+Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). A push to a connected repo's default branch syncs the file into every project the repo is linked to. In the console a repo-managed flag is read-only except its kill switch: `FlagService.applyChangeset` and `setClientVisible` refuse it with `RepoManagedFlagError` (a `restore` op is still allowed, since it undoes a kill). The customer guide is [Flags as code](../customer/flags/flags-as-code.md).
 
 ```yaml
 version: 1

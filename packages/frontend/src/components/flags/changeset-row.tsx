@@ -177,6 +177,9 @@ export default function ChangesetRow({ workspaceId, projectId, changeset }: Prop
         <span className="text-xs text-muted-foreground">
           <Ago date={changeset.createdAt} />
         </span>
+        {changeset.commitSha === null ? null : (
+          <StatusBadge tone={Tones.neutral}>From commit {changeset.commitSha.slice(0, 7)}</StatusBadge>
+        )}
         {changeset.reason === null ? null : <span className="text-xs text-muted-foreground">· {changeset.reason}</span>}
       </div>
       <ul className="font-mono text-xs">

@@ -94,7 +94,7 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Server SDK (local evaluation) | Live | `@mocco/flags-core` and an OpenFeature Node provider over the ETag'd flagd-compatible ruleset |
 | Client SDKs (OFREP) | Live | OFREP bulk and single evaluation (client-visible flags only), the SSE change stream, `@mocco/openfeature-web` and `@mocco/openfeature-react-native` (offline copy, foreground refresh); React through `@openfeature/react-sdk` |
 | Telemetry and stale flags | Live | SDKs send per-minute evaluation counts (`POST /v1/flags/telemetry`, hourly rollups); a daily job finds unused, never-evaluated and fully rolled-out flags; badges, dismiss-until and a weekly digest |
-| Flags-as-code | Not drawn | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate. A default-branch push syncs it: unprotected environments apply, protected ones wait for the gate, and a refused file is recorded with its issues ([reference](./flags.md#flags-as-code-moccoflagsyml)). The console's read-only view doesn't exist yet |
+| Flags-as-code | Live | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate. A default-branch push syncs it: unprotected environments apply, protected ones wait for the gate, and a refused file is recorded with its issues ([reference](./flags.md#flags-as-code-moccoflagsyml)). In the console, repo flags are marked, read-only except the kill switch, and the last syncs are listed ([guide](../customer/flags/flags-as-code.md)) |
 
 ### Product line 3 — Messenger (#95)
 

@@ -3,7 +3,12 @@ import { ChangeOutcomes, ChangesetSources, FlagManagers, FlagTypes } from '@mocc
 import { resolveFlag } from '@mocco/flags-core';
 
 import { auditRestores } from '@backend/domain/flags/audit-restores';
-import { FlagEnvironmentNotFoundError, FlagKeyTakenError, FlagNotFoundError } from '@backend/domain/flags/errors';
+import {
+  FlagEnvironmentNotFoundError,
+  FlagKeyTakenError,
+  FlagNotFoundError,
+  RepoManagedFlagError,
+} from '@backend/domain/flags/errors';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
 import { FlagConfigRepo } from '@backend/domain/flags/repos/flag-config.repo';
 import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
@@ -104,6 +109,18 @@ export class FlagService {
       throw new FlagEnvironmentNotFoundError(environmentId);
     }
     return environment;
+  }
+
+  /** Refuse a console change to any of `flagKeys` that `.mocco/flags.yml` manages (#145). */
+  private async refuseRepoManaged(workspaceId: string, projectId: string, flagKeys: readonly string[]) {
+    if (flagKeys.length === 0) {
+      return;
+    }
+    const flags = await new FlagRepo(this.deps.db).listByProject(workspaceId, projectId);
+    const managed = flags.find(flag => flagKeys.includes(flag.key) && flag.managedBy === FlagManagers.repo);
+    if (managed !== undefined) {
+      throw new RepoManagedFlagError(managed.key);
+    }
   }
 
   /** The publisher this service applies with (shared with the governance service). */
@@ -316,6 +333,12 @@ export class FlagService {
     input: { environmentId: string; baseVersion: number; ops: ChangeOp[]; reason: string | null },
   ) {
     const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
+    // Restoring a kill stays a console action on repo-managed flags (it's the kill switch).
+    await this.refuseRepoManaged(
+      workspaceId,
+      projectId,
+      input.ops.flatMap(op => (op.op === 'restore' || !('flagKey' in op) ? [] : [op.flagKey])),
+    );
     const { changeGate } = environment;
     if (changeGate !== null) {
       if (this.deps.governance === undefined) {
@@ -440,6 +463,7 @@ export class FlagService {
     actorUserId: string,
     input: { flagKey: string; clientVisible: boolean },
   ) {
+    await this.refuseRepoManaged(workspaceId, projectId, [input.flagKey]);
     const flag = await new FlagRepo(this.deps.db).setClientVisible(
       workspaceId,
       projectId,

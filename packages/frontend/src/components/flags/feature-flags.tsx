@@ -8,6 +8,7 @@ import Protection from '@frontend/components/flags/protection';
 import Segments from '@frontend/components/flags/segments';
 import { StaleBadges, StaleSummary } from '@frontend/components/flags/stale';
 import {
+  Ago,
   errorMessage,
   inputClass,
   labelClass,
@@ -19,7 +20,15 @@ import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { FlagConfigDto, FlagDto, FlagEnvironmentDto, FlagType, StaleFindingDto } from '@mocco/common/flags';
+import type { Tone } from '@frontend/components/notifications/notification-ui';
+import type {
+  FlagConfigDto,
+  FlagDto,
+  FlagEnvironmentDto,
+  FlagFileSyncDto,
+  FlagType,
+  StaleFindingDto,
+} from '@mocco/common/flags';
 
 interface Props {
   workspaceId: string;
@@ -146,6 +155,8 @@ function FlagCell({
           aria-label={label}
           aria-pressed={config.enabled}
           pending={change.isPending}
+          // A repo-managed flag changes through .mocco/flags.yml, not here.
+          disabled={flag.managedBy === 'repo'}
           className="h-7 px-2 text-xs"
           onClick={() => {
             change.mutate({
@@ -332,6 +343,7 @@ function Flags({
                       {flag.type === FlagTypes.boolean ? null : (
                         <StatusBadge tone={Tones.neutral}>{flag.type}</StatusBadge>
                       )}
+                      {flag.managedBy === 'repo' ? <StatusBadge tone={Tones.neutral}>From repo</StatusBadge> : null}
                       <StaleBadges findings={stale.filter(finding => finding.flagKey === flag.key)} />
                     </div>
                     {flag.description ? <div className="text-xs text-muted-foreground">{flag.description}</div> : null}
@@ -405,6 +417,58 @@ function PerEnvironment({ workspaceId, projectId, environments }: Props & { envi
   );
 }
 
+const syncBadges: Record<FlagFileSyncDto['state'], { label: string; tone: Tone }> = {
+  applied: { label: 'Applied', tone: Tones.ok },
+  pending_approval: { label: 'Waiting for approval', tone: Tones.warn },
+  unchanged: { label: 'No changes', tone: Tones.neutral },
+  invalid: { label: 'Refused', tone: Tones.danger },
+};
+
+/** The last syncs of `.mocco/flags.yml`: how each commit landed and why a file was refused. */
+function RepoSyncs({ workspaceId, projectId }: Props) {
+  const syncsQuery = trpc.flags.fileSyncs.useQuery({ workspaceId, projectId });
+  const syncs = syncsQuery.data?.syncs ?? [];
+  if (syncs.length === 0) {
+    return null;
+  }
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">From the repository</h3>
+      <p className="text-xs text-muted-foreground">
+        Pushes to the default branch sync <span className="font-mono">.mocco/flags.yml</span>. A refused file changes
+        nothing.
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {syncs.slice(0, 5).map(sync => (
+          <li
+            key={sync.id}
+            aria-label={`Sync of ${sync.commitSha.slice(0, 7)}`}
+            className="flex flex-col gap-1 rounded-lg border border-border px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone={syncBadges[sync.state].tone}>{syncBadges[sync.state].label}</StatusBadge>
+              <span className="font-mono text-xs">{sync.commitSha.slice(0, 7)}</span>
+              <span className="text-xs text-muted-foreground">
+                <Ago date={sync.createdAt} />
+              </span>
+            </div>
+            {sync.issues.length === 0 ? null : (
+              <ul className="font-mono text-xs text-destructive">
+                {sync.issues.map(issue => (
+                  <li key={`${issue.path}:${issue.message}`}>
+                    {issue.path === '' ? '' : `${issue.path}: `}
+                    {issue.message}
+                    {issue.line === undefined ? '' : ` (line ${issue.line})`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** The flags screen: environments, the flag × environment switches, and per environment its segments and history. */
 export default function FeatureFlags({ workspaceId, projectId }: Props) {
   const input = { workspaceId, projectId };
@@ -431,6 +495,7 @@ export default function FeatureFlags({ workspaceId, projectId }: Props) {
         flags={flags}
         stale={staleQuery.data?.findings ?? []}
       />
+      <RepoSyncs workspaceId={workspaceId} projectId={projectId} />
       <PerEnvironment workspaceId={workspaceId} projectId={projectId} environments={environments} />
     </div>
   );
