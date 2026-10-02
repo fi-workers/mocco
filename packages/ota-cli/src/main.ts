@@ -21,9 +21,11 @@ import type { ExpoConfig } from './app-config';
 import type { OtaPlatform } from '@mocco/common/ota-hosting';
 
 const USAGE = `Usage:
-  mocco-ota init --manifest-url <url> [--channel production] [--keyid root] [--project .]
+  mocco-ota init --manifest-url <url> [--channel production] [--keyid root] [--keep-key] [--project .]
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
+      --keep-key reuses the key and certificate already in the project and writes only
+      the config — for pointing at another Mocco app without a new store build.
 
   mocco-ota publish [--channel <name> [--rollout <percent>] [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
                     [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
@@ -120,6 +122,7 @@ async function runInit(args: readonly string[]): Promise<void> {
       'manifest-url': { type: 'string' },
       channel: { type: 'string', default: 'production' },
       keyid: { type: 'string', default: DEFAULT_SIGNING_KEY_ID },
+      'keep-key': { type: 'boolean', default: false },
       project: { type: 'string', default: '.' },
     },
   });
@@ -131,6 +134,7 @@ async function runInit(args: readonly string[]): Promise<void> {
     manifestUrl: values['manifest-url'],
     channel: values.channel,
     keyid: values.keyid,
+    isKeepingKey: values['keep-key'],
     log,
   });
 }
