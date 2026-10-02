@@ -3,16 +3,29 @@
 import { z } from 'zod';
 
 export const GuideSets = {
+  start: 'start',
+  governance: 'governance',
   notifications: 'notifications',
   ota: 'ota',
   flags: 'flags',
+  messenger: 'messenger',
 } as const;
 export type GuideSet = (typeof GuideSets)[keyof typeof GuideSets];
-export const guideSetSchema = z.enum([GuideSets.notifications, GuideSets.ota, GuideSets.flags]);
+export const guideSetSchema = z.enum([
+  GuideSets.start,
+  GuideSets.governance,
+  GuideSets.notifications,
+  GuideSets.ota,
+  GuideSets.flags,
+  GuideSets.messenger,
+]);
 
 /** The side-nav heading of each set. */
 export const guideSetLabels: Record<GuideSet, string> = {
+  [GuideSets.start]: 'Getting started',
+  [GuideSets.governance]: 'Deploy governance',
   [GuideSets.notifications]: 'Notifications',
   [GuideSets.ota]: 'OTA and force update',
   [GuideSets.flags]: 'Feature flags',
+  [GuideSets.messenger]: 'Messenger',
 };

@@ -19,7 +19,7 @@ Messenger lets the people signed in to your app write to your team without leavi
 
 ## 1. Turn on Messenger
 
-A workspace owner turns on **Messenger** on the workspace's **Products** page. Each project then shows an **Inbox** tab.
+A workspace member turns on **Messenger** on the workspace's **Products** page. Each project then shows an **Inbox** tab.
 
 ## 2. Set up the messenger
 
