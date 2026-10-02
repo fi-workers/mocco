@@ -22,6 +22,8 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/ota`;
     return appId === undefined ? path : `${path}?app=${encodeURIComponent(appId)}`;
   },
+  /** The project's API keys for the public /v1 API. */
+  projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */
   projectOtaTokens: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/ota-tokens`,
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
