@@ -22,7 +22,7 @@ import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { AppVersionPolicyRepo } from '@backend/domain/ota/repos/app-version-policy.repo';
+import { VersionPolicyRepo } from '@backend/domain/ota/repos/version-policy.repo';
 import { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import { expectOne } from '@backend/infra/db/rows';
 import {
@@ -208,7 +208,7 @@ describe('ext POST /credentials (pglite)', () => {
       auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
       runs: runService,
       broker,
-      versionChecks: new VersionCheckService({ policies: new AppVersionPolicyRepo(t.db) }),
+      versionChecks: new VersionCheckService({ policies: new VersionPolicyRepo(t.db) }),
       callbackUrl: CALLBACK_URL,
       postJson: async () => {
         /* the credentials route never posts */

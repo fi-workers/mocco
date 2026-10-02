@@ -201,8 +201,8 @@ describe('GET /api/ext/v1/apps/:appId/version-check (pglite)', () => {
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       logged.push(...args);
     });
-    await t.db.execute(sql`drop table mocco_app_version_policy_changes`);
-    await t.db.execute(sql`drop table mocco_app_version_policies`);
+    await t.db.execute(sql`drop table mocco_ota_version_policy_changes`);
+    await t.db.execute(sql`drop table mocco_ota_version_policies`);
 
     const response = await check(androidAppId, 'version=2.0.0');
 

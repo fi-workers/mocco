@@ -1390,8 +1390,8 @@ export const approvalVotes = pgTable(
 // ─────────────────────────────────────────────────────────────
 
 /** A store app's version policy: the floors that trigger hard / soft update prompts. */
-export const appVersionPolicies = pgTable(
-  'mocco_app_version_policies',
+export const otaVersionPolicies = pgTable(
+  'mocco_ota_version_policies',
   {
     appId: uuid('app_id').primaryKey(),
     workspaceId: uuid('workspace_id').notNull(),
@@ -1419,21 +1419,21 @@ export const appVersionPolicies = pgTable(
     foreignKey({
       columns: [t.appId, t.workspaceId],
       foreignColumns: [projectApps.id, projectApps.workspaceId],
-      name: 'mocco_app_version_policies_app_workspace_fk',
+      name: 'mocco_ota_version_policies_app_workspace_fk',
     }).onDelete('cascade'),
     foreignKey({
       columns: [t.projectId, t.workspaceId],
       foreignColumns: [projects.id, projects.workspaceId],
-      name: 'mocco_app_version_policies_project_workspace_fk',
+      name: 'mocco_ota_version_policies_project_workspace_fk',
     }).onDelete('cascade'),
-    check('mocco_app_version_policies_interval_check', sql`${t.softPromptIntervalHours} BETWEEN 1 AND 8760`),
-    check('mocco_app_version_policies_revision_check', sql`${t.revision} >= 1`),
+    check('mocco_ota_version_policies_interval_check', sql`${t.softPromptIntervalHours} BETWEEN 1 AND 8760`),
+    check('mocco_ota_version_policies_revision_check', sql`${t.revision} >= 1`),
   ],
 );
 
 /** An applied version-policy change — append-only evidence. */
-export const appVersionPolicyChanges = pgTable(
-  'mocco_app_version_policy_changes',
+export const otaVersionPolicyChanges = pgTable(
+  'mocco_ota_version_policy_changes',
   {
     id: uuid().primaryKey().defaultRandom(),
     workspaceId: uuid('workspace_id').notNull(),
@@ -1449,14 +1449,14 @@ export const appVersionPolicyChanges = pgTable(
     createdAt,
   },
   t => [
-    index('mocco_app_version_policy_changes_app_idx').on(t.appId, t.createdAt),
+    index('mocco_ota_version_policy_changes_app_idx').on(t.appId, t.createdAt),
     foreignKey({
       columns: [t.appId, t.workspaceId],
       foreignColumns: [projectApps.id, projectApps.workspaceId],
-      name: 'mocco_app_version_policy_changes_app_workspace_fk',
+      name: 'mocco_ota_version_policy_changes_app_workspace_fk',
     }).onDelete('cascade'),
     check(
-      'mocco_app_version_policy_changes_direction_check',
+      'mocco_ota_version_policy_changes_direction_check',
       sql`${t.direction} IN (${sqlInList(Object.values(PolicyDirections))})`,
     ),
   ],

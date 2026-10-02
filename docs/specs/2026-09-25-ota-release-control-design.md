@@ -127,7 +127,7 @@ Per store app: a minimum supported version (hard block), a recommended version (
 
 A policy applies to one `mocco_project_apps` row whose platform is `ios` or `android`, since store versions and store links are per platform. A React Native project registers its iOS and Android builds as two apps.
 
-`mocco_app_version_policies` (one row per app):
+`mocco_ota_version_policies` (one row per app):
 
 | Column | Notes |
 |---|---|
@@ -142,7 +142,7 @@ A policy applies to one `mocco_project_apps` row whose platform is `ios` or `and
 | `revision` | int, incremented on every change. It is the cache key and the optimistic-concurrency token. |
 | `updated_at` | |
 
-`mocco_app_version_policy_changes` (append-only history): `id`, `workspace_id`, `app_id`, `before` jsonb, `after` jsonb, `direction` (`tighten` \| `relax`), `actor_user_id`, `approval_request_id` (nullable), `reason`, `created_at`.
+`mocco_ota_version_policy_changes` (append-only history): `id`, `workspace_id`, `app_id`, `before` jsonb, `after` jsonb, `direction` (`tighten` \| `relax`), `actor_user_id`, `approval_request_id` (nullable), `reason`, `created_at`.
 
 ### Invariants
 
