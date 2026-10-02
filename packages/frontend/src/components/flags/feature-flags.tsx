@@ -28,6 +28,7 @@ import type {
   FlagFileSyncDto,
   FlagType,
   StaleFindingDto,
+  TimelineRunDto,
 } from '@mocco/common/flags';
 
 interface Props {
@@ -138,7 +139,7 @@ function FlagCell({
       await Promise.all([
         utils.flags.environments.invalidate(),
         utils.flags.list.invalidate(),
-        utils.flags.history.invalidate(),
+        utils.flags.timeline.invalidate(),
       ]);
     },
   });
@@ -368,17 +369,103 @@ function Flags({
   );
 }
 
+const runBadges: Record<string, { label: string; tone: Tone }> = {
+  succeeded: { label: 'Run succeeded', tone: Tones.ok },
+  failed: { label: 'Run failed', tone: Tones.danger },
+  rejected: { label: 'Run rejected', tone: Tones.danger },
+  canceled: { label: 'Run canceled', tone: Tones.neutral },
+};
+
+/** One run of the linked pipeline, between the changesets. */
+function RunRow({ workspaceId, run }: { workspaceId: string; run: TimelineRunDto }) {
+  const badge = runBadges[run.state] ?? { label: `Run ${run.state.replaceAll('_', ' ')}`, tone: Tones.warn };
+  return (
+    <li
+      aria-label={`Run ${run.commitSha.slice(0, 7)}`}
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm">
+      <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+      <Link
+        href={Routes.workspaceRun(workspaceId, run.id)}
+        className="font-mono text-xs underline-offset-2 hover:underline">
+        {run.commitSha.slice(0, 7)}
+      </Link>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+        {run.commitMessage.split('\n', 1)[0]}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        <Ago date={run.finishedAt ?? run.createdAt} />
+      </span>
+    </li>
+  );
+}
+
+/** Which repo's pipeline runs show on the timeline. Correlation only: it changes no rule or gate. */
+function LinkedPipeline({ workspaceId, projectId, environment }: Props & { environment: FlagEnvironmentDto }) {
+  const utils = trpc.useUtils();
+  const linksQuery = trpc.project.listRepos.useQuery({ workspaceId, projectId });
+  const reposQuery = trpc.integration.repos.useQuery({ workspaceId }, { retry: false });
+  const link = trpc.flags.setLinkedPipeline.useMutation({
+    onSuccess: async () => {
+      await Promise.all([utils.flags.environments.invalidate(), utils.flags.timeline.invalidate()]);
+    },
+  });
+  const linkedIds = new Set((linksQuery.data?.links ?? []).map(entry => entry.repoId));
+  const repos = (reposQuery.data?.repos ?? []).filter(repo => linkedIds.has(repo.id));
+  if (repos.length === 0) {
+    return null;
+  }
+  return (
+    <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      Show the runs of
+      <select
+        aria-label={`Linked pipeline of ${environment.name}`}
+        value={environment.linkedRepoId ?? ''}
+        disabled={link.isPending}
+        className={`${inputClass} w-auto py-1 text-xs`}
+        onChange={event => {
+          link.mutate({
+            workspaceId,
+            projectId,
+            environmentId: environment.id,
+            repoId: event.target.value === '' ? null : event.target.value,
+          });
+        }}>
+        <option value="">no pipeline</option>
+        {repos.map(repo => (
+          <option key={repo.id} value={repo.id}>
+            {repo.owner}/{repo.name}
+          </option>
+        ))}
+      </select>
+      {link.error ? <span className="text-destructive">{errorMessage(link.error)}</span> : null}
+    </label>
+  );
+}
+
+/** The environment's changesets, and the linked pipeline's runs between them, newest first. */
 function History({ workspaceId, projectId, environment }: Props & { environment: FlagEnvironmentDto }) {
-  const historyQuery = trpc.flags.history.useQuery({ workspaceId, projectId, environmentId: environment.id });
+  const timelineQuery = trpc.flags.timeline.useQuery({ workspaceId, projectId, environmentId: environment.id });
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium">History of {environment.name}</h2>
-      {historyQuery.isLoading ? <Spinner /> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">History of {environment.name}</h2>
+        <LinkedPipeline workspaceId={workspaceId} projectId={projectId} environment={environment} />
+      </div>
+      {timelineQuery.isLoading ? <Spinner /> : null}
       <ul className="flex flex-col gap-2">
-        {(historyQuery.data?.changesets ?? []).map(changeset => (
-          <ChangesetRow key={changeset.id} workspaceId={workspaceId} projectId={projectId} changeset={changeset} />
-        ))}
+        {(timelineQuery.data?.entries ?? []).map(entry =>
+          entry.kind === 'run' ? (
+            <RunRow key={`run:${entry.run.id}`} workspaceId={workspaceId} run={entry.run} />
+          ) : (
+            <ChangesetRow
+              key={entry.changeset.id}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              changeset={entry.changeset}
+            />
+          ),
+        )}
       </ul>
     </section>
   );

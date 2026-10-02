@@ -202,6 +202,10 @@ SDKs count evaluations per flag and variant in memory (`EvaluationCounter` in `@
 
 Telemetry is advisory: anyone with a key can send counts, so they only raise or hide cleanup hints. No governance decision reads them; `flags-telemetry.test.ts` checks that the gate, kill switch, publisher and approval code never import the rollup or finding code.
 
+## Timeline and linked pipeline
+
+An environment may link one of the project's repos (`linked_repo_id`, #146): `flags.setLinkedPipeline`, audited `flag.linked_pipeline.changed`, refused for a repo the project doesn't link. It is for correlation only and never grants or gates anything. `flags.timeline` returns the environment's changesets (placed at their resolution, or at their proposal while pending) interleaved with the runs of that repo's pipeline (`FlagTimelineRepo.runsOfRepo`, placed when they finished), newest first, at most 50. The console's History shows it, with the runs linking to their run page.
+
 ## Flags as code (`.mocco/flags.yml`)
 
 Flags can be declared in the repository (#145, [design §3](../specs/2026-09-24-feature-flags-design.md#3-flags-as-code-vs-ui-changesets)). A push to a connected repo's default branch syncs the file into every project the repo is linked to. In the console a repo-managed flag is read-only except its kill switch: `FlagService.applyChangeset` and `setClientVisible` refuse it with `RepoManagedFlagError` (a `restore` op is still allowed, since it undoes a kill). The customer guide is [Flags as code](../customer/flags/flags-as-code.md).

@@ -61,6 +61,8 @@ export const AuditActions = {
   flagKilled: 'flag.killed',
   flagRestored: 'flag.restored',
   flagKillRolesChanged: 'flag.kill_roles.changed',
+  /** An environment's linked pipeline (the repo its timeline shows runs of) changed (#146). */
+  flagLinkedPipelineChanged: 'flag.linked_pipeline.changed',
   flagClientVisibilityChanged: 'flag.client_visible.changed',
   flagStaleDismissed: 'flag.stale.dismissed',
   messengerEnabled: 'messenger.enabled',

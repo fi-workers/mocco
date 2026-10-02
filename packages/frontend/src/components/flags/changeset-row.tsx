@@ -84,7 +84,7 @@ function PendingActions({ workspaceId, projectId, changeset }: Props) {
   const isCoProposer = myUserId !== null && changeset.coProposerUserIds.includes(myUserId);
   const refresh = async () => {
     await Promise.all([
-      utils.flags.history.invalidate(),
+      utils.flags.timeline.invalidate(),
       utils.flags.list.invalidate(),
       utils.flags.environments.invalidate(),
       utils.flags.segments.invalidate(),

@@ -8,6 +8,7 @@ import {
   changeOpSchema,
   changesetSchema,
   flagFileSyncSchema,
+  flagTimelineEntrySchema,
   flagConfigSchema,
   flagEnvironmentCreateInputSchema,
   flagCreateInputSchema,
@@ -222,6 +223,23 @@ export const flagsRouter = router({
       await ctx.flagKillSwitch.setKillRoles(workspaceId, projectId, ctx.session.user.id, roles);
       return { ok: true } as const;
     }),
+
+  /** Link an environment to one of the project's repos (its pipeline's runs show on the timeline), or unlink it. */
+  setLinkedPipeline: flagsProcedure
+    .input(environmentInput.extend({ repoId: z.uuid().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...link } = input;
+      await ctx.flags.setLinkedPipeline(workspaceId, projectId, ctx.session.user.id, link);
+      return { ok: true } as const;
+    }),
+
+  /** An environment's changesets interleaved with its linked pipeline's runs, newest first. */
+  timeline: flagsProcedure
+    .input(environmentInput)
+    .output(z.object({ entries: z.array(flagTimelineEntrySchema) }))
+    .query(async ({ ctx, input }) => ({
+      entries: await ctx.flags.timeline(input.workspaceId, input.projectId, input.environmentId),
+    })),
 
   /** Protect, re-gate or unprotect an environment. A protected one's gate changes need its current gate. */
   setChangeGate: flagsProcedure

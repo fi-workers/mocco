@@ -267,6 +267,8 @@ export const flagEnvironmentSchema = z.object({
   /** Roles whose members may kill a flag here; empty: any workspace member. */
   killRoles: z.array(z.string()),
   currentVersion: z.number(),
+  /** The repo whose pipeline runs show on this environment's timeline (#146); correlation only. */
+  linkedRepoId: z.uuid().nullable(),
   createdAt: z.date(),
 });
 export type FlagEnvironmentDto = z.infer<typeof flagEnvironmentSchema>;
@@ -471,3 +473,22 @@ export const flagFileSyncSchema = z.object({
   createdAt: z.date(),
 });
 export type FlagFileSyncDto = z.infer<typeof flagFileSyncSchema>;
+
+/** A pipeline run of an environment's linked repo, as its timeline shows it (#146). */
+export const timelineRunSchema = z.object({
+  id: z.uuid(),
+  state: z.string(),
+  commitSha: z.string(),
+  commitMessage: z.string(),
+  branch: z.string(),
+  createdAt: z.date(),
+  finishedAt: z.date().nullable(),
+});
+export type TimelineRunDto = z.infer<typeof timelineRunSchema>;
+
+/** One entry of an environment's timeline: a changeset, or a run of its linked pipeline. */
+export const flagTimelineEntrySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('changeset'), at: z.date(), changeset: changesetSchema }),
+  z.object({ kind: z.literal('run'), at: z.date(), run: timelineRunSchema }),
+]);
+export type FlagTimelineEntryDto = z.infer<typeof flagTimelineEntrySchema>;

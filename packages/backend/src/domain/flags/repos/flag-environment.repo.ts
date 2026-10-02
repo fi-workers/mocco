@@ -81,6 +81,13 @@ export class FlagEnvironmentRepo {
       .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
   }
 
+  async setLinkedRepo(workspaceId: string, environmentId: string, linkedRepoId: string | null) {
+    await this.db
+      .update(schema.flagEnvironments)
+      .set({ linkedRepoId })
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
+  }
+
   /** Take the environment's publish lock for the rest of the transaction and read its
    * current version. Call inside a transaction only. */
   async lockForPublish(workspaceId: string, environmentId: string) {

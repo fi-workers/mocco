@@ -190,7 +190,7 @@ function EnvironmentEditor({
       await Promise.all([
         utils.flags.list.invalidate(),
         utils.flags.environments.invalidate(),
-        utils.flags.history.invalidate(),
+        utils.flags.timeline.invalidate(),
       ]);
     },
   });
