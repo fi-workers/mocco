@@ -11,6 +11,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
+import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { Context } from 'hono';
@@ -18,8 +19,8 @@ import type { Context } from 'hono';
 export interface V1Deps {
   apiKeys: Pick<ApiKeyService, 'authenticate'>;
   limiter: RateLimiter;
-  /** OTA uploads from CI; undefined leaves /v1/ota unmounted. */
-  ota?: OtaUploadDeps;
+  /** OTA from CI and for devices; undefined leaves /v1/ota unmounted. */
+  ota?: OtaUploadDeps & OtaServingDeps;
 }
 
 export interface V1Env {

@@ -1,6 +1,6 @@
 ---
 title: Mocco-hosted OTA updates
-description: How a project's React Native app becomes a Mocco-hosted OTA app served to the stock expo-updates client — the fixed device-facing URLs, signing certificates, channels and their protection, uploads from CI with the mocco-ota CLI, and the tRPC surface. The manifest endpoint and promotions follow in later slices.
+description: How a project's React Native app becomes a Mocco-hosted OTA app served to the stock expo-updates client — the fixed device-facing URLs, signing certificates, channels and their protection, uploads from CI with the mocco-ota CLI, promotion to open channels, the manifest and asset endpoints, and the tRPC surface. Gated promotion, rollout and rollback follow.
 type: reference
 status: active
 created: 2026-10-01
@@ -22,11 +22,15 @@ code_refs:
   - packages/backend/src/domain/ota/UploadService.ts
   - packages/backend/src/transport/ext/v1/ota-uploads.ts
   - packages/ota-cli/src/publish.ts
+  - packages/backend/src/domain/ota/OtaChannelService.ts
+  - packages/backend/src/domain/ota/UpdateCheckService.ts
+  - packages/backend/src/domain/ota/serving/select.ts
+  - packages/backend/src/transport/ext/v1/ota-manifest.ts
 ---
 
 # Mocco-hosted OTA updates
 
-> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127) and uploads (#128); the manifest endpoint (#129) and promotions (#131, #132) build on it.
+> Phase 3 of the [OTA release control design](../specs/2026-09-25-ota-release-control-design.md): Mocco serves updates to the stock `expo-updates` client (ADR 0021), signed in the customer's CI (ADR 0022), with promotions to protected channels approved like a deploy (ADR 0020). This page covers setup (#127), uploads (#128), and promotion and serving (#129); gated promotion (#131) and rollout and rollback (#132) build on it.
 
 ## OTA apps
 
@@ -72,10 +76,29 @@ The release is then `verifying` until the **`ota.verifyAssets`** job re-hashes e
 
 The console's **Releases** list shows each release's status, platforms, download size, git SHA and uploader.
 
+## Promotion
+
+Promoting a `ready` release to a channel points that channel's heads (one per platform and runtime version) at the release's updates. It is refused when the release isn't ready, when the channel is **protected** (that needs an approved request, which lands with gated promotion), and when the release is **older** than what the channel serves on a platform: devices load only a newer `commitTime`, so an older release would reach no one, and going back is a rollback. Promoting what a channel already serves changes nothing. Each promotion appends a `promote` deployment and is audited as `ota.channel.changed` with the actor (a user or `apikey:<id>`).
+
+Promote from the console (**Promote** on a ready release; protected channels are listed but disabled), with `mocco-ota promote --release <id> --channel <name>`, or with `mocco-ota publish --channel <name>`, which waits until the release is verified. Each channel row shows the release it serves per platform.
+
+## Serving devices
+
+`GET /v1/ota/apps/{id}/manifest` speaks Expo Updates protocol v1 to the stock client. It reads `expo-protocol-version` (only `1`, else 400), `expo-platform` and `expo-runtime-version` (required, else 400), `expo-channel-name`, `EAS-Client-ID` and `expo-current-update-id`. Then:
+
+1. **No head** for the app, channel, platform and runtime (including an unknown app or channel): **204** with `expo-protocol-version: 1`. Never 404, so apps can't be enumerated and a misconfigured build keeps its embedded bundle.
+2. A head serving a `rollBackToEmbedded` directive: the **directive** part.
+3. The **candidate** for devices whose rollout bucket (SHA-256 of salt and `EAS-Client-ID`, mod 10 000) is below the rollout share and the head isn't paused; everyone else gets the **active** update. A device without `EAS-Client-ID` is always in the control group.
+4. Already running the target: **204**. Otherwise, **200** `multipart/mixed` with the `manifest` part, carrying the exact signed bytes and their `expo-signature` header, plus an `extensions` part. A client that accepts only JSON gets `application/expo+json` with `expo-signature` as a response header (and 406 for a directive).
+
+Responses carry `expo-sfv-version: 0` and `cache-control: private, max-age=0`. Each head's serving state is cached in-process for 5 seconds, including "nothing to serve", so a burst of checks costs one query per head. A promotion invalidates the cache at once in the instance that made it; other instances catch up within the TTL.
+
+`GET /v1/ota/apps/{id}/assets/{hash}` (the URL inside every signed manifest) redirects (302) to the verified bytes in the store: the CDN or bucket URL, or the filesystem driver's route. Unknown or unverified hashes are 404.
+
 ## Tables (migrations 0022–0023)
 
 `mocco_ota_apps`, `mocco_ota_signing_certificates`, `mocco_ota_channels`, `mocco_ota_upload_sessions` (token hash only, one release per session), plus the tables the next slices fill: `mocco_ota_releases`, `mocco_ota_updates` (the exact signed manifest bytes, never rewritten; the id is the Expo update id from CI), `mocco_ota_signed_directives`, `mocco_ota_assets` (content-addressed by base64url SHA-256, linked to `mocco_objects`), `mocco_ota_update_assets`, `mocco_ota_channel_heads` (serving state per channel, platform and runtime version) and `mocco_ota_deployments` (append-only channel history). All are workspace-scoped with composite FKs.
 
 ## tRPC surface
 
-`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.
+`ota.hosting.apps.list | create`, `ota.hosting.releases.list`, `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | promote`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.

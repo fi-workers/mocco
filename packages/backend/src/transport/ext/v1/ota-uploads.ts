@@ -1,9 +1,10 @@
-// OTA uploads from CI on the public /v1 surface (OTA design §6.2). A secret key with
-// `ota:write` mints a short-lived upload session; the session token then declares a
-// release, gets presigned PUTs for the missing assets, and finalizes it. Rejections are
+// OTA from CI on the public /v1 surface (OTA design §6.2). A secret key with `ota:write`
+// mints a short-lived upload session (the session token then declares a release, gets
+// presigned PUTs for the missing assets, and finalizes it), reads a release's status and
+// promotes ready releases to unprotected channels. Rejections are
 // problem+json whose `detail` says exactly what to fix, so the CLI can print it as is.
 import { ApiScopes } from '@mocco/common/apikey';
-import { finalizeRequestSchema, uploadRequestSchema } from '@mocco/common/ota-hosting';
+import { finalizeRequestSchema, promotionRequestSchema, uploadRequestSchema } from '@mocco/common/ota-hosting';
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 
@@ -11,6 +12,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@
 import { KeyRateLimits, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
 import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
+import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
 import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { Context } from 'hono';
@@ -18,6 +20,7 @@ import type { z } from 'zod';
 
 export interface OtaUploadDeps {
   uploads: Pick<UploadService, 'createSession' | 'authenticate' | 'beginRelease' | 'finalize'>;
+  channels: Pick<OtaChannelService, 'promoteAsKey' | 'releaseStatusAsKey'>;
 }
 
 interface SessionEnv {
@@ -105,6 +108,39 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
       }
     },
   );
+
+  const ciKey = requireKey(deps, { kinds: ['secret'], scope: ApiScopes.otaWrite });
+
+  // A release's status, so CI can wait for `ready` before promoting.
+  app.get('/apps/:appId/releases/:releaseId', ciKey, async c => {
+    try {
+      return c.json(
+        await ota.channels.releaseStatusAsKey(c.var.principal, c.req.param('appId'), c.req.param('releaseId')),
+      );
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
+
+  // Promote a ready release to an unprotected channel.
+  app.post('/apps/:appId/releases/:releaseId/promotions', ciKey, async c => {
+    const { data, refused } = await parseJson(c, promotionRequestSchema);
+    if (refused !== undefined) {
+      return refused;
+    }
+    try {
+      const result = await ota.channels.promoteAsKey(
+        c.var.principal,
+        c.req.param('appId'),
+        c.req.param('releaseId'),
+        data.channel,
+        data.reason,
+      );
+      return c.json(result, result.changed ? 201 : 200);
+    } catch (error) {
+      return problemOfError(error);
+    }
+  });
 
   const sessions = new Hono<SessionEnv>();
   sessions.use('*', requireUploadSession(deps, ota));

@@ -100,6 +100,18 @@ export class OtaReleaseRepo {
     return rows.length;
   }
 
+  /** A release's own updates (one per platform), without republishes. */
+  async listOriginalUpdates(releaseId: string) {
+    return await this.db
+      .select({
+        id: schema.otaUpdates.id,
+        platform: schema.otaUpdates.platform,
+        commitTime: schema.otaUpdates.commitTime,
+      })
+      .from(schema.otaUpdates)
+      .where(and(eq(schema.otaUpdates.releaseId, releaseId), eq(schema.otaUpdates.kind, OtaUpdateKinds.original)));
+  }
+
   async findUpdate(id: string) {
     const [row] = await this.db.select().from(schema.otaUpdates).where(eq(schema.otaUpdates.id, id));
     return row;

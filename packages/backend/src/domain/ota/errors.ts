@@ -143,3 +143,30 @@ export class OtaUploadConflictError extends ConflictError {
     this.name = 'OtaUploadConflictError';
   }
 }
+
+/** Promotion needs a `ready` release (assets re-hashed, invariant 2). */
+export class OtaReleaseNotReadyError extends BadRequestError {
+  constructor(releaseId: string, status: string, options?: ErrorOptions) {
+    super(`Release ${releaseId} is ${status}; only ready releases can be promoted`, options);
+    this.name = 'OtaReleaseNotReadyError';
+  }
+}
+
+/** Devices load only a newer commitTime, so promoting an older release would reach no one. */
+export class OtaReleaseOlderThanHeadError extends ConflictError {
+  constructor(channel: string, platform: string, options?: ErrorOptions) {
+    super(
+      `The release is older than what "${channel}" serves on ${platform}; devices only load newer updates, so roll back instead`,
+      options,
+    );
+    this.name = 'OtaReleaseOlderThanHeadError';
+  }
+}
+
+/** A protected channel changes only through an approval (invariant 6). */
+export class OtaChannelProtectedError extends ForbiddenError {
+  constructor(channel: string, options?: ErrorOptions) {
+    super(`Channel "${channel}" is protected; promoting to it needs an approved request`, options);
+    this.name = 'OtaChannelProtectedError';
+  }
+}

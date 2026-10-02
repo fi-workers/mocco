@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -26,6 +26,18 @@ export class OtaAssetRepo {
       .from(schema.otaAssets)
       .leftJoin(schema.objects, eq(schema.objects.id, schema.otaAssets.objectId))
       .where(and(eq(schema.otaAssets.appId, appId), inArray(schema.otaAssets.hash, [...hashes])));
+  }
+
+  /** The stored object of a verified asset, or undefined (unknown, unverified or gone). */
+  async findVerifiedObject(appId: string, hash: string) {
+    const [row] = await this.db
+      .select({ object: schema.objects })
+      .from(schema.otaAssets)
+      .innerJoin(schema.objects, eq(schema.objects.id, schema.otaAssets.objectId))
+      .where(
+        and(eq(schema.otaAssets.appId, appId), eq(schema.otaAssets.hash, hash), isNotNull(schema.otaAssets.verifiedAt)),
+      );
+    return row?.object;
   }
 
   /** Record the asset (or point an existing one at a fresh upload) — unverified either way. */

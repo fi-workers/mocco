@@ -11,6 +11,7 @@ import { keyidOf, parseManifestUrl, readAppJson, runtimeVersionOf } from './app-
 import { CliError } from './errors';
 import { isPresent } from './fs';
 import { init, KEY_FILE } from './init';
+import { promote } from './promote';
 import { publish } from './publish';
 
 import type { OtaPlatform } from '@mocco/common/ota-hosting';
@@ -20,12 +21,15 @@ const USAGE = `Usage:
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
 
-  mocco-ota publish [--platform ios|android|all] [--message <text>] [--mandatory]
-                    [--skip-export] [--dist dist] [--runtime-version <v>]
+  mocco-ota publish [--channel <name>] [--platform ios|android|all] [--message <text>]
+                    [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
-      Export, upload and finalize a signed release.
+      Export, upload and finalize a signed release; with --channel, promote it once ready.
       Needs MOCCO_API_KEY (a secret key with ota:write) and the signing key in
       MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
+
+  mocco-ota promote --release <id> --channel <name> [--project .]
+      Point an unprotected channel at a ready release. Needs MOCCO_API_KEY.
 `;
 
 const run = promisify(execFile);
@@ -108,11 +112,47 @@ async function runInit(args: readonly string[]): Promise<void> {
   });
 }
 
+/** The API key from the environment, and the app and API base from app.json (or flags). */
+async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url'?: string }) {
+  const apiKey = process.env.MOCCO_API_KEY;
+  if (apiKey === undefined || apiKey === '') {
+    throw new CliError('Set MOCCO_API_KEY to a secret API key with the ota:write scope');
+  }
+  const { json } = await readAppJson(projectDir);
+  const expo = json.expo ?? {};
+  const fromUrl = expo.updates?.url === undefined ? undefined : parseManifestUrl(expo.updates.url);
+  const appId = flags['app-id'] ?? fromUrl?.appId;
+  const apiBase = flags['api-url'] ?? fromUrl?.apiBase;
+  if (appId === undefined || apiBase === undefined) {
+    throw new CliError('app.json has no Mocco updates.url; run mocco-ota init, or pass --app-id and --api-url');
+  }
+  return { apiKey, appId, apiBase, expo };
+}
+
+async function runPromote(args: readonly string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: [...args],
+    options: {
+      release: { type: 'string' },
+      channel: { type: 'string' },
+      'app-id': { type: 'string' },
+      'api-url': { type: 'string' },
+      project: { type: 'string', default: '.' },
+    },
+  });
+  if (values.release === undefined || values.channel === undefined) {
+    throw new CliError('--release and --channel are required');
+  }
+  const { apiKey, appId, apiBase } = await targetOf(path.resolve(values.project), values);
+  await promote({ apiBase, appId, apiKey, releaseId: values.release, channel: values.channel, log });
+}
+
 async function runPublish(args: readonly string[]): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
     options: {
       platform: { type: 'string', default: 'all' },
+      channel: { type: 'string' },
       message: { type: 'string' },
       mandatory: { type: 'boolean', default: false },
       'skip-export': { type: 'boolean', default: false },
@@ -126,18 +166,7 @@ async function runPublish(args: readonly string[]): Promise<void> {
     },
   });
   const projectDir = path.resolve(values.project);
-  const apiKey = process.env.MOCCO_API_KEY;
-  if (apiKey === undefined || apiKey === '') {
-    throw new CliError('Set MOCCO_API_KEY to a secret API key with the ota:write scope');
-  }
-  const { json } = await readAppJson(projectDir);
-  const expo = json.expo ?? {};
-  const fromUrl = expo.updates?.url === undefined ? undefined : parseManifestUrl(expo.updates.url);
-  const appId = values['app-id'] ?? fromUrl?.appId;
-  const apiBase = values['api-url'] ?? fromUrl?.apiBase;
-  if (appId === undefined || apiBase === undefined) {
-    throw new CliError('app.json has no Mocco updates.url; run mocco-ota init, or pass --app-id and --api-url');
-  }
+  const { apiKey, appId, apiBase, expo } = await targetOf(projectDir, values);
   const platforms = platformsOf(values.platform);
   const [first = OtaPlatforms.ios] = platforms;
   const distDir = path.resolve(projectDir, values.dist);
@@ -162,6 +191,10 @@ async function runPublish(args: readonly string[]): Promise<void> {
   log(
     `Done: release ${result.releaseId} (${result.reusedAssets} asset(s) reused, ${result.uploadedBytes} bytes uploaded).`,
   );
+  if (values.channel !== undefined) {
+    log(`Waiting for Mocco to verify the assets before promoting to ${values.channel}…`);
+    await promote({ apiBase, appId, apiKey, releaseId: result.releaseId, channel: values.channel, log });
+  }
 }
 
 /** Run the command line; resolves to the exit code. */
@@ -174,6 +207,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     }
     if (command === 'publish') {
       await runPublish(rest);
+      return 0;
+    }
+    if (command === 'promote') {
+      await runPromote(rest);
       return 0;
     }
     process.stdout.write(USAGE);

@@ -265,3 +265,29 @@ export const otaReleaseSchema = z.object({
   createdAt: z.date(),
 });
 export type OtaReleaseDto = z.infer<typeof otaReleaseSchema>;
+
+/** What a channel head serves now — wire shape for the console. */
+export const otaChannelHeadSchema = z.object({
+  channelId: z.uuid(),
+  platform: otaPlatformSchema,
+  runtimeVersion: z.string(),
+  releaseId: z.uuid().nullable(),
+  updatedAt: z.date(),
+});
+export type OtaChannelHeadDto = z.infer<typeof otaChannelHeadSchema>;
+
+/** `POST /v1/ota/apps/:appId/releases/:releaseId/promotions`. */
+export const promotionRequestSchema = z.object({
+  channel: z.string().regex(CHANNEL_NAME_PATTERN),
+  reason: z.string().max(500).nullable().default(null),
+});
+export type PromotionRequest = z.infer<typeof promotionRequestSchema>;
+
+/** The result of a promotion: the platforms whose heads now serve the release. */
+export interface PromotionResult {
+  channel: string;
+  releaseId: string;
+  platforms: OtaPlatform[];
+  /** False when the channel already served this release (nothing changed). */
+  changed: boolean;
+}

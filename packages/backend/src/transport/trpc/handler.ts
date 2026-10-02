@@ -27,6 +27,7 @@ import type { ConnectionService } from '@backend/domain/integration/ConnectionSe
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
 import type { ChannelService } from '@backend/domain/notification/ChannelService';
 import type { ExternalCredentialService } from '@backend/domain/ota/ExternalCredentialService';
+import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { OtaHostingService } from '@backend/domain/ota/OtaHostingService';
 import type { SigningService } from '@backend/domain/ota/SigningService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
@@ -55,6 +56,7 @@ export interface TrpcDeps extends Services {
   otaHosting: OtaHostingService;
   otaSigning: SigningService;
   otaUploads: UploadService;
+  otaChannels: OtaChannelService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -95,6 +97,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         otaHosting: deps.otaHosting,
         otaSigning: deps.otaSigning,
         otaUploads: deps.otaUploads,
+        otaChannels: deps.otaChannels,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -129,6 +132,7 @@ export function productionServices(): TrpcDeps {
     otaHosting: getOtaDomain().otaHosting,
     otaSigning: getOtaDomain().otaSigning,
     otaUploads: getOtaDomain().otaUploads,
+    otaChannels: getOtaDomain().otaChannels,
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,
