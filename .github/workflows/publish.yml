@@ -23,9 +23,12 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: .nvmrc
-          cache: yarn
           registry-url: https://registry.npmjs.org
-      - run: corepack enable && yarn install --immutable
+      # setup-node's yarn cache runs the global yarn 1, which refuses the packageManager
+      # pin; corepack has to be on first, so no setup-node cache (as in ci.yml).
+      - name: Enable corepack (yarn is integrity-pinned via packageManager)
+        run: corepack enable
+      - run: yarn install --immutable
       - run: yarn sdk:build
       - run: yarn test-sdk
       - uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
