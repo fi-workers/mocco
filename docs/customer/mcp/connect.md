@@ -4,8 +4,8 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-02
-confidence: medium
+updated: 2026-10-03
+confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
 related:
@@ -25,19 +25,29 @@ You sign in once in the browser and the client holds the token.
 https://www.mocco.club/api/mcp
 ```
 
-> Not shipped yet. This page is the shape it will take; the slices are in the
-> [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
+> The read tools are in. Deciding — approving, resuming, promoting — is the next slice;
+> until then an agent can tell you a deploy is blocked but cannot unblock it. The plan is
+> in the [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
 
 **It reads as you.** You see what your Mocco roles let you see, in whichever workspaces
 you belong to — never more, because the server has no privileges of its own.
 
-| | |
+| Tool | Answers |
 |---|---|
-| Runs | Which are running, which are waiting, which failed, and on what |
-| Gates | Why a run is paused and what would release it |
-| Approvals | What is waiting on a human, on whom, and who has voted |
+| `mocco_runs_search` | Which runs are running, waiting or failed. Filter by `awaiting_gate` for "what is blocked" |
+| `mocco_runs_get` | One run: its steps, and the gate holding it with what would release it |
+| `mocco_approvals_search` | What is waiting on a human right now |
+| `mocco_approvals_get` | One request: the change it pins, the requirements, and the votes so far |
+
+Reads take a `responseFormat`: `concise` by default, `detailed` when the agent wants the
+commit and the gate requirements too. That keeps a search from spending your context on
+rows you did not ask about.
+
+**Which workspace?** If you belong to one, say nothing. If you belong to several, the
+tool asks which and names them — and a workspace you are not a member of is refused
+whether or not it exists.
 
 **Deciding is separate and off by default.** Approving, resuming and promoting are
 switched on per workspace by an owner. Until then your agent can tell you the deploy is

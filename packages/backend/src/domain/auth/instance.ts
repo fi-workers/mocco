@@ -8,12 +8,25 @@ import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
+import type { Provider } from '@backend/domain/auth/provider';
+
 export interface Services {
   auth: AuthService;
   workspace: WorkspaceService;
 }
 
-const state: { services?: Services } = {};
+/**
+ * What the MCP endpoint needs and nothing else does: `requireMcpAuth` takes the whole
+ * provider, to reach its JWKS and issuer, and the resource identifier it checks the
+ * token's audience against. Kept off `Services` so the tRPC context — which needs
+ * neither — does not have to carry them.
+ */
+export interface McpAuth {
+  provider: Provider;
+  mcpResource: string;
+}
+
+const state: { services?: Services; mcpAuth?: McpAuth } = {};
 
 export function getServices(): Services {
   if (!state.services) {
@@ -34,6 +47,17 @@ export function getServices(): Services {
     }
     const provider = createProvider(getDb(), { secret: env.AUTH_SECRET, baseUrl, trustedOrigins, mcpResource });
     state.services = { auth: new AuthService(provider), workspace: new WorkspaceService(provider) };
+    state.mcpAuth = { provider, mcpResource };
   }
   return state.services;
+}
+
+/** The provider and resource the MCP endpoint authenticates against. */
+export function getMcpAuth(): McpAuth {
+  getServices();
+  const { mcpAuth } = state;
+  if (mcpAuth === undefined) {
+    throw new Error('auth is not configured');
+  }
+  return mcpAuth;
 }
