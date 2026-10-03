@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import { DiscordInstallService } from '@backend/domain/notification/DiscordInstallService';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
@@ -43,7 +43,7 @@ describe('ext Discord install routes (pglite, fake OAuth)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    const provider = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    const provider = await createTestProvider(t.db);
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
   });

@@ -5,11 +5,15 @@
 import { randomUUID } from 'node:crypto';
 
 import { WorkspaceMemberRoles, type WorkspaceCreateInput } from '@mocco/common/workspace';
+import { z } from 'zod';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { isAPIError } from '@backend/domain/auth/provider';
 
 import type { Provider } from '@backend/domain/auth/provider';
+
+/** The org plugin's active-member answer: a comma-separated role list. */
+const activeMemberRoleSchema = z.object({ role: z.string() });
 
 /** Workspace roles that may change workspace-level settings (the org plugin's owner/admin). */
 const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
@@ -104,7 +108,13 @@ export class WorkspaceService {
    */
   async callerRoles(headers: Headers, workspaceId: string): Promise<string[]> {
     try {
-      const { role } = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers });
+      const answer = await this.provider.api.getActiveMemberRole({ query: { organizationId: workspaceId }, headers });
+      // Parsed rather than read off the inferred type. The provider's type is a function
+      // of its plugin tuple, and with the MCP plugins registered it is large enough that
+      // the compiler stops narrowing `role` — which would make this silently `any`.
+      // Parsing at the boundary is what the conventions ask for anyway, and it does not
+      // quietly degrade when the vendor's inference does.
+      const { role } = activeMemberRoleSchema.parse(answer);
       // sonarjs/null-dereference is a false positive: `role` and each part are non-nullable strings.
       /* eslint-disable sonarjs/null-dereference */
       return role

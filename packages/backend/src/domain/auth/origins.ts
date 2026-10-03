@@ -60,3 +60,23 @@ export function resolveAuthOrigins(env: AuthOriginEnv): AuthOrigins {
   }
   return { trustedOrigins: [] };
 }
+
+/** Where the MCP server answers, under the app's own origin ([ADR 0011](../../../../docs/adr/0011-external-api-surface-architecture.md)). */
+export const MCP_PATH = '/api/mcp';
+
+/**
+ * The MCP protected resource identifier (RFC 8707 / RFC 9728): the canonical URL issued
+ * tokens are audience-bound to, so a token minted for another MCP server cannot be
+ * replayed at ours.
+ *
+ * `undefined` when there is no base URL to anchor it to — a preview with no Vercel URL,
+ * or a deploy with no `SERVICE_DOMAIN`. The authorization server is then simply not
+ * configured, which is better than guessing: the identifier ends up inside issued tokens
+ * and in published metadata, so a wrong one is worse than an absent one.
+ *
+ * It must be HTTPS with no query, fragment or credentials; HTTP is accepted only on
+ * loopback, which `resolveAuthOrigins` already guarantees by deriving the scheme.
+ */
+export function mcpResourceOf(origins: AuthOrigins): string | undefined {
+  return origins.baseUrl === undefined ? undefined : `${origins.baseUrl}${MCP_PATH}`;
+}

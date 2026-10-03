@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -109,10 +109,14 @@ function pushHeaders(overrides: Record<string, string> = {}): Record<string, str
 
 describe('ext GitHub webhook route (pglite)', () => {
   let t: TestDb;
+  // Built once per test: the provider seeds the authorization server's resource row on
+  // init, so it has to be awaited before anything uses it (and before the DB closes).
+  let provider: Awaited<ReturnType<typeof createTestProvider>>;
   let pending: Promise<unknown>[];
 
   beforeEach(async () => {
     t = await createTestDb();
+    provider = await createTestProvider(t.db);
     pending = [];
   });
   afterEach(async () => {
@@ -126,7 +130,7 @@ describe('ext GitHub webhook route (pglite)', () => {
     const repoRepo = new RepoRepo(t.db);
     const connectStates = new ConnectStateRepo(t.db);
     return {
-      auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
+      auth: new AuthService(provider),
       connection: new ConnectionService({ connections, repos: repoRepo, connectStates, provider: fakeProvider() }),
       provider: fakeProvider(),
       commitSync: new CommitSyncService({

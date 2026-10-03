@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -56,6 +56,9 @@ async function post(app: ReturnType<typeof createExtApp>, path: string, body: un
 
 describe('ext execution routes (pglite)', () => {
   let t: TestDb;
+  // Built once per test: the provider seeds the authorization server's resource row on
+  // init, so it has to be awaited before anything uses it (and before the DB closes).
+  let provider: Awaited<ReturnType<typeof createTestProvider>>;
   let pending: Promise<unknown>[];
   let posted: PostedRequest[];
   let executor: FakeExecutor;
@@ -65,6 +68,7 @@ describe('ext execution routes (pglite)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
+    provider = await createTestProvider(t.db);
     pending = [];
     posted = [];
     executor = new FakeExecutor();
@@ -95,7 +99,7 @@ describe('ext execution routes (pglite)', () => {
    * routes only need `runs`, `postJson`, and the waitUntil collector. */
   function deps(overrides: Partial<ExtDeps> = {}): ExtDeps {
     return {
-      auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
+      auth: new AuthService(provider),
       runs,
       versionChecks: new VersionCheckService({ policies: new VersionPolicyRepo(t.db) }),
       broker: new CredentialBroker({

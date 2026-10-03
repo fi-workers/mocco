@@ -26,6 +26,10 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1144.0",
     "@aws-sdk/s3-request-presigner": "3.1144.0",
+    "@better-auth/cimd": "1.7.7",
+    "@better-auth/core": "1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
     "@mocco/common": "workspace:*",
     "@mocco/flags-core": "workspace:*",
     "@octokit/app": "16.1.2",
