@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createProvider, type Provider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+
+import type { Provider } from '@backend/domain/auth/provider';
 
 // Full-stack auth test on pglite: real migrations + real auth provider.
 // Catches schema/adapter drift that unit mocks would miss.
@@ -11,7 +13,7 @@ describe('auth (email + password) on pglite', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    auth = createProvider(t.db, { secret: 'test-secret-not-for-prod' });
+    auth = await createTestProvider(t.db);
   });
   afterEach(async () => {
     await t.close();

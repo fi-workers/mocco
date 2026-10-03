@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveAuthOrigins } from '@backend/domain/auth/origins';
+import { mcpResourceOf, resolveAuthOrigins } from '@backend/domain/auth/origins';
 
 describe('resolveAuthOrigins', () => {
   it('production/local: base = SERVICE_DOMAIN (https), trusts both its www and apex form', () => {
@@ -56,5 +56,43 @@ describe('resolveAuthOrigins', () => {
     const r = resolveAuthOrigins({ serviceDomain: 'localhost:3100' });
     expect(r.baseUrl).toBe('http://localhost:3100');
     expect(r.trustedOrigins).toContain('http://localhost:3100');
+  });
+});
+
+describe('mcpResourceOf', () => {
+  it('anchors the resource to the app origin', () => {
+    expect(mcpResourceOf(resolveAuthOrigins({ serviceDomain: 'www.mocco.club' }))).toBe(
+      'https://www.mocco.club/api/mcp',
+    );
+  });
+
+  it('stays http on loopback, which the resource identifier allows only there', () => {
+    expect(mcpResourceOf(resolveAuthOrigins({ serviceDomain: 'localhost:3100' }))).toBe(
+      'http://localhost:3100/api/mcp',
+    );
+  });
+
+  it('follows a preview to its own deployment URL', () => {
+    const origins = resolveAuthOrigins({
+      vercelEnv: 'preview',
+      vercelUrl: 'a.vercel.app',
+      vercelBranchUrl: 'b.vercel.app',
+    });
+
+    expect(mcpResourceOf(origins)).toBe('https://b.vercel.app/api/mcp');
+  });
+
+  it('is undefined with no base URL, so the server is left unconfigured rather than guessed', () => {
+    expect(mcpResourceOf(resolveAuthOrigins({}))).toBeUndefined();
+    expect(mcpResourceOf(resolveAuthOrigins({ vercelEnv: 'preview' }))).toBeUndefined();
+  });
+
+  it('carries no query, fragment or credentials — the identifier must be canonical', () => {
+    const resource = mcpResourceOf(resolveAuthOrigins({ serviceDomain: 'www.mocco.club' })) ?? '';
+    const url = new URL(resource);
+
+    expect(url.search).toBe('');
+    expect(url.hash).toBe('');
+    expect(url.username).toBe('');
   });
 });

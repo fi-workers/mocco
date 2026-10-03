@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { AuthService } from '@backend/domain/auth/AuthService';
-import { createProvider } from '@backend/domain/auth/provider';
+import { createTestProvider } from '@backend/domain/auth/testing/provider';
 import { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
 import { StubCredentialProvider } from '@backend/domain/credential/providers/stub';
 import { CredentialGrantRepo } from '@backend/domain/credential/repos/credential-grant.repo';
@@ -75,10 +75,14 @@ async function post(app: ReturnType<typeof createExtApp>, path: string, body: un
 
 describe('ext POST /credentials (pglite)', () => {
   let t: TestDb;
+  // Built once per test: the provider seeds the authorization server's resource row on
+  // init, so it has to be awaited before anything uses it (and before the DB closes).
+  let provider: Awaited<ReturnType<typeof createTestProvider>>;
   let broker: CredentialBroker;
 
   beforeEach(async () => {
     t = await createTestDb();
+    provider = await createTestProvider(t.db);
     broker = new CredentialBroker({
       runs: new RunRepo(t.db),
       steps: new RunStepRepo(t.db),
@@ -205,7 +209,7 @@ describe('ext POST /credentials (pglite)', () => {
       },
     });
     return {
-      auth: new AuthService(createProvider(t.db, { secret: 'test-secret-not-for-prod' })),
+      auth: new AuthService(provider),
       runs: runService,
       broker,
       versionChecks: new VersionCheckService({ policies: new VersionPolicyRepo(t.db) }),
