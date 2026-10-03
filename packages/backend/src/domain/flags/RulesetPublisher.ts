@@ -57,11 +57,11 @@ const configStateOf = (config: FlagConfigState): FlagConfigState => ({
 
 /** An environment's flags, configs and segments as they are now. */
 export async function readHead(db: Db, workspaceId: string, environment: FlagEnvironmentRow): Promise<HeadState> {
-  const [flags, rows, segments] = await Promise.all([
-    new FlagRepo(db).listByProject(workspaceId, environment.projectId),
-    new FlagConfigRepo(db).listForEnvironment(workspaceId, environment.id),
-    new FlagSegmentRepo(db).listForEnvironment(workspaceId, environment.id),
-  ]);
+  // One after another: `db` is often a transaction, and one connection can't run queries
+  // concurrently (pg deprecates it and will refuse it).
+  const flags = await new FlagRepo(db).listByProject(workspaceId, environment.projectId);
+  const rows = await new FlagConfigRepo(db).listForEnvironment(workspaceId, environment.id);
+  const segments = await new FlagSegmentRepo(db).listForEnvironment(workspaceId, environment.id);
   return {
     flags,
     configs: new Map(rows.map(({ config, flag }) => [flag.key, { ...configStateOf(config), salt: config.salt }])),
