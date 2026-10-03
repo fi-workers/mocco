@@ -109,6 +109,10 @@ Each environment's **History** lists its changes. To see your deploys among them
 
 ![The History of Production: a pipeline run of acme/mobile above the flag changes](./images/flags-timeline.png)
 
+With a pipeline linked, Mocco also checks a flag before you turn it on. It looks at the code of the pipeline's last successful run, and if no file quotes the flag's key (as in `getBooleanValue('checkout', …)`), the editor warns you before you save. Turning the flag on then would serve a value no deployed code reads yet. The warning never stops you.
+
+![The editor warns that legacy-banner isn't in the last deploy of acme/mobile](./images/flags-deploy-warning.png)
+
 ## Use flagd instead
 
 Mocco serves standard flagd flag definitions, so a [flagd](https://flagd.dev) instance can sync from Mocco and serve flags to any OpenFeature flagd provider, in any language. Point flagd's HTTP sync at Mocco with the server key:

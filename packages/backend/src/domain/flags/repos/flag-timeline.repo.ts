@@ -1,3 +1,4 @@
+import { RunStates } from '@mocco/common/execution';
 import { and, desc, eq } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
@@ -25,6 +26,56 @@ export class FlagTimelineRepo {
       .where(and(eq(schema.runs.workspaceId, workspaceId), eq(schema.commits.repoId, repoId)))
       .orderBy(desc(schema.runs.createdAt))
       .limit(limit);
+  }
+
+  /** The repo's last successful run and its commit, with what's needed to fetch its code. */
+  async lastDeploy(workspaceId: string, repoId: string) {
+    const [row] = await this.db
+      .select({
+        runId: schema.runs.id,
+        commitSha: schema.commits.sha,
+        owner: schema.repos.owner,
+        name: schema.repos.name,
+        externalAccountId: schema.providerConnections.externalAccountId,
+      })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .innerJoin(schema.providerConnections, eq(schema.repos.connectionId, schema.providerConnections.id))
+      .where(
+        and(
+          eq(schema.runs.workspaceId, workspaceId),
+          eq(schema.commits.repoId, repoId),
+          eq(schema.runs.state, RunStates.succeeded),
+        ),
+      )
+      .orderBy(desc(schema.runs.finishedAt))
+      .limit(1);
+    return row;
+  }
+
+  async findScan(workspaceId: string, repoId: string, commitSha: string) {
+    const [row] = await this.db
+      .select()
+      .from(schema.flagCodeScans)
+      .where(
+        and(
+          eq(schema.flagCodeScans.workspaceId, workspaceId),
+          eq(schema.flagCodeScans.repoId, repoId),
+          eq(schema.flagCodeScans.commitSha, commitSha),
+        ),
+      );
+    return row;
+  }
+
+  async saveScan(row: typeof schema.flagCodeScans.$inferInsert) {
+    await this.db
+      .insert(schema.flagCodeScans)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [schema.flagCodeScans.repoId, schema.flagCodeScans.commitSha],
+        set: { scannedKeys: row.scannedKeys, foundKeys: row.foundKeys, isComplete: row.isComplete },
+      });
   }
 
   /** Whether the repo is linked to the project. */

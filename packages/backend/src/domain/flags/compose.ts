@@ -14,6 +14,7 @@ import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-member
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
+import type { RepoArchiveSource } from '@backend/domain/integration/ports';
 import type { Db } from '@backend/infra/db/types';
 
 export interface FlagsDomain {
@@ -28,11 +29,24 @@ export interface FlagsDomain {
  * The production root below binds it once; tests call it with a pglite db. */
 export function createFlagsDomain(
   db: Db,
-  deps: { audit: AuditService; approvals: ApprovalService; events?: EventPublisher; appOrigin?: string },
+  deps: {
+    audit: AuditService;
+    approvals: ApprovalService;
+    events?: EventPublisher;
+    appOrigin?: string;
+    /** Reads deployed code for the deploy-aware warning (#146). */
+    archives?: RepoArchiveSource;
+  },
 ): FlagsDomain {
   const publisher = new RulesetPublisher();
   const flagGovernance = new FlagGovernanceService({ db, publisher, ...deps });
-  const flags = new FlagService({ db, audit: deps.audit, publisher, governance: flagGovernance });
+  const flags = new FlagService({
+    db,
+    audit: deps.audit,
+    publisher,
+    governance: flagGovernance,
+    ...(deps.archives !== undefined && { archives: deps.archives }),
+  });
   const flagKillSwitch = new KillSwitchService({ db, publisher, memberships: new RoleMembershipRepo(db), ...deps });
   deps.approvals.registerHandler(FlagApprovalSubjects.changeset, async request => {
     await flagGovernance.applyApproved(request);

@@ -1,8 +1,9 @@
 import { AuditActions } from '@mocco/common/audit';
-import { ChangeOutcomes, ChangesetSources, FlagManagers, FlagTypes } from '@mocco/common/flags';
+import { ChangeOutcomes, ChangesetSources, DeployCheckStates, FlagManagers, FlagTypes } from '@mocco/common/flags';
 import { resolveFlag } from '@mocco/flags-core';
 
 import { auditRestores } from '@backend/domain/flags/audit-restores';
+import { scanArchive } from '@backend/domain/flags/code-refs';
 import {
   FlagEnvironmentNotFoundError,
   FlagKeyTakenError,
@@ -24,6 +25,7 @@ import { UniqueConstraintError } from '@backend/infra/db/errors';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagChangesetRow } from '@backend/domain/flags/repos/flag-changeset.repo';
+import type { RepoArchiveSource } from '@backend/domain/integration/ports';
 import type { Db } from '@backend/infra/db/types';
 import type {
   BooleanFlagCreateInput,
@@ -40,6 +42,8 @@ export interface FlagServiceDeps {
   publisher?: RulesetPublisher;
   /** Decides changes to protected environments; without it they are refused (fail closed). */
   governance?: FlagGovernanceService;
+  /** Reads deployed code for the deploy-aware warning (#146); without it the check answers unknown. */
+  archives?: RepoArchiveSource;
 }
 
 /** How many changesets an environment's history returns. */
@@ -122,6 +126,34 @@ export class FlagService {
     const managed = flags.find(flag => flagKeys.includes(flag.key) && flag.managedBy === FlagManagers.repo);
     if (managed !== undefined) {
       throw new RepoManagedFlagError(managed.key);
+    }
+  }
+
+  /** Scan a deployed commit for every flag key of the project, and cache it; undefined if the code can't be read. */
+  private async scanDeploy(
+    workspaceId: string,
+    projectId: string,
+    repoId: string,
+    deploy: { commitSha: string; owner: string; name: string; externalAccountId: string },
+  ) {
+    const { archives } = this.deps;
+    if (archives === undefined) {
+      return undefined;
+    }
+    const flags = await new FlagRepo(this.deps.db).listByProject(workspaceId, projectId);
+    const keys = flags.map(flag => flag.key);
+    try {
+      const archive = await archives.getArchiveAtCommit(
+        { externalAccountId: deploy.externalAccountId, owner: deploy.owner, name: deploy.name },
+        deploy.commitSha,
+      );
+      const { found, isComplete } = await scanArchive(archive, keys);
+      const scan = { scannedKeys: keys, foundKeys: [...found], isComplete };
+      await new FlagTimelineRepo(this.deps.db).saveScan({ workspaceId, repoId, commitSha: deploy.commitSha, ...scan });
+      return scan;
+    } catch (error) {
+      console.warn(`[flags] couldn't scan ${deploy.owner}/${deploy.name}@${deploy.commitSha}: ${String(error)}`);
+      return undefined;
     }
   }
 
@@ -406,6 +438,37 @@ export class FlagService {
     );
     await this.auditApplied(workspaceId, input.proposerUserId, changeset);
     return { outcome: ChangeOutcomes.applied, changeset };
+  }
+
+  /**
+   * Whether `flagKey` is in the code the environment last deployed (#146): the last
+   * successful run of its linked pipeline, its commit's archive scanned for the project's
+   * flag keys (cached per commit). A warning only: enabling the flag is never refused.
+   */
+  async deployCheck(workspaceId: string, projectId: string, environmentId: string, flagKey: string) {
+    const environment = await this.requireEnvironment(workspaceId, projectId, environmentId);
+    const none = { runId: null, commitSha: null, repo: null };
+    if (environment.linkedRepoId === null) {
+      return { state: DeployCheckStates.unlinked, ...none };
+    }
+    const timeline = new FlagTimelineRepo(this.deps.db);
+    const deploy = await timeline.lastDeploy(workspaceId, environment.linkedRepoId);
+    if (deploy === undefined) {
+      return { state: DeployCheckStates.noDeploy, ...none };
+    }
+    const found = { runId: deploy.runId, commitSha: deploy.commitSha, repo: `${deploy.owner}/${deploy.name}` };
+    const cached = await timeline.findScan(workspaceId, environment.linkedRepoId, deploy.commitSha);
+    const scan =
+      cached?.scannedKeys.includes(flagKey) === true
+        ? cached
+        : await this.scanDeploy(workspaceId, projectId, environment.linkedRepoId, deploy);
+    if (scan === undefined) {
+      return { state: DeployCheckStates.unknown, ...found };
+    }
+    if (scan.foundKeys.includes(flagKey)) {
+      return { state: DeployCheckStates.present, ...found };
+    }
+    return { state: scan.isComplete ? DeployCheckStates.absent : DeployCheckStates.unknown, ...found };
   }
 
   /** The project's recent `.mocco/flags.yml` syncs, newest first (#145). */

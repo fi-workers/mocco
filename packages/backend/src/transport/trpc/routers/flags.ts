@@ -7,6 +7,7 @@ import {
   ChangeOutcomes,
   changeOpSchema,
   changesetSchema,
+  deployCheckSchema,
   flagFileSyncSchema,
   flagTimelineEntrySchema,
   flagConfigSchema,
@@ -232,6 +233,15 @@ export const flagsRouter = router({
       await ctx.flags.setLinkedPipeline(workspaceId, projectId, ctx.session.user.id, link);
       return { ok: true } as const;
     }),
+
+  /** Whether a flag's key is in the code the environment last deployed (a warning before enabling it). */
+  deployCheck: flagsProcedure
+    .input(environmentInput.extend({ flagKey: z.string().min(1).max(128) }))
+    .output(deployCheckSchema)
+    .query(
+      async ({ ctx, input }) =>
+        await ctx.flags.deployCheck(input.workspaceId, input.projectId, input.environmentId, input.flagKey),
+    ),
 
   /** An environment's changesets interleaved with its linked pipeline's runs, newest first. */
   timeline: flagsProcedure

@@ -10,6 +10,7 @@ import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { FlagFileSyncService } from '@backend/domain/flags/FlagFileSyncService';
 import { StreamTokens } from '@backend/domain/flags/stream-token';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getIntegration } from '@backend/domain/integration/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
@@ -21,11 +22,14 @@ const state: { flags?: FlagsDomain } = {};
 
 export function getFlagsDomain(): FlagsDomain {
   if (!state.flags) {
+    // Without the GitHub App, the deploy-aware warning answers unknown.
+    const archives = getIntegration()?.provider;
     state.flags = createFlagsDomain(getDb(), {
       audit: getAudit().audit,
       approvals: getGovernance().approvals,
       events: getEventBus(),
       appOrigin: resolveBaseOrigin({ serviceDomain: getEnv().SERVICE_DOMAIN, vercelUrl: getEnv().VERCEL_URL }),
+      ...(archives !== undefined && { archives }),
     });
   }
   return state.flags;

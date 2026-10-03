@@ -1767,6 +1767,26 @@ export const flagChangesets = pgTable(
   ],
 );
 
+/** Which flag keys a commit's code quotes (#146), cached per repo and commit: the
+ * deploy-aware warning reads it instead of downloading the archive again. */
+export const flagCodeScans = pgTable(
+  'mocco_flag_code_scans',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    commitSha: text('commit_sha').notNull(),
+    // The keys looked for; a key outside it means scanning again.
+    scannedKeys: text('scanned_keys').array().notNull(),
+    foundKeys: text('found_keys').array().notNull(),
+    // False when the archive was too large to read whole: an absent key is then unknown.
+    isComplete: boolean('is_complete').notNull(),
+    createdAt,
+  },
+  t => [primaryKey({ columns: [t.repoId, t.commitSha], name: 'mocco_flag_code_scans_pk' })],
+);
+
 /** Each sync of a project's `.mocco/flags.yml` from a default-branch commit (#145): how
  * it ended, and why a refused file was refused. */
 export const flagFileSyncs = pgTable(
