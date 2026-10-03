@@ -7,6 +7,7 @@ import {
   FlagEnvironmentNotFoundError,
   FlagKeyTakenError,
   FlagNotFoundError,
+  InvalidChangeError,
   RepoManagedFlagError,
 } from '@backend/domain/flags/errors';
 import { FlagChangesetRepo } from '@backend/domain/flags/repos/flag-changeset.repo';
@@ -15,6 +16,7 @@ import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environmen
 import { FlagFileSyncRepo } from '@backend/domain/flags/repos/flag-file-sync.repo';
 import { FlagRulesetSnapshotRepo } from '@backend/domain/flags/repos/flag-ruleset-snapshot.repo';
 import { FlagSegmentRepo } from '@backend/domain/flags/repos/flag-segment.repo';
+import { FlagTimelineRepo } from '@backend/domain/flags/repos/flag-timeline.repo';
 import { FlagRepo } from '@backend/domain/flags/repos/flag.repo';
 import { RulesetPublisher } from '@backend/domain/flags/RulesetPublisher';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
@@ -415,6 +417,55 @@ export class FlagService {
   async history(workspaceId: string, projectId: string, environmentId: string) {
     await this.requireEnvironment(workspaceId, projectId, environmentId);
     return await new FlagChangesetRepo(this.deps.db).listByEnvironment(workspaceId, environmentId, HISTORY_LIMIT);
+  }
+
+  /**
+   * Link the environment to the pipeline of one of the project's repos, or unlink it
+   * (#146). Correlation only: its runs show on the environment's timeline, and nothing
+   * is granted or gated by it. Audited.
+   */
+  async setLinkedPipeline(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { environmentId: string; repoId: string | null },
+  ) {
+    const environment = await this.requireEnvironment(workspaceId, projectId, input.environmentId);
+    const timeline = new FlagTimelineRepo(this.deps.db);
+    if (input.repoId !== null && !(await timeline.isLinked(workspaceId, projectId, input.repoId))) {
+      throw new InvalidChangeError('That repository is not linked to this project');
+    }
+    await new FlagEnvironmentRepo(this.deps.db).setLinkedRepo(workspaceId, environment.id, input.repoId);
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.flagLinkedPipelineChanged,
+      subjectType: 'flag_environment',
+      subjectId: environment.id,
+      payload: { before: environment.linkedRepoId, after: input.repoId },
+    });
+  }
+
+  /**
+   * The environment's timeline, newest first (#146): its changesets (at their resolution,
+   * or their proposal while pending) interleaved with the runs of its linked pipeline.
+   */
+  async timeline(workspaceId: string, projectId: string, environmentId: string) {
+    const environment = await this.requireEnvironment(workspaceId, projectId, environmentId);
+    const [changesets, runs] = await Promise.all([
+      new FlagChangesetRepo(this.deps.db).listByEnvironment(workspaceId, environmentId, HISTORY_LIMIT),
+      environment.linkedRepoId === null
+        ? []
+        : new FlagTimelineRepo(this.deps.db).runsOfRepo(workspaceId, environment.linkedRepoId, HISTORY_LIMIT),
+    ]);
+    const entries = [
+      ...changesets.map(changeset => ({
+        kind: 'changeset' as const,
+        at: changeset.resolvedAt ?? changeset.createdAt,
+        changeset,
+      })),
+      ...runs.map(run => ({ kind: 'run' as const, at: run.finishedAt ?? run.createdAt, run })),
+    ];
+    return entries.toSorted((a, b) => b.at.getTime() - a.at.getTime()).slice(0, HISTORY_LIMIT);
   }
 
   /**

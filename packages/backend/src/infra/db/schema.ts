@@ -1590,6 +1590,9 @@ export const flagEnvironments = pgTable(
       .default(sql`'{}'::text[]`),
     // The version of the latest applied changeset; 0 until the first one.
     currentVersion: integer('current_version').notNull().default(0),
+    // The repo whose pipeline deploys what this environment serves (#146): only for
+    // correlation (runs on the timeline). It never grants or bypasses anything.
+    linkedRepoId: uuid('linked_repo_id').references(() => repos.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
   },

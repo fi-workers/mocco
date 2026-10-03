@@ -108,7 +108,7 @@ export default function KillSwitch({ workspaceId, projectId, flagKey, environmen
     await Promise.all([
       utils.flags.list.invalidate(),
       utils.flags.environments.invalidate(),
-      utils.flags.history.invalidate(),
+      utils.flags.timeline.invalidate(),
     ]);
   };
   const kill = trpc.flags.kill.useMutation({

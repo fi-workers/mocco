@@ -103,6 +103,12 @@ If Mocco can't be reached, the provider keeps answering from the last rules it r
 
 A flag that is switched off returns your code's default with the reason `DISABLED`. A flag key Mocco doesn't know returns your default with the error `FLAG_NOT_FOUND`, so a typo never breaks a request.
 
+## See deploys next to flag changes
+
+Each environment's **History** lists its changes. To see your deploys among them, pick the repository whose pipeline deploys what the environment serves in **Show the runs of**, next to the History heading. Its pipeline runs then appear between the flag changes, so you can tell whether a flag was turned on before or after the code that reads it shipped. Select a run's commit to open the run. Linking a pipeline only adds the runs to the History: it changes no rule, switch or approval.
+
+![The History of Production: a pipeline run of acme/mobile above the flag changes](./images/flags-timeline.png)
+
 ## Use flagd instead
 
 Mocco serves standard flagd flag definitions, so a [flagd](https://flagd.dev) instance can sync from Mocco and serve flags to any OpenFeature flagd provider, in any language. Point flagd's HTTP sync at Mocco with the server key:

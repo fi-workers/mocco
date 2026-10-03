@@ -114,7 +114,7 @@ function SegmentForm({
       await Promise.all([
         utils.flags.segments.invalidate(),
         utils.flags.environments.invalidate(),
-        utils.flags.history.invalidate(),
+        utils.flags.timeline.invalidate(),
       ]);
       onDone(result.outcome === 'pending_approval' ? 'The segment change was sent for approval.' : undefined);
     },
@@ -256,7 +256,7 @@ function SegmentRow({ workspaceId, projectId, environment, segment }: Props & { 
       await Promise.all([
         utils.flags.segments.invalidate(),
         utils.flags.environments.invalidate(),
-        utils.flags.history.invalidate(),
+        utils.flags.timeline.invalidate(),
       ]);
     },
   });

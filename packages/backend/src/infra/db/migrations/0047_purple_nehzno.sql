@@ -1,0 +1,2 @@
+ALTER TABLE "mocco_flag_environments" ADD COLUMN "linked_repo_id" uuid;--> statement-breakpoint
+ALTER TABLE "mocco_flag_environments" ADD CONSTRAINT "mocco_flag_environments_linked_repo_id_mocco_repos_id_fk" FOREIGN KEY ("linked_repo_id") REFERENCES "public"."mocco_repos"("id") ON DELETE set null ON UPDATE no action;
