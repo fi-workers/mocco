@@ -1,6 +1,6 @@
 ---
 title: SDK packages
-description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin) and @mocco/ota-cli — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and npm trusted publishing.
+description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin) and @mocco/cli — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and npm trusted publishing.
 type: reference
 status: active
 created: 2026-10-02
@@ -40,7 +40,7 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 | `@mocco/openfeature-server` | Node servers | `MoccoProvider({ secretKey, changeDetection?, pollIntervalMs?, bootstrap? })`, an OpenFeature server provider over flags-core. It listens to `GET /v1/flags/stream` and fetches `GET /v1/flags/ruleset` (ETag) on each change, polling as a fallback (`changeDetection: 'poll'` polls only), and serves the last good ruleset as STALE when Mocco is down. Peer: `@openfeature/server-sdk` |
 | `@mocco/openfeature-web` | browsers | `MoccoWebProvider({ publishableKey })`: OpenFeature's OFREP web provider with Mocco's defaults (Mocco evaluates; the change stream, a 60 s polling fallback, a refresh on tab focus, the last evaluation in `localStorage`). Dependency: `@openfeature/ofrep-web-provider`; peer: `@openfeature/web-sdk` |
 | `@mocco/openfeature-react-native` | React Native apps | `MoccoReactNativeProvider({ publishableKey, storage, appState, EventSource })`: OFREP evaluation with the last answers kept in AsyncStorage (served at launch and offline), a refresh on returning to the foreground, polling while active, and the change stream through `react-native-sse`. The app passes those in, so the package has no native or React Native dependency. Peer: `@openfeature/web-sdk` |
-| `@mocco/ota-cli` | CI | the `mocco-ota` bin (`init`, `publish`, `promote`, `pause`, `rollback`); `@mocco/common` is bundled in |
+| `@mocco/cli` | CI | the `mocco` bin (`init`, `publish`, `promote`, `pause`, `rollback`); `@mocco/common` is bundled in |
 
 ## Building and developing
 

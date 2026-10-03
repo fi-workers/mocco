@@ -27,7 +27,7 @@ On the project's **Overview** tab, add your app with the platform **React Native
 In your app's repository, run:
 
 ```bash
-npx mocco-ota init --manifest-url <the manifest URL>
+npx mocco ota init --manifest-url <the manifest URL>
 ```
 
 It creates a signing key pair and a certificate (`keys/private-key.pem`, git-ignored, and `certs/certificate.pem`) and writes the `updates` block into `app.json`. Build and ship a new binary with it: the certificate is embedded in the binary.
@@ -38,7 +38,7 @@ Set a `runtimeVersion` in `app.json` if you have none. It is what pairs a JS bun
 "runtimeVersion": { "policy": "fingerprint" }
 ```
 
-`fingerprint` hashes the native dependencies and config, so the value changes by itself whenever the native side does — nobody has to remember. `mocco-ota publish` resolves it per platform with your project's own Expo CLI, which makes iOS and Android separate releases (they hash differently). A literal or the `appVersion` policy works too, and both keep the two platforms in one release.
+`fingerprint` hashes the native dependencies and config, so the value changes by itself whenever the native side does — nobody has to remember. `mocco ota publish` resolves it per platform with your project's own Expo CLI, which makes iOS and Android separate releases (they hash differently). A literal or the `appVersion` policy works too, and both keep the two platforms in one release.
 
 ## 2. Register the certificate
 
@@ -69,7 +69,7 @@ steps:
       MOCCO_OTA_SIGNING_KEY: ${{ secrets.MOCCO_OTA_SIGNING_KEY }}
 ```
 
-Elsewhere, create a secret API key with `ota:write` under **API keys** and run `MOCCO_API_KEY=… npx mocco-ota publish --channel staging`. `publish` runs `expo export`, uploads only the files Mocco doesn't have yet, signs the manifest (and pre-signs rollbacks), and waits until Mocco has verified the upload before promoting. Add `--mandatory` for an update the app should apply at the next safe point.
+Elsewhere, create a secret API key with `ota:write` under **API keys** and run `MOCCO_API_KEY=… npx mocco ota publish --channel staging`. `publish` runs `expo export`, uploads only the files Mocco doesn't have yet, signs the manifest (and pre-signs rollbacks), and waits until Mocco has verified the upload before promoting. Add `--mandatory` for an update the app should apply at the next safe point.
 
 ## In the app
 
@@ -90,7 +90,7 @@ export default function App() {
 }
 ```
 
-`<MoccoOta>` reports each launch, including emergency launches (the update crashed and the embedded bundle took over). `useMoccoUpdate()` downloads an available update in the background; a mandatory one (`--mandatory`) applies when the app next comes back to the foreground. `clientId` is any stable per-install id (for example from `expo-application`); Mocco stores only a hash of it. Instead of `mocco-ota init` writing `app.json`, you can use the config plugin: `"plugins": [["@mocco/react-native", { "manifestUrl": "…", "channel": "production" }]]`.
+`<MoccoOta>` reports each launch, including emergency launches (the update crashed and the embedded bundle took over). `useMoccoUpdate()` downloads an available update in the background; a mandatory one (`--mandatory`) applies when the app next comes back to the foreground. `clientId` is any stable per-install id (for example from `expo-application`); Mocco stores only a hash of it. Instead of `mocco ota init` writing `app.json`, you can use the config plugin: `"plugins": [["@mocco/react-native", { "manifestUrl": "…", "channel": "production" }]]`.
 
 ## 5. Roll out and roll back
 

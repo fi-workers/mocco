@@ -1,5 +1,10 @@
-// The `mocco-ota` command line: argument parsing, environment and process glue around
-// `init` and `publish`. Errors print one line saying what to fix and exit 1.
+// The `mocco` command line: argument parsing, environment and process glue around the
+// commands. Errors print one line saying what to fix and exit 1.
+//
+// Commands are grouped by product — `mocco ota publish`, not `mocco publish`. OTA is one
+// product line of several, so a flat surface would be claimed by whichever shipped first
+// and every later one would read as an exception. The group is the whole convention: a
+// new product adds `mocco <product> <verb>` and nothing else moves.
 import { execFile, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,14 +27,14 @@ import type { ExpoConfig } from './app-config';
 import type { OtaPlatform } from '@mocco/common/ota-hosting';
 
 const USAGE = `Usage:
-  mocco-ota init --manifest-url <url> [--channel production] [--keyid root] [--keep-key] [--project .]
+  mocco ota init --manifest-url <url> [--channel production] [--keyid root] [--keep-key] [--project .]
       Make the signing key and certificate, and point app.json at Mocco.
       Copy the manifest URL from the console (OTA hosting → Connect the app).
       --keep-key reuses the key and certificate already in the project and writes only
       the config — for pointing at another Mocco app without a new store build.
 
-  mocco-ota publish [--channel <name> [--rollout <percent>] [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
-                    [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
+  mocco ota publish [--channel <name> [--rollout <percent>] [--wait]] [--oidc] [--platform ios|android|all] [--message <text>]
+                        [--mandatory] [--skip-export] [--dist dist] [--runtime-version <v>]
                     [--signing-key <file>] [--git-sha <sha>] [--project .]
       Export, upload and finalize a signed release; with --channel, promote it once ready
       (--wait waits for approval on a protected channel, within the 15-minute session).
@@ -40,12 +45,12 @@ const USAGE = `Usage:
       GitHub Actions (trusted publishing; the default there when MOCCO_API_KEY is unset).
       Signs with MOCCO_OTA_SIGNING_KEY, --signing-key or ${KEY_FILE}.
 
-  mocco-ota promote --release <id> --channel <name> [--rollout <percent>] [--wait]
+  mocco ota promote --release <id> --channel <name> [--rollout <percent>] [--wait]
       Point a channel at a ready release, or roll it out to a share of devices; a
       protected channel gets an approval request (--wait waits for the decision).
 
-  mocco-ota pause --channel <name>
-  mocco-ota rollback --channel <name> [--platform ios|android] [--to-embedded]
+  mocco ota pause --channel <name>
+  mocco ota rollback --channel <name> [--platform ios|android] [--to-embedded]
       Stop a rollout, or roll back instantly to the pre-signed republish (or to the
       embedded bundle). Never gated. Both need MOCCO_API_KEY.
 `;
@@ -103,7 +108,7 @@ async function signingKeyOf(projectDir: string, flag: string | undefined): Promi
   if (await isPresent(local)) {
     return await readFile(local, 'utf8');
   }
-  throw new CliError(`No signing key: set MOCCO_OTA_SIGNING_KEY, pass --signing-key or run mocco-ota init`);
+  throw new CliError(`No signing key: set MOCCO_OTA_SIGNING_KEY, pass --signing-key or run mocco ota init`);
 }
 
 async function runInit(args: readonly string[]): Promise<void> {
@@ -173,7 +178,7 @@ async function targetOf(projectDir: string, flags: { 'app-id'?: string; 'api-url
   const appId = flags['app-id'] ?? fromUrl?.appId;
   const apiBase = flags['api-url'] ?? fromUrl?.apiBase;
   if (appId === undefined || apiBase === undefined) {
-    throw new CliError('app.json has no Mocco updates.url; run mocco-ota init, or pass --app-id and --api-url');
+    throw new CliError('app.json has no Mocco updates.url; run mocco ota init, or pass --app-id and --api-url');
   }
   return { appId, apiBase, expo };
 }
@@ -202,7 +207,7 @@ function percentOf(value: string | undefined): number {
   return percent;
 }
 
-/** `mocco-ota pause|rollback --channel <name> [--to-embedded]`: stop actions, never gated. */
+/** `mocco ota pause|rollback --channel <name> [--to-embedded]`: stop actions, never gated. */
 async function runStop(command: 'pause' | 'rollback', args: readonly string[]): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
@@ -315,30 +320,46 @@ async function runPublish(args: readonly string[]): Promise<void> {
   }, Promise.resolve());
 }
 
+const HELP = new Set(['help', '--help', '-h']);
+
+/** `mocco ota <verb>`. Returns the exit code, or undefined for a verb it does not know. */
+async function runOta(argv: readonly string[]): Promise<number | undefined> {
+  const [verb, ...rest] = argv;
+  if (verb === 'init') {
+    await runInit(rest);
+    return 0;
+  }
+  if (verb === 'publish') {
+    await runPublish(rest);
+    return 0;
+  }
+  if (verb === 'promote') {
+    await runPromote(rest);
+    return 0;
+  }
+  if (verb === 'pause' || verb === 'rollback') {
+    await runStop(verb, rest);
+    return 0;
+  }
+  return undefined;
+}
+
 /** Run the command line; resolves to the exit code. */
 export async function main(argv: readonly string[]): Promise<number> {
-  const [command, ...rest] = argv;
+  const [group, ...rest] = argv;
   try {
-    if (command === 'init') {
-      await runInit(rest);
-      return 0;
-    }
-    if (command === 'publish') {
-      await runPublish(rest);
-      return 0;
-    }
-    if (command === 'promote') {
-      await runPromote(rest);
-      return 0;
-    }
-    if (command === 'pause' || command === 'rollback') {
-      await runStop(command, rest);
-      return 0;
+    if (group === 'ota') {
+      const code = await runOta(rest);
+      if (code !== undefined) {
+        return code;
+      }
+      process.stdout.write(USAGE);
+      return rest[0] === undefined || HELP.has(rest[0]) ? 0 : 1;
     }
     process.stdout.write(USAGE);
-    return command === undefined || ['help', '--help'].includes(command) ? 0 : 1;
+    return group === undefined || HELP.has(group) ? 0 : 1;
   } catch (error) {
-    process.stderr.write(`mocco-ota: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`mocco: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
 }

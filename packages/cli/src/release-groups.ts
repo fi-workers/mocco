@@ -1,4 +1,4 @@
-// How many releases one `mocco-ota publish` becomes. A release carries one runtime
+// How many releases one `mocco ota publish` becomes. A release carries one runtime
 // version, so the platforms that share one are published together.
 import type { OtaPlatform } from '@mocco/common/ota-hosting';
 

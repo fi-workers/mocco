@@ -1,6 +1,6 @@
 // Promotion from the CLI: wait until Mocco has verified a release's assets, then point
-// an unprotected channel at it — with a secret key (`mocco-ota promote`) or with the
-// upload session that published it (`mocco-ota publish --channel`).
+// an unprotected channel at it — with a secret key (`mocco ota promote`) or with the
+// upload session that published it (`mocco ota publish --channel`).
 import { MoccoApi } from './api';
 import { CliError } from './errors';
 
@@ -52,7 +52,7 @@ async function waitUntilReady(
       throw new CliError(`Release ${releaseId} is ${current.status}; it can't be promoted`);
     }
     if (Date.now() > deadline) {
-      throw new CliError(`Release ${releaseId} is still verifying; promote it later with mocco-ota promote`);
+      throw new CliError(`Release ${releaseId} is still verifying; promote it later with mocco ota promote`);
     }
     await sleep(options.pollMs ?? 2000);
     await poll();
@@ -99,7 +99,7 @@ async function waitForDecision(
   await poll();
 }
 
-/** `mocco-ota promote`: with a secret API key. */
+/** `mocco ota promote`: with a secret API key. */
 export async function promote(options: PromoteOptions): Promise<PromotionResult> {
   const api = new MoccoApi(options.apiBase, options.fetch);
   await waitUntilReady(

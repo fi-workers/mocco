@@ -1,10 +1,10 @@
 {
-  "name": "@mocco/ota-cli",
+  "name": "@mocco/cli",
   "version": "0.2.0",
-  "description": "Publish signed Expo Updates to Mocco-hosted OTA from CI: init, publish, promote, pause, rollback.",
+  "description": "The mocco CLI: publish OTA updates from CI, and work with Mocco from a terminal.",
   "type": "module",
   "bin": {
-    "mocco-ota": "./dist/cli.js"
+    "mocco": "./dist/cli.js"
   },
   "exports": {
     "./init": {
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "dev": "node ./bin/mocco-ota.mjs",
+    "dev": "node ./bin/mocco.mjs",
     "lint": "eslint . --max-warnings 0",
     "ts-check": "tsc --noEmit",
     "test": "vitest run"

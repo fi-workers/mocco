@@ -80,7 +80,7 @@ function fakeMocco(opts: { present?: readonly string[]; head?: { updateId: strin
   return { requests, releaseId, fetch: fetchImpl };
 }
 
-describe('mocco-ota', () => {
+describe('mocco ota', () => {
   let projectDir: string;
 
   const writeExport = async () => {
@@ -126,7 +126,7 @@ describe('mocco-ota', () => {
   };
 
   beforeEach(async () => {
-    projectDir = await mkdtemp(path.join(tmpdir(), 'mocco-ota-cli-'));
+    projectDir = await mkdtemp(path.join(tmpdir(), 'mocco-cli-'));
     await writeFile(path.join(projectDir, 'app.json'), JSON.stringify({ expo: { name: 'Acme', version: '1.0.0' } }));
     await init({ projectDir, manifestUrl: MANIFEST_URL, channel: 'production', keyid: 'root' });
   });

@@ -225,7 +225,7 @@ key system cannot express. It is also the scope `requiredScopes` steps up for.
 
 ## The CLI
 
-**One `mocco`, run with `npx`.** `mocco-ota` becomes `mocco ota …` and stays as a
+**One `mocco`, run with `npx`.** `mocco` becomes `mocco ota …` and stays as a
 deprecated alias for the builds that already call it. Two CLIs for one product is a
 question every user has to answer before they can use either.
 
@@ -233,7 +233,7 @@ question every user has to answer before they can use either.
 npx mocco login                       # device code; a token per profile
 npx mocco runs list --project acme
 npx mocco gate approve <id> --reason "checked the migration"
-npx mocco ota publish --channel production   # what mocco-ota publish is today
+npx mocco ota publish --channel production   # what mocco ota publish is today
 ```
 
 Two ways to authenticate, because the CLI has two callers:
@@ -243,7 +243,7 @@ Two ways to authenticate, because the CLI has two callers:
   only flow that works where a browser cannot be opened, which includes an agent in a
   sandbox. Loopback + PKCE is the safer choice when a browser *is* available, so the
   login tries that first and falls back to the device code.
-- **CI**, through `MOCCO_API_KEY` or GitHub OIDC, exactly as `mocco-ota` does now. It can
+- **CI**, through `MOCCO_API_KEY` or GitHub OIDC, exactly as `mocco` does now. It can
   publish and read; it cannot approve, and says so plainly if asked to.
 
 The polling loop is where device-flow implementations usually go wrong: honour the
@@ -271,7 +271,7 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
    confirmation and the opt-in that enables them.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
-   `@mocco/ota-cli`, which becomes an alias.
+   `@mocco/cli`, which becomes an alias.
 8. **OTA and flags tools** — once the shape has survived a real week.
 
 ## Evaluating it

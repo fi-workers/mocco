@@ -23,10 +23,10 @@ EAS Update already uses `expo-updates`, so the code stays the same.
 
 | EAS Update | Mocco |
 |---|---|
-| `updates.url` `https://u.expo.dev/<project>` | the manifest URL from **OTA hosting** (`mocco-ota init` writes it) |
-| `eas update --channel` | `mocco-ota publish --channel` (or the `ota-publish` action) |
+| `updates.url` `https://u.expo.dev/<project>` | the manifest URL from **OTA hosting** (`mocco ota init` writes it) |
+| `eas update --channel` | `mocco ota publish --channel` (or the `ota-publish` action) |
 | Channels and branches | Channels; a release is promoted between channels, never re-uploaded |
-| Code signing (optional) | Required: `mocco-ota init` makes the key and certificate |
+| Code signing (optional) | Required: `mocco ota init` makes the key and certificate |
 | `eas update:rollback` | **Roll back** (pre-signed, instant) or **Roll back to embedded** |
 | Rollouts | `--rollout <percent>` and the channel controls |
 
@@ -39,7 +39,7 @@ CodePush needs a different client: replace `react-native-code-push` with `expo-u
 | CodePush | Mocco |
 |---|---|
 | Deployment keys (`Staging`, `Production`) | Channels in `expo-channel-name`; protect `production` |
-| `appcenter codepush release-react` | `mocco-ota publish --channel staging` |
+| `appcenter codepush release-react` | `mocco ota publish --channel staging` |
 | `promote Staging Production` | **Promote** (an approval on a protected channel) |
 | `--rollout 20` | `--rollout 20` |
 | `--mandatory` and `installMode` | `--mandatory`; the app applies it at the next safe point |
