@@ -1,6 +1,6 @@
 {
   "name": "@mocco/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The mocco CLI: publish OTA updates from CI, and work with Mocco from a terminal.",
   "type": "module",
   "bin": {
