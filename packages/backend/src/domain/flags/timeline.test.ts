@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -23,9 +25,22 @@ import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { FlagsDomain } from '@backend/domain/flags/compose';
 
+/** A one-file ustar archive, gzipped like GitHub's. */
+async function archiveOf(path: string, content: string): Promise<Uint8Array> {
+  const data = new TextEncoder().encode(content);
+  const header = new Uint8Array(512);
+  header.set(new TextEncoder().encode(`acme-app-sha/${path}`), 0);
+  header.set(new TextEncoder().encode(`${data.length.toString(8).padStart(11, '0')}\0`), 124);
+  header[156] = 0x30;
+  const body = new Uint8Array(Math.ceil(data.length / 512) * 512);
+  body.set(data);
+  return await promisify(gzip)(new Uint8Array([...header, ...body, ...new Uint8Array(1024)]));
+}
+
 describe('flag environment timeline (pglite)', () => {
   let t: TestDb;
   let domain: FlagsDomain;
+  let archiveFetches: string[];
   let workspaceId: string;
   let projectId: string;
   let userId: string;
@@ -92,7 +107,17 @@ describe('flag environment timeline (pglite)', () => {
   beforeEach(async () => {
     t = await createTestDb();
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
-    domain = createFlagsDomain(t.db, { audit, approvals: createApprovalService(t.db, audit) });
+    archiveFetches = [];
+    domain = createFlagsDomain(t.db, {
+      audit,
+      approvals: createApprovalService(t.db, audit),
+      archives: {
+        getArchiveAtCommit: async (_ref, sha) => {
+          archiveFetches.push(sha);
+          return await archiveOf('src/app.ts', "if (await flags.getBooleanValue('checkout', false)) {}");
+        },
+      },
+    });
     workspaceId = expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
     const project = await createProjectDomain(t.db).projects.create(workspaceId, { name: 'App', handle: 'app' });
     projectId = project.id;
@@ -146,5 +171,34 @@ describe('flag environment timeline (pglite)', () => {
 
     const [environment] = await domain.flags.listEnvironments(workspaceId, projectId);
     expect(environment?.linkedRepoId).toBeNull();
+  });
+
+  it('warns when the last deployed commit does not quote the flag key, and caches the scan', async () => {
+    const check = async (flagKey: string) =>
+      await domain.flags.deployCheck(workspaceId, projectId, environmentId, flagKey);
+    await domain.flags.createBooleanFlag(workspaceId, projectId, userId, {
+      key: 'checkout',
+      description: null,
+      lifecycle: 'temporary',
+    });
+    await domain.flags.createBooleanFlag(workspaceId, projectId, userId, {
+      key: 'onboarding',
+      description: null,
+      lifecycle: 'temporary',
+    });
+    const unlinked = await check('checkout');
+    const repoId = await seedRepo(true);
+    await domain.flags.setLinkedPipeline(workspaceId, projectId, userId, { environmentId, repoId });
+    const noDeploy = await check('checkout');
+    await seedRun(repoId, 'ccc333', new Date('2026-02-01T00:00:00Z'));
+
+    const present = await check('checkout');
+    const absent = await check('onboarding');
+
+    expect([unlinked.state, noDeploy.state]).toEqual(['unlinked', 'no_deploy']);
+    expect(present).toMatchObject({ state: 'present', commitSha: 'ccc333', repo: 'acme/app' });
+    expect(absent).toMatchObject({ state: 'absent', commitSha: 'ccc333' });
+    // One download: the second key was scanned with the first.
+    expect(archiveFetches).toEqual(['ccc333']);
   });
 });

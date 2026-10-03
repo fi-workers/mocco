@@ -57,6 +57,11 @@ export interface RepoFileSource {
   ): Promise<string | null>;
 }
 
+/** A repo's code at a commit, as a gzipped tar (#146: which flag keys a deploy contains). */
+export interface RepoArchiveSource {
+  getArchiveAtCommit(ref: { externalAccountId: string; owner: string; name: string }, sha: string): Promise<Uint8Array>;
+}
+
 /** Fires an out-of-band event at a provider repo to kick off external execution
  * (github: a `repository_dispatch`). The neutral seam the GitHub executor adapter
  * (domain/execution/executors/github) triggers through — so the executor never

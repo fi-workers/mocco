@@ -27,6 +27,7 @@ import type {
   CommitSource,
   InstallationVerifier,
   OwnershipResult,
+  RepoArchiveSource,
   RepoFileSource,
   RepoLister,
   RepositoryDispatcher,
@@ -197,7 +198,7 @@ async function mintInstallationOctokit(app: App, externalAccountId: string) {
 
 export function createGitHubProvider(
   config: GitHubConfig,
-): RepoLister & InstallationVerifier & CommitSource & RepoFileSource & RepositoryDispatcher {
+): RepoLister & InstallationVerifier & CommitSource & RepoFileSource & RepoArchiveSource & RepositoryDispatcher {
   const app = new App({
     appId: config.appId,
     privateKey: config.privateKey,
@@ -273,6 +274,21 @@ export function createGitHubProvider(
     },
 
     getFileAtCommit,
+
+    // The tarball endpoint redirects to codeload; octokit follows it and hands back the bytes.
+    async getArchiveAtCommit(ref, sha) {
+      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+      try {
+        const { data } = await octokit.request('GET /repos/{owner}/{repo}/tarball/{ref}', {
+          owner: ref.owner,
+          repo: ref.name,
+          ref: sha,
+        });
+        return new Uint8Array(data as ArrayBuffer);
+      } catch (error) {
+        throw new GithubApiError(`failed to fetch the archive at ${sha}`, octokitStatus(error), { cause: error });
+      }
+    },
 
     async getConfigAtCommit(ref, sha) {
       return await getFileAtCommit(ref, sha, CONFIG_FILE_PATH);

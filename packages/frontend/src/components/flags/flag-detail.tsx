@@ -178,6 +178,13 @@ function EnvironmentEditor({
   const isProtected = environment.changeGate !== null;
   // `.mocco/flags.yml` owns this flag: everything but the kill switch is read-only here.
   const isRepoManaged = flag.managedBy === 'repo';
+  // Turning the flag on: check the code that reads it has shipped (the linked pipeline's last deploy).
+  const isEnabling = draft.enabled && !config.enabled;
+  const deployQuery = trpc.flags.deployCheck.useQuery(
+    { workspaceId, projectId, environmentId: environment.id, flagKey: flag.key },
+    { enabled: isEnabling && environment.linkedRepoId !== null },
+  );
+  const deploy = isEnabling ? deployQuery.data : undefined;
   const save = trpc.flags.applyChangeset.useMutation({
     onSuccess: async result => {
       if (result.outcome === 'pending_approval') {
@@ -271,6 +278,13 @@ function EnvironmentEditor({
         flagKey={flag.key}
         ops={ops}
       />
+      {deploy?.state === 'absent' ? (
+        <Notice tone={Tones.warn} title="Not deployed yet">
+          <span className="font-mono">{flag.key}</span> isn&apos;t in the last deploy of {deploy.repo} (
+          <span className="font-mono">{deploy.commitSha?.slice(0, 7)}</span>): the code that reads it may not have
+          shipped to {environment.name}. Callers without it keep their default.
+        </Notice>
+      ) : null}
       {isProtected && !isRepoManaged ? (
         <label className={labelClass}>
           Reason for the approvers (optional)

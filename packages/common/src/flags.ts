@@ -492,3 +492,26 @@ export const flagTimelineEntrySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('run'), at: z.date(), run: timelineRunSchema }),
 ]);
 export type FlagTimelineEntryDto = z.infer<typeof flagTimelineEntrySchema>;
+
+/** Whether a flag's key is in the code its environment last deployed (#146). */
+export const DeployCheckStates = {
+  /** The environment has no linked pipeline. */
+  unlinked: 'unlinked',
+  /** The linked pipeline has no successful run yet. */
+  noDeploy: 'no_deploy',
+  present: 'present',
+  /** Not in the last deployed commit: code reading the flag may not have shipped. */
+  absent: 'absent',
+  /** The code couldn't be read (no GitHub connection, or the archive was too large). */
+  unknown: 'unknown',
+} as const;
+export type DeployCheckState = (typeof DeployCheckStates)[keyof typeof DeployCheckStates];
+
+export const deployCheckSchema = z.object({
+  state: z.enum(Object.values(DeployCheckStates) as [DeployCheckState, ...DeployCheckState[]]),
+  /** The last successful run of the linked pipeline and its commit, when there is one. */
+  runId: z.uuid().nullable(),
+  commitSha: z.string().nullable(),
+  repo: z.string().nullable(),
+});
+export type DeployCheckDto = z.infer<typeof deployCheckSchema>;

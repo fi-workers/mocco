@@ -337,6 +337,13 @@
       "when": 1790985188682,
       "tag": "0047_purple_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790987912112,
+      "tag": "0048_daily_maverick",
+      "breakpoints": true
     }
   ]
 }
