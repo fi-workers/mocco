@@ -79,6 +79,31 @@ export class RunRepo {
   }
 
   /**
+   * Runs across a workspace, newest first — the read a person makes, where the unit of
+   * access is the workspace they are a member of rather than one project's repositories.
+   * Same filters as `searchInProject`.
+   */
+  async searchInWorkspace(
+    workspaceId: string,
+    filter: { state?: RunState; repoId?: string; limit: number; before?: Date },
+  ) {
+    const conditions = [
+      eq(schema.runs.workspaceId, workspaceId),
+      ...(filter.state === undefined ? [] : [eq(schema.runs.state, filter.state)]),
+      ...(filter.repoId === undefined ? [] : [eq(schema.repos.id, filter.repoId)]),
+      ...(filter.before === undefined ? [] : [lt(schema.runs.createdAt, filter.before)]),
+    ];
+    return await this.db
+      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .where(and(...conditions))
+      .orderBy(desc(schema.runs.createdAt))
+      .limit(filter.limit);
+  }
+
+  /**
    * One run, scoped to a project the same way as `searchInProject` — so a key cannot read
    * a run belonging to a repository its project does not link, even inside its own
    * workspace. Returns undefined rather than throwing: the route answers 404 either way,

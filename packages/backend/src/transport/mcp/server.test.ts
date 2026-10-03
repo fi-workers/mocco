@@ -1,0 +1,25 @@
+// The server builds, and building it registers tools without reaching a service.
+//
+// There is deliberately no assertion here about tool *names*: writing the names out and
+// checking they match themselves tests the test. What each tool does is covered where it
+// is implemented, against a real database.
+import { describe, expect, it } from 'vitest';
+
+import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
+import { createMcpServer } from '@backend/transport/mcp/server';
+
+const refuse = () => {
+  throw new Error('registration must not call a service');
+};
+
+describe('createMcpServer', () => {
+  it('registers its tools without calling anything', () => {
+    const server = createMcpServer({
+      runs: { searchInWorkspace: refuse, get: refuse },
+      approvals: { list: refuse, get: refuse },
+      scope: new WorkspaceScope({ memberships: { listForUser: refuse, isMember: refuse } }),
+    });
+
+    expect(server).toBeDefined();
+  });
+});

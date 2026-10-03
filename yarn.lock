@@ -2533,6 +2533,7 @@ __metadata:
     "@mocco/openfeature-server": "workspace:*"
     "@mocco/openfeature-web": "workspace:*"
     "@mocco/sdk-core": "workspace:*"
+    "@modelcontextprotocol/server": "npm:2.2.0"
     "@octokit/app": "npm:16.1.2"
     "@octokit/plugin-retry": "npm:8.1.0"
     "@octokit/plugin-throttling": "npm:11.0.3"
@@ -2762,6 +2763,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@modelcontextprotocol/core@npm:2.2.0":
+  version: 2.2.0
+  resolution: "@modelcontextprotocol/core@npm:2.2.0"
+  dependencies:
+    zod: "npm:^4.2.0"
+  checksum: 10/3788ecff0b86506aaeaf072acd5ef1000eb9508da5760154cef87dd762718eb7a5e8977222f34406e0f5801176bc6a4b311b537dd4d263998e93884f34adb477
+  languageName: node
+  linkType: hard
+
 "@modelcontextprotocol/sdk@npm:^1.26.0":
   version: 1.29.0
   resolution: "@modelcontextprotocol/sdk@npm:1.29.0"
@@ -2792,6 +2802,16 @@ __metadata:
     zod:
       optional: false
   checksum: 10/ff551b97e06b661f95fec8fd34e112c446e69894a84a9979cdac369fb5de27f0a1a5c1f4e2a1f270cc60f93e54c28a8059a94ca51c3d528d2670ade874b244f9
+  languageName: node
+  linkType: hard
+
+"@modelcontextprotocol/server@npm:2.2.0":
+  version: 2.2.0
+  resolution: "@modelcontextprotocol/server@npm:2.2.0"
+  dependencies:
+    "@modelcontextprotocol/core": "npm:2.2.0"
+    zod: "npm:^4.2.0"
+  checksum: 10/698bb13ff43171b191ac1fddf2c8eed00fc42d2bb79d43a1dfa96efbd459f438a195bdc214c5cbd9bf0fba283c82a459f540d5b77e9f153d5d4ceadad8aae68a
   languageName: node
   linkType: hard
 
@@ -14270,7 +14290,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:4.6.5, zod@npm:^3.25 || ^4.0, zod@npm:^3.25.0 || ^4.0.0, zod@npm:^4.5.4":
+"zod@npm:4.6.5, zod@npm:^3.25 || ^4.0, zod@npm:^3.25.0 || ^4.0.0, zod@npm:^4.2.0, zod@npm:^4.5.4":
   version: 4.6.5
   resolution: "zod@npm:4.6.5"
   checksum: 10/db004952e4dc6eab38b70f0cdef9251a65da84f5d08c5a0ef85e2590cfa9c477544ce734161ff5c05f89a15f0967137607a7feb16716195e04965f030db47213

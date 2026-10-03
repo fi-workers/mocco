@@ -558,6 +558,12 @@ export class RunService {
     return await this.deps.runs.searchInProject(workspaceId, projectId, filter);
   }
 
+  /** Runs across a workspace, newest first — the read a person makes (MCP), where the
+   * unit of access is workspace membership rather than a project's repositories. */
+  async searchInWorkspace(workspaceId: string, filter: ProjectRunFilter) {
+    return await this.deps.runs.searchInWorkspace(workspaceId, filter);
+  }
+
   /**
    * One run with its steps and gates, scoped to a project the same way. Returns undefined
    * for a run the project does not reach — including one in the same workspace — so a key
