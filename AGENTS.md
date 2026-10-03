@@ -13,7 +13,7 @@ packages/backend/   @mocco/backend   src/ — domain · infra · transport (see 
 packages/frontend/  @mocco/frontend  src/ — Next.js Pages Router UI (pages/api mounts the backend)
 packages/common/    @mocco/common    src/ — shared types & zod schemas
 packages/sdk-*/     @mocco/sdk-core · js · node · react-native — published MIT SDKs (docs/reference/sdk.md)
-packages/ota-cli/   @mocco/ota-cli   the mocco-ota CLI for hosted OTA (published)
+packages/cli/   @mocco/cli   the mocco-ota CLI for hosted OTA (published)
 docs/               llm-wiki: ADRs (immutable) · concepts · guides · reference · meta
 docs/prototype/     non-functional click-through (design reference, plain HTML/JS)
 infra/local/        traefik + mkcert for https://www.mocco.work local dev

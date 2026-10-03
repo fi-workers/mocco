@@ -23,12 +23,33 @@ inputs:
     description: The release message. Defaults to the commit subject.
     required: false
   cli-version:
-    description: The @mocco/ota-cli version to run.
+    description: >-
+      The @mocco/cli version to run, or `source` to build it from this repository at the
+      ref this action was taken from — for a Mocco whose packages aren't on a registry the
+      job can reach (a private deployment, or before the first publish).
     required: false
     default: latest
 runs:
   using: composite
   steps:
+    # `source` builds the CLI from the same commit as this action, so the two can't drift.
+    - name: Check out Mocco
+      if: inputs.cli-version == 'source'
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        repository: ${{ github.action_repository || 'fi-workers/mocco' }}
+        ref: ${{ github.action_ref || 'main' }}
+        path: .mocco-cli
+
+    - name: Build the CLI
+      if: inputs.cli-version == 'source'
+      shell: bash
+      working-directory: .mocco-cli
+      run: |
+        corepack enable
+        yarn install --immutable
+        yarn cli build
+
     - name: Publish
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -38,9 +59,14 @@ runs:
         INPUT_PLATFORM: ${{ inputs.platform }}
         INPUT_MESSAGE: ${{ inputs.message }}
         CLI_VERSION: ${{ inputs.cli-version }}
+        CLI_CHECKOUT: ${{ github.workspace }}/.mocco-cli
       run: |
         args=(publish --oidc --platform "$INPUT_PLATFORM")
         if [ -n "$INPUT_APP_ID" ]; then args+=(--app-id "$INPUT_APP_ID"); fi
         if [ -n "$INPUT_CHANNEL" ]; then args+=(--channel "$INPUT_CHANNEL"); fi
         if [ -n "$INPUT_MESSAGE" ]; then args+=(--message "$INPUT_MESSAGE"); fi
-        npx --yes "@mocco/ota-cli@${CLI_VERSION}" "${args[@]}"
+        if [ "$CLI_VERSION" = "source" ]; then
+          node "$CLI_CHECKOUT/packages/cli/dist/cli.js" ota "${args[@]}"
+        else
+          npx --yes "@mocco/cli@${CLI_VERSION}" ota "${args[@]}"
+        fi

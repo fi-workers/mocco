@@ -1,4 +1,6 @@
-# @mocco/ota-cli
+# @mocco/cli
+
+> Renamed from `@mocco/ota-cli` before its first publish; the entries below predate the rename.
 
 ## 0.2.0
 

@@ -49,7 +49,7 @@ jobs:
           - lint-e2e
           - lint-sdk
           - test-common
-          - test-ota-cli
+          - test-cli
           - test-sdk
           - db:drift
           - schema:drift

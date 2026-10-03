@@ -2513,6 +2513,24 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@mocco/cli@workspace:packages/cli":
+  version: 0.0.0-use.local
+  resolution: "@mocco/cli@workspace:packages/cli"
+  dependencies:
+    "@expo/code-signing-certificates": "npm:0.0.7"
+    "@mocco/common": "workspace:*"
+    "@mocco/sdk-core": "workspace:*"
+    eslint: "npm:10.6.0"
+    tsup: "npm:8.5.1"
+    tsx: "npm:4.22.4"
+    typescript: "npm:5.9.3"
+    vitest: "npm:4.1.9"
+    zod: "npm:4.6.5"
+  bin:
+    mocco: ./dist/cli.js
+  languageName: unknown
+  linkType: soft
+
 "@mocco/common@workspace:*, @mocco/common@workspace:packages/common":
   version: 0.0.0-use.local
   resolution: "@mocco/common@workspace:packages/common"
@@ -2663,24 +2681,6 @@ __metadata:
     vitest: "npm:4.1.9"
   peerDependencies:
     "@openfeature/web-sdk": ^1.10.0
-  languageName: unknown
-  linkType: soft
-
-"@mocco/ota-cli@workspace:packages/ota-cli":
-  version: 0.0.0-use.local
-  resolution: "@mocco/ota-cli@workspace:packages/ota-cli"
-  dependencies:
-    "@expo/code-signing-certificates": "npm:0.0.7"
-    "@mocco/common": "workspace:*"
-    "@mocco/sdk-core": "workspace:*"
-    eslint: "npm:10.6.0"
-    tsup: "npm:8.5.1"
-    tsx: "npm:4.22.4"
-    typescript: "npm:5.9.3"
-    vitest: "npm:4.1.9"
-    zod: "npm:4.6.5"
-  bin:
-    mocco-ota: ./dist/cli.js
   languageName: unknown
   linkType: soft
 

@@ -1,4 +1,4 @@
-// `mocco-ota init`: make the code-signing key pair and the self-signed certificate the
+// `mocco ota init`: make the code-signing key pair and the self-signed certificate the
 // app embeds, and point app.json at Mocco (OTA design §2). The private key stays local
 // (store it as a CI secret); the certificate is registered in the console.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';

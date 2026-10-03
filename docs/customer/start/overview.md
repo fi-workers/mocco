@@ -53,7 +53,7 @@ A public help site for your product. Write articles in Markdown with a live prev
 
 ## API keys and SDKs
 
-Your apps, servers and CI talk to Mocco with a project's API keys: a **publishable** key for web and React Native apps, a **secret** key for servers and CI. The SDKs wrap that API for each platform: `@mocco/js` for browsers, `@mocco/node` for servers, `@mocco/react-native` for React Native apps, the OpenFeature providers for feature flags, and `@mocco/ota-cli` for publishing OTA updates from CI. See [API keys](./api-keys.md).
+Your apps, servers and CI talk to Mocco with a project's API keys: a **publishable** key for web and React Native apps, a **secret** key for servers and CI. The SDKs wrap that API for each platform: `@mocco/js` for browsers, `@mocco/node` for servers, `@mocco/react-native` for React Native apps, the OpenFeature providers for feature flags, and `@mocco/cli` for publishing OTA updates from CI. See [API keys](./api-keys.md).
 
 ## Coming later
 

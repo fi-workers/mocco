@@ -1,4 +1,4 @@
-// `mocco-ota publish`: export (optionally), hash, upload only what Mocco lacks, sign
+// `mocco ota publish`: export (optionally), hash, upload only what Mocco lacks, sign
 // every body a device will verify, and finalize (OTA design §6.3).
 import { randomUUID } from 'node:crypto';
 
