@@ -51,6 +51,8 @@ related:
 - [0024 — Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs (draft)](./adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)
 - [0025 — Every product surface ships MCP tools (draft)](./adr/0025-every-product-surface-ships-mcp-tools.md)
 - [0026 — Position Mocco around the production record (superseded by 0029)](./adr/0026-position-mocco-around-the-production-record.md)
+- [0027 — Status probes are pull-based agents (draft)](./adr/0027-status-probes-are-pull-based-agents.md)
+- [0028 — Public status pages are static snapshots on object storage (draft)](./adr/0028-status-pages-are-static-snapshots.md)
 - [0029 — Mocco is everything a product needs, except the code (draft)](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)
 
 ## Implementation
