@@ -2,8 +2,8 @@
 // `root/<key>`, with a `<key>.meta.json` sidecar for the content type, cache control and
 // visibility. Clients reach it through the signed internal route
 // (/api/ext/internal/storage/*, transport/ext/storage.ts), which calls `put`/`get`/`head`.
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { Visibilities, visibilitySchema } from '@mocco/common/storage';
@@ -36,6 +36,14 @@ export function isSafeKey(key: string): boolean {
     key.length <= 1024 &&
     segments.every(segment => KEY_SEGMENT.test(segment) && segment !== '.' && segment !== '..')
   );
+}
+
+/** Write through a temporary file and rename it into place, so a reader (this route, or a plain
+ * static server over the directory) never sees a half-written file. */
+async function writeAtomically(file: string, data: Uint8Array | string): Promise<void> {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await writeFile(temporary, data);
+  await rename(temporary, file);
 }
 
 export interface FilesystemObjectStoreOptions {
@@ -97,7 +105,7 @@ export class FilesystemObjectStore implements ObjectStore {
     const file = this.pathOf(key);
     await mkdir(path.dirname(file), { recursive: true });
     const etag = createHash('sha256').update(body).digest('hex').slice(0, 32);
-    await writeFile(file, body);
+    await writeAtomically(file, body);
     const meta: ObjectMeta = {
       contentType: opts.contentType,
       ...(opts.cacheControl !== undefined && { cacheControl: opts.cacheControl }),
@@ -105,7 +113,7 @@ export class FilesystemObjectStore implements ObjectStore {
       etag,
       size: body.byteLength,
     };
-    await writeFile(`${file}${META_SUFFIX}`, JSON.stringify(meta));
+    await writeAtomically(`${file}${META_SUFFIX}`, JSON.stringify(meta));
     return { etag };
   }
 

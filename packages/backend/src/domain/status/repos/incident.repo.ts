@@ -1,4 +1,4 @@
-import { IncidentStatuses } from '@mocco/common/status';
+import { IncidentStatuses, IncidentVisibilities } from '@mocco/common/status';
 import { and, desc, eq, ne } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
@@ -24,6 +24,26 @@ export class IncidentRepo {
       .where(and(scoped(scope), eq(i.pageId, pageId), isOpenOnly ? ne(i.status, IncidentStatuses.resolved) : undefined))
       .orderBy(desc(i.startedAt))
       .limit(200);
+  }
+
+  /** The page's published incidents for the public snapshot: every open one, and the newest
+   * `resolvedLimit` resolved ones. Drafts never come back from here. */
+  async listPublished(scope: StatusScope, pageId: string, resolvedLimit: number) {
+    const published = and(scoped(scope), eq(i.pageId, pageId), eq(i.visibility, IncidentVisibilities.published));
+    const [open, resolved] = await Promise.all([
+      this.db
+        .select()
+        .from(i)
+        .where(and(published, ne(i.status, IncidentStatuses.resolved)))
+        .orderBy(desc(i.startedAt)),
+      this.db
+        .select()
+        .from(i)
+        .where(and(published, eq(i.status, IncidentStatuses.resolved)))
+        .orderBy(desc(i.resolvedAt))
+        .limit(resolvedLimit),
+    ]);
+    return { open, resolved };
   }
 
   async find(scope: StatusScope, id: string): Promise<IncidentRow | undefined> {

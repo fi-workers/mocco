@@ -59,6 +59,13 @@ export const INCIDENT_TRANSITIONS: Record<IncidentStatus, readonly IncidentStatu
   [IncidentStatuses.resolved]: [],
 };
 
+/**
+ * Whether an incident is on the public page. Incidents an operator opens are published; a draft
+ * (monitor-origin incidents, later) stays in the console and never reaches the public snapshot.
+ */
+export const IncidentVisibilities = { draft: 'draft', published: 'published' } as const;
+export type IncidentVisibility = (typeof IncidentVisibilities)[keyof typeof IncidentVisibilities];
+
 export const IncidentSeverities = { minor: 'minor', major: 'major', critical: 'critical' } as const;
 export type IncidentSeverity = (typeof IncidentSeverities)[keyof typeof IncidentSeverities];
 export const incidentSeveritySchema = z.enum(

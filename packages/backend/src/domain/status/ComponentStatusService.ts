@@ -13,11 +13,16 @@ import type { ComponentStatus } from '@mocco/common/status';
 export class ComponentStatusService {
   constructor(private readonly deps: { db: Db }) {}
 
-  /** The page's components, in order, each with the status it shows. */
-  async forPage(scope: StatusScope, pageId: string): Promise<(ComponentRow & { displayedStatus: ComponentStatus })[]> {
+  /** The page's components, in order, each with the status it shows. The public page passes
+   * `isPublishedOnly`, so a draft incident can't change what visitors see. */
+  async forPage(
+    scope: StatusScope,
+    pageId: string,
+    isPublishedOnly = false,
+  ): Promise<(ComponentRow & { displayedStatus: ComponentStatus })[]> {
     const [components, impacts, inMaintenance] = await Promise.all([
       new ComponentRepo(this.deps.db).listForPage(scope, pageId),
-      new IncidentComponentRepo(this.deps.db).openImpactsForPage(scope, pageId),
+      new IncidentComponentRepo(this.deps.db).openImpactsForPage(scope, pageId, isPublishedOnly),
       new MaintenanceComponentRepo(this.deps.db).inProgressComponentIds(scope, pageId),
     ]);
     const maintained = new Set(inMaintenance);

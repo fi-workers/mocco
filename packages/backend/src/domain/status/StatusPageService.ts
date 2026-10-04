@@ -11,6 +11,7 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
 import type { StatusScope } from '@backend/domain/status/scope';
+import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { Db } from '@backend/infra/db/types';
 import type { ComponentGroupInput, ComponentInput, ComponentStatus, StatusPageInput } from '@mocco/common/status';
 
@@ -18,6 +19,8 @@ export interface StatusPageDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   componentStatus: ComponentStatusService;
+  /** Marks the public page dirty with each change and requests a publish. */
+  snapshots: Pick<SnapshotScheduler, 'change'>;
 }
 
 /** Map the slug's unique index to the domain error; rethrow anything else. */
@@ -72,7 +75,12 @@ export class StatusPageService {
   async createPage(scope: StatusScope, actorUserId: string, input: StatusPageInput) {
     const page = await slugChecked(
       input.slug,
-      async () => await new StatusPageRepo(this.deps.db).insert({ ...scope, ...input }),
+      async () =>
+        await this.deps.snapshots.change(async (tx, touch) => {
+          const created = await new StatusPageRepo(tx).insert({ ...scope, ...input });
+          touch({ workspaceId: scope.workspaceId, pageId: created.id });
+          return created;
+        }),
     );
     await this.deps.audit.record(scope.workspaceId, {
       actorUserId,
@@ -87,7 +95,14 @@ export class StatusPageService {
   async updatePage(scope: StatusScope, pageId: string, input: StatusPageInput) {
     const page = await slugChecked(
       input.slug,
-      async () => await new StatusPageRepo(this.deps.db).update(scope, pageId, input),
+      async () =>
+        await this.deps.snapshots.change(async (tx, touch) => {
+          const updated = await new StatusPageRepo(tx).update(scope, pageId, input);
+          if (updated !== undefined) {
+            touch({ workspaceId: scope.workspaceId, pageId });
+          }
+          return updated;
+        }),
     );
     if (page === undefined) {
       throw new StatusEntityNotFoundError('page', pageId);
@@ -110,17 +125,26 @@ export class StatusPageService {
 
   async createGroup(scope: StatusScope, pageId: string, input: ComponentGroupInput) {
     await this.requirePage(scope, pageId);
-    const groups = new ComponentGroupRepo(this.deps.db);
-    return await groups.insert({
-      ...scope,
-      pageId,
-      name: input.name,
-      position: input.position ?? (await groups.nextPosition(pageId)),
+    return await this.deps.snapshots.change(async (tx, touch) => {
+      const groups = new ComponentGroupRepo(tx);
+      touch({ workspaceId: scope.workspaceId, pageId });
+      return await groups.insert({
+        ...scope,
+        pageId,
+        name: input.name,
+        position: input.position ?? (await groups.nextPosition(pageId)),
+      });
     });
   }
 
   async updateGroup(scope: StatusScope, groupId: string, input: ComponentGroupInput) {
-    const group = await new ComponentGroupRepo(this.deps.db).update(scope, groupId, input);
+    const group = await this.deps.snapshots.change(async (tx, touch) => {
+      const updated = await new ComponentGroupRepo(tx).update(scope, groupId, input);
+      if (updated !== undefined) {
+        touch({ workspaceId: scope.workspaceId, pageId: updated.pageId });
+      }
+      return updated;
+    });
     if (group === undefined) {
       throw new StatusEntityNotFoundError('group', groupId);
     }
@@ -129,7 +153,15 @@ export class StatusPageService {
 
   /** Delete the group; its components stay on the page, ungrouped. */
   async deleteGroup(scope: StatusScope, groupId: string): Promise<void> {
-    if (!(await new ComponentGroupRepo(this.deps.db).delete(scope, groupId))) {
+    const group = await new ComponentGroupRepo(this.deps.db).find(scope, groupId);
+    if (group === undefined) {
+      throw new StatusEntityNotFoundError('group', groupId);
+    }
+    const isDeleted = await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: group.pageId });
+      return await new ComponentGroupRepo(tx).delete(scope, groupId);
+    });
+    if (!isDeleted) {
       throw new StatusEntityNotFoundError('group', groupId);
     }
   }
@@ -137,14 +169,17 @@ export class StatusPageService {
   async createComponent(scope: StatusScope, pageId: string, input: ComponentInput) {
     await this.requirePage(scope, pageId);
     await this.assertGroupOnPage(scope, pageId, input.groupId);
-    const components = new ComponentRepo(this.deps.db);
-    return await components.insert({
-      ...scope,
-      pageId,
-      name: input.name,
-      description: input.description ?? null,
-      groupId: input.groupId ?? null,
-      position: input.position ?? (await components.nextPosition(pageId)),
+    return await this.deps.snapshots.change(async (tx, touch) => {
+      const components = new ComponentRepo(tx);
+      touch({ workspaceId: scope.workspaceId, pageId });
+      return await components.insert({
+        ...scope,
+        pageId,
+        name: input.name,
+        description: input.description ?? null,
+        groupId: input.groupId ?? null,
+        position: input.position ?? (await components.nextPosition(pageId)),
+      });
     });
   }
 
@@ -155,11 +190,14 @@ export class StatusPageService {
       throw new StatusEntityNotFoundError('component', componentId);
     }
     await this.assertGroupOnPage(scope, component.pageId, input.groupId);
-    const updated = await components.update(scope, componentId, {
-      name: input.name,
-      ...(input.description !== undefined && { description: input.description }),
-      ...(input.groupId !== undefined && { groupId: input.groupId }),
-      ...(input.position !== undefined && { position: input.position }),
+    const updated = await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: component.pageId });
+      return await new ComponentRepo(tx).update(scope, componentId, {
+        name: input.name,
+        ...(input.description !== undefined && { description: input.description }),
+        ...(input.groupId !== undefined && { groupId: input.groupId }),
+        ...(input.position !== undefined && { position: input.position }),
+      });
     });
     if (updated === undefined) {
       throw new StatusEntityNotFoundError('component', componentId);
@@ -170,9 +208,14 @@ export class StatusPageService {
   /** Set the status an operator reports by hand (audited). Open incidents and maintenance
    * still count toward the status the component shows. */
   async setComponentStatus(scope: StatusScope, actorUserId: string, componentId: string, status: ComponentStatus) {
-    const components = new ComponentRepo(this.deps.db);
-    const before = await components.find(scope, componentId);
-    const updated = before === undefined ? undefined : await components.update(scope, componentId, { status });
+    const before = await new ComponentRepo(this.deps.db).find(scope, componentId);
+    const updated =
+      before === undefined
+        ? undefined
+        : await this.deps.snapshots.change(async (tx, touch) => {
+            touch({ workspaceId: scope.workspaceId, pageId: before.pageId });
+            return await new ComponentRepo(tx).update(scope, componentId, { status });
+          });
     if (before === undefined || updated === undefined) {
       throw new StatusEntityNotFoundError('component', componentId);
     }
@@ -187,7 +230,15 @@ export class StatusPageService {
   }
 
   async deleteComponent(scope: StatusScope, componentId: string): Promise<void> {
-    if (!(await new ComponentRepo(this.deps.db).delete(scope, componentId))) {
+    const component = await new ComponentRepo(this.deps.db).find(scope, componentId);
+    if (component === undefined) {
+      throw new StatusEntityNotFoundError('component', componentId);
+    }
+    const isDeleted = await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: component.pageId });
+      return await new ComponentRepo(tx).delete(scope, componentId);
+    });
+    if (!isDeleted) {
       throw new StatusEntityNotFoundError('component', componentId);
     }
   }

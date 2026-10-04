@@ -13,6 +13,7 @@ import { IncidentRepo } from '@backend/domain/status/repos/incident.repo';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { StatusScope } from '@backend/domain/status/scope';
+import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Db } from '@backend/infra/db/types';
 import type { AffectedComponent, IncidentCreateInput, IncidentStatus, IncidentUpdateInput } from '@mocco/common/status';
@@ -21,6 +22,8 @@ export interface IncidentDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   pages: Pick<StatusPageService, 'requirePage'>;
+  /** Marks the public page dirty with each change and requests a publish. */
+  snapshots: Pick<SnapshotScheduler, 'change'>;
   now?: () => Date;
 }
 
@@ -91,7 +94,8 @@ export class IncidentService {
     await this.deps.pages.requirePage(scope, input.pageId);
     await this.assertComponentsOnPage(scope, input.pageId, input.components);
     const now = this.now();
-    const incident = await this.deps.db.transaction(async tx => {
+    const incident = await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: input.pageId });
       const created = await new IncidentRepo(tx).insert({
         ...scope,
         pageId: input.pageId,
@@ -130,12 +134,13 @@ export class IncidentService {
   /** Post an update to the timeline, moving the incident to `input.status` if that's a legal step. */
   async postUpdate(scope: StatusScope, actorUserId: string, incidentId: string, input: IncidentUpdateInput) {
     const now = this.now();
-    const { incident, from, update } = await this.deps.db.transaction(async tx => {
+    const { incident, from, update } = await this.deps.snapshots.change(async (tx, touch) => {
       const incidents = new IncidentRepo(tx);
       const current = await incidents.findForUpdate(scope, incidentId);
       if (current === undefined) {
         throw new StatusEntityNotFoundError('incident', incidentId);
       }
+      touch({ workspaceId: scope.workspaceId, pageId: current.pageId });
       const updated = await incidents.update(scope, incidentId, transitionIncident(current, input.status, now));
       const posted = await new IncidentUpdateRepo(tx).insert({
         workspaceId: scope.workspaceId,
@@ -164,7 +169,8 @@ export class IncidentService {
   ) {
     const incident = await this.require(scope, incidentId);
     await this.assertComponentsOnPage(scope, incident.pageId, components);
-    await this.deps.db.transaction(async tx => {
+    await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: incident.pageId });
       await new IncidentComponentRepo(tx).replace(scope.workspaceId, incidentId, components);
     });
     await this.deps.audit.record(scope.workspaceId, {

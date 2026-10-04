@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -19,6 +19,18 @@ export class IncidentUpdateRepo {
       .select()
       .from(u)
       .where(and(eq(u.workspaceId, workspaceId), eq(u.incidentId, incidentId)))
+      .orderBy(asc(u.createdAt));
+  }
+
+  /** The timelines of `incidentIds`, oldest first. */
+  async listForIncidents(workspaceId: string, incidentIds: readonly string[]): Promise<IncidentUpdateRow[]> {
+    if (incidentIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(u)
+      .where(and(eq(u.workspaceId, workspaceId), inArray(u.incidentId, [...incidentIds])))
       .orderBy(asc(u.createdAt));
   }
 
