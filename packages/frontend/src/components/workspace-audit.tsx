@@ -1,5 +1,6 @@
+import { auditActionLabels } from '@mocco/common/audit';
+
 import { Button } from '@frontend/components/ui/button';
-import { auditActionLabels } from '@frontend/lib/audit-labels';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { trpc } from '@frontend/lib/trpc';
 

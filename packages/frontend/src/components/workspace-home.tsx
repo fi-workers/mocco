@@ -1,3 +1,4 @@
+import { auditActionLabels } from '@mocco/common/audit';
 import { FlagApprovalSubjects } from '@mocco/common/flags';
 import { ApprovalStates } from '@mocco/common/governance';
 import { OtaApprovalSubjects } from '@mocco/common/ota';
@@ -7,7 +8,6 @@ import Link from 'next/link';
 
 import { Ago, Notice, Spinner, Tones } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
-import { auditActionLabels } from '@frontend/lib/audit-labels';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
