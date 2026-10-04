@@ -4,7 +4,7 @@ description: How Mocco gates deploys — connect GitHub, describe a pipeline of 
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, governance, gates, approvals, github, guide]
@@ -26,7 +26,7 @@ Deploy governance is always on in every workspace. The pieces are:
 
 - **Repositories** on the workspace's **Deploys** page: the GitHub repositories Mocco watches.
 - **A `.mocco.yml` file** in each repository: its pipeline, with steps and gates.
-- **Commits** and **runs**: each commit on the watched branch can be run through its pipeline, and the run page is where approvers act.
+- **Commits** and **runs**: each commit on the watched branch can be run through its pipeline, and the run page is where approvers act. The **Deploys** page lists the latest runs across repositories, with their state (a run waiting at a gate also shows on the workspace **Home**).
 - **Roles** and **Credential releases** on the **Access** page: who approves, and which gate unlocks which credential.
 
 ## Connect GitHub

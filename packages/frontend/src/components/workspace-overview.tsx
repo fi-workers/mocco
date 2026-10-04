@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 
 import { ConnectGithubButton } from '@frontend/components/connect-github-button';
+import { RecentRuns } from '@frontend/components/recent-runs';
 import { RepoList } from '@frontend/components/repo-list';
 import { trpc } from '@frontend/lib/trpc';
 
@@ -14,9 +15,9 @@ function noticeFor(query: ReturnType<typeof useRouter>['query']): string | null 
   return null;
 }
 
-// A workspace's Deploys section: connect a GitHub App, then register repositories
-// and choose the branch mocco watches. Read-only observation for now — deploys are
-// gated in later slices.
+// A workspace's Deploys section: the latest pipeline runs across its repositories, then
+// the repositories themselves — connect a GitHub App, register repositories and choose
+// the branch Mocco watches.
 export default function WorkspaceOverview({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   // retry:false — a PRECONDITION_FAILED (GitHub App not configured) or NOT_FOUND is
@@ -40,14 +41,19 @@ export default function WorkspaceOverview({ workspaceId }: { workspaceId: string
         </section>
       );
     }
-    return <RepoList workspaceId={workspaceId} connections={connections} />;
+    return (
+      <>
+        <RecentRuns workspaceId={workspaceId} />
+        <RepoList workspaceId={workspaceId} connections={connections} />
+      </>
+    );
   })();
 
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight">Deploys</h1>
-        <p className="text-sm text-muted-foreground">The repositories Mocco watches, and the deploys it gates.</p>
+        <p className="text-sm text-muted-foreground">The latest pipeline runs, and the repositories Mocco watches.</p>
       </header>
 
       {notice ? <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm">{notice}</p> : null}
