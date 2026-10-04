@@ -54,7 +54,7 @@ workspace, and a missing row means the defaults.
 - The switch grants nothing by itself. A deciding tool still acts as its caller, through
   the same service the console uses, and that person's roles are the only authority.
 - In the console it is **Settings → Agents → Allow agents to decide**.
-- `mocco_approvals_vote` reads it on every call and refuses while it is off; the setting is
+- `mocco_approvals_vote` and `mocco_gates_resume` read it on every call and refuse while it is off; the setting is
   not cached in a token, so switching it off takes effect on the next call.
 
 ## Deferred (by design)

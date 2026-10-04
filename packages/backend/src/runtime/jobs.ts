@@ -56,6 +56,8 @@ import { SigningService } from '@backend/domain/ota/SigningService';
 import { UploadService } from '@backend/domain/ota/UploadService';
 import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
+import { createStatusDomain } from '@backend/domain/status/compose';
+import { createStatusHandlers, statusSchedules } from '@backend/domain/status/jobs';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
 import { createStorageHandlers, storageGcSchedule } from '@backend/domain/storage/jobs';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
@@ -163,6 +165,10 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       }),
     }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
+    ...createStatusHandlers({
+      maintenances: createStatusDomain(db, { audit, now: deps.now }).statusMaintenances,
+      now: deps.now,
+    }),
     ...createOtaHandlers({
       uploads,
       metrics: new OtaMetricsService({
@@ -191,6 +197,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       pruneUploadSessionsSchedule,
       ...otaMetricsSchedules,
       ...flagSchedules,
+      ...statusSchedules,
       ...(deps.storage === undefined ? [] : [storageGcSchedule]),
     ],
   });

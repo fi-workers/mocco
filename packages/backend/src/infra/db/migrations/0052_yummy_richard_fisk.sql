@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_status_components" ADD CONSTRAINT "mocco_status_components_id_workspace_uq" UNIQUE("id","workspace_id");

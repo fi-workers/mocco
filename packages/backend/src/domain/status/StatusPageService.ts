@@ -8,6 +8,7 @@ import { StatusPageRepo } from '@backend/domain/status/repos/page.repo';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
 import type { StatusScope } from '@backend/domain/status/scope';
 import type { Db } from '@backend/infra/db/types';
@@ -16,6 +17,7 @@ import type { ComponentGroupInput, ComponentInput, ComponentStatus, StatusPageIn
 export interface StatusPageDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
+  componentStatus: ComponentStatusService;
 }
 
 /** Map the slug's unique index to the domain error; rethrow anything else. */
@@ -57,12 +59,12 @@ export class StatusPageService {
     return page;
   }
 
-  /** The page with its groups and components, in order. */
+  /** The page with its groups and its components, each with the status it shows. */
   async getPage(scope: StatusScope, pageId: string) {
     const page = await this.requirePage(scope, pageId);
     const [groups, components] = await Promise.all([
       new ComponentGroupRepo(this.deps.db).listForPage(scope, pageId),
-      new ComponentRepo(this.deps.db).listForPage(scope, pageId),
+      this.deps.componentStatus.forPage(scope, pageId),
     ]);
     return { page, groups, components };
   }
@@ -93,7 +95,7 @@ export class StatusPageService {
     return page;
   }
 
-  /** Delete the page with its groups and components. */
+  /** Delete the page with its components, incidents and maintenance windows. */
   async deletePage(scope: StatusScope, actorUserId: string, pageId: string): Promise<void> {
     const page = await this.requirePage(scope, pageId);
     await new StatusPageRepo(this.deps.db).delete(scope, pageId);
@@ -165,7 +167,8 @@ export class StatusPageService {
     return updated;
   }
 
-  /** Set the status an operator reports by hand (audited). */
+  /** Set the status an operator reports by hand (audited). Open incidents and maintenance
+   * still count toward the status the component shows. */
   async setComponentStatus(scope: StatusScope, actorUserId: string, componentId: string, status: ComponentStatus) {
     const components = new ComponentRepo(this.deps.db);
     const before = await components.find(scope, componentId);

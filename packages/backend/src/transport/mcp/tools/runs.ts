@@ -95,8 +95,12 @@ export async function getRun(deps: RunToolDeps, args: GetRunArgs, userId: string
     createdAt: run.createdAt,
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
-    // The single most useful fact about a paused run, stated rather than inferred.
-    waitingOn: waiting === undefined ? null : { gate: waiting.name, requirements: waiting.requirements },
+    // The single most useful fact about a paused run, stated rather than inferred. The
+    // item index is what `mocco_gates_resume` names the gate by.
+    waitingOn:
+      waiting === undefined
+        ? null
+        : { gate: waiting.name, itemIndex: waiting.itemIndex, requirements: waiting.requirements },
     steps: steps.map(step => ({
       index: step.stepIndex,
       name: step.name,

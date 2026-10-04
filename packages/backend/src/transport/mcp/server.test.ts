@@ -17,6 +17,7 @@ describe('createMcpServer', () => {
     const server = createMcpServer({
       runs: { searchInWorkspace: refuse, get: refuse },
       approvals: { list: refuse, get: refuse, vote: refuse },
+      gates: { getPending: refuse, resume: refuse },
       scope: new WorkspaceScope({ memberships: { listForUser: refuse, isMember: refuse } }),
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,

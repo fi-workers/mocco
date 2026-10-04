@@ -12,7 +12,6 @@
 // narrowed to the project an API key speaks for. A person in a workspace is exactly the
 // right unit of scope, and that is who is calling here.
 import { approvalDecisionSchema, ApprovalStates } from '@mocco/common/governance';
-import { McpScopes } from '@mocco/common/mcp';
 import { acceptedContent, inputRequired } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
@@ -24,27 +23,21 @@ import {
   NotAuthorizedToApproveError,
   SelfApprovalError,
 } from '@backend/domain/governance/errors';
+import {
+  CONFIRM,
+  confirmationSchema,
+  openDecision,
+  refused,
+  requireApprovalsWrite,
+} from '@backend/transport/mcp/tools/deciding';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 
 import type { ApprovalService } from '@backend/domain/governance/ApprovalService';
-import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
-import type { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
-import type { Confirmations } from '@backend/transport/mcp/confirmation';
-import type {
-  CallToolResult,
-  InputRequiredResult,
-  McpServer,
-  ScopeChallengeHandler,
-  ServerContext,
-} from '@modelcontextprotocol/server';
+import type { DecidingToolDeps } from '@backend/transport/mcp/tools/deciding';
+import type { CallToolResult, InputRequiredResult, McpServer, ServerContext } from '@modelcontextprotocol/server';
 
-export interface ApprovalToolDeps {
+export interface ApprovalToolDeps extends DecidingToolDeps {
   approvals: Pick<ApprovalService, 'list' | 'get' | 'vote'>;
-  scope: WorkspaceScope;
-  settings: Pick<McpSettingsService, 'agentsMayDecide'>;
-  /** Signs the confirmation round trip. Absent without AUTH_SECRET, and then the deciding
-   * tools refuse: a confirmation that cannot be verified is no confirmation. */
-  confirmations: Confirmations | undefined;
 }
 
 const searchInput = z.object({
@@ -128,13 +121,7 @@ const voteConfirmationSchema = z.object({
 });
 type VoteConfirmation = z.infer<typeof voteConfirmationSchema>;
 
-/** The person's answer. A boolean field, because a form-mode elicitation can carry one
- * and every client renders it as the yes/no it is. */
-const CONFIRM = 'confirm';
-const confirmSchema = z.object({ confirm: z.boolean().describe('Cast this vote') });
-
-/** A refusal the model reads and can act on. */
-const refused = (text: string): CallToolResult => ({ content: [{ type: 'text', text }], isError: true });
+const confirmSchema = confirmationSchema('Cast this vote');
 
 /**
  * What the model is told when the service refuses the vote: the service's own reason,
@@ -165,20 +152,6 @@ function voteRefusal(error: unknown): CallToolResult {
   throw error;
 }
 
-/** The deciding tools need `approvals:write`. A token without it is challenged for it
- * (HTTP 403, `insufficient_scope`) — every scope it already has plus this one, because
- * the client re-authorizes with exactly the set the challenge names. */
-// eslint-disable-next-line sonarjs/function-return-type -- the SDK's contract: a challenge, or undefined for none
-const requireApprovalsWrite: ScopeChallengeHandler = ({ authInfo }) => {
-  if (authInfo === undefined || authInfo.scopes.includes(McpScopes.approvalsWrite)) {
-    return undefined;
-  }
-  return {
-    scopes: [McpScopes.approvalsWrite, ...authInfo.scopes],
-    errorDescription: 'Voting needs your permission for this app to approve and reject as you',
-  };
-};
-
 /** What the person is asked: the decision, and exactly what it would decide. */
 function confirmationMessage(
   request: Awaited<ReturnType<ApprovalService['get']>>['request'],
@@ -206,22 +179,11 @@ export async function voteOnApproval(
   args: VoteArgs,
   ctx: ServerContext,
 ): Promise<CallToolResult | InputRequiredResult> {
-  const userId = userIdOf(ctx);
-  // The HTTP layer has already challenged a token without the scope; this is the same
-  // rule checked where the decision is made, in case anything ever routes around it.
-  if (!(ctx.http?.authInfo?.scopes.includes(McpScopes.approvalsWrite) ?? false)) {
-    return refused('This connection may not vote. Reconnect the app and allow it to approve and reject as you.');
+  const opened = await openDecision(deps, ctx, args.workspaceId, { verb: 'vote', doing: 'Voting' });
+  if ('content' in opened) {
+    return opened;
   }
-  const workspaceId = await deps.scope.resolve(userId, args.workspaceId);
-  if (!(await deps.settings.agentsMayDecide(workspaceId))) {
-    return refused(
-      'Agents may not vote in this workspace. An owner or admin can allow it in Settings → Agents; until then, vote in the Mocco console.',
-    );
-  }
-  const { confirmations } = deps;
-  if (confirmations === undefined) {
-    return refused('Voting through an agent is unavailable on this server: it cannot sign a confirmation.');
-  }
+  const { userId, workspaceId, confirmations } = opened;
   const asked: VoteConfirmation = {
     tool: VOTE_TOOL,
     workspaceId,
@@ -311,7 +273,7 @@ export function registerApprovalTools(server: McpServer, deps: ApprovalToolDeps)
         'Approve or reject a pending request as the signed-in person. The person is asked to confirm in their client before the vote is cast. Only works where the workspace allows agents to decide, and only within the roles the request requires.',
       inputSchema: voteInput,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-      scopeChallenge: requireApprovalsWrite,
+      scopeChallenge: requireApprovalsWrite('Voting needs your permission for this app to approve and reject as you'),
     },
     async (args, ctx) => await voteOnApproval(deps, args, ctx),
   );
