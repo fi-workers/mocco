@@ -15,7 +15,7 @@ export default function ProjectOtaReleasePage() {
   return (
     <AppShell>
       {id && projectId && releaseId ? (
-        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaHosting}>
+        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaUpdates}>
           <OtaReleasePage workspaceId={id} projectId={projectId} releaseId={releaseId} />
         </ProjectLayout>
       ) : null}

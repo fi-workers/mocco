@@ -64,7 +64,7 @@ Under **Repositories** on the same page, choose a repository and **Link** to say
 
 ## 6. Turn on products
 
-Open **Products** in the workspace's side nav and choose **Turn on** next to each product you want. Its pages appear in every project's side nav right away: **Force update**, **OTA hosting** and **OTA tokens** for OTA and force update and **Feature flags** under **Release**, and **Inbox** for Messenger and **Help center** under **Support**. **Turn off** hides them again.
+Open **Products** in the workspace's side nav and choose **Turn on** next to each product you want. Its pages appear in every project's side nav right away: **Force update** and **OTA updates** for OTA and force update and **Feature flags** under **Release**, and **Inbox** for Messenger and **Help center** under **Support**. **Turn off** hides them again.
 
 ![The Products page](./images/products.png)
 

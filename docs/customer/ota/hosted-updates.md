@@ -20,9 +20,9 @@ Mocco can serve your React Native app's over-the-air updates itself. The app kee
 
 ## 1. Connect the app
 
-On the project's **Overview** page, add your app with the platform **React Native**. Then open **OTA hosting** and choose **Host OTA updates**. Mocco shows the app's manifest URL and the `expo.updates` block for `app.json`.
+On the project's **Overview** page, add your app with the platform **React Native**. Then open **OTA updates** (the **Hosted by Mocco** tab) and choose **Host OTA updates**. Mocco shows the app's manifest URL and the `expo.updates` block for `app.json`.
 
-![The OTA hosting page: the manifest URL, certificates, channels and releases](./images/hosting-overview.png)
+![OTA updates, Hosted by Mocco: the manifest URL, certificates, channels and releases](./images/hosting-overview.png)
 
 In your app's repository, run:
 

@@ -2,10 +2,11 @@ import { useRouter } from 'next/router';
 
 import AppShell from '@frontend/components/app-shell';
 import OtaHosting from '@frontend/components/ota/ota-hosting';
+import OtaTabBar, { OtaTabs } from '@frontend/components/ota/ota-tabs';
 import ProjectLayout from '@frontend/components/project-layout';
 import { ProjectSections } from '@frontend/lib/products';
 
-// A project's Mocco-hosted OTA updates (ADR 0021): the OTA app, its signing certificates
+// A project's OTA updates, "Hosted by Mocco" tab (ADR 0021): the OTA app, its signing certificates
 // and channels. The ids are the path; the selected OTA app is `?app=`.
 export default function ProjectOtaHostingPage() {
   const router = useRouter();
@@ -15,8 +16,11 @@ export default function ProjectOtaHostingPage() {
   return (
     <AppShell>
       {id && projectId ? (
-        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaHosting}>
-          <OtaHosting workspaceId={id} projectId={projectId} />
+        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaUpdates}>
+          <div className="flex flex-col gap-6">
+            <OtaTabBar workspaceId={id} projectId={projectId} active={OtaTabs.hosted} />
+            <OtaHosting workspaceId={id} projectId={projectId} />
+          </div>
         </ProjectLayout>
       ) : null}
     </AppShell>

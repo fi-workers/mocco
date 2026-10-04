@@ -22,7 +22,7 @@ Your OTA tool publishes with a token. Once Mocco holds that token and nobody els
 
 ## 1. Store the token
 
-Create a publishing token in your OTA tool (the tool guides say how, and how narrowly each tool lets you scope it). Then open the project's **OTA tokens** page, choose the tool, give the token a name such as `acme-production`, paste it and choose **Add token**.
+Create a publishing token in your OTA tool (the tool guides say how, and how narrowly each tool lets you scope it). Then open the project's **OTA updates** page and its **Your OTA tool** tab, choose the tool, give the token a name such as `acme-production`, paste it and choose **Add token**.
 
 ![The Add a publishing token form](./images/tokens-add.png)
 
