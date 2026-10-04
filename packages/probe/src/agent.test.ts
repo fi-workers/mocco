@@ -107,9 +107,18 @@ const quietLog = (): Logger & { warnings: string[] } => {
   };
 };
 
+/**
+ * Waits until the fake server has seen what the assertion needs. Every wait is on a condition,
+ * never a fixed sleep, and the timeout is generous so a slow CI runner only makes it slower.
+ */
+const eventually = async (assertion: () => void): Promise<void> => {
+  await vi.waitFor(assertion, { timeout: 15_000, interval: 10 });
+};
+
 const ok: CheckReport = { outcome: CheckOutcomes.ok, latencyMs: 12, timings: { connect: 3 } };
 
-describe('ProbeAgent', () => {
+// Above `eventually`'s timeout, so a slow wait fails with its assertion rather than the test timeout.
+describe('ProbeAgent', { timeout: 30_000 }, () => {
   const cleanups: (() => Promise<void>)[] = [];
 
   afterEach(async () => {
@@ -158,9 +167,11 @@ describe('ProbeAgent', () => {
       runCheck,
     );
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(mocco.callsTo('/results')).toHaveLength(1);
       expect(mocco.callsTo('/heartbeat').length).toBeGreaterThan(0);
+      // It keeps polling after the first batch, at the server's pace.
+      expect(mocco.callsTo('/lease').length).toBeGreaterThan(1);
     });
     await stop();
 
@@ -183,8 +194,6 @@ describe('ProbeAgent', () => {
       ],
     });
     expect(mocco.callsTo('/heartbeat')[0]?.body).toMatchObject({ agentVersion: '9.9.9', inflight: expect.any(Number) });
-    // It keeps polling after the first batch, at the server's pace.
-    expect(mocco.callsTo('/lease').length).toBeGreaterThan(1);
   });
 
   it('runs a check at its round time, not when it was leased', async () => {
@@ -201,7 +210,7 @@ describe('ProbeAgent', () => {
       },
     );
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(mocco.callsTo('/results')).toHaveLength(1);
     });
     await stop();
@@ -214,7 +223,7 @@ describe('ProbeAgent', () => {
       '/lease': (_call, calls) => (calls.filter(call => call.path === '/lease').length <= 2 ? { status: 503 } : empty),
     });
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(mocco.callsTo('/lease').length).toBeGreaterThanOrEqual(4);
     });
     await stop();
@@ -240,7 +249,7 @@ describe('ProbeAgent', () => {
       },
     });
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(mocco.callsTo('/results')).toHaveLength(2);
     });
     await stop();
@@ -267,7 +276,7 @@ describe('ProbeAgent', () => {
           : empty,
     });
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(mocco.callsTo('/results')).toHaveLength(1);
     });
     await stop();
@@ -302,7 +311,7 @@ describe('ProbeAgent', () => {
       runCheck,
     );
 
-    await vi.waitFor(() => {
+    await eventually(() => {
       expect(runCheck).toHaveBeenCalledTimes(1);
     });
     const stopping = stop();
