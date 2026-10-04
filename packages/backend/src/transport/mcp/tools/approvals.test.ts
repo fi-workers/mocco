@@ -172,6 +172,7 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
       approvals,
+      gates: { getPending: refuse, resume: refuse },
       scope: new WorkspaceScope({ memberships: new MembershipRepo(t.db) }),
       settings,
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
