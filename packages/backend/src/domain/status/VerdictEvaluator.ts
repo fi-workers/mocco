@@ -1,0 +1,146 @@
+// The verdict evaluator (#150): closes monitor rounds, decides them with `consensus.ts`, and moves
+// each monitor's state and schedule. It runs as the per-minute `status.evaluate` job and, for the
+// monitors a probe just reported on, right after ingest.
+//
+// A round is the monitor's `next_round_at`. It closes once every enabled location assigned to the
+// monitor has reported, or once its deadline (the round, the check's timeout and the result grace,
+// the same moment its leases expire) has passed; a location that sent nothing is `no_data`. Each
+// close is one transaction under the monitor's advisory lock, which pause and resume take too:
+// the verdict, the new state and streaks, the next round, and a state change row when the state
+// moved. The round is re-read under the lock, so two evaluators can't close it twice.
+import { MonitorKinds, MonitorStates } from '@mocco/common/status';
+
+import { nextState, tallyRound } from '@backend/domain/status/consensus';
+import { leaseExpiry } from '@backend/domain/status/ProbeService';
+import { CheckResultRepo } from '@backend/domain/status/repos/check-result.repo';
+import { MonitorLocationRepo } from '@backend/domain/status/repos/monitor-location.repo';
+import { MonitorStateChangeRepo } from '@backend/domain/status/repos/monitor-state-change.repo';
+import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
+import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
+import { utcDayOf } from '@backend/infra/db/day-partitions';
+
+import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
+import type { Db } from '@backend/infra/db/types';
+
+export interface VerdictEvaluatorDeps {
+  db: Db;
+  now?: () => Date;
+}
+
+/** Rounds closed per run at most; the next minute picks up the rest, oldest first. */
+const BATCH = 500;
+
+export const RoundCloses = { open: 'open', closed: 'closed', changed: 'changed', skipped: 'skipped' } as const;
+type RoundClose = (typeof RoundCloses)[keyof typeof RoundCloses];
+
+/** The next round: one interval after this one, or now when that is already past or a recheck
+ * is due. */
+function nextRoundOf(monitor: MonitorRow, now: Date, isRecheck: boolean): Date {
+  const scheduled = monitor.nextRoundAt.getTime() + monitor.intervalSeconds * 1000;
+  return isRecheck || scheduled <= now.getTime() ? now : new Date(scheduled);
+}
+
+export class VerdictEvaluator {
+  constructor(private readonly deps: VerdictEvaluatorDeps) {}
+
+  private async closeRound(candidate: MonitorRow, now: Date): Promise<RoundClose> {
+    const scope = { workspaceId: candidate.workspaceId, projectId: candidate.projectId };
+    const roundAt = candidate.nextRoundAt;
+    const [reports, assigned] = await Promise.all([
+      new CheckResultRepo(this.deps.db).listForRound(candidate.workspaceId, candidate.id, roundAt),
+      new MonitorLocationRepo(this.deps.db).countEnabled(candidate.workspaceId, candidate.id),
+    ]);
+    const deadline = leaseExpiry({ roundAt, spec: candidate.spec });
+    if (reports.length < assigned && now <= deadline) {
+      return RoundCloses.open;
+    }
+    return await this.deps.db.transaction(async tx => {
+      const monitors = new MonitorRepo(tx);
+      const monitor = await monitors.lockForStateChange(scope, candidate.id);
+      // Paused, deleted, or closed by another evaluator since it was read.
+      if (
+        monitor === undefined ||
+        monitor.state === MonitorStates.paused ||
+        monitor.nextRoundAt.getTime() !== roundAt.getTime()
+      ) {
+        return RoundCloses.skipped;
+      }
+      const tally = tallyRound(
+        reports.map(report => ({ outcome: report.outcome, latencyMs: report.latencyMs })),
+        {
+          assigned,
+          quorumMode: monitor.quorumMode,
+          latencyThresholdMs: monitor.spec.kind === MonitorKinds.http ? monitor.spec.latencyThresholdMs : undefined,
+        },
+      );
+      await new RoundVerdictRepo(tx).insert({
+        monitorId: monitor.id,
+        roundAt,
+        workspaceId: monitor.workspaceId,
+        ...tally,
+        closedAt: now,
+      });
+      const next = nextState(monitor, tally.verdict, monitor);
+      const isMoved = next.state !== monitor.state;
+      await monitors.setState(
+        scope,
+        monitor.id,
+        {
+          state: next.state,
+          consecutiveFails: next.consecutiveFails,
+          consecutiveOks: next.consecutiveOks,
+          nextRoundAt: nextRoundOf(monitor, now, next.recheck),
+          ...(isMoved && { stateChangedAt: now }),
+        },
+        now,
+      );
+      if (!isMoved) {
+        return RoundCloses.closed;
+      }
+      await new MonitorStateChangeRepo(tx).append({
+        workspaceId: monitor.workspaceId,
+        monitorId: monitor.id,
+        fromState: monitor.state,
+        toState: next.state,
+        at: now,
+        roundAt,
+        reason: {
+          by: 'evaluator',
+          verdict: tally.verdict,
+          okCount: tally.okCount,
+          failCount: tally.failCount,
+          noDataCount: tally.noDataCount,
+        },
+      });
+      return RoundCloses.changed;
+    });
+  }
+
+  /** Close every round that can be closed (only the given monitors' when `monitorIds` is set). */
+  async evaluate(
+    opts: { now?: Date; monitorIds?: readonly string[] } = {},
+  ): Promise<{ closed: number; changed: number }> {
+    const now = opts.now ?? this.deps.now?.() ?? new Date();
+    const candidates = await new MonitorRepo(this.deps.db).listRoundsStarted(now, {
+      ...(opts.monitorIds !== undefined && { monitorIds: opts.monitorIds }),
+      limit: BATCH,
+    });
+    if (candidates.length === 0) {
+      return { closed: 0, changed: 0 };
+    }
+    // Verdicts are written inside transactions, where a missing partition can't be retried.
+    const verdicts = new RoundVerdictRepo(this.deps.db);
+    const existing = new Set(await verdicts.partitions.days());
+    await verdicts.partitions.ensure(
+      [...new Set(candidates.map(monitor => utcDayOf(monitor.nextRoundAt)))].filter(day => !existing.has(day)),
+    );
+    const outcomes = await candidates.reduce<Promise<RoundClose[]>>(async (previous, monitor) => {
+      const done = await previous;
+      return [...done, await this.closeRound(monitor, now)];
+    }, Promise.resolve([]));
+    return {
+      closed: outcomes.filter(outcome => outcome === RoundCloses.closed || outcome === RoundCloses.changed).length,
+      changed: outcomes.filter(outcome => outcome === RoundCloses.changed).length,
+    };
+  }
+}

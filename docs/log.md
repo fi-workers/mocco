@@ -152,6 +152,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status verdict evaluator
+
+- The status reference gains "Verdicts and the state machine": when a round closes, how the quorum and the verdict
+  are decided, the state transition table, the immediate recheck, and the per-monitor lock. The partition section
+  becomes "Time series and their partitions", covering round verdicts (30 days) beside raw results, and the
+  `status.retention` job's new name `TimeSeriesRetention`. The results paragraph adds the refusal of a result before its
+  round and the inline evaluation. Tables list `mocco_status_round_verdicts` and the monitor streaks. The feature map's
+  monitors and consensus rows say what is built.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-verdict-evaluator` (#150, part 3)
+
 ## 2026-10-05 — Status probe protocol
 
 - The status reference gains "Probe protocol" (the `/v1/probe` lease, results and heartbeat routes, location-token

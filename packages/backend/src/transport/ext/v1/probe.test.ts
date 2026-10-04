@@ -12,8 +12,8 @@ import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
-import { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import { createStatusDomain } from '@backend/domain/status/compose';
+import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { expectOne } from '@backend/infra/db/rows';
 import { statusCheckResults, statusLocations, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -74,7 +74,7 @@ describe('/v1/probe (pglite)', () => {
       }),
     );
     monitorId = created.id;
-    await new CheckResultRetention({ db: t.db }).run(T0);
+    await new TimeSeriesRetention({ db: t.db }).run(T0);
     app = new Hono<V1Env>().basePath('/api/ext').route(
       '/v1',
       createV1Routes({

@@ -6,12 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
-import { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import { createStatusDomain } from '@backend/domain/status/compose';
 import { generateLocationToken, hashLocationToken } from '@backend/domain/status/location-token';
 import { ProbeService } from '@backend/domain/status/ProbeService';
 import { CheckResultRepo } from '@backend/domain/status/repos/check-result.repo';
 import { LocationRepo } from '@backend/domain/status/repos/location.repo';
+import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { expectOne } from '@backend/infra/db/rows';
 import { statusCheckResults, statusLocations, statusProbeLeases, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -98,7 +98,7 @@ describe('probe protocol (pglite)', () => {
     ).id;
     scope = await newScope('acme');
     otherScope = await newScope('other');
-    await new CheckResultRetention({ db: t.db }).run(T0);
+    await new TimeSeriesRetention({ db: t.db }).run(T0);
   });
   afterEach(async () => {
     await t.close();
@@ -229,13 +229,16 @@ describe('probe protocol (pglite)', () => {
 
   it('creates day partitions ahead, drops those past retention, and creates a missing one on ingest', async () => {
     const results = new CheckResultRepo(t.db);
-    const retention = new CheckResultRetention({ db: t.db });
-    expect(await results.partitionDays()).toEqual(['2026-10-05', '2026-10-06', '2026-10-07']);
+    const retention = new TimeSeriesRetention({ db: t.db });
+    expect(await results.partitions.days()).toEqual(['2026-10-05', '2026-10-06', '2026-10-07']);
 
     const later = await retention.run(new Date('2026-10-20T00:30:00.000Z'));
 
-    expect(later.dropped).toEqual(['2026-10-05', '2026-10-06']);
-    expect(await results.partitionDays()).toEqual(['2026-10-07', '2026-10-20', '2026-10-21', '2026-10-22']);
+    expect(later.checkResults.dropped).toEqual(['2026-10-05', '2026-10-06']);
+    // Verdicts are kept 30 days, so none of theirs is old enough yet.
+    expect(later.roundVerdicts.dropped).toEqual([]);
+    expect(later.roundVerdicts.created).toEqual(['2026-10-20', '2026-10-21', '2026-10-22']);
+    expect(await results.partitions.days()).toEqual(['2026-10-07', '2026-10-20', '2026-10-21', '2026-10-22']);
 
     const fra = await hosted('fra');
     clock = new Date('2026-11-30T12:00:00.000Z');
@@ -246,6 +249,6 @@ describe('probe protocol (pglite)', () => {
       throw new Error('fixture lease missing');
     }
     await expect(probes.report(fra.location, [okFor(lease)])).resolves.toMatchObject({ accepted: 1 });
-    expect(await results.partitionDays()).toContain('2026-11-30');
+    expect(await results.partitions.days()).toContain('2026-11-30');
   });
 });

@@ -1,4 +1,5 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { MonitorStates } from '@mocco/common/status';
+import { and, asc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { expectOne } from '@backend/infra/db/rows';
@@ -55,16 +56,40 @@ export class MonitorRepo {
     return row;
   }
 
-  /** Set the state (under `lockForStateChange`); `nextRoundAt` reschedules the next round. */
+  /** The monitors whose current round has started (`next_round_at` passed), across all
+   * workspaces, oldest round first: the evaluator's candidates. Paused monitors have no rounds. */
+  async listRoundsStarted(now: Date, opts: { monitorIds?: readonly string[]; limit: number }): Promise<MonitorRow[]> {
+    return await this.db
+      .select()
+      .from(m)
+      .where(
+        and(
+          ne(m.state, MonitorStates.paused),
+          lte(m.nextRoundAt, now),
+          opts.monitorIds === undefined ? undefined : inArray(m.id, [...opts.monitorIds]),
+        ),
+      )
+      .orderBy(asc(m.nextRoundAt))
+      .limit(opts.limit);
+  }
+
+  /** Set the state, streaks and schedule (under `lockForStateChange`). */
   async setState(
     scope: StatusScope,
     id: string,
-    values: { state: MonitorState; stateChangedAt: Date; nextRoundAt?: Date },
+    values: {
+      state: MonitorState;
+      stateChangedAt?: Date;
+      nextRoundAt?: Date;
+      consecutiveFails?: number;
+      consecutiveOks?: number;
+    },
+    at: Date,
   ): Promise<MonitorRow> {
     return expectOne(
       await this.db
         .update(m)
-        .set({ ...values, updatedAt: values.stateChangedAt })
+        .set({ ...values, updatedAt: at })
         .where(and(scoped(scope), eq(m.id, id)))
         .returning(),
     );

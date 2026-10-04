@@ -10,6 +10,7 @@ import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
 import { StatusPageService } from '@backend/domain/status/StatusPageService';
+import { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { JobQueue } from '@backend/domain/jobs/ports';
@@ -23,6 +24,7 @@ export interface StatusDomain {
   statusMonitors: MonitorService;
   statusLocations: LocationService;
   statusProbes: ProbeService;
+  statusVerdicts: VerdictEvaluator;
 }
 
 export interface StatusDomainDeps {
@@ -41,13 +43,15 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     componentStatus: new ComponentStatusService({ db }),
     snapshots,
   });
+  const statusVerdicts = new VerdictEvaluator({ db, ...now });
   return {
     statusPages,
+    statusVerdicts,
     statusIncidents: new IncidentService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
     statusMaintenances: new MaintenanceService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
-    statusProbes: new ProbeService({ db, ...now }),
+    statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),
   };
 }
 

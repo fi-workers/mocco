@@ -40,6 +40,7 @@ import {
   MonitorKinds,
   MonitorStates,
   QuorumModes,
+  RoundVerdicts,
 } from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
@@ -134,6 +135,7 @@ import type {
   MonitorSpec,
   MonitorState,
   QuorumMode,
+  RoundVerdict,
 } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
@@ -3463,6 +3465,9 @@ export const statusMonitors = pgTable(
     state: text().$type<MonitorState>().notNull().default(MonitorStates.pending),
     stateChangedAt: timestamp('state_changed_at').notNull().defaultNow(),
     nextRoundAt: timestamp('next_round_at').notNull().defaultNow(),
+    /** Consecutive failing and passing verdicts, for `confirmations` and `recovery_confirmations`. */
+    consecutiveFails: integer('consecutive_fails').notNull().default(0),
+    consecutiveOks: integer('consecutive_oks').notNull().default(0),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3640,6 +3645,34 @@ export const statusCheckResults = pgTable(
     check(
       'mocco_status_check_results_error_kind_check',
       sql`${t.errorKind} IS NULL OR ${t.errorKind} IN (${sqlInList(Object.values(CheckErrorKinds))})`,
+    ),
+  ],
+);
+
+/**
+ * One closed round of a monitor: what its locations agreed on. Partitioned by UTC day on
+ * `round_at` like the raw results (custom migration 0059), and dropped a day at a time after 30
+ * days by the `status.retention` job; state changes, not verdicts, are the record of downtime.
+ */
+export const statusRoundVerdicts = pgTable(
+  'mocco_status_round_verdicts',
+  {
+    monitorId: uuid('monitor_id').notNull(),
+    roundAt: timestamp('round_at').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    verdict: text().$type<RoundVerdict>().notNull(),
+    okCount: integer('ok_count').notNull(),
+    failCount: integer('fail_count').notNull(),
+    noDataCount: integer('no_data_count').notNull(),
+    p50LatencyMs: integer('p50_latency_ms'),
+    closedAt: timestamp('closed_at').notNull(),
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_round_verdicts_pk', columns: [t.monitorId, t.roundAt] }),
+    index('mocco_status_round_verdicts_workspace_round_idx').on(t.workspaceId, t.roundAt),
+    check(
+      'mocco_status_round_verdicts_verdict_check',
+      sql`${t.verdict} IN (${sqlInList(Object.values(RoundVerdicts))})`,
     ),
   ],
 );

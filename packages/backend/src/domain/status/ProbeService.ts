@@ -5,6 +5,7 @@
 // token can't speak for another location or another monitor.
 import { ProbeProtocol } from '@mocco/common/status';
 
+import { errorSummary } from '@backend/domain/errors';
 import { hashLocationToken } from '@backend/domain/status/location-token';
 import { CheckResultRepo } from '@backend/domain/status/repos/check-result.repo';
 import { LocationRepo } from '@backend/domain/status/repos/location.repo';
@@ -12,11 +13,14 @@ import { ProbeLeaseRepo } from '@backend/domain/status/repos/probe-lease.repo';
 
 import type { LocationRow } from '@backend/domain/status/repos/location.repo';
 import type { DueRound, ProbeLeaseRow } from '@backend/domain/status/repos/probe-lease.repo';
+import type { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 import type { Db } from '@backend/infra/db/types';
 import type { LocationKind, MonitorSpec, ProbeResult } from '@mocco/common/status';
 
 export interface ProbeDeps {
   db: Db;
+  /** Closes the rounds a report completes right away, instead of at the next minute's job. */
+  verdicts?: Pick<VerdictEvaluator, 'evaluate'>;
   now?: () => Date;
 }
 
@@ -55,7 +59,8 @@ const ResultVerdicts = { fresh: 'fresh', duplicate: 'duplicate', rejected: 'reje
 type ResultVerdict = (typeof ResultVerdicts)[keyof typeof ResultVerdicts];
 
 /** A result is fresh only for an unreported, unexpired lease of this location for exactly this
- * monitor and round; a repeat of a reported lease is a duplicate; anything else is refused. */
+ * monitor and round, between the round's time and the lease's expiry; a repeat of a reported lease
+ * is a duplicate; anything else is refused. */
 function verdictOf(lease: ProbeLeaseRow | undefined, result: ProbeResult, isRepeat: boolean, now: Date): ResultVerdict {
   if (lease === undefined || !isLeasedRound(lease, result)) {
     return ResultVerdicts.rejected;
@@ -63,7 +68,8 @@ function verdictOf(lease: ProbeLeaseRow | undefined, result: ProbeResult, isRepe
   if (lease.reportedAt !== null || isRepeat) {
     return ResultVerdicts.duplicate;
   }
-  return now > lease.expiresAt ? ResultVerdicts.rejected : ResultVerdicts.fresh;
+  // A check runs at its round's time: a result before it, or after the lease expired, is refused.
+  return now < lease.roundAt || now > lease.expiresAt ? ResultVerdicts.rejected : ResultVerdicts.fresh;
 }
 
 export class ProbeService {
@@ -158,6 +164,15 @@ export class ProbeService {
       fresh.map(({ lease }) => lease.id),
       now,
     );
+    if (inserted.length > 0 && this.deps.verdicts !== undefined) {
+      // Only rounds every location has now reported close here; the job closes the rest. A
+      // failure here must not fail the report: the results are stored and the job retries.
+      try {
+        await this.deps.verdicts.evaluate({ now, monitorIds: [...new Set(fresh.map(({ lease }) => lease.monitorId))] });
+      } catch (error) {
+        console.error('[status] inline round evaluation failed', errorSummary(error));
+      }
+    }
     return { accepted: inserted.length, duplicates: duplicates + fresh.length - inserted.length, rejected };
   }
 

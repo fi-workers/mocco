@@ -407,6 +407,20 @@
       "when": 1791148835231,
       "tag": "0057_partition_check_results",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791151414313,
+      "tag": "0058_free_firebird",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791151418940,
+      "tag": "0059_partition_round_verdicts",
+      "breakpoints": true
     }
   ]
 }

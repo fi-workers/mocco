@@ -22,7 +22,9 @@ code_refs:
   - packages/backend/src/domain/status/MonitorService.ts
   - packages/backend/src/domain/status/LocationService.ts
   - packages/backend/src/domain/status/ProbeService.ts
-  - packages/backend/src/domain/status/CheckResultRetention.ts
+  - packages/backend/src/domain/status/TimeSeriesRetention.ts
+  - packages/backend/src/domain/status/VerdictEvaluator.ts
+  - packages/backend/src/domain/status/consensus.ts
   - packages/backend/src/transport/ext/v1/probe.ts
   - packages/backend/src/domain/status/ComponentStatusService.ts
   - packages/backend/src/domain/status/component-status.ts
@@ -88,12 +90,13 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `state`, `state_changed_at`, `next_round_at` |
+| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `state`, `state_changed_at`, `next_round_at`, and the streaks `consecutive_fails` and `consecutive_oks` |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
+| `mocco_status_round_verdicts` | One closed round of a monitor: `verdict` (`ok`, `degraded`, `fail`, `unknown`), `ok_count`, `fail_count`, `no_data_count`, `p50_latency_ms`, `closed_at`. Key (monitor, round); partitioned by day like the raw results and kept 30 days |
 | `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
-| `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#raw-results-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
+| `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#time-series-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
 
 Pages reference `mocco_projects(id, workspace_id)`. Groups, components, incidents and maintenance windows
 reference `mocco_status_pages(id, workspace_id, project_id)` through composite foreign keys, so no row can point at
@@ -214,9 +217,9 @@ changed in the meantime. Posting an incident while the app is down needs the bre
 
 A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at the locations it is assigned to
 ([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). Monitors and locations are managed over tRPC, and
-agents lease and report rounds over the [probe protocol](#probe-protocol). The verdict evaluator, which advances
-`next_round_at` and moves `state`, and the probe agent come next; until then a monitor stays `pending` and is leased
-once per location.
+agents lease and report rounds over the [probe protocol](#probe-protocol); the
+[verdict evaluator](#verdicts-and-the-state-machine) closes each round and moves the monitor's state and schedule. The
+probe agent itself comes next, so nothing runs the checks yet.
 
 **Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
 
@@ -239,7 +242,7 @@ monitor can't be pointed at another tenant's private network. Every linked compo
 project's pages.
 
 **State.** A new monitor is `pending` with its first round due at once (`next_round_at`). Only two writers change
-`state`: the evaluator (a later slice) and the operator's pause and resume. Both take the monitor's
+`state`: the evaluator and the operator's pause and resume. Both take the monitor's
 `pg_advisory_xact_lock` (`AdvisoryLockNamespaces.statusMonitor`) inside their transaction and append a row to
 `mocco_status_monitor_state_changes`. Pausing sets `paused`; resuming sets `pending` and makes a round due now. Pausing
 a paused monitor, or resuming one that isn't paused, changes nothing. Editing a monitor replaces its settings,
@@ -268,26 +271,59 @@ twice to one location. Other locations lock other rows and get their own lease o
 the round's time plus the check's timeout plus 15 seconds. `pollAfterMs` is 15 seconds, or 0 when the batch was full.
 
 **Results.** A result is stored only if its lease belongs to the reporting location, names the same monitor and
-round, hasn't been reported, and hasn't expired. A result for another location's lease, another monitor or round, or
-an expired lease is listed in `rejected` and stored nowhere, so a stolen token can't speak for another location. A
+round, hasn't been reported, and arrives between the round's time and the lease's expiry. A result for another
+location's lease, another monitor or round, or one too early or too late is listed in `rejected` and stored nowhere, so a stolen token can't speak for another location. A
 result for a lease already reported, or repeated in the same batch, counts as a duplicate: retrying a batch is safe.
 Results are inserted `ON CONFLICT DO NOTHING` on (monitor, round, location), and their leases are then marked
 `reported_at`. A probe reports `ok` or `fail`; `no_data` is reserved for the evaluator, for a lease nobody reported.
+After storing results, the report runs the evaluator for those monitors, so a round every location has reported
+closes at once; a failure there is logged and never fails the report.
 
 **Seen.** Every lease call and heartbeat sets the location's `last_seen_at` and `agent_version`.
 
-### Raw results and their partitions
+### Verdicts and the state machine
 
-`mocco_status_check_results` is range-partitioned by UTC day on `round_at`, one partition per day named
-`mocco_status_check_results_pYYYYMMDD`. drizzle-kit can't declare a partitioned table, so migration 0056 creates the
-table from `schema.ts` and the custom migration 0057 recreates it, still empty, as the partitioned parent with the same
-columns, key, checks and index. The drift check still compares `schema.ts` to the snapshots, which don't record
-partitioning.
+The `status.evaluate` job runs every minute (`VerdictEvaluator`), and the results route runs it for the monitors it
+just stored results for. A monitor's current round is its `next_round_at`. It closes when every enabled location
+assigned to the monitor has reported, or once the round's deadline (its time, the check's timeout and the 15-second
+grace, when its leases expire) has passed. A location that sent nothing is `no_data`. The evaluator handles at most 500
+rounds a run, oldest first.
 
-The `status.retention` job runs every hour (`CheckResultRetention`). It creates the partitions for today and the next
-two days, and drops the partitions older than 14 days with all their rows, so old results go without a `DELETE`. If a
-result arrives for a day with no partition yet (a fresh install before the job's first run), the insert creates that
-day's partition and retries once.
+The round's verdict comes from the pure `tallyRound` in `consensus.ts`. Only the locations that reported count:
+the quorum is half of them rounded up for `majority`, one for `any`, all of them for `all`, and never less than one,
+so a single location goes through the same rule. `fail` when at least a quorum failed (checked first, so a tie under
+`majority` fails); `ok` when a quorum passed, or `degraded` when a quorum of passing checks was slower than the HTTP
+spec's `latencyThresholdMs`; otherwise `unknown`, including when nobody reported.
+
+`nextState` then moves the monitor:
+
+| From | `fail` | `ok` / `degraded` |
+|---|---|---|
+| `pending`, `up`, `degraded`, `suspect` | `suspect` with an immediate recheck, or `down` once `confirmations` rounds in a row failed | `up` / `degraded` |
+| `down`, `recovering` | `down` | `recovering`, or `up` / `degraded` once `recovery_confirmations` rounds in a row passed |
+
+An `unknown` round changes nothing: not the state, not the streaks. `no_data` can never take a monitor down. A
+paused monitor has no rounds.
+
+Each close is one transaction under the monitor's advisory lock (the same one pause and resume take). It re-reads
+the monitor and skips the round if another evaluator closed it meanwhile. It inserts the verdict, sets the state and
+streaks, and moves `next_round_at` to one interval after the round, or to now when that is already past or when the
+monitor just became `suspect` (the recheck). When the state moved, it appends a state change with the round and a
+`reason` carrying the verdict and counts. Probes then lease the next round as usual.
+
+### Time series and their partitions
+
+`mocco_status_check_results` and `mocco_status_round_verdicts` are range-partitioned by UTC day on `round_at`, one
+partition per day named `<table>_pYYYYMMDD` (`infra/db/day-partitions.ts`). drizzle-kit can't declare a partitioned
+table, so a generated migration creates each table from `schema.ts` (0056, 0058) and a custom migration recreates it,
+still empty, as the partitioned parent with the same columns, key, checks and index (0057, 0059). The drift check
+still compares `schema.ts` to the snapshots, which don't record partitioning.
+
+The `status.retention` job runs every hour (`TimeSeriesRetention`). For both tables it creates the partitions for
+today and the next two days, and drops whole days past retention, so old rows go without a `DELETE`: 14 days of raw
+results, 30 days of verdicts. State changes are not partitioned and are kept. If a result arrives for a day with no
+partition yet (a fresh install before the job's first run), the insert creates that day's partition and retries once;
+the evaluator creates the verdict partitions it needs before its transactions.
 
 ## Audit
 
@@ -329,7 +365,8 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-Checking monitors (the verdict evaluator with `mocco_status_round_verdicts`, and `@mocco/probe`), component status derived from monitors
+Running checks (`@mocco/probe`, the embedded probe and hosted locations), heartbeat monitors, a location-unhealthy
+alert, component status derived from monitors
 (`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` (and a way to create or publish a
 draft, which arrives with monitor-origin incidents); repo and project links on components; run links

@@ -281,6 +281,12 @@ export type LocationDto = z.infer<typeof locationSchema>;
 export const CheckOutcomes = { ok: 'ok', fail: 'fail', noData: 'no_data' } as const;
 export type CheckOutcome = (typeof CheckOutcomes)[keyof typeof CheckOutcomes];
 
+/** What the reporting locations of one round agree on: `fail` or `ok` when a quorum of them
+ * reported it (`degraded` when a quorum of passing checks was over the latency threshold), and
+ * `unknown` when no quorum agrees or nobody reported. `unknown` never moves a monitor's state. */
+export const RoundVerdicts = { ok: 'ok', degraded: 'degraded', fail: 'fail', unknown: 'unknown' } as const;
+export type RoundVerdict = (typeof RoundVerdicts)[keyof typeof RoundVerdicts];
+
 /** Why a check failed (or, for `latency`, why it was slow). */
 export const CheckErrorKinds = {
   timeout: 'timeout',
