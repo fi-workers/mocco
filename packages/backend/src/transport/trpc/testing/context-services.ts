@@ -14,6 +14,7 @@ import { createMcpSettingsService } from '@backend/domain/mcp/instance';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
 import { createOtaDomain } from '@backend/domain/ota/instance';
 import { createProjectDomain } from '@backend/domain/project/instance';
+import { createStatusDomain } from '@backend/domain/status/compose';
 import { SecretBox } from '@backend/infra/crypto/secret-box';
 
 import type { Db } from '@backend/infra/db/types';
@@ -38,6 +39,7 @@ export function contextServices(db: Db) {
     ...createFlagsDomain(db, { audit, approvals }),
     ...createMessengerDomain(db, { audit, box: () => box }),
     ...createHelpDomain(db, { audit }),
+    ...createStatusDomain(db, { audit }),
     apiKeys: createApiKeyService(db, { projects: project.projects, audit }),
     mcpSettings: createMcpSettingsService(db, audit),
     // Optional services default to absent; a test that exercises one passes it after the spread.

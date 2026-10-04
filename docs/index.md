@@ -5,7 +5,7 @@ okf_version: "0.1"
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [index, moc]
@@ -87,6 +87,7 @@ related:
 - [Mocco-hosted OTA updates](./reference/ota-hosting.md) — OTA apps for React Native, fixed manifest and asset URLs, signing certificates, channels and gated protection
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
 - [Feature flags](./reference/flags.md) — environments, flags, changesets and the versioned flagd ruleset each applied change compiles to
+- [Status page model](./reference/status.md) — status pages, component groups and components, their tenancy, and the status router
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers
 - [Public /v1 API](./reference/public-api.md) — publishable and secret project keys, origin rules, rate limits, problem+json, the API host

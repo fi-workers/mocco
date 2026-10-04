@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -124,14 +124,15 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 
 ### Status page (#103)
 
-Planned; nothing is built yet. The design is the [status page spec](../specs/2026-09-24-status-page-design.md), with
+Status pages and their components are built as a backend model and API ([status page model](./status.md));
+incidents and maintenance are next, and there is no screen yet. The design is the [status page spec](../specs/2026-09-24-status-page-design.md), with
 [ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md) (probes) and
 [ADR 0028](../adr/0028-status-pages-are-static-snapshots.md) (public pages). What sets it apart from a standalone
 status tool is that every incident lists the runs that reached production just before it.
 
 | Feature | Status | Description |
 |---|---|---|
-| Components, incidents and maintenance | Not drawn | Component groups and components linked to a project or repo; incidents (investigating → identified → monitoring → resolved) with a timeline, impact and a postmortem; scheduled maintenance. Every change is audited |
+| Components, incidents and maintenance | Prototype | Backend only (the `status.*` router), no screen yet. Built: a project's status pages with component groups and components, and audited manual component status. Next: incidents (investigating → identified → monitoring → resolved) with a timeline, impact and a postmortem; scheduled maintenance. Linking components to repos comes with deploy correlation |
 | Public status page | Not drawn | Versioned static snapshots on object storage behind a CDN, so the page reads without the Mocco app or database (ADR 0028); `<slug>.status.mocco.club` and a custom domain; 90-day uptime bars |
 | HTTP and TCP monitors | Not drawn | Status code, keyword, latency threshold and TLS expiry; 60-second minimum interval; run by `@mocco/probe` agents that lease their work (ADR 0027) |
 | Multi-region consensus | Not drawn | A monitor is down only when a quorum of locations fails for consecutive rounds; a silent location is `no_data`, never downtime. Hosted regions plus private locations behind NAT |

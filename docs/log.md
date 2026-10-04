@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -121,6 +121,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
 - Source: branch `docs/getting-started`
 
+## 2026-10-05 — Agents can resume paused runs
+
+- The connect guide lists `mocco_gates_resume`, says what its confirmation shows (a reject halts the run), that one
+  permission covers voting and resuming, and adds the resume refusals to troubleshooting. The MCP spec marks slice 6c
+  shipped, records how the resume is built, and decides its open question: the tool stays behind `approvals:write`,
+  because roles already separate who may vote from who may resume, and a separate scope can be split later through
+  the same step-up without breaking clients. The workspace reference notes the resume tool reads the switch too.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/workspace.md`,
+  `log.md`
+- Source: branch `feat/mcp-gates-resume`
+
 ## 2026-10-04 — MCP sign-in, end to end
 
 - The connect guide gains "Approving the connection" with a screenshot of the new consent screen, the correct
@@ -182,16 +193,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `adr/README.md`, `index.md`, `specs/2026-09-24-status-page-design.md`, `reference/feature-map.md`
 - Source: branch `docs/status-adrs` (issue #147)
 
-## 2026-10-05 — Agents can resume paused runs
+## 2026-10-05 — Status pages and components
 
-- The connect guide lists `mocco_gates_resume`, says what its confirmation shows (a reject halts the run), that one
-  permission covers voting and resuming, and adds the resume refusals to troubleshooting. The MCP spec marks slice 6c
-  shipped, records how the resume is built, and decides its open question: the tool stays behind `approvals:write`,
-  because roles already separate who may vote from who may resume, and a separate scope can be split later through
-  the same step-up without breaking clients. The workspace reference notes the resume tool reads the switch too.
-- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/workspace.md`,
-  `log.md`
-- Source: branch `feat/mcp-gates-resume`
+- Added the [status page model](./reference/status.md) reference for the first part of #148: status pages,
+  component groups and components, their tenancy through composite foreign keys, the audit actions and the
+  `status.*` router. The feature map's "Components, incidents and maintenance" row moves to Prototype (backend
+  only, pages and components so far; incidents and maintenance are next).
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `index.md`, `log.md`
+- Source: branch `feat/status-model` (issue #148)
 
 ## 2026-10-04 — Customer screenshots show page content only
 

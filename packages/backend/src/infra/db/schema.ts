@@ -27,6 +27,7 @@ import {
   OtaUpdateKinds,
 } from '@mocco/common/ota-hosting';
 import { AppPlatforms, Products } from '@mocco/common/project';
+import { ComponentStatuses } from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
 import {
@@ -106,6 +107,7 @@ import type {
   OtaUpdateKind,
 } from '@mocco/common/ota-hosting';
 import type { AppPlatform, Product } from '@mocco/common/project';
+import type { ComponentStatus } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -3084,3 +3086,95 @@ export const mcpSettings = pgTable('mocco_mcp_settings', {
   // SET NULL: the setting outlives the person who switched it; the audit chain keeps who.
   changedByUserId: uuid('changed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 });
+
+// ─────────────────────────────────────────────────────────────
+// Status page (#103, slice #148): a project's status pages and their components, managed by
+// hand. Every row carries `workspace_id`; children reach their page through composite FKs on
+// (page_id, workspace_id, project_id), so a row can never point at another tenant's page.
+// Incidents and maintenance come next; monitors, subscribers and snapshots in later slices.
+// ─────────────────────────────────────────────────────────────
+
+/** A status page of a project. `slug` is global: it becomes the public host label. */
+export const statusPages = pgTable(
+  'mocco_status_pages',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    slug: text().notNull(),
+    title: text().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_status_pages_slug_uq').on(t.slug),
+    index('mocco_status_pages_project_idx').on(t.projectId),
+    // A UNIQUE CONSTRAINT so children's composite FKs can reference (id, workspace_id, project_id).
+    unique('mocco_status_pages_scope_uq').on(t.id, t.workspaceId, t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_status_pages_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_status_pages_slug_check', sql`${t.slug} ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'`),
+  ],
+);
+
+/** A heading that groups a page's components ("API", "Dashboard"). */
+export const statusComponentGroups = pgTable(
+  'mocco_status_component_groups',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    name: text().notNull(),
+    position: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_status_component_groups_page_idx').on(t.pageId, t.position),
+    // Lets a component's group FK require the group to be on the component's page.
+    unique('mocco_status_component_groups_id_page_uq').on(t.id, t.pageId),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_component_groups_page_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A part of the service a page reports on. `status` is the one an operator sets by hand; once
+ * incidents and maintenance land, the status a page shows also counts them. */
+export const statusComponents = pgTable(
+  'mocco_status_components',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    // Null = ungrouped. Deleting a group ungroups its components first (ComponentGroupRepo.delete).
+    groupId: uuid('group_id'),
+    name: text().notNull(),
+    description: text(),
+    position: integer().notNull(),
+    status: text().$type<ComponentStatus>().notNull().default(ComponentStatuses.operational),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_status_components_page_idx').on(t.pageId, t.position),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_components_page_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.groupId, t.pageId],
+      foreignColumns: [statusComponentGroups.id, statusComponentGroups.pageId],
+      name: 'mocco_status_components_group_fk',
+    }),
+    check('mocco_status_components_status_check', sql`${t.status} IN (${sqlInList(Object.values(ComponentStatuses))})`),
+  ],
+);
