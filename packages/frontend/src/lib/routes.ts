@@ -71,6 +71,11 @@ export const Routes = {
   projectHelp: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help`,
   projectHelpArticle: (id: string, projectId: string, articleId: string) =>
     `/workspaces/${id}/p/${projectId}/help/${articleId}`,
+  /** The project's status pages (#148); `pageId` selects the page shown. */
+  projectStatus: (id: string, projectId: string, pageId?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/status`;
+    return pageId === undefined ? path : `${path}?page=${encodeURIComponent(pageId)}`;
+  },
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

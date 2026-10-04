@@ -23,14 +23,28 @@ code_refs:
   - packages/backend/src/domain/status/component-status.ts
   - packages/backend/src/domain/status/jobs.ts
   - packages/backend/src/transport/trpc/routers/status.ts
+  - packages/frontend/src/components/status/status-pages.tsx
+  - packages/frontend/src/components/status/page-components.tsx
 ---
 
 # Status page model
 
 The status page product ([design spec](../specs/2026-09-24-status-page-design.md), issue #103) lands in slices.
 This page describes what is built (#148): operators manage a project's status pages, components, incidents and
-scheduled maintenance by hand through the `status.*` tRPC router. There is no operator UI, public page, monitor,
-subscriber or deploy correlation yet.
+scheduled maintenance by hand through the `status.*` tRPC router. There is no public page, monitor, subscriber or
+deploy correlation yet.
+
+## Console
+
+A project's **Status page** section (`/workspaces/[id]/p/[projectId]/status`, shown when the status product is on)
+lists the project's pages as tabs; `?page=` selects the one shown. With no page yet, it opens on a form to create
+one: a title, and an address (the slug) suggested from the title. On a page, an operator adds component groups and
+components (name, optional description, optional group), renames, regroups and deletes them, and moves groups and
+components up and down (the screen rewrites `position` for the rows whose place changes). Each component shows the
+status the page shows (`displayedStatus`) next to a select for the status reported by hand; when an open incident
+or maintenance makes it show worse, the row says so. Page settings rename the page, change its address (a taken
+address is refused with the domain error) and delete it with everything on it. Incidents and maintenance have no
+screen yet.
 
 ## Tables
 
