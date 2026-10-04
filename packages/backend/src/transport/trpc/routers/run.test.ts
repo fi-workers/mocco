@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { ExecutorIds } from '@mocco/common/execution';
+import { RunStates, ExecutorIds } from '@mocco/common/execution';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -262,6 +262,28 @@ describe('run router on pglite', () => {
       const { workspace: wsB } = await memberB.workspace.create({ name: 'B' });
 
       await expect(memberB.run.trigger({ workspaceId: wsB.id, commitId })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  describe('list', () => {
+    it("lists the workspace's runs newest first, filtered by state", async () => {
+      const api = await signedInCaller('list@example.com');
+      const { workspace: ws } = await api.workspace.create({ name: 'W' });
+      const first = await api.run.trigger({ workspaceId: ws.id, commitId: await seedRunnableCommit(ws.id, 'sha-l1') });
+      const second = await api.run.trigger({ workspaceId: ws.id, commitId: await seedRunnableCommit(ws.id, 'sha-l2') });
+
+      const { runs } = await api.run.list({ workspaceId: ws.id });
+      expect(runs.map(run => run.id)).toEqual([second.run.id, first.run.id]);
+      expect(runs[0]?.sha).toBe('sha-l2');
+      const { runs: waiting } = await api.run.list({ workspaceId: ws.id, state: RunStates.awaitingGate });
+      expect(waiting).toEqual([]);
+    });
+
+    it('a non-member cannot list runs in another workspace (NOT_FOUND)', async () => {
+      const owner = await signedInCaller('owner-list@example.com');
+      const { workspace: wsA } = await owner.workspace.create({ name: 'A' });
+      const stranger = await signedInCaller('stranger-list@example.com');
+      await expect(stranger.run.list({ workspaceId: wsA.id })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 

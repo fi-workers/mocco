@@ -4,7 +4,7 @@
 // router-scoped middleware. Unlike the integration router, `ctx.runs` is always
 // present (the execution domain has no external dependency to gate on), so there
 // is no PRECONDITION_FAILED "not configured" branch.
-import { runEventSchema, runSchema, runStepSchema } from '@mocco/common/execution';
+import { runEventSchema, runSchema, runStateSchema, runStepSchema, runSummarySchema } from '@mocco/common/execution';
 import { gateResumeInputSchema, resumeSchema, runGateSchema } from '@mocco/common/governance';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -65,6 +65,35 @@ export const runRouter = router({
     .mutation(async ({ ctx, input }) => ({
       run: await ctx.runs.trigger(input.workspaceId, input.commitId, ctx.session.user.id),
     })),
+
+  // Runs across the workspace, newest first — e.g. the ones waiting at a gate, which the
+  // workspace Home lists with the other approvals.
+  list: protectedRunProcedure
+    .input(
+      z.object({
+        workspaceId: z.uuid(),
+        state: runStateSchema.optional(),
+        limit: z.number().int().min(1).max(50).default(20),
+      }),
+    )
+    .output(z.object({ runs: z.array(runSummarySchema) }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.runs.searchInWorkspace(input.workspaceId, {
+        limit: input.limit,
+        ...(input.state !== undefined && { state: input.state }),
+      });
+      return {
+        runs: rows.map(row => ({
+          id: row.run.id,
+          state: row.run.state,
+          repo: `${row.repo.owner}/${row.repo.name}`,
+          branch: row.commit.branch,
+          sha: row.commit.sha,
+          message: row.commit.message,
+          createdAt: row.run.createdAt,
+        })),
+      };
+    }),
 
   get: protectedRunProcedure
     .input(z.object({ workspaceId: z.uuid(), runId: z.uuid() }))

@@ -72,6 +72,18 @@ export const runSchema = z.object({
 });
 export type RunDto = z.infer<typeof runSchema>;
 
+/** A run in a workspace-wide list: the run, and the commit and repository it runs. */
+export const runSummarySchema = z.object({
+  id: z.uuid(),
+  state: runStateSchema,
+  repo: z.string(),
+  branch: z.string(),
+  sha: z.string(),
+  message: z.string(),
+  createdAt: z.date(),
+});
+export type RunSummaryDto = z.infer<typeof runSummarySchema>;
+
 /** A materialized step of a run. `with` is free-form adapter options (ADR 0004); `handle` is an opaque adapter handle. */
 export const runStepSchema = z.object({
   id: z.uuid(),
