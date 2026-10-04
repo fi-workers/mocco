@@ -10,12 +10,13 @@
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
+import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
-export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps;
+export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps & FlagToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
 const SERVER_INFO = { name: 'mocco', version: '0.1.0' } as const;
@@ -32,6 +33,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerRunTools(server, deps);
   registerApprovalTools(server, deps);
   registerGateTools(server, deps);
+  registerFlagTools(server, deps);
   return server;
 }
 

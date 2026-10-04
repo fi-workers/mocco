@@ -6,9 +6,12 @@
 // confirmation state is signed with a key every deployment derives from the same secret.
 import { MembershipRepo } from '@backend/domain/auth/repos/membership.repo';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getMcpSettings } from '@backend/domain/mcp/instance';
+import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
+import { getProjectDomain } from '@backend/domain/project/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 import { createConfirmations } from '@backend/transport/mcp/confirmation';
@@ -22,11 +25,15 @@ const state: { handler?: McpHttpHandler } = {};
 export function getMcpHandler(): McpHttpHandler {
   if (state.handler === undefined) {
     const secret = getEnv().AUTH_SECRET;
+    const scope = new WorkspaceScope({ memberships: new MembershipRepo(getDb()) });
+    const { projects, products } = getProjectDomain();
     state.handler = createMcpHttpHandler({
       runs: getExecution().runs,
       approvals: getGovernance().approvals,
       gates: getGovernance().gates,
-      scope: new WorkspaceScope({ memberships: new MembershipRepo(getDb()) }),
+      flags: getFlagsDomain().flags,
+      scope,
+      projects: new ProjectScope({ workspaces: scope, projects, products }),
       settings: getMcpSettings(),
       confirmations: secret === undefined ? undefined : createConfirmations(secret),
     });

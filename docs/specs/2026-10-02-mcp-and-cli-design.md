@@ -164,6 +164,9 @@ has several servers loaded.
 | `mocco_runs_get` | One run: steps, gates, why it is paused |
 | `mocco_approvals_search` | What is waiting on a human, and on whom |
 | `mocco_approvals_get` | One request: subject, policy, votes, who may still vote |
+| `mocco_flags_search` | A project's flags matching a filter (text, lifecycle, repo-managed) |
+| `mocco_flags_get` | One flag: variants, per-environment state, whether the repo manages it |
+| `mocco_flags_changesets_search` | Flag changes waiting for approval, with the request deciding each |
 
 **Deciding** — person only, refused for a key with a message saying why:
 
@@ -277,7 +280,15 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    or slice 8.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
    `@mocco/cli`, which becomes an alias.
-8. **OTA and flags tools** — once the shape has survived a real week.
+8. **OTA and flags tools** — once the shape has survived a real week. The flag reads come
+   first (*shipped*): `mocco_flags_search`, `mocco_flags_get` and
+   `mocco_flags_changesets_search`, read-only, over `FlagService`. Flags are
+   project-scoped, so a `ProjectScope` (`domain/mcp/ProjectScope.ts`) makes the checks the
+   console's `productProcedure` makes — membership, the flags product, the project in that
+   workspace — and, like the workspace, the project may be left out when there is exactly
+   one. Still to come: the OTA reads, a stale filter (it lives in `StaleFlagDetector`,
+   a second service), and any tool that changes a flag, which needs the deciding
+   machinery and its own design pass.
 
 ### How the vote is built (slice 6b)
 
