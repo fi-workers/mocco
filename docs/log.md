@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -120,3 +120,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   making them would have meant changing data. The audit screenshot is cropped to the table.
 - Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
 - Source: branch `docs/getting-started`
+
+## 2026-10-04 — Positioning around the production record
+
+- Added [ADR 0026](./adr/0026-position-mocco-around-the-production-record.md): Mocco is one workspace to release,
+  control and support an app; "write ≠ ship" generalizes "write ≠ deploy"; products and console sections are
+  grouped by job (Release, Support, Operate), from the frontend product registry.
+- Rewrote the product description in the root `README.md`, `AGENTS.md` and `index.md` to list what has shipped,
+  and added a "where it stands" section to the roadmap, since the shipping order diverged from the waves.
+- Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
+- Source: branch `docs/positioning`
