@@ -10,16 +10,14 @@ import { ChangeOutcomes, FlagFileSyncStates, FlagManagers, ChangesetSources } fr
 import { FLAGS_FILE_PATH } from '@mocco/common/flags-file';
 
 import { parseFlagsFile, planFlagsFile } from '@backend/domain/flags/flags-file';
-import { FlagEnvironmentRepo } from '@backend/domain/flags/repos/flag-environment.repo';
+import { readFlagsHead } from '@backend/domain/flags/flags-head';
 import { FlagFileSyncRepo } from '@backend/domain/flags/repos/flag-file-sync.repo';
 import { FlagRepo } from '@backend/domain/flags/repos/flag.repo';
-import { readHead } from '@backend/domain/flags/RulesetPublisher';
 import { decodeYaml } from '@backend/domain/pipeline/yaml/decode';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
-import type { EnvironmentState } from '@backend/domain/flags/apply-ops';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
-import type { FlagsHead, FlagsSyncPlan } from '@backend/domain/flags/flags-file';
+import type { FlagsSyncPlan } from '@backend/domain/flags/flags-file';
 import type { FlagService } from '@backend/domain/flags/FlagService';
 import type { FlagEnvironmentRow } from '@backend/domain/flags/repos/flag-environment.repo';
 import type { FlagFileSyncRow } from '@backend/domain/flags/repos/flag-file-sync.repo';
@@ -85,42 +83,6 @@ export class FlagFileSyncService {
     ]);
     const proposer = pusher ?? author ?? null;
     return { proposer, coProposers: author !== undefined && author !== proposer ? [author] : [] };
-  }
-
-  /** The project's flags and each environment's state, by environment key. */
-  private async headOf(workspaceId: string, projectId: string) {
-    const [flags, environments] = await Promise.all([
-      new FlagRepo(this.deps.db).listByProject(workspaceId, projectId),
-      new FlagEnvironmentRepo(this.deps.db).listByProject(workspaceId, projectId),
-    ]);
-    const states = await Promise.all(
-      environments.map(async environment => {
-        const head = await readHead(this.deps.db, workspaceId, environment);
-        const state: EnvironmentState = {
-          configs: new Map([...head.configs].map(([key, { salt: _salt, ...config }]) => [key, config])),
-          segments: head.segments,
-          variants: new Map(head.flags.map(flag => [flag.key, Object.keys(flag.variants)])),
-        };
-        return [environment.key, state] as const;
-      }),
-    );
-    const head: FlagsHead = {
-      flags: new Map(
-        flags.map(flag => [
-          flag.key,
-          {
-            type: flag.type,
-            variants: flag.variants,
-            description: flag.description,
-            lifecycle: flag.lifecycle,
-            clientVisible: flag.clientVisible,
-            managedBy: flag.managedBy,
-          },
-        ]),
-      ),
-      environments: new Map(states),
-    };
-    return { head, environments };
   }
 
   private async record(
@@ -221,7 +183,7 @@ export class FlagFileSyncService {
     if (parsed.file === null) {
       return await this.record(workspaceId, projectId, push, proposerUserId, FlagFileSyncStates.invalid, parsed.issues);
     }
-    const { head, environments } = await this.headOf(workspaceId, projectId);
+    const { head, environments } = await readFlagsHead(this.deps.db, workspaceId, projectId);
     const planned = planFlagsFile(parsed.file, head);
     if (planned.plan === null) {
       return await this.record(

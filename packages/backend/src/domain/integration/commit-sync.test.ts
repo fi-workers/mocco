@@ -4,7 +4,11 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
-import { CommitSyncService, type DefaultBranchPush } from '@backend/domain/integration/CommitSyncService';
+import {
+  CommitSyncService,
+  type DefaultBranchPullRequest,
+  type DefaultBranchPush,
+} from '@backend/domain/integration/CommitSyncService';
 import { ConnectionStatuses, RepoStatuses } from '@backend/domain/integration/constants';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
@@ -77,6 +81,22 @@ function fakeSourceWithConfigs(
 
 type PushData = Extract<ParsedWebhook, { kind: 'push' }>['data'];
 type InstallationData = Extract<ParsedWebhook, { kind: 'installation' }>['data'];
+type PullRequestData = Extract<ParsedWebhook, { kind: 'pull_request' }>['data'];
+
+function pullRequestEvent(args: {
+  installationId: number;
+  repoExternalId: number;
+  action?: string;
+  base?: string;
+  headSha: string;
+}): PullRequestData {
+  return {
+    action: args.action ?? 'opened',
+    installation: { id: args.installationId },
+    repository: { id: args.repoExternalId, name: 'n', owner: { login: 'o' } },
+    pull_request: { number: 7, head: { sha: args.headSha }, base: { ref: args.base ?? 'main', sha: 'base' } },
+  };
+}
 
 function pushEvent(args: {
   installationId: number;
@@ -309,6 +329,54 @@ describe('CommitSyncService (pglite)', () => {
     ]);
     expect(pushes[0]?.authorEmail).toBe(srcCommit('c1').authorEmail);
     expect(await commitShaSet(repo.id)).toEqual(new Set(['c1', 'boom']));
+  });
+
+  it('hands pull requests into the default branch to the flags plan sink, resolved through the installation', async () => {
+    const workspaceId = await seedWorkspace();
+    const connection = await seedConnection(workspaceId, '5000');
+    const repo = await seedRepo(workspaceId, connection.id, { externalRepoId: '900' });
+    // Another workspace registered the same GitHub repo under its own installation.
+    const otherWorkspaceId = await seedWorkspace('Other');
+    const otherConnection = await seedConnection(otherWorkspaceId, '6000');
+    const otherRepo = await seedRepo(otherWorkspaceId, otherConnection.id, { externalRepoId: '900' });
+    const pullRequests: DefaultBranchPullRequest[] = [];
+    const svc = service().withFlagPlans({
+      checkPullRequest: async pullRequest => {
+        pullRequests.push(pullRequest);
+        if (pullRequest.headSha === 'boom') {
+          throw new Error('sink down');
+        }
+        await Promise.resolve();
+      },
+    });
+    const handle = async (data: PullRequestData) => {
+      await svc.handle({ kind: 'pull_request', data });
+    };
+
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 900, headSha: 'h1' }));
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 900, action: 'synchronize', headSha: 'h2' }));
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 900, action: 'closed', headSha: 'h3' }));
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 900, base: 'develop', headSha: 'h4' }));
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 999, headSha: 'h5' }));
+    await handle(pullRequestEvent({ installationId: 7000, repoExternalId: 900, headSha: 'h6' }));
+    await handle(pullRequestEvent({ installationId: 6000, repoExternalId: 900, action: 'reopened', headSha: 'h7' }));
+    await handle(pullRequestEvent({ installationId: 5000, repoExternalId: 900, headSha: 'boom' }));
+
+    expect(pullRequests.map(pullRequest => [pullRequest.repoId, pullRequest.headSha])).toEqual([
+      [repo.id, 'h1'],
+      [repo.id, 'h2'],
+      [otherRepo.id, 'h7'],
+      [repo.id, 'boom'],
+    ]);
+    expect(pullRequests[0]).toEqual({
+      workspaceId,
+      repoId: repo.id,
+      ref: { externalAccountId: '5000', owner: 'o', name: 'n' },
+      number: 7,
+      headSha: 'h1',
+      baseSha: 'base',
+    });
+    expect(pullRequests[2]?.workspaceId).toBe(otherWorkspaceId);
   });
 
   it('installation.deleted marks the connection deleted and its repos inactive, preserving commits', async () => {

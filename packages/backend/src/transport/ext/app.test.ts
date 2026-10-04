@@ -48,6 +48,7 @@ function fakeProvider(isOwner = true): GitHubProvider {
     getFileAtCommit: async () => null,
     getArchiveAtCommit: async () => new Uint8Array(),
     dispatch: async () => {},
+    publishCheck: async () => {},
   };
 }
 

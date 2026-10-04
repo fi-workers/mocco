@@ -19,11 +19,14 @@ import {
 import {
   installationEventSchema,
   installationRepositoriesEventSchema,
+  pullRequestEventSchema,
   pushEventSchema,
 } from '@backend/domain/integration/github/webhook-events';
 
 import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-events';
 import type {
+  CheckPublisher,
+  CheckReport,
   CommitSource,
   InstallationVerifier,
   OwnershipResult,
@@ -131,6 +134,31 @@ export function decodeGetContent(data: unknown): string {
   return Buffer.from(file.data.content, 'base64').toString('utf8');
 }
 
+/** GitHub refuses a check run whose output `summary` or `text` exceeds this many characters. */
+export const CHECK_OUTPUT_MAX_CHARS = 65_535;
+
+const TRUNCATED_NOTE = '\n\n_…cut short: GitHub limits how long a check report can be._';
+
+/** Fit Markdown into a check run's output field, saying so when it's cut. Pure; unit-tested. */
+export function fitCheckOutput(markdown: string): string {
+  // sonarjs/null-dereference is a false positive: `markdown` is a non-optional string.
+  // eslint-disable-next-line sonarjs/null-dereference
+  return markdown.length <= CHECK_OUTPUT_MAX_CHARS
+    ? markdown
+    : `${markdown.slice(0, CHECK_OUTPUT_MAX_CHARS - TRUNCATED_NOTE.length)}${TRUNCATED_NOTE}`;
+}
+
+/** Pure mapper: a neutral CheckReport -> the `POST /repos/{owner}/{repo}/check-runs` body. Unit-tested. */
+export function toCheckRunBody(report: CheckReport) {
+  return {
+    name: report.name,
+    head_sha: report.headSha,
+    status: 'completed' as const,
+    conclusion: report.conclusion,
+    output: { title: report.title, summary: fitCheckOutput(report.summary), text: fitCheckOutput(report.text) },
+  };
+}
+
 /** Constant-time comparison of a `sha256=<hex>` webhook signature against one
  * computed from `rawBody` + `secret`. Pure (node:crypto is a Node built-in, not
  * a vendor SDK). A `null` or malformed signature returns `false`, never throws —
@@ -162,7 +190,8 @@ export function parseWebhook(eventType: string | null, rawBody: string): ParsedW
   if (
     eventType !== GithubWebhookEvents.push &&
     eventType !== GithubWebhookEvents.installation &&
-    eventType !== GithubWebhookEvents.installation_repositories
+    eventType !== GithubWebhookEvents.installation_repositories &&
+    eventType !== GithubWebhookEvents.pull_request
   ) {
     return { kind: WebhookKinds.ignored, eventType: eventType ?? 'unknown' };
   }
@@ -173,6 +202,9 @@ export function parseWebhook(eventType: string | null, rawBody: string): ParsedW
     }
     if (eventType === GithubWebhookEvents.installation) {
       return { kind: WebhookKinds.installation, data: installationEventSchema.parse(json) };
+    }
+    if (eventType === GithubWebhookEvents.pull_request) {
+      return { kind: WebhookKinds.pull_request, data: pullRequestEventSchema.parse(json) };
     }
     return { kind: WebhookKinds.installation_repositories, data: installationRepositoriesEventSchema.parse(json) };
   } catch (error) {
@@ -198,7 +230,13 @@ async function mintInstallationOctokit(app: App, externalAccountId: string) {
 
 export function createGitHubProvider(
   config: GitHubConfig,
-): RepoLister & InstallationVerifier & CommitSource & RepoFileSource & RepoArchiveSource & RepositoryDispatcher {
+): RepoLister &
+  InstallationVerifier &
+  CommitSource &
+  RepoFileSource &
+  RepoArchiveSource &
+  RepositoryDispatcher &
+  CheckPublisher {
   const app = new App({
     appId: config.appId,
     privateKey: config.privateKey,
@@ -309,6 +347,20 @@ export function createGitHubProvider(
         });
       } catch (error) {
         throw new GithubApiError('failed to dispatch repository event', octokitStatus(error), { cause: error });
+      }
+    },
+
+    // A completed check run in one call: the report is final when it's written.
+    async publishCheck(ref, report) {
+      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+      try {
+        await octokit.request('POST /repos/{owner}/{repo}/check-runs', {
+          owner: ref.owner,
+          repo: ref.name,
+          ...toCheckRunBody(report),
+        });
+      } catch (error) {
+        throw new GithubApiError('failed to create a check run', octokitStatus(error), { cause: error });
       }
     },
   };

@@ -50,8 +50,23 @@ export const installationRepositoriesEventSchema = z.object({
   installation: z.object({ id: z.number() }),
 });
 
+/** A pull request opened or moved (#146: the flags plan check). `action` stays a plain
+ * string: GitHub sends many more than the ones we act on, and those are ignored, not refused. */
+export const pullRequestEventSchema = z.object({
+  action: z.string(),
+  installation: z.object({ id: z.number() }),
+  repository: repoRef,
+  pull_request: z.object({
+    number: z.number(),
+    head: z.object({ sha: z.string() }),
+    /** `ref` is the bare branch name (no `refs/heads/`). */
+    base: z.object({ ref: z.string(), sha: z.string() }),
+  }),
+});
+
 export type ParsedWebhook =
   | { kind: typeof WebhookKinds.push; data: z.infer<typeof pushEventSchema> }
   | { kind: typeof WebhookKinds.installation; data: z.infer<typeof installationEventSchema> }
   | { kind: typeof WebhookKinds.installation_repositories; data: z.infer<typeof installationRepositoriesEventSchema> }
+  | { kind: typeof WebhookKinds.pull_request; data: z.infer<typeof pullRequestEventSchema> }
   | { kind: typeof WebhookKinds.ignored; eventType: string };

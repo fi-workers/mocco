@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import { GithubApiError } from '@backend/domain/integration/github/errors';
 import {
+  CHECK_OUTPUT_MAX_CHARS,
   decodeGetContent,
+  fitCheckOutput,
+  toCheckRunBody,
   toListedCommit,
   toRepo,
   toSourceCommit,
@@ -147,5 +150,37 @@ describe('toRepo', () => {
 
   it('stringifies the numeric id (external ids are strings across providers)', () => {
     expect(toRepo({ id: 1, name: 'n', default_branch: 'trunk', owner: { login: 'o' } }).externalRepoId).toBe('1');
+  });
+});
+
+describe('toCheckRunBody', () => {
+  it('maps a report to a completed check run with its Markdown output', () => {
+    const report = {
+      name: 'Mocco flags plan',
+      headSha: 'abc',
+      conclusion: 'neutral' as const,
+      title: 'T',
+      summary: 'S',
+      text: 'X',
+    };
+    expect(toCheckRunBody(report)).toEqual({
+      name: 'Mocco flags plan',
+      head_sha: 'abc',
+      status: 'completed',
+      conclusion: 'neutral',
+      output: { title: 'T', summary: 'S', text: 'X' },
+    });
+  });
+});
+
+describe('fitCheckOutput', () => {
+  it('keeps Markdown within the limit as it is', () => {
+    expect(fitCheckOutput('a'.repeat(CHECK_OUTPUT_MAX_CHARS))).toHaveLength(CHECK_OUTPUT_MAX_CHARS);
+  });
+
+  it('cuts longer Markdown to the limit and says so', () => {
+    const fitted = fitCheckOutput('a'.repeat(CHECK_OUTPUT_MAX_CHARS + 10));
+    expect(fitted).toHaveLength(CHECK_OUTPUT_MAX_CHARS);
+    expect(fitted.endsWith('_…cut short: GitHub limits how long a check report can be._')).toBe(true);
   });
 });

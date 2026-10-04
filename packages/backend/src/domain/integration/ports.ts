@@ -62,6 +62,30 @@ export interface RepoArchiveSource {
   getArchiveAtCommit(ref: { externalAccountId: string; owner: string; name: string }, sha: string): Promise<Uint8Array>;
 }
 
+/** How a finished check ended. Only the two that never block a merge on their own. */
+export const CheckConclusions = {
+  success: 'success',
+  neutral: 'neutral',
+} as const;
+export type CheckConclusion = (typeof CheckConclusions)[keyof typeof CheckConclusions];
+
+/** A finished check on a commit, with a Markdown report (#146: the flags plan on a PR). */
+export interface CheckReport {
+  name: string;
+  headSha: string;
+  conclusion: CheckConclusion;
+  title: string;
+  /** Markdown, shown first. */
+  summary: string;
+  /** Markdown, the details under the summary. */
+  text: string;
+}
+
+/** Publishes a check on a commit (github: a completed check run). */
+export interface CheckPublisher {
+  publishCheck(ref: { externalAccountId: string; owner: string; name: string }, report: CheckReport): Promise<void>;
+}
+
 /** Fires an out-of-band event at a provider repo to kick off external execution
  * (github: a `repository_dispatch`). The neutral seam the GitHub executor adapter
  * (domain/execution/executors/github) triggers through — so the executor never
