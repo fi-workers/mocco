@@ -410,7 +410,7 @@ describe('RunService (pglite)', () => {
       const run = await service.trigger(workspaceId, commitId, userId);
 
       const auditRepo = new AuditRepo(t.db);
-      const entries = await auditRepo.all(workspaceId);
+      const entries = await auditRepo.listByWorkspace(workspaceId, 0n);
       const triggered = entries.find(entry => entry.action === AuditActions.runTriggered);
       expect(triggered).toBeDefined();
       expect(triggered?.actorUserId).toBe(userId);

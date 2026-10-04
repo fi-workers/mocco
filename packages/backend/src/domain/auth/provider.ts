@@ -4,6 +4,7 @@
 import { cimd } from '@better-auth/cimd';
 import { fetchClientMetadataResource } from '@better-auth/cimd/node';
 import { mcp } from '@better-auth/mcp';
+import { McpScopes, mcpSignInScopes } from '@mocco/common/mcp';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { toNodeHandler } from 'better-auth/node';
@@ -51,6 +52,16 @@ export interface AuthOptions {
 /** Where a client is sent to sign in, and to approve what it is asking for. */
 const LOGIN_PAGE = '/auth/sign-in';
 const CONSENT_PAGE = '/auth/consent';
+
+/**
+ * Every scope the authorization server can grant: the vendor's sign-in defaults plus
+ * `approvals:write`. A registered client's capability set is this list (the vendor
+ * persists it at registration), so a client can later step up to `approvals:write`
+ * without registering again. Clients stored before the scope existed lack it until their
+ * Client ID Metadata Document is fetched again — the vendor re-persists the client on
+ * every metadata refresh, which a fresh server process always does on first use.
+ */
+const MCP_SCOPES = [...mcpSignInScopes, McpScopes.approvalsWrite];
 
 /**
  * Notes on the MCP plugins, registered by `createMcpProvider` below.
@@ -138,7 +149,12 @@ export function createProvider(db: AdapterDb, options: AuthOptions) {
       organization(),
       jwt(),
       cimd({ fetchClientMetadataResource, metadataProfile: 'mcp-2026-07-28' }),
-      mcp({ resource: options.mcpResource, loginPage: LOGIN_PAGE, consentPage: CONSENT_PAGE }),
+      mcp({
+        resource: options.mcpResource,
+        loginPage: LOGIN_PAGE,
+        consentPage: CONSENT_PAGE,
+        scopes: MCP_SCOPES,
+      }),
     ],
   });
 }

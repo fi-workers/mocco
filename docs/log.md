@@ -150,6 +150,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
 - Source: branch `feat/mcp-agents-setting`
 
+## 2026-10-05 — Agents can vote on approvals
+
+- The connect guide lists `mocco_approvals_vote`, says what the confirmation shows and that declining votes nothing,
+  adds "Allowing an app to vote" for the step-up consent, and replaces the stale "tools are missing" troubleshooting
+  row with the refusals a person can now meet. The MCP spec marks slice 6b shipped and records how the scope,
+  step-up, confirmation state and errors are built; the workspace reference notes the vote tool reads the switch.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/workspace.md`,
+  `log.md`
+- Source: branch `feat/mcp-approvals-vote`
+
 ## 2026-10-04 — Mocco is everything a product needs, except the code
 
 - Added [ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md), superseding ADR 0026's
@@ -160,6 +170,27 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #357
 
+## 2026-10-04 — Status page architecture decisions
+
+- Added ADR 0027 (status probes are pull-based agents: one `@mocco/probe` for hosted regions and private locations,
+  Vercel functions and Cloudflare cron rejected as probers, hosting kept out of code) and ADR 0028 (public status
+  pages are static snapshots on object storage behind a CDN, the deliberate exception to ADR 0015's ISR). The status
+  spec links both, publishes through the storage domain's `ObjectStore` port instead of its own bucket settings, and
+  records that Fly.io has no Seoul region. The feature map gains a Status page section with the v1 scope and
+  non-goals.
+- Docs touched: `adr/0027-status-probes-are-pull-based-agents.md`, `adr/0028-status-pages-are-static-snapshots.md`,
+  `adr/README.md`, `index.md`, `specs/2026-09-24-status-page-design.md`, `reference/feature-map.md`
+- Source: branch `docs/status-adrs` (issue #147)
+
+## 2026-10-05 — Status pages and components
+
+- Added the [status page model](./reference/status.md) reference for the first part of #148: status pages,
+  component groups and components, their tenancy through composite foreign keys, the audit actions and the
+  `status.*` router. The feature map's "Components, incidents and maintenance" row moves to Prototype (backend
+  only, pages and components so far; incidents and maintenance are next).
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `index.md`, `log.md`
+- Source: branch `feat/status-model` (issue #148)
+
 ## 2026-10-04 — Customer screenshots show page content only
 
 - Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,
@@ -168,3 +199,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   teach the navigation. A navigation change no longer stales every guide.
 - Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
 - Source: PR #359
+
+## 2026-10-04 — Audit log: what verify proves, and what it costs
+
+- Corrected the audit spec: a `seq` gap is normal (a rolled-back insert uses a value) and `verify` doesn't check
+  for gaps; a middle deletion breaks the `prev_hash` link instead. Tail truncation is stated as a known limitation
+  until KMS signing. The spec also records that `verify` walks the chain in pages and that the console no longer
+  polls it, and that a credential request with a bad run token isn't audited.
+- The audit customer guide says the check runs when the page opens and on Re-verify, explains numbering gaps,
+  and names tail truncation.
+- Docs touched: `superpowers/specs/2026-07-29-slice8-audit-log-design.md`, `customer/start/audit-log.md`, `log.md`
+- Source: branch `fix/audit-verify-cost` (issue #92)

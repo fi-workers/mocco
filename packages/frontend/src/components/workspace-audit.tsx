@@ -5,19 +5,27 @@ import { trpc } from '@frontend/lib/trpc';
 
 import type { AuditEntryDto } from '@mocco/common/audit';
 
-/** Poll cadence for the chain read + verification. Audit is durable, not real-time,
- * so a relaxed interval keeps the badge fresh without hammering the chain walk. */
+/** Poll cadence for the entry list, which reads only what it shows. Audit is durable,
+ * not real-time, so a relaxed interval is enough. The chain verification is NOT
+ * polled: it re-walks the whole chain, so it runs on load and on "Re-verify". */
 const POLL_MS = 5000;
 
 interface Props {
   workspaceId: string;
 }
 
-/** The chain-intact badge: green "Verified" once the chain re-walk reconciles, red
- * "Broken at #<seq>" the moment a stored hash/linkage no longer matches its content.
- * Never blocks — while the first verify is in flight it shows a muted "Checking…". */
+/** The chain-intact badge: green "Verified" when the chain re-walk reconciles, red
+ * "Broken at #<seq>" when a stored hash/linkage no longer matches its content. The
+ * walk is linear in the chain, so it runs once per visit and again only on
+ * "Re-verify" (never on a timer, a window focus or a remount within the session);
+ * the badge says when it last ran. Never blocks — while the first verify is in flight
+ * it shows a muted "Checking…". */
 function ChainBadge({ workspaceId }: Props) {
-  const verifyQuery = trpc.audit.verify.useQuery({ workspaceId }, { retry: false, refetchInterval: POLL_MS });
+  const verifyQuery = trpc.audit.verify.useQuery(
+    { workspaceId },
+    { retry: false, staleTime: Infinity, refetchOnWindowFocus: false },
+  );
+  const checkedAt = new Date(verifyQuery.dataUpdatedAt).toLocaleTimeString();
 
   if (verifyQuery.data === undefined) {
     return <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">Checking…</span>;
@@ -25,13 +33,13 @@ function ChainBadge({ workspaceId }: Props) {
   if (verifyQuery.data.intact) {
     return (
       <span className="rounded-md border border-emerald-600/40 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:border-emerald-400/40 dark:text-emerald-400">
-        Chain verified
+        Chain verified at {checkedAt}
       </span>
     );
   }
   return (
     <span className="rounded-md border border-destructive/40 px-2 py-0.5 text-xs font-medium text-destructive">
-      Chain broken at #{verifyQuery.data.brokenAtSeq}
+      Chain broken at #{verifyQuery.data.brokenAtSeq} (checked {checkedAt})
     </span>
   );
 }
@@ -54,7 +62,8 @@ function subjectLabel(entry: AuditEntryDto): string {
  * UX invariant (mirrors run-detail): the spinner shows ONLY on the very first load
  * (`isPending`). Every subsequent background poll is silent — React Query keeps the
  * last data, so the table stays rendered and updates in place, never a blocking
- * spinner on refetch. A manual "Re-verify" forces an immediate re-walk.
+ * spinner on refetch. The chain badge is not polled; "Re-verify" re-walks the chain
+ * and refreshes the list.
  */
 export default function WorkspaceAudit({ workspaceId }: Props) {
   const utils = trpc.useUtils();

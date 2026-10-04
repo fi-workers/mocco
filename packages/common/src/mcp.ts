@@ -18,3 +18,20 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
   workspaceId: z.uuid(),
   agentsMayDecide: z.boolean(),
 });
+
+/**
+ * The OAuth scopes the MCP authorization server grants beyond sign-in.
+ *
+ * `approvals:write` lets an agent vote as its person. It is not asked for when a client
+ * first connects: the client is challenged for it (step-up) the first time it calls a
+ * deciding tool, so the person grants it at the moment a decision is actually wanted.
+ * The keys are camel-cased because the values follow OAuth's `resource:action` form.
+ */
+export const McpScopes = {
+  approvalsWrite: 'approvals:write',
+} as const;
+export type McpScope = (typeof McpScopes)[keyof typeof McpScopes];
+
+/** What a client is asked for when it first connects: who the person is, and staying
+ * signed in. Reading needs nothing more. */
+export const mcpSignInScopes = ['openid', 'profile', 'email', 'offline_access'] as const;

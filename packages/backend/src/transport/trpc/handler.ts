@@ -15,6 +15,7 @@ import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
+import { getStatusDomain } from '@backend/domain/status/instance';
 import { appRouter } from '@backend/transport/trpc/root';
 
 import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
@@ -52,6 +53,7 @@ import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Context } from '@backend/transport/trpc/trpc';
 
 /** Injected per-handler deps. `connection`/`commitSync`/`commitConfig` are present only
@@ -89,6 +91,7 @@ export interface TrpcDeps extends Services {
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
   helpTranslations: HelpTranslationService;
+  statusPages: StatusPageService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -144,6 +147,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         helpAuthoring: deps.helpAuthoring,
         helpImport: deps.helpImport,
         helpTranslations: deps.helpTranslations,
+        statusPages: deps.statusPages,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,
@@ -193,6 +197,7 @@ export function productionServices(): TrpcDeps {
     helpAuthoring: getHelpDomain().helpAuthoring,
     helpImport: getHelpDomain().helpImport,
     helpTranslations: getHelpDomain().helpTranslations,
+    ...getStatusDomain(),
     inbound: getInbound(),
     notifications: getNotification().channels,
     notificationActivity: getNotification().activity,
