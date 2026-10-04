@@ -27,7 +27,7 @@ On the sign-up page, enter your name, email and a password of at least 8 charact
 
 ## 2. Create a workspace
 
-A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens it.
+A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens its **Home**: the approvals waiting for your team in every product (a flag change in a protected environment, a raised minimum app version, a release on a protected OTA channel), the latest entries of the audit log, and your projects. Each waiting approval links to the screen where you approve it.
 
 ![Create a workspace: the workspace name and Create workspace](./images/create-workspace.png)
 

@@ -32,6 +32,7 @@ export const sectionGroupLabels: Readonly<Record<SectionGroup, string>> = {
 };
 
 export const WorkspaceSections = {
+  home: 'home',
   deploys: 'deploys',
   projects: 'projects',
   members: 'members',
@@ -65,6 +66,7 @@ interface NavEntry<Key, Href> {
 }
 
 export const workspaceNav: readonly NavEntry<WorkspaceSection, (workspaceId: string) => string>[] = [
+  { key: WorkspaceSections.home, label: 'Home', href: Routes.workspaceHome, product: null, group: null },
   { key: WorkspaceSections.projects, label: 'Projects', href: Routes.workspaceProjects, product: null, group: null },
   {
     key: WorkspaceSections.deploys,
