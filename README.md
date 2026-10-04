@@ -7,8 +7,8 @@
 | Group          | Products today                                                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Release**    | Deploy governance on GitHub Actions · OTA updates (hosted, or gating your own tool) · Force update · Feature flags (OpenFeature) |
-| **Support**    | Messenger · Help center                                                                                                          |
 | **Operate**    | Notifications (Mocco, Sentry, Vercel, GitHub → Discord) · Audit log                                                              |
+| **Support**    | Messenger · Help center                                                                                                          |
 | **Developers** | Public `/v1` API with API keys · SDKs (MIT) · `mocco` CLI · MCP server                                                           |
 
 Next on the [roadmap](./docs/reference/roadmap.md): status page, app reviews, feedback board, forum, deep links and end-user identity.
