@@ -25,6 +25,7 @@ export function getMcpHandler(): McpHttpHandler {
     state.handler = createMcpHttpHandler({
       runs: getExecution().runs,
       approvals: getGovernance().approvals,
+      gates: getGovernance().gates,
       scope: new WorkspaceScope({ memberships: new MembershipRepo(getDb()) }),
       settings: getMcpSettings(),
       confirmations: secret === undefined ? undefined : createConfirmations(secret),

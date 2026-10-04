@@ -182,6 +182,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `adr/README.md`, `index.md`, `specs/2026-09-24-status-page-design.md`, `reference/feature-map.md`
 - Source: branch `docs/status-adrs` (issue #147)
 
+## 2026-10-05 — Agents can resume paused runs
+
+- The connect guide lists `mocco_gates_resume`, says what its confirmation shows (a reject halts the run), that one
+  permission covers voting and resuming, and adds the resume refusals to troubleshooting. The MCP spec marks slice 6c
+  shipped, records how the resume is built, and decides its open question: the tool stays behind `approvals:write`,
+  because roles already separate who may vote from who may resume, and a separate scope can be split later through
+  the same step-up without breaking clients. The workspace reference notes the resume tool reads the switch too.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/workspace.md`,
+  `log.md`
+- Source: branch `feat/mcp-gates-resume`
+
 ## 2026-10-04 — Customer screenshots show page content only
 
 - Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,

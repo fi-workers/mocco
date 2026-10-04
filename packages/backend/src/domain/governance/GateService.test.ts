@@ -172,6 +172,40 @@ describe('GateService (pglite)', () => {
     return gate.state;
   };
 
+  describe('getPending', () => {
+    it('returns the paused gate with the repository and commit the run deploys', async () => {
+      const workspaceId = await seedWorkspace();
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      const { run, repo, commit, gate } = await gateService.getPending(workspaceId, runId, 0);
+
+      expect(run.id).toBe(runId);
+      expect(`${repo.owner}/${repo.name}`).toBe('fi-workers/api');
+      expect(commit.branch).toBe('main');
+      expect(gate).toMatchObject({ name: 'approve', itemIndex: 0, state: 'pending' });
+    });
+
+    it('refuses what resume would refuse: another index, a foreign workspace, a settled gate', async () => {
+      const workspaceId = await seedWorkspace();
+      const alice = await seedUser();
+      await seedRole(workspaceId, 'deployer', [alice]);
+      const runId = await triggerGatedRun(
+        workspaceId,
+        { name: 'approve', resume: [{ role: 'deployer', count: 1 }] },
+        await seedUser(),
+      );
+
+      await expect(gateService.getPending(workspaceId, runId, 1)).rejects.toBeInstanceOf(GateNotCurrentError);
+      await expect(gateService.getPending(await seedWorkspace(), runId, 0)).rejects.toBeInstanceOf(GateNotCurrentError);
+      await gateService.resume(workspaceId, runId, 0, alice, 'resume');
+      await expect(gateService.getPending(workspaceId, runId, 0)).rejects.toBeInstanceOf(GateNotCurrentError);
+    });
+  });
+
   describe('single-role N-of-M', () => {
     it('a single resume satisfies count:1 → gate resumed, run continues (next step dispatched)', async () => {
       const workspaceId = await seedWorkspace();

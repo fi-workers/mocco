@@ -272,7 +272,9 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    confirmation and the opt-in that enables them. It ships as three PRs: the per-workspace
    opt-in (`mocco_mcp_settings`, *shipped*), then `approvals:write` with the confirmation
    round trip and `mocco_approvals_vote` (*shipped* — see *How the vote is built* below),
-   then `mocco_gates_resume`, which reuses the same scope, opt-in and confirmation.
+   then `mocco_gates_resume`, which reuses the same scope, opt-in and confirmation
+   (*shipped* — see *How the resume is built*). Slice 6 is complete; the next is slice 7
+   or slice 8.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
    `@mocco/cli`, which becomes an alias.
 8. **OTA and flags tools** — once the shape has survived a real week.
@@ -305,6 +307,29 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   `AUTH_SECRET` the tool refuses rather than run unconfirmed.
 - **Errors.** The service's refusals (not pending, a second vote, a missing role,
   self-approval, a missing reason) come back as tool errors that say what to do next.
+
+### How the resume is built (slice 6c)
+
+- **Same locks, one place.** The scope check, the opt-in and the server's ability to sign
+  are shared with the vote (`transport/mcp/tools/deciding.ts`), so the two deciding tools
+  cannot drift apart. `confirmation.ts` needed no change: the payload already names its
+  tool, so a vote's state does not parse as a resume's.
+- **Scope.** It stays behind `approvals:write` — see *Decided* below.
+- **Confirmation.** The first call reads the gate through `GateService.getPending`, which
+  applies the same guard as `resume` (the run's current pending gate, in this workspace)
+  and returns the run with its repository and commit. The person is shown the decision
+  (a reject says it halts the run), the repository, the commit with its branch and subject
+  line, the gate's name and index, what it requires, and the reason. The state records the
+  workspace, run, gate index, decision and reason, and the retry must match all of them.
+  A gate that is not current is refused before anything is asked.
+- **The call.** Only an accepted `confirm: true` reaches `GateService.resume`, with the
+  caller's own id, once. The answer says whether the vote was recorded and where the run
+  and gate now stand — a single vote need not settle an N-of-M gate.
+- **Errors.** Not the current gate, the run's triggerer under `prevent_self`, a missing
+  role, a missing reason, and a second vote come back as tool errors that say what to do
+  next. A gate settled between the question and the answer is refused as not current.
+- **Finding the gate.** `mocco_runs_get` now puts the gate's `itemIndex` in `waitingOn`,
+  so a concise read is enough to name the gate to resume.
 
 ## Evaluating it
 
@@ -400,5 +425,19 @@ before it shows up as behaviour.
 - **Rate limits for a person's token.** `/v1` limits per key; an MCP token needs its own
   bucket, and an agent polling `mocco_runs_get` in a loop is the expected shape, not the
   abusive one.
-- **Does `mocco_gates_resume` belong behind its own scope?** Resuming is not voting, and
-  a role may well be allowed one and not the other.
+
+### Decided
+
+- **`mocco_gates_resume` stays behind `approvals:write`** (slice 6c). The question was
+  whether resuming deserves its own scope because a role may be allowed to vote and not to
+  resume. That distinction is already drawn, and drawn better, by the roles: a gate names
+  the roles that may resume it and an approval request names the roles that may vote, and
+  the service checks them on every call. The scope answers a different question — may this
+  app decide anything as me at all — and to a person on a consent screen "approve or reject
+  changes as you" covers both. A second scope would add a second consent prompt that
+  protects nothing the roles do not, and would force the console's consent wording and the
+  authorization server's client capabilities to change in the same PR. Splitting later is
+  not a breaking change: a new `gates:write` would be declared by the tool's
+  `scopeChallenge`, and a token that lacks it is challenged for it (403
+  `insufficient_scope`) and the client steps up by itself, exactly as it did for
+  `approvals:write`.
