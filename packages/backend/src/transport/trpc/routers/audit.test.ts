@@ -172,7 +172,7 @@ describe('audit router on pglite', () => {
       const { workspace: ws } = await api.workspace.create({ name: 'W' });
       await seedEntries(ws.id, ['a', 'b', 'c']);
 
-      const rows = await new AuditRepo(t.db).all(ws.id);
+      const rows = await new AuditRepo(t.db).listByWorkspace(ws.id, 0n);
       const tampered = expectOne(rows.slice(1, 2));
       await t.db
         .update(auditLog)
@@ -192,7 +192,7 @@ describe('audit router on pglite', () => {
       await seedEntries(wsA.id, ['a1']);
       await seedEntries(wsB.id, ['b1']);
 
-      const bRow = expectOne(await new AuditRepo(t.db).all(wsB.id));
+      const bRow = expectOne(await new AuditRepo(t.db).listByWorkspace(wsB.id, 0n));
       await t.db.update(auditLog).set({ hash: 'deadbeef' }).where(eq(auditLog.seq, bRow.seq));
 
       await expect(api.audit.verify({ workspaceId: wsA.id })).resolves.toEqual({ intact: true });

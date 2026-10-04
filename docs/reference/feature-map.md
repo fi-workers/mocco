@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -122,6 +122,29 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 | Custom domains | Prototype | `HELP_CUSTOM_DOMAINS` (`help.example.com=<slug>`) serves a site on the customer's domain; adding the domain is a deployment step for now |
 | Console editor | Prototype | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, publish and history ([customer guide](../customer/help/help-center.md)) |
 
+### Status page (#103)
+
+Status pages and their components are built as a backend model and API ([status page model](./status.md));
+incidents and maintenance are next, and there is no screen yet. The design is the [status page spec](../specs/2026-09-24-status-page-design.md), with
+[ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md) (probes) and
+[ADR 0028](../adr/0028-status-pages-are-static-snapshots.md) (public pages). What sets it apart from a standalone
+status tool is that every incident lists the runs that reached production just before it.
+
+| Feature | Status | Description |
+|---|---|---|
+| Components, incidents and maintenance | Prototype | Backend only (the `status.*` router), no screen yet. Built: a project's status pages with component groups and components, and audited manual component status. Next: incidents (investigating → identified → monitoring → resolved) with a timeline, impact and a postmortem; scheduled maintenance. Linking components to repos comes with deploy correlation |
+| Public status page | Not drawn | Versioned static snapshots on object storage behind a CDN, so the page reads without the Mocco app or database (ADR 0028); `<slug>.status.mocco.club` and a custom domain; 90-day uptime bars |
+| HTTP and TCP monitors | Not drawn | Status code, keyword, latency threshold and TLS expiry; 60-second minimum interval; run by `@mocco/probe` agents that lease their work (ADR 0027) |
+| Multi-region consensus | Not drawn | A monitor is down only when a quorum of locations fails for consecutive rounds; a silent location is `no_data`, never downtime. Hosted regions plus private locations behind NAT |
+| Heartbeat monitors | Not drawn | Cron jobs ping `/v1/ping/:token`; silence past period plus grace is down |
+| Deploy correlation and deploy watch | Not drawn | An incident shows the runs that finished before it started, linked both ways; after a run succeeds its monitors check every 30 seconds for 15 minutes, and a failure opens an incident naming the run |
+| Subscribers | Not drawn | Email with double opt-in, RSS/Atom, signed webhooks |
+| `/v1` management API, SDK and MCP tools | Not drawn | Monitors, incidents and maintenance from CI, `@mocco/sdk` and agents (ADR 0025) |
+
+**Not in v1:** on-call schedules and escalation, phone and SMS; browser, multi-step, DNS and ICMP checks; intervals
+under 30 seconds; automatic rollback on a failed post-deploy check (that needs its own ADR); private or SSO-gated
+pages; latency charts on the public page; a dedicated time-series database.
+
 ### Deploy loop depth
 
 | Feature | Status | Description |
@@ -139,5 +162,5 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 | Slack notifications | Prototype | Approval-request/deploy/override events → channel. Convenience (not correctness) |
 | Org policy override | Prototype | WS rules a repo can't weaken (monotonic hardening). An enterprise concern |
 | Multi-cloud (GCP WIF) | Not drawn | A second broker beyond AWS STS. One is enough to prove the model |
-| Ops — Monitors/Incidents | Not drawn | Post-deploy health/incident integration. Now its own product line — see the status page in the [roadmap](./roadmap.md) (#103) |
+| Ops — Monitors/Incidents | Not drawn | Post-deploy health/incident integration. Now its own product line — see [Status page (#103)](#status-page-103) above |
 | Billing / Plan | Not drawn | Usage/plans. Needed for billing, unnecessary to prove value |

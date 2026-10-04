@@ -67,4 +67,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
   [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',
+  [AuditActions.statusPageCreated]: 'Status page created',
+  [AuditActions.statusPageDeleted]: 'Status page deleted',
+  [AuditActions.statusComponentStatusChanged]: 'Component status set by hand',
 };

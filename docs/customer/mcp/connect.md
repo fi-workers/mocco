@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -25,10 +25,9 @@ You sign in once in the browser and the client holds the token.
 https://www.mocco.club/api/mcp
 ```
 
-> The read tools are in, and so is the workspace switch for deciding (below). The deciding
-> tools themselves (approving, resuming, promoting) come next. Until they do, an agent can
-> tell you a deploy is blocked but can't unblock it, whatever the switch says. The plan is
-> in the [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
+> The read tools are in, and so is the first deciding tool: voting on an approval request.
+> Resuming a paused run comes next, then promoting. The plan is in the
+> [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
 
@@ -50,14 +49,26 @@ rows you did not ask about.
 tool asks which and names them — and a workspace you are not a member of is refused
 whether or not it exists.
 
-**Deciding is separate and off by default.** Approving, resuming and promoting are
-switched on per workspace by an owner. Until then your agent can tell you the deploy is
-blocked on a second approval; it cannot be that approval.
+**Deciding is separate and off by default.**
 
-When they are on, each one asks you to confirm — the client shows you the run, the gate
-and the policy before anything happens. That confirmation is the protocol's own step, not
-a prompt we wrote, and it is what stops a page of text your agent read somewhere from
-turning into a production deploy.
+| Tool | Does |
+|---|---|
+| `mocco_approvals_vote` | Approves or rejects a pending request as you, with an optional reason |
+
+Deciding is switched on per workspace by an owner or admin (below). Until then your agent
+can tell you a change is waiting on a second approval; it cannot be that approval.
+
+When it is on, every vote asks you first. Your client shows what is about to happen — approve
+or reject, the kind of request, what it is about, the exact change it would let through, and
+your reason — and nothing is voted until you answer yes. Declining, or closing the prompt,
+votes nothing. That confirmation is the protocol's own step, not a prompt we wrote, and it
+is what stops a page of text your agent read somewhere from turning into a production
+deploy. A confirmation is good for five minutes and only for the vote it showed: change the
+decision or the reason and you are asked again.
+
+The vote is then cast exactly as if you had clicked it in the console. The request's own
+rules still apply: you need one of the roles it asks for, you cannot approve a change you
+requested when the request forbids it, and you get one vote.
 
 ## What it will never do
 
@@ -136,7 +147,7 @@ will not connect — upgrade it, or use the `mocco` CLI in the meantime.
 ## Approving the connection
 
 The first time a client connects, your browser opens Mocco. Sign in if you aren't already,
-and Mocco asks whether to let that app act as you:
+and Mocco asks whether to let that app read as you:
 
 ![The consent screen: the app's name, the account it would act as, what it will be able to do, and Allow or Deny](./images/mcp-consent.png)
 
@@ -146,6 +157,17 @@ reconnecting it later doesn't ask again.
 
 Only allow an app you just started connecting. If this screen appears and you didn't start
 anything, choose Deny.
+
+### Allowing an app to vote
+
+Connecting does not let an app vote. The first time your agent tries to, Mocco answers that
+the connection needs one more permission, and your client opens the same screen again with
+one new line: **Approve or reject changes as you, in workspaces that allow agents to
+decide**. Allow it and the client carries on with the vote, which still asks you to confirm
+it. Deny it and the app keeps reading, as before.
+
+You are asked once per app. The permission does nothing in a workspace that has not allowed
+agents to decide, and nothing beyond what your roles allow anywhere.
 
 ## Turning the deciding tools on
 
@@ -161,6 +183,9 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 |---|---|
 | The client asks for a token or header | It is treating this as a key-authenticated server. Remove the header; this one is OAuth |
 | `405 Method Not Allowed` on connect | The client is trying `GET` or `DELETE`. It is on the old transport — upgrade it |
-| Sign-in succeeds, tools are missing | The deciding tools are off for that workspace, or your roles do not include them |
+| "Agents may not vote in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
+| "This connection may not vote" | The app was never allowed to vote. Reconnect it and allow the voting permission when asked |
+| "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
+| The browser reports an invalid scope when you allow voting | The app was connected before voting existed, and Mocco has not yet refreshed what it may ask for. It does within the hour; try again then |
 | The browser opens Mocco's sign-in and then lands on your workspaces instead of the client | The page was opened without the client's request in its address. Start the connection again from the client |
 | Tools from the wrong workspace | You belong to several. Ask the agent to switch workspace, or pin one in the client config |

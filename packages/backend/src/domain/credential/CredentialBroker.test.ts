@@ -320,7 +320,7 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
     const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
 
     expect(result).toEqual({ ok: false, reason: BrokerDenials.credentialUnavailable });
-    const entries = await new AuditRepo(t.db).all(workspaceId);
+    const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
     expect(entries.find(entry => entry.action === AuditActions.credentialDenied)?.payload).toMatchObject({
       reason: BrokerDenials.credentialUnavailable,
     });
@@ -405,7 +405,7 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
       expect(result.ok).toBe(true);
 
-      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
       const issued = entries.find(entry => entry.action === AuditActions.credentialIssued);
       expect(issued).toBeDefined();
       expect(issued?.actorUserId).toBeNull(); // a machine/runtime request
@@ -424,13 +424,30 @@ describe('CredentialBroker (pglite, fail-closed)', () => {
       const result = await broker.issue({ runId, stepIndex: STEP_INDEX, token: TOKEN });
       expect(result.ok).toBe(false);
 
-      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
       const denied = entries.find(entry => entry.action === AuditActions.credentialDenied);
       expect(denied).toBeDefined();
       expect(denied?.actorUserId).toBeNull();
       expect(denied?.subjectId).toBe(runId);
       expect(denied?.payload).toMatchObject({ reason: BrokerDenials.gateNotResumed, stepIndex: STEP_INDEX });
       expect(await audit.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('a bad or absent run token DENIES without appending — an unauthenticated caller cannot grow the chain', async () => {
+      const { runId, workspaceId } = await seed();
+
+      // A caller holding only the run id (seen in a URL or a log), no valid token.
+      await expect(broker.issue({ runId, stepIndex: STEP_INDEX, token: 'wrong-token' })).resolves.toEqual({
+        ok: false,
+        reason: BrokerDenials.badToken,
+      });
+      await expect(broker.issue({ runId, stepIndex: STEP_INDEX, token: '' })).resolves.toEqual({
+        ok: false,
+        reason: BrokerDenials.badToken,
+      });
+
+      const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
+      expect(entries.filter(entry => entry.action === AuditActions.credentialDenied)).toEqual([]);
     });
 
     it('is fail-open — an ALLOW still issues when audit.record throws', async () => {

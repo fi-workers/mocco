@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -271,10 +271,40 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
    confirmation and the opt-in that enables them. It ships as three PRs: the per-workspace
    opt-in (`mocco_mcp_settings`, *shipped*), then `approvals:write` with the confirmation
-   round trip and `mocco_approvals_vote`, then `mocco_gates_resume`.
+   round trip and `mocco_approvals_vote` (*shipped* — see *How the vote is built* below),
+   then `mocco_gates_resume`, which reuses the same scope, opt-in and confirmation.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
    `@mocco/cli`, which becomes an alias.
 8. **OTA and flags tools** — once the shape has survived a real week.
+
+### How the vote is built (slice 6b)
+
+- **Scope.** The authorization server knows `approvals:write` alongside the sign-in
+  scopes. The 401 that starts a connection names only the sign-in scopes, so a client
+  never asks for it up front. The tool declares it with the SDK's per-tool
+  `scopeChallenge`, and a token without it gets a 403 `insufficient_scope` naming every
+  scope the token has plus this one — the client re-authorizes with exactly that set, and
+  the consent screen asks again because the set grew. The challenge is decided on the
+  parsed `tools/call` the SDK is about to run, not on the `Mcp-Name` header; the tool
+  checks the scope again itself.
+- **Clients registered earlier.** A client's allowed scopes are stored when it registers,
+  so one that registered before this scope existed would be refused it. Every client
+  arrives through a Client ID Metadata Document, and Better Auth re-stores the client
+  whenever it fetches that document again (at most an hour apart, and on a fresh process),
+  so these heal by themselves.
+- **Opt-in.** The tool refuses unless the workspace allows agents to decide, naming where
+  an owner or admin changes it.
+- **Confirmation.** The first call returns `input_required` with a form elicitation that
+  states the decision, the request kind, the subject, the pinned change and the reason,
+  plus a `requestState` minted by the SDK's HMAC codec. The key is derived from
+  `AUTH_SECRET` (`sha256("mocco-mcp-request-state:" + secret)`, the same pattern as the
+  flag stream tokens), bound to the person, the client and the method, and valid for five
+  minutes. The SDK verifies it before the tool runs and refuses a forged, expired or
+  foreign one with a fixed `-32602`. The tool then checks that the state is for this exact
+  vote, and only an accepted `confirm: true` reaches `ApprovalService.vote`. Without
+  `AUTH_SECRET` the tool refuses rather than run unconfirmed.
+- **Errors.** The service's refusals (not pending, a second vote, a missing role,
+  self-approval, a missing reason) come back as tool errors that say what to do next.
 
 ## Evaluating it
 

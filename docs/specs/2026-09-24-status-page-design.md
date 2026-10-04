@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [spec, design, status-page]
@@ -13,6 +13,8 @@ related:
   - ../research/status-page-competitors.md
   - ../reference/roadmap.md
   - ./2026-09-24-platform-foundations-design.md
+  - ../adr/0027-status-probes-are-pull-based-agents.md
+  - ../adr/0028-status-pages-are-static-snapshots.md
 ---
 
 # Status page, monitors and incidents — implementation design
@@ -101,7 +103,7 @@ flowchart LR
 | **Fly.io machines (one small VM per region)** | Yes, 18 regions (per [Fly pricing docs](https://docs.fly.io/about/pricing/)); OpenStatus runs its Go checker this way at about $4 per probe ([OpenStatus infra](https://www.openstatus.dev/blog/openstatus-infra)) | Yes | The same container runs anywhere | shared-cpu-1x 256 MB is about $2/mo per region plus egress (computed from the per-second price; unverified vs region multiplier up to 3x) | **Adopt for hosted regions**, but only as a host for the generic agent. There is no Fly API coupling in the core |
 | **Self-hosted probe agent (pull model)** | Wherever the customer runs it | We run the same agent | Yes | Customer-paid | **Adopt as the core design.** Every probe, hosted or private, is this agent |
 
-**Decision (proposed ADR "status probes are pull-based agents").** A probe is a stateless process, `packages/probe` (`@mocco/probe`, Node 22, no DB). It runs a loop:
+**Decision ([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)).** A probe is a stateless process, `packages/probe` (`@mocco/probe`, Node 22, no DB). It runs a loop:
 
 1. `POST /api/ext/v1/probe/lease` with its location token. It receives a batch of **check assignments** due in the next ~60 s, each carrying monitor spec, `roundAt` (the scheduled round timestamp) and a `leaseId`.
 2. It executes each check at `roundAt` plus jitter, using `undici` for HTTP with `timings`, `node:net` for TCP and `node:tls` for certificate expiry.
@@ -241,8 +243,7 @@ export interface RunEventsSource {            // domain/execution, in-process
 ```
 
 Leaf files that are the only vendor importers:
-- `domain/status/publish/s3-publisher.ts`: S3-compatible (R2, S3, MinIO) through the object storage foundation's client. Env `STATUS_PUBLISH_BUCKET`, `STATUS_PUBLISH_PURGE_URL`.
-- `domain/status/publish/fs-publisher.ts`: self-host directory output (`STATUS_PUBLISH_DIR`), served by any static server.
+- `domain/status/publish/object-store-publisher.ts`: the `StaticPublisher` over the storage domain's `ObjectStore` port ([ADR 0028](../adr/0028-status-pages-are-static-snapshots.md)), so the `s3` driver (R2, S3, MinIO) serves hosted pages and the `filesystem` driver writes a directory for self-host. CDN purging of the pointer file is its only addition.
 - `domain/status/publish/vercel-blob-publisher.ts` (optional).
 - `packages/probe/src/http-check.ts`: the only `undici` importer.
 - No Fly.io API is used by code. Hosted probe deployment is infra (`infra/probe/fly.toml`), outside the backend.
@@ -342,13 +343,13 @@ await mocco.status.incidents.update(inc.id, { status: 'resolved', body: 'Rolled 
 | Concern | Hosted Mocco | Self-host (Node 22 + Postgres) |
 |---|---|---|
 | Scheduler tick | Vercel Cron, per-minute (Pro) | In-process loop (scheduler foundation) |
-| Probes | `@mocco/probe` on Fly.io machines in about 6 regions (`fra`, `iad`, `sjc`, `sin`, `nrt`, plus `icn` if available (unverified that Fly offers Seoul)) | Embedded probe (single region) and/or any number of `@mocco/probe` containers |
-| Page hosting | Object storage (R2 or S3) behind the CDN with custom domains | `fs-publisher` directory served by nginx/Caddy, or S3/MinIO; any CDN optional |
+| Probes | `@mocco/probe` on Fly.io machines in about 6 regions (`fra`, `iad`, `sjc`, `sin`, `nrt`, plus a Seoul location on another provider, since Fly has no `icn`) | Embedded probe (single region) and/or any number of `@mocco/probe` containers |
+| Page hosting | Object storage (R2 or S3) behind the CDN with custom domains | `filesystem` storage driver's directory served by nginx/Caddy, or S3/MinIO; any CDN optional |
 | Email | Notifications foundation (vendor behind neutral `Notifier`) | SMTP adapter |
 | TLS for custom domains | Custom domains foundation | Operator's reverse proxy |
 | Time series | Postgres | Postgres |
 
-No new env name is vendor-branded: `STATUS_PUBLISH_*`, `STATUS_PROBE_EMBEDDED=true`, `STATUS_RAW_RETENTION_DAYS`.
+No new env name is vendor-branded: `STATUS_PROBE_EMBEDDED=true`, `STATUS_RAW_RETENTION_DAYS`, and the storage domain's existing `STORAGE_*` settings for publishing.
 
 ## Security and abuse
 
@@ -395,10 +396,10 @@ No new env name is vendor-branded: `STATUS_PUBLISH_*`, `STATUS_PROBE_EMBEDDED=tr
 
 ## Open questions / ADRs needed
 
-1. **ADR: status probes are pull-based agents** (hosted on Fly.io as infra, the same image self-hosted). It records the rejection of Vercel regional functions and Cloudflare cron as probers.
-2. **ADR: public pages are static snapshots on object storage and CDN.** This coordinates with the public rendering foundation ADR (help center and forum may choose SSR/ISR instead). Status needs independence from the app, so it may be the exception.
+1. ~~ADR: status probes are pull-based agents.~~ Decided in [ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md).
+2. ~~ADR: public pages are static snapshots on object storage and CDN.~~ Decided in [ADR 0028](../adr/0028-status-pages-are-static-snapshots.md): status is the exception to ADR 0015's ISR, and help centers, the forum and the changelog stay on ISR. The snapshot publisher goes through the storage domain's `ObjectStore` port rather than its own `STATUS_PUBLISH_*` bucket settings.
 3. **Raw results storage at scale.** Should plain Postgres partitions stay the only option, or should a `CheckResultSink` port get an optional ClickHouse/Timescale adapter at more than 20k monitors? Defer, but keep the port.
-4. **Hosted regions and Seoul.** Confirm Fly region availability for `icn` (unverified). Otherwise use another host (Vultr Seoul or AWS ap-northeast-2 Lightsail) for a Korea probe. The agent is host-agnostic.
+4. **Hosted regions and Seoul.** Fly.io has no Seoul region (checked 2026-10-04; Tokyo `nrt` is the nearest), so a Korea probe runs the same image on another provider (Vultr Seoul or AWS ap-northeast-2 Lightsail). The agent is host-agnostic.
 5. **`.mocco.yml` `maintenance:` on gates.** Is this an additive schema change allowed under ADR 0010's lean core, or should the link be configured in the Status UI (gate name to page) instead? The UI mapping is safer for v1.
 6. **What counts as a "production" run** for correlation, until the pipeline model has an explicit production marker. Resolve with the pipeline owner.
 7. **Monitor-origin incident default:** draft (safer) or auto-publish? The proposal is draft by default with an opt-in to publish.
