@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -45,27 +45,28 @@ Goal: connect repo → define gate → prove that **without approval, a producti
 
 | Feature | Status | Description |
 |---|---|---|
-| Deploy Queue | Prototype | main commit = deploy candidate → run. Daily work surface + home |
-| Run detail | Prototype | One run: which commit, pipeline status, gates, action bar (Resume/Reject/Dispatch/Stop) |
-| Gate resume (approve) ★ | Prototype | Role-based resume, AND rule, `prevent_self`, reason required. approve ≡ resume |
-| **Credential gating (OIDC broker)** ★ | **Not drawn** | STS issued only to a resumed+verified run. Even if you delete the Verify step, credentials can't be obtained — the real enforcement |
-| Access (role → member) ★ | Prototype | Who can deploy/approve, separate from GitHub permissions. The `write ≠ deploy` surface |
-| Pipeline & gate definition | Prototype | `.mocco.yml` = step + gate. Linear is enough for v1 (parallel DAG comes later) |
-| Audit log | Prototype | Append-only hash chain. Approval/dispatch/credential events = compliance |
+| Deploy Queue | Live | main commit = deploy candidate → run. The workspace Overview lists each repo's commits; a commit's page triggers a run |
+| Run detail | Live | One run: which commit, pipeline status, gates, the live step timeline and the resume action |
+| Gate resume (approve) ★ | Live | Role-based resume, AND rule, `prevent_self`, reason required. approve ≡ resume |
+| **Credential gating (OIDC broker)** ★ | **Live** (stub provider) | The broker releases a credential only to a resumed, verified run, fail-closed, against a grant allowlist (`.mocco.yml` `credential`). The only provider is a stub; a real cloud STS provider is still to come |
+| Access (role → member) ★ | Live | Who can deploy/approve, separate from GitHub permissions. The `write ≠ deploy` surface |
+| Pipeline & gate definition | Live | `.mocco.yml` = step + gate. Linear is enough for v1 (parallel DAG comes later) |
+| Audit log | Live | Append-only hash chain. Approval/dispatch/credential events = compliance |
 
 ### Platform & Workspace — foundation
 
 | Feature | Status | Description |
 |---|---|---|
 | Login (email+password) | Live | Vendor-neutral auth surface; Google SSO and GitHub account-linking land as separate PRs |
-| Connect repo | Prototype | Install GitHub App → select repo → detect `.mocco.yml` → OIDC trust. Onboarding |
+| Connect repo | Live | Install GitHub App → select repo → detect `.mocco.yml`. Onboarding |
 | Commit sync | **Live** | Verify-first GitHub webhook (`push`/`installation`/`installation_repositories`) → tenant-isolated `mocco_commits` sync, deferred via `waitUntil`. Feeds the candidate-queue read path |
 | Commit detail / config parse | **Live** | Per-commit `.mocco.yml` fetched at its SHA in the same deferred pass, parsed by the slice-1 `MoccoConfigParser`, and snapshotted 1:1 into `mocco_commit_configs` (best-effort per commit). The frontend commit-detail page renders the parsed steps from a pure DB read (`integration.commitDetail`). Observation slice (connect → commit queue → commit detail) is now complete; execution/gates are the next epic |
-| **GitHub App + Cloud OIDC** ★ | **Not drawn** | Dispatch/webhooks (App) + STS trust (OIDC). This wiring is what makes gating real |
+| **GitHub App + Cloud OIDC** ★ | **Live** (App) | Dispatch, webhooks and check runs through the GitHub App are live; cloud STS trust waits on a real credential provider |
 | Workspace model (backend) | **Live** | `mocco_workspaces`/`mocco_members`, DB-enforced invariants — see [workspace model](./workspace.md) |
-| Workspace UI + invite flow | Not drawn | client plugin + screens land together (session-type parity) |
+| Workspace UI | Live | Workspace switcher, Home, members list (read-only), settings (rename, delete) |
+| Invite flow | Not drawn | Needs email delivery (#118) |
 
-**MVP line**: connect a repo, define a gate, and a production deploy is **provably blocked** until an authorized role resumes (the credential broker proves it, recorded in the audit log). The two not-yet-drawn MVP items (`credential gating`, `GitHub App + OIDC`) were left out of the prototype because they are heavier on the backend than on screens — **without these two, "the gate is actually enforced" does not hold.**
+**MVP line**: connect a repo, define a gate, and a production deploy is **provably blocked** until an authorized role resumes (the credential broker proves it, recorded in the audit log). Both enforcement items (`credential gating`, `GitHub App + OIDC`) are now live against a stub credential provider; **the wedge holds end-to-end once a real cloud STS provider replaces the stub.**
 
 ## Post-MVP — after the wedge holds
 
@@ -79,7 +80,7 @@ The first product after deploy governance, in phases set by the [OTA release con
 |---|---|---|
 | Version policy and native force update | **Live** | Minimum, recommended and blocked versions per store app; tighten changes gated, relax changes reviewed after. See [OTA version policy](./ota-version-policy.md) |
 | Gate existing OTA tools | **Live** | Mocco holds the EAS / CodePush / hot-updater publishing token and releases it only to a step behind a resumed gate. See [OTA external credentials](./ota-external-credentials.md) |
-| Hosted Expo Updates | **Live** (in review) | Mocco serves updates to the stock `expo-updates` client (ADR 0021); the key stays in CI (ADR 0022); promotions to protected channels need approval (ADR 0020). See [Mocco-hosted OTA](./ota-hosting.md) |
+| Hosted Expo Updates | **Live** | Mocco serves updates to the stock `expo-updates` client (ADR 0021); the key stays in CI (ADR 0022); promotions to protected channels need approval (ADR 0020). See [Mocco-hosted OTA](./ota-hosting.md) |
 
 ### Product line 2 — Feature flags (#101)
 
@@ -103,12 +104,12 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 
 | Feature | Status | Notes |
 |---|---|---|
-| Conversations and identity | Prototype | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
-| Team inbox | Prototype | The project's **Inbox** tab: setup (identity secret shown once), open/closed lists with unread, the thread with replies and internal notes, the user's current and starting app context, close/reopen, blocking, categories and secret rotation; Discord alerts through the Mocco preset ([customer guide](../customer/messenger/contact-us.md)) |
-| React Native SDK | Prototype | `MessengerClient` in `@mocco/sdk-core` and headless hooks in `@mocco/react-native/messenger` (pure JS, Expo Go) |
-| Attachments | Prototype | Up to 3 screenshots per message through object storage, verified on send, served with short-lived links; thumbnails in the inbox |
-| Guests | Prototype | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
-| Push replies | Prototype | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
+| Conversations and identity | Live | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
+| Team inbox | Live | The project's **Inbox** tab: setup (identity secret shown once), open/closed lists with unread, the thread with replies and internal notes, the user's current and starting app context, close/reopen, blocking, categories and secret rotation; Discord alerts through the Mocco preset ([customer guide](../customer/messenger/contact-us.md)) |
+| React Native SDK | Live | `MessengerClient` in `@mocco/sdk-core` and headless hooks in `@mocco/react-native/messenger` (pure JS, Expo Go) |
+| Attachments | Live | Up to 3 screenshots per message through object storage, verified on send, served with short-lived links; thumbnails in the inbox |
+| Guests | Live | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
+| Push replies | Live | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
 
 ### Help center (#96)
 
@@ -116,11 +117,11 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 
 | Capability | State | Notes |
 |---|---|---|
-| Sites, articles and revisions | Prototype | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback |
-| Public site | Prototype | `<slug>.<HELP_SITES_DOMAIN>`: a home per language and article pages, ISR every 60 seconds (ADR 0015, draft) |
-| Translation | Prototype | On publish, each offered language is machine-translated through `AI_GATEWAY_API_KEY` (structure-checked), served per language; reviewed text is never overwritten and shows as stale; the article editor's Translations section reviews each language; collection and section titles are translated with their articles |
-| Custom domains | Prototype | `HELP_CUSTOM_DOMAINS` (`help.example.com=<slug>`) serves a site on the customer's domain; adding the domain is a deployment step for now |
-| Console editor | Prototype | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, publish and history ([customer guide](../customer/help/help-center.md)) |
+| Sites, articles and revisions | Live | A project's help site (slug, source and target languages), collections → sections → articles, append-only revisions with save, publish, unpublish and restore, public read with source-language fallback |
+| Public site | Live | `<slug>.<HELP_SITES_DOMAIN>`: a home per language and article pages, ISR every 60 seconds (ADR 0015, draft) |
+| Translation | Live | On publish, each offered language is machine-translated through `AI_GATEWAY_API_KEY` (structure-checked), served per language; reviewed text is never overwritten and shows as stale; the article editor's Translations section reviews each language; collection and section titles are translated with their articles |
+| Custom domains | Live | `HELP_CUSTOM_DOMAINS` (`help.example.com=<slug>`) serves a site on the customer's domain; adding the domain is a deployment step for now |
+| Console editor | Live | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, publish and history ([customer guide](../customer/help/help-center.md)) |
 
 ### Deploy loop depth
 
@@ -136,7 +137,7 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 
 | Feature | Status | Description |
 |---|---|---|
-| Slack notifications | Prototype | Approval-request/deploy/override events → channel. Convenience (not correctness) |
+| Slack notifications | Prototype | Approval-request/deploy/override events → channel. Discord delivery is live ([notifications](./notifications.md)); Slack is #117 |
 | Org policy override | Prototype | WS rules a repo can't weaken (monotonic hardening). An enterprise concern |
 | Multi-cloud (GCP WIF) | Not drawn | A second broker beyond AWS STS. One is enough to prove the model |
 | Ops — Monitors/Incidents | Not drawn | Post-deploy health/incident integration. Now its own product line — see the status page in the [roadmap](./roadmap.md) (#103) |
