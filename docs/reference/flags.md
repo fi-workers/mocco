@@ -4,7 +4,7 @@ description: How Mocco stores feature flags — environments (flag targets), fla
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-03
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [reference, flags, openfeature, flagd]
@@ -20,6 +20,8 @@ code_refs:
   - packages/backend/src/domain/flags/FlagGovernanceService.ts
   - packages/common/src/flags-file.ts
   - packages/backend/src/domain/flags/flags-file.ts
+  - packages/backend/src/domain/flags/FlagPlanCheckService.ts
+  - packages/backend/src/domain/flags/plan-check-report.ts
   - packages/backend/src/domain/flags/KillSwitchService.ts
   - packages/backend/src/domain/flags/apply-ops.ts
   - packages/backend/src/domain/flags/compile-ruleset.ts
@@ -267,6 +269,16 @@ A plan never contains `kill` or `restore`, so a sync never un-kills a flag. Plan
 - the member whose **verified** email matches the head commit's author email.
 
 The pusher is `proposed_by_user_id` when known, else the author. The other, when it is a different member, is in `co_proposer_user_ids`, on the changeset and on its approval request, and `checkVote` bars co-proposers like the owner. A git author email is a claim, so it only counts when it matches a verified address of a member. A GitHub review never satisfies the gate (ADR 0002). A rebase keeps a repo changeset's commit and co-proposers, and closes the old pending changeset before proposing the new one.
+
+### The pull request plan check
+
+A pull request that changes the file gets a check run on GitHub, **Mocco flags plan**, saying what merging it would do (#146). `CommitSyncService.handle` routes `pull_request` webhooks with the actions `opened`, `synchronize` and `reopened` whose base is the repo's default branch to `FlagPlanCheckService.checkPullRequest`; the ext app wires it with `withFlagPlans`. The repo is resolved through the installation's connection like a push (never by external repo id alone), and a failure is logged and dropped. The service:
+
+1. Reads `.mocco/flags.yml` at the PR's head and base commits. It reports nothing when the head has no file, when the two are the same text, or when the repo is linked to no project.
+2. For each linked project, plans the head's file against the project **as it is now** (`readFlagsHead`, the same read the push sync uses), not against the base's file, because the console may have changed things since.
+3. Renders one report for all the projects (`renderPlanCheck`, pure) and publishes it as a completed check run (`CheckPublisher.publishCheck`, `POST /repos/{owner}/{repo}/check-runs` under `checks: write`).
+
+The report's summary has a row per project. Its details list the flags created, updated, taken over (`adopted`) and handed back (`released`), then each environment that changes with its ops and whether they apply at once or wait for approval (the environment's `change_gate`: roles, counts and `prevent_self`). A refused file lists its issues (path, message, line). The conclusion is `success` when every project has a plan and `neutral` when any refuses, never `failure` or `action_required`: the check doesn't block a merge by itself. A repo can still make it required in its branch protection. The check only reads: the merge's push sync plans again and is what changes Mocco. Each output field is cut to GitHub's 65,535 characters, with a note.
 
 ## API
 

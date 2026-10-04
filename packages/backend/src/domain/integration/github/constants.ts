@@ -10,6 +10,7 @@ export const GithubWebhookEvents = {
   push: 'push',
   installation: 'installation',
   installation_repositories: 'installation_repositories',
+  pull_request: 'pull_request',
 } as const;
 export type GithubWebhookEvent = (typeof GithubWebhookEvents)[keyof typeof GithubWebhookEvents];
 
@@ -22,6 +23,15 @@ export const GithubInstallationActions = {
   new_permissions_accepted: 'new_permissions_accepted',
 } as const;
 export type GithubInstallationAction = (typeof GithubInstallationActions)[keyof typeof GithubInstallationActions];
+
+/** `pull_request` webhook payload `action` values that move a PR's head: the ones the
+ * flags plan check (#146) answers. Other actions (closed, labeled, …) are parsed but ignored. */
+export const GithubPullRequestActions = {
+  opened: 'opened',
+  synchronize: 'synchronize',
+  reopened: 'reopened',
+} as const;
+export type GithubPullRequestAction = (typeof GithubPullRequestActions)[keyof typeof GithubPullRequestActions];
 
 /** `setup_action` query param on the GitHub App post-install redirect. */
 export const GithubSetupActions = {
@@ -37,6 +47,7 @@ export const WebhookKinds = {
   push: 'push',
   installation: 'installation',
   installation_repositories: 'installation_repositories',
+  pull_request: 'pull_request',
   ignored: 'ignored',
 } as const;
 export type WebhookKind = (typeof WebhookKinds)[keyof typeof WebhookKinds];

@@ -34,6 +34,19 @@ export class FlagFileSyncRepo {
     return rows.map(row => row.projectId);
   }
 
+  /** The projects a repo is linked to, with their names (the PR plan check reports by project). */
+  async linkedProjectsOfRepo(workspaceId: string, repoId: string) {
+    return await this.db
+      .select({ id: schema.projects.id, name: schema.projects.name })
+      .from(schema.projectRepos)
+      .innerJoin(
+        schema.projects,
+        and(eq(schema.projects.id, schema.projectRepos.projectId), eq(schema.projects.workspaceId, workspaceId)),
+      )
+      .where(and(eq(schema.projectRepos.workspaceId, workspaceId), eq(schema.projectRepos.repoId, repoId)))
+      .orderBy(schema.projects.name);
+  }
+
   /** The workspace member who signed in with this GitHub account, if any. */
   async memberByGithubAccount(workspaceId: string, githubUserId: string) {
     const [row] = await this.db

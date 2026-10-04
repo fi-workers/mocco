@@ -18,6 +18,7 @@ function readFixture(name: string): string {
 
 const pushFixture = readFixture('push.json');
 const installationDeletedFixture = readFixture('installation-deleted.json');
+const pullRequestOpenedFixture = readFixture('pull-request-opened.json');
 
 describe('parseWebhook', () => {
   it('parses a push event into commits', () => {
@@ -36,6 +37,29 @@ describe('parseWebhook', () => {
       throw new Error('expected installation');
     }
     expect(result.data.action).toBe('deleted');
+  });
+
+  it('parses a pull_request event into its head and base', () => {
+    const result = parseWebhook('pull_request', pullRequestOpenedFixture);
+    expect(result.kind).toBe('pull_request');
+    if (result.kind !== 'pull_request') {
+      throw new Error('expected pull_request');
+    }
+    expect(result.data).toMatchObject({
+      action: 'opened',
+      installation: { id: 12_345_678 },
+      repository: { id: 654_321 },
+      pull_request: {
+        number: 42,
+        head: { sha: '9f8e7d6c5b4a39281706f5e4d3c2b1a098765432' },
+        base: { ref: 'main', sha: '1b2c3d4e5f60718293a4b5c6d7e8f9012a3b4c5d' },
+      },
+    });
+  });
+
+  it('parses a pull_request action we do not act on instead of refusing it', () => {
+    const closed = JSON.stringify({ ...JSON.parse(pullRequestOpenedFixture), action: 'closed' });
+    expect(parseWebhook('pull_request', closed)).toMatchObject({ kind: 'pull_request', data: { action: 'closed' } });
   });
 
   it('returns { kind: "ignored" } for an event type we do not handle', () => {

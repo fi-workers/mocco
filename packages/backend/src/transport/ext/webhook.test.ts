@@ -73,6 +73,7 @@ function fakeProvider(): GitHubProvider {
     getFileAtCommit: async () => null,
     getArchiveAtCommit: async () => new Uint8Array(),
     dispatch: async () => {},
+    publishCheck: async () => {},
   };
 }
 

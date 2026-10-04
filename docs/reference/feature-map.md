@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-01
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -95,6 +95,7 @@ Flags v1, per the [feature flags design](../specs/2026-09-24-feature-flags-desig
 | Client SDKs (OFREP) | Live | OFREP bulk and single evaluation (client-visible flags only), the SSE change stream, `@mocco/openfeature-web` and `@mocco/openfeature-react-native` (offline copy, foreground refresh); React through `@openfeature/react-sdk` |
 | Telemetry and stale flags | Live | SDKs send per-minute evaluation counts (`POST /v1/flags/telemetry`, hourly rollups); a daily job finds unused, never-evaluated and fully rolled-out flags; badges, dismiss-until and a weekly digest |
 | Flags-as-code | Live | `.mocco/flags.yml` on the default branch produces changesets that still pass the gate. A default-branch push syncs it: unprotected environments apply, protected ones wait for the gate, and a refused file is recorded with its issues ([reference](./flags.md#flags-as-code-moccoflagsyml)). In the console, repo flags are marked, read-only except the kill switch, and the last syncs are listed ([guide](../customer/flags/flags-as-code.md)) |
+| Pull request plan check | Live | A PR into the default branch that changes `.mocco/flags.yml` gets a **Mocco flags plan** check run: each project's changes per environment, which ones wait for approval, the flags created, taken over and handed back, or the issues that refuse the file. Never blocks a merge (`success` or `neutral`) ([reference](./flags.md#the-pull-request-plan-check)) |
 
 ### Product line 3 — Messenger (#95)
 

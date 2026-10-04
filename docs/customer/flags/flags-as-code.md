@@ -1,10 +1,10 @@
 ---
 title: Flags as code
-description: Declare feature flags in your repository with .mocco/flags.yml — a merge to the default branch updates unprotected environments at once and leaves protected ones waiting for approval, while the kill switch stays in the console.
+description: Declare feature flags in your repository with .mocco/flags.yml — pull requests show what merging would do, a merge to the default branch updates unprotected environments at once and leaves protected ones waiting for approval, while the kill switch stays in the console.
 type: guide
 status: active
 created: 2026-10-03
-updated: 2026-10-03
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, flags, github, guide]
@@ -18,7 +18,7 @@ You can keep your feature flags in your repository, next to the code that reads 
 
 ## 1. Connect the repository
 
-The repository must be connected to Mocco through the GitHub App and linked to the project, as for pipelines. Mocco reads the file on every push to the repository's **default branch**.
+The repository must be connected to Mocco through the GitHub App and linked to the project, as for pipelines. Mocco reads the file on every push to the repository's **default branch**, and on pull requests into it.
 
 ## 2. Add `.mocco/flags.yml`
 
@@ -67,7 +67,17 @@ A rule's `when` is one condition or a list that must all match: `{ attribute, op
 
 The operators are the ones the console's rule editor offers: `in`, `not_in`, `starts_with`, `ends_with`, `lt`, `lte`, `gt`, `gte` and the `semver_` comparisons. Unknown fields are refused, so a misspelled key is caught instead of ignored.
 
-## 3. Merge, and approve where it's protected
+## 3. Open a pull request
+
+When a pull request into the default branch changes `.mocco/flags.yml`, Mocco adds a check to it called **Mocco flags plan**. It says what merging would do in every project the repository is linked to:
+
+- the flags it creates, the ones it takes over from the console, and the ones it hands back;
+- each environment that changes, with its changes, and whether they apply at once or wait for approval;
+- if the file has a mistake, each problem with where it is, so you can fix it before merging.
+
+The check is planned against your flags as they are now, so it also shows what someone changed in the console since the branch was made. It runs again on every push to the pull request. It never blocks a merge on its own: it passes when the file is fine and ends neutral when it isn't. Nothing changes in Mocco until you merge.
+
+## 4. Merge, and approve where it's protected
 
 When the change reaches the default branch:
 

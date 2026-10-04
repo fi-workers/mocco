@@ -2,7 +2,11 @@ import { Providers } from '@mocco/common/integration';
 
 import { BACKFILL_DEFAULT_LIMIT, ConnectionStatuses } from '@backend/domain/integration/constants';
 import { RepoNotFoundError } from '@backend/domain/integration/errors';
-import { GithubInstallationActions, WebhookKinds } from '@backend/domain/integration/github/constants';
+import {
+  GithubInstallationActions,
+  GithubPullRequestActions,
+  WebhookKinds,
+} from '@backend/domain/integration/github/constants';
 import { toSourceCommit } from '@backend/domain/integration/github/provider';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
@@ -17,6 +21,7 @@ import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webh
 
 type PushData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.push }>['data'];
 type InstallationData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.installation }>['data'];
+type PullRequestData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.pull_request }>['data'];
 // Row shapes are taken from the repos (a service never imports the drizzle schema).
 type RepoRow = Awaited<ReturnType<RepoRepo['getByConnectionAndExternalRepoId']>>;
 type CommitInsert = Parameters<CommitRepo['upsertMany']>[0][number];
@@ -50,6 +55,8 @@ export interface CommitSyncServiceDeps {
   configs: CommitConfigService;
   /** Syncs `.mocco/flags.yml` on default-branch pushes (#145); omitted where flags aren't wired. */
   flagFiles?: DefaultBranchPushSink;
+  /** Reports what a pull request's `.mocco/flags.yml` would do once merged (#146); omitted where not wired. */
+  flagPlans?: PullRequestSink;
 }
 
 /** A push to a repo's default branch, for consumers that read repo files (flags-as-code). */
@@ -65,6 +72,23 @@ export interface DefaultBranchPush {
 export interface DefaultBranchPushSink {
   syncPush(push: DefaultBranchPush): Promise<void>;
 }
+
+/** A pull request into a repo's default branch whose head just moved (opened, pushed to, reopened). */
+export interface DefaultBranchPullRequest {
+  workspaceId: string;
+  repoId: string;
+  ref: { externalAccountId: string; owner: string; name: string };
+  number: number;
+  headSha: string;
+  baseSha: string;
+}
+
+export interface PullRequestSink {
+  checkPullRequest(pullRequest: DefaultBranchPullRequest): Promise<void>;
+}
+
+/** The pull request actions that move a PR's head, so its plan may have changed. */
+const PLANNED_PULL_REQUEST_ACTIONS = new Set<string>(Object.values(GithubPullRequestActions));
 
 /** All zeros: the push deleted the branch. */
 const DELETED_SHA = /^0+$/u;
@@ -172,9 +196,66 @@ export class CommitSyncService {
     }
   }
 
+  /**
+   * The repo a webhook is about, resolved ONLY as `installation_id → connection → repo by
+   * (connection_id, external_repo_id)` (the tenant-isolation invariant above), or
+   * undefined — logged and parked — when no workspace has connected or registered it.
+   */
+  private async resolveRepo(installationId: number, externalRepoId: number, what: string) {
+    const externalAccountId = String(installationId);
+    const connection = await this.deps.connections.findByExternalAccount(Providers.github, externalAccountId);
+    if (connection === undefined) {
+      // No workspace has connected this installation — nothing to attribute the event to.
+      console.warn(`[commit-sync] ${what} for unconnected installation ${externalAccountId} — parked`);
+      return undefined;
+    }
+    try {
+      const repo = await this.deps.repos.getByConnectionAndExternalRepoId(connection.id, String(externalRepoId));
+      return { connection, repo };
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        // The installation is connected, but this repo isn't registered under it — park.
+        console.warn(
+          `[commit-sync] ${what} for unregistered repo ${externalRepoId} under installation ${externalAccountId} — parked`,
+        );
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  /** Hand a pull request into the default branch to the flags plan check. Best-effort, like the push sink. */
+  private async checkPullRequest(data: PullRequestData): Promise<void> {
+    if (this.deps.flagPlans === undefined || !PLANNED_PULL_REQUEST_ACTIONS.has(data.action)) {
+      return;
+    }
+    const resolved = await this.resolveRepo(data.installation.id, data.repository.id, 'pull_request');
+    if (resolved === undefined || data.pull_request.base.ref !== resolved.repo.defaultBranch) {
+      return;
+    }
+    const { connection, repo } = resolved;
+    try {
+      await this.deps.flagPlans.checkPullRequest({
+        workspaceId: repo.workspaceId,
+        repoId: repo.id,
+        ref: { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
+        number: data.pull_request.number,
+        headSha: data.pull_request.head.sha,
+        baseSha: data.pull_request.base.sha,
+      });
+    } catch (error) {
+      console.error(`[commit-sync] flags plan check failed for repo ${repo.id} PR #${data.pull_request.number}`, error);
+    }
+  }
+
   /** The same service, also handing default-branch pushes to `sink` (flags-as-code, #145). */
   withFlagFiles(sink: DefaultBranchPushSink): CommitSyncService {
     return new CommitSyncService({ ...this.deps, flagFiles: sink });
+  }
+
+  /** The same service, also handing pull requests into the default branch to `sink` (#146). */
+  withFlagPlans(sink: PullRequestSink): CommitSyncService {
+    return new CommitSyncService({ ...this.deps, flagPlans: sink });
   }
 
   /** Route a parsed webhook to its handler. The webhook route calls this in `waitUntil`. */
@@ -185,6 +266,10 @@ export class CommitSyncService {
     }
     if (parsed.kind === WebhookKinds.installation) {
       await this.handleInstallation(parsed.data);
+      return;
+    }
+    if (parsed.kind === WebhookKinds.pull_request) {
+      await this.checkPullRequest(parsed.data);
       return;
     }
     if (parsed.kind === WebhookKinds.installation_repositories) {
@@ -199,32 +284,15 @@ export class CommitSyncService {
 
   /** Sync the commits carried by a push, tenant-scoped through the connection. */
   async syncPush(data: PushData): Promise<void> {
-    const externalAccountId = String(data.installation.id);
-    const connection = await this.deps.connections.findByExternalAccount(Providers.github, externalAccountId);
-    if (connection === undefined) {
-      // No workspace has connected this installation — nothing to attribute the push to.
-      console.warn(`[commit-sync] push for unconnected installation ${externalAccountId} — parked`);
+    const resolved = await this.resolveRepo(data.installation.id, data.repository.id, 'push');
+    if (resolved === undefined) {
       return;
     }
-
     if (!data.ref.startsWith(BRANCH_REF_PREFIX)) {
       return; // tag push / non-branch ref — not a branch we could watch
     }
     const branch = data.ref.slice(BRANCH_REF_PREFIX.length);
-
-    let repo: RepoRow;
-    try {
-      repo = await this.deps.repos.getByConnectionAndExternalRepoId(connection.id, String(data.repository.id));
-    } catch (error) {
-      if (error instanceof EntityNotFoundError) {
-        // The installation is connected, but this repo isn't registered under it — park.
-        console.warn(
-          `[commit-sync] push for unregistered repo ${data.repository.id} under installation ${externalAccountId} — parked`,
-        );
-        return;
-      }
-      throw error;
-    }
+    const { connection, repo } = resolved;
 
     if (branch === repo.defaultBranch) {
       await this.notifyDefaultBranchPush(data, connection.externalAccountId, repo);
