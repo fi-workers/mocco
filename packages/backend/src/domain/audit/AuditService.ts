@@ -17,6 +17,9 @@ export interface AuditRecordInput {
  * `seq` (the router stringifies it for the wire, like every other bigserial). */
 export type VerifyResult = { intact: true } | { intact: false; brokenAtSeq: bigint };
 
+/** Entries `verify` reads per round trip — bounds its memory, not its time. */
+const VERIFY_PAGE_SIZE = 1000;
+
 export interface AuditServiceDeps {
   audit: AuditRepo;
 }
@@ -59,27 +62,52 @@ export class AuditService {
    * Re-walk the workspace's chain in `seq` order, recomputing each entry's `hash`
    * from the running `prev` (starting null). The first entry whose stored `prev_hash`
    * doesn't match the running `prev` (a linkage break — a removal or reorder) or
-   * whose stored `hash` doesn't match the recomputation (a mutated field) proves a
-   * tamper; return its `seq`. An empty or fully-reconciling chain is `intact`.
+   * whose stored `hash` doesn't match the recomputation (a mutated field) is where
+   * the chain stops reconciling; return its `seq`. An empty or fully-reconciling
+   * chain is `intact`.
+   *
+   * The walk reads the chain in keyset pages of `VERIFY_PAGE_SIZE`, carrying only the
+   * last stored hash between pages, so memory stays constant however long the chain
+   * grows. Time is still linear in the chain, which is why the console runs this on
+   * load and on request rather than on a timer.
+   *
+   * What this cannot see: `seq` gaps are normal (a rolled-back insert still consumes
+   * a bigserial value), so contiguity is never checked; and deleting the newest
+   * entries leaves a shorter chain that still reconciles — nothing in the database
+   * proves a removed tail existed. That needs an external anchor (the deferred KMS
+   * signing).
    */
   async verify(workspaceId: string): Promise<VerifyResult> {
-    const entries = await this.deps.audit.all(workspaceId);
-    // The running `prev` for entry N is entry N-1's STORED hash (null for the first).
-    // The first entry that doesn't reconcile — a broken `prev_hash` linkage (removal/
-    // reorder) or a recomputed `hash` mismatch (a mutated field) — proves a tamper.
-    const broken = entries.find((entry, index) => {
-      const prev = index === 0 ? null : (entries[index - 1]?.hash ?? null);
-      const { hash } = chainEntry(prev, {
-        workspaceId: entry.workspaceId,
-        actorUserId: entry.actorUserId,
-        action: entry.action,
-        subjectType: entry.subjectType,
-        subjectId: entry.subjectId,
-        payload: entry.payload,
+    let prev: string | null = null;
+    let afterSeq = 0n;
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop -- each page starts after the previous one's last seq
+      const page = await this.deps.audit.chainPage(workspaceId, afterSeq, VERIFY_PAGE_SIZE);
+      const pagePrev = prev;
+      // The running `prev` for entry N is entry N-1's STORED hash — the previous
+      // page's last hash for this page's first entry (null for the chain's first).
+      const broken = page.find((entry, index) => {
+        const expectedPrev = index === 0 ? pagePrev : (page[index - 1]?.hash ?? null);
+        const { hash } = chainEntry(expectedPrev, {
+          workspaceId: entry.workspaceId,
+          actorUserId: entry.actorUserId,
+          action: entry.action,
+          subjectType: entry.subjectType,
+          subjectId: entry.subjectId,
+          payload: entry.payload,
+        });
+        return entry.prevHash !== expectedPrev || entry.hash !== hash;
       });
-      return entry.prevHash !== prev || entry.hash !== hash;
-    });
-    return broken ? { intact: false, brokenAtSeq: broken.seq } : { intact: true };
+      if (broken) {
+        return { intact: false, brokenAtSeq: broken.seq };
+      }
+      const last = page.at(-1);
+      if (last === undefined || page.length < VERIFY_PAGE_SIZE) {
+        return { intact: true };
+      }
+      prev = last.hash;
+      afterSeq = last.seq;
+    }
   }
 
   /** A workspace's entries with `seq > sinceSeq`, oldest-first — the read surface

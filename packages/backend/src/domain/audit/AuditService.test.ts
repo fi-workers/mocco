@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -38,7 +38,7 @@ describe('AuditService (pglite)', () => {
 
   /** The workspace's rows, oldest-first (raw, for asserting the stored chain). */
   async function allRows(workspaceId: string) {
-    return await new AuditRepo(t.db).all(workspaceId);
+    return await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
   }
 
   /** Record a gate-resumed entry per subjectId, SEQUENTIALLY (head-recursion, not a
@@ -187,6 +187,88 @@ describe('AuditService (pglite)', () => {
 
     // The first entry's own hash no longer matches its content — broken at seq 1.
     expect(await service.verify(workspaceId)).toEqual({ intact: false, brokenAtSeq: first.seq });
+  });
+
+  /** Insert a valid `count`-entry chain in one statement (the hashes computed with the
+   * same `chainEntry` SSOT `record` uses) — long enough to span several `verify`
+   * pages without paying one transaction per entry. Returns the stored rows. */
+  async function seedLongChain(workspaceId: string, count: number) {
+    let prevHash: string | null = null;
+    const rows = Array.from({ length: count }, (_, index) => {
+      const content = {
+        workspaceId,
+        actorUserId: null,
+        action: AuditActions.runTriggered,
+        subjectType: 'run',
+        subjectId: `r${String(index)}`,
+        payload: { index },
+      };
+      const row = { ...content, prevHash, hash: chainEntry(prevHash, content).hash };
+      prevHash = row.hash;
+      return row;
+    });
+    await t.db.insert(auditLog).values(rows);
+    return await allRows(workspaceId);
+  }
+
+  describe('verify across pages (a chain longer than one read)', () => {
+    // verify reads 1000 entries per round trip; 2500 spans three pages.
+    const LONG = 2500;
+
+    it('a long, untouched chain verifies intact', async () => {
+      const workspaceId = await seedWorkspace();
+      await seedLongChain(workspaceId, LONG);
+      expect(await service.verify(workspaceId)).toEqual({ intact: true });
+    });
+
+    it('a removed entry at a page boundary breaks the next one', async () => {
+      const workspaceId = await seedWorkspace();
+      const chain = await seedLongChain(workspaceId, LONG);
+      // Entry 1000 ends the first page; without it, entry 1001 links to a hash that is
+      // no longer there. The walk must carry the previous page's last hash to see it.
+      const removed = expectOne(chain.slice(999, 1000));
+      const next = expectOne(chain.slice(1000, 1001));
+      await t.db.delete(auditLog).where(eq(auditLog.seq, removed.seq));
+
+      expect(await service.verify(workspaceId)).toEqual({ intact: false, brokenAtSeq: next.seq });
+    });
+
+    it('a mutated entry on a later page is pinpointed', async () => {
+      const workspaceId = await seedWorkspace();
+      const chain = await seedLongChain(workspaceId, LONG);
+      const tampered = expectOne(chain.slice(2200, 2201));
+      await t.db
+        .update(auditLog)
+        .set({ payload: { index: -1 } })
+        .where(eq(auditLog.seq, tampered.seq));
+
+      expect(await service.verify(workspaceId)).toEqual({ intact: false, brokenAtSeq: tampered.seq });
+    });
+  });
+
+  it('a seq gap alone is not a break — a rolled-back insert leaves one', async () => {
+    const workspaceId = await seedWorkspace();
+    await recordSubjects(workspaceId, ['a']);
+    // Consume a bigserial value without keeping the row, as a rolled-back insert does.
+    await t.db.execute(sql`SELECT nextval(pg_get_serial_sequence('mocco_audit_log', 'seq'))`);
+    await recordSubjects(workspaceId, ['b']);
+
+    const [first, second] = await allRows(workspaceId);
+    expect(Number((second?.seq ?? 0n) - (first?.seq ?? 0n))).toBeGreaterThan(1);
+    expect(await service.verify(workspaceId)).toEqual({ intact: true });
+  });
+
+  it('known limitation: deleting the newest entry still verifies intact', async () => {
+    // A truncated tail is a shorter chain that still reconciles; nothing in the
+    // database proves the removed entry existed. Detecting it needs an external
+    // anchor (KMS signing, deferred). This pins the documented behaviour.
+    const workspaceId = await seedWorkspace();
+    await recordSubjects(workspaceId, ['a', 'b', 'c']);
+    const chain = await allRows(workspaceId);
+    const last = expectOne(chain.slice(-1));
+    await t.db.delete(auditLog).where(eq(auditLog.seq, last.seq));
+
+    expect(await service.verify(workspaceId)).toEqual({ intact: true });
   });
 
   it('record is fail-open — a repo that throws is logged, the caller is unaffected', async () => {
