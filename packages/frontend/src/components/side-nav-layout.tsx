@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { groupEntries, sectionGroupLabels } from '@frontend/lib/products';
 import { cn } from '@frontend/lib/utils';
@@ -28,6 +28,10 @@ interface Props {
 // On a phone the nav is a horizontal strip that can be wider than the screen; centre the
 // current section in it so the reader sees where they are without scrolling sideways.
 // A no-op when the strip fits (and on wider screens, where the nav is a column).
+// Scroll before paint so the strip never shows its start and then jumps; pages are
+// prerendered, where layout effects don't run, so fall back to useEffect there.
+const useBeforePaintEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 function revealInStrip(link: HTMLElement | null): void {
   const strip = link?.closest('nav');
   if (!link || !strip || strip.scrollWidth <= strip.clientWidth) {
@@ -43,7 +47,7 @@ export default function SideNavLayout({ header, label, items, activeKey, footer,
   const navRef = useRef<HTMLElement>(null);
   // Items arrive as the enabled products load, so re-centre whenever the set changes.
   const itemKeys = items.map(item => item.key).join(' ');
-  useEffect(() => {
+  useBeforePaintEffect(() => {
     revealInStrip(navRef.current?.querySelector<HTMLElement>('[aria-current="page"]') ?? null);
   }, [activeKey, itemKeys]);
 

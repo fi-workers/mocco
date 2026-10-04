@@ -35,11 +35,11 @@ Then choose **Set up help center**.
 
 ## 3. Organize and add articles
 
-A help center has **collections** (the top level, such as "Getting started"), which hold **sections** (such as "Basics"), which hold **articles**. Add a collection at the bottom of the tab, a section inside a collection, and an article inside a section. A new article opens in the editor.
+A help center has **collections** (the top level, such as "Getting started"), which hold **sections** (such as "Basics"), which hold **articles**. Add a collection at the bottom of the page, a section inside a collection, and an article inside a section. A new article opens in the editor.
 
-The tab shows every article with its state: **Draft** has never been published, **Published** is on the site, and **Unpublished changes** means the site still shows an earlier version than the one you saved. The site's address is at the top; select it to open the site.
+The page shows every article with its state: **Draft** has never been published, **Published** is on the site, and **Unpublished changes** means the site still shows an earlier version than the one you saved. The site's address is at the top; select it to open the site.
 
-![The Help center tab: a collection with a section and two published articles, and the site's address](./images/help-center.png)
+![The Help center page: a collection with a section and two published articles, and the site's address](./images/help-center.png)
 
 ## Import from Mintlify
 
