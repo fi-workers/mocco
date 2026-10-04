@@ -15,7 +15,7 @@ related:
 
 # Mocco Wiki — Top-level MOC
 
-> One workspace to release, control and support an app, built on one record of what reached production and who approved it ([ADR 0026](./adr/0026-position-mocco-around-the-production-record.md)). Shipped: deploy governance, OTA and force update, feature flags, messenger, help center, notifications; the rest are on the [roadmap](./reference/roadmap.md).
+> Everything a product needs to be built and run, except the code: release, operations and support in one workspace that shares one team, one set of roles and one history ([ADR 0027](./adr/0027-mocco-is-everything-a-product-needs-except-the-code.md)). Shipped: deploy governance, OTA and force update, feature flags, notifications, messenger, help center; the rest are on the [roadmap](./reference/roadmap.md).
 > For usage, see the [README](./README.md).
 
 ## Product core — deploy governance (first product line)
@@ -50,7 +50,8 @@ related:
 - [0023 — Flag targets are evaluation scopes, not governance types (draft)](./adr/0023-flag-targets-are-evaluation-scopes.md)
 - [0024 — Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs (draft)](./adr/0024-flags-openfeature-flagd-ruleset-ofrep.md)
 - [0025 — Every product surface ships MCP tools (draft)](./adr/0025-every-product-surface-ships-mcp-tools.md)
-- [0026 — Position Mocco around the production record, products grouped by job (draft)](./adr/0026-position-mocco-around-the-production-record.md)
+- [0026 — Position Mocco around the production record (superseded by 0027)](./adr/0026-position-mocco-around-the-production-record.md)
+- [0027 — Mocco is everything a product needs, except the code (draft)](./adr/0027-mocco-is-everything-a-product-needs-except-the-code.md)
 
 ## Implementation
 
