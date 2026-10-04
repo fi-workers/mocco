@@ -5,7 +5,7 @@ okf_version: "0.1"
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-09-25
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [index, moc]
@@ -15,7 +15,7 @@ related:
 
 # Mocco Wiki — Top-level MOC
 
-> All-in-one platform for developers: one workspace to release, control and support an app, built on one record of what reached production and who approved it ([ADR 0026](./adr/0026-position-mocco-around-the-production-record.md)). Shipped: deploy governance, OTA and force update, feature flags, messenger, help center, notifications; the rest are on the [roadmap](./reference/roadmap.md).
+> One workspace to release, control and support an app, built on one record of what reached production and who approved it ([ADR 0026](./adr/0026-position-mocco-around-the-production-record.md)). Shipped: deploy governance, OTA and force update, feature flags, messenger, help center, notifications; the rest are on the [roadmap](./reference/roadmap.md).
 > For usage, see the [README](./README.md).
 
 ## Product core — deploy governance (first product line)

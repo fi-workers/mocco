@@ -201,7 +201,7 @@ export default function Home() {
 
             <figure className="flex flex-col gap-3">
               <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <p className="px-1 pb-3 text-xs font-medium text-muted-foreground">Production · today</p>
+                <p className="px-1 pb-3 text-xs font-medium text-muted-foreground">Example · one day of production</p>
                 <ol className="flex flex-col">
                   {record.map(entry => (
                     <li
