@@ -96,6 +96,7 @@ related:
 - [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
 - [Inbound webhook sources](./reference/inbound.md) — per-source ingest URLs, vendor secrets, receipts and outcomes, quota, retention
 - [Notifications](./reference/notifications.md) — channels, rules and filters, the delivery lifecycle, the Discord failure policy
+- [Search engines and crawlers](./reference/seo.md) — robots.txt and sitemap.xml on the app's host and every help center's host
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access

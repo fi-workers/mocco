@@ -51,14 +51,14 @@ function readGuide(set: GuideSet, slug: string): string {
   return readFileSync(path.join(guidesDir(set), `${slug}.md`), 'utf8');
 }
 
-/** Split the YAML frontmatter from the body; only `title` and `description` are read. */
-function splitFrontmatter(source: string): { title: string; description: string; body: string } {
+/** Split the YAML frontmatter from the body; only `title`, `description` and `updated` are read. */
+function splitFrontmatter(source: string): { title: string; description: string; updated: string; body: string } {
   const match = /^---\n([\s\S]*?)\n---\n/u.exec(source);
   const front = match?.[1] ?? '';
   const field = (key: string) => new RegExp(String.raw`^${key}:\s*(.*)$`, 'mu').exec(front)?.[1]?.trim() ?? '';
   // eslint-disable-next-line sonarjs/null-dereference -- a file's text, never null
   const body = source.slice(match?.[0].length ?? 0);
-  return { title: field('title'), description: field('description'), body };
+  return { title: field('title'), description: field('description'), updated: field('updated'), body };
 }
 
 /** PNG width and height from the IHDR chunk (bytes 16–23). */
@@ -108,6 +108,19 @@ export function listGuideSlugs(set: GuideSet): string[] {
 
 export function listGuides(set: GuideSet): DocNavEntry[] {
   return listGuideSlugs(set).map(slug => ({ slug, title: splitFrontmatter(readGuide(set, slug)).title }));
+}
+
+/** Every guide's path and the date its frontmatter says it was last updated, for the sitemap. */
+export function listGuidePages(): { path: string; lastModified: Date | null }[] {
+  return Object.values(GuideSets).flatMap(set =>
+    listGuideSlugs(set).map(slug => {
+      const { updated } = splitFrontmatter(readGuide(set, slug));
+      return {
+        path: Routes.guide(set, slug),
+        lastModified: /^\d{4}-\d{2}-\d{2}$/u.test(updated) ? new Date(`${updated}T00:00:00Z`) : null,
+      };
+    }),
+  );
 }
 
 /** One guide as a render tree. The page's own `# Title` is kept as its heading. */

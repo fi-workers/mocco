@@ -68,6 +68,24 @@ export class HelpPublicReadService {
     );
   }
 
+  /** The site's collections and sections, and its articles that have something published. */
+  private async publishedTree(site: HelpSiteRow) {
+    const treeRepo = new HelpTreeRepo(this.deps.db);
+    const collections = await treeRepo.collections(site.workspaceId, site.projectId);
+    const sections = await treeRepo.sections(
+      site.workspaceId,
+      collections.map(collection => collection.id),
+    );
+    const inSections = await new HelpArticleRepo(this.deps.db).inSections(
+      site.workspaceId,
+      sections.map(section => section.id),
+    );
+    const articles = inSections.filter(
+      article => article.status === ArticleStatuses.published && article.publishedRevisionId !== null,
+    );
+    return { collections, sections, articles };
+  }
+
   async site(slug: string) {
     const site = await this.requireSite(slug);
     return { slug: site.slug, name: site.name, sourceLocale: site.sourceLocale, locales: site.locales };
@@ -77,20 +95,8 @@ export class HelpPublicReadService {
   async tree(slug: string, locale: string) {
     const site = await this.requireSite(slug);
     const served = localeFor(site, locale);
-    const treeRepo = new HelpTreeRepo(this.deps.db);
     const articleRepo = new HelpArticleRepo(this.deps.db);
-    const collections = await treeRepo.collections(site.workspaceId, site.projectId);
-    const sections = await treeRepo.sections(
-      site.workspaceId,
-      collections.map(collection => collection.id),
-    );
-    const inSections = await articleRepo.inSections(
-      site.workspaceId,
-      sections.map(section => section.id),
-    );
-    const articles = inSections.filter(
-      article => article.status === ArticleStatuses.published && article.publishedRevisionId !== null,
-    );
+    const { collections, sections, articles } = await this.publishedTree(site);
     const published = await articleRepo.revisionsByIds(articles.map(article => article.publishedRevisionId ?? ''));
     const titles = new Map(published.map(revision => [revision.id, revision.title]));
     // In another language: the translated title where there is a translation, else the source's.
@@ -142,6 +148,38 @@ export class HelpPublicReadService {
   }
 
   /**
+   * Every public page of a site, for its sitemap: each language's home, and each published
+   * article in the languages it is really served in — the source, and every language with a
+   * translation (any other language redirects to the source's address). `lastModified` is
+   * when that language's text last changed; a home has none.
+   */
+  async sitemap(slug: string) {
+    const site = await this.requireSite(slug);
+    const { articles } = await this.publishedTree(site);
+    const ids = articles.map(article => article.id);
+    const translated = await Promise.all(
+      site.locales.map(async locale => ({ locale, texts: await this.translationTexts(ids, locale) })),
+    );
+    return {
+      sourceLocale: site.sourceLocale,
+      homes: [site.sourceLocale, ...site.locales].map(locale => ({ locale, path: `/${locale}` })),
+      articles: articles.map(article => [
+        {
+          locale: site.sourceLocale,
+          path: articlePath(site.sourceLocale, article.shortId, article.slug),
+          lastModified: article.publishedAt,
+        },
+        ...translated.flatMap(({ locale, texts }) => {
+          const text = texts.get(article.id);
+          return text === undefined
+            ? []
+            : [{ locale, path: articlePath(locale, article.shortId, article.slug), lastModified: text.createdAt }];
+        }),
+      ]),
+    };
+  }
+
+  /**
    * A published article by its URL ref (`{shortId}-{slug}`). Undefined when there is no
    * such published article. `canonicalPath` differs from the asked one when the slug
    * changed or the language fell back, so the page can redirect.
@@ -185,19 +223,7 @@ export class HelpPublicReadService {
     const site = await this.requireSite(slug);
     const served = localeFor(site, locale);
     const articleRepo = new HelpArticleRepo(this.deps.db);
-    const treeRepo = new HelpTreeRepo(this.deps.db);
-    const collections = await treeRepo.collections(site.workspaceId, site.projectId);
-    const sections = await treeRepo.sections(
-      site.workspaceId,
-      collections.map(collection => collection.id),
-    );
-    const inSections = await articleRepo.inSections(
-      site.workspaceId,
-      sections.map(section => section.id),
-    );
-    const articles = inSections.filter(
-      article => article.status === ArticleStatuses.published && article.publishedRevisionId !== null,
-    );
+    const { articles } = await this.publishedTree(site);
     const sources = await articleRepo.revisionsByIds(articles.map(article => article.publishedRevisionId ?? ''));
     const sourceById = new Map(sources.map(revision => [revision.id, revision]));
     const translations =
