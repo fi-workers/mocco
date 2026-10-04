@@ -152,3 +152,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0027-status-probes-are-pull-based-agents.md`, `adr/0028-status-pages-are-static-snapshots.md`,
   `adr/README.md`, `index.md`, `specs/2026-09-24-status-page-design.md`, `reference/feature-map.md`
 - Source: branch `docs/status-adrs` (issue #147)
+
+## 2026-10-04 — Customer screenshots show page content only
+
+- Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,
+  removing the old sidebar, project tabs and dev overlays, and added a "Customer guide screenshots" rule to the
+  [conventions](./meta/conventions.md): screenshots show content, not the app shell, except in the guides that
+  teach the navigation. A navigation change no longer stales every guide.
+- Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
+- Source: branch `docs/content-only-screenshots`
