@@ -14,10 +14,11 @@ import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/too
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerOtaTools, type OtaToolDeps } from '@backend/transport/mcp/tools/ota';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
+import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
 
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
-export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps & FlagToolDeps & OtaToolDeps;
+export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps & FlagToolDeps & OtaToolDeps & StatusToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
 const SERVER_INFO = { name: 'mocco', version: '0.1.0' } as const;
@@ -36,6 +37,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerGateTools(server, deps);
   registerFlagTools(server, deps);
   registerOtaTools(server, deps);
+  registerStatusTools(server, deps);
   return server;
 }
 

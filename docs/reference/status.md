@@ -171,3 +171,14 @@ Monitors and `status_source`; the public snapshot (`visibility`, `locale`, `them
 custom domains; subscribers; incident `visibility` and `origin`; repo and project links on components; run links
 (`suspected_run_id`, `mocco_status_incident_runs`); and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
+
+## MCP
+
+Agents read status pages over MCP with `mocco_status_pages_get` (each component and its `displayedStatus`),
+`mocco_status_incidents_search` (open by default; by status, severity, page or title text, newest first, paged),
+`mocco_status_incidents_get` (the timeline, affected components and postmortem) and `mocco_status_maintenances_search`
+(scheduled and in progress by default) in `transport/mcp/tools/status.ts`: thin, read-only adapters over `getPage`,
+`IncidentService.list` / `get` and `MaintenanceService.list`, behind the same checks as
+`productProcedure(Products.status)` (`ProjectScope`). A page is looked up among the project's own, so another tenant's
+page or incident reads like one that does not exist. Nothing on MCP declares or updates an incident yet. See
+[Connect Mocco to your agent](../customer/mcp/connect.md).

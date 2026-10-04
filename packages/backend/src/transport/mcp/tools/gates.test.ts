@@ -277,6 +277,9 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
       otaMetrics: { channelReach: refuse, monthlyActiveDevices: refuse },
       versionPolicies: { get: refuse, listChanges: refuse },
       projectApps: { listApps: refuse },
+      statusPages: { listPages: refuse, getPage: refuse },
+      statusIncidents: { list: refuse, get: refuse },
+      statusMaintenances: { list: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

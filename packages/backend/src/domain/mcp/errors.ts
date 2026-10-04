@@ -51,3 +51,16 @@ export class AppUnclearError extends BadRequestError {
     this.name = 'AppUnclearError';
   }
 }
+
+/** No status page was named and the project has none, or more than one. Names the
+ * choices, like `ProjectUnclearError`. */
+export class StatusPageUnclearError extends BadRequestError {
+  constructor(readonly choices: readonly { id: string; name: string }[]) {
+    super(
+      choices.length === 0
+        ? 'This project has no status pages'
+        : `Say which status page with pageId: ${namesOf(choices)}`,
+    );
+    this.name = 'StatusPageUnclearError';
+  }
+}
