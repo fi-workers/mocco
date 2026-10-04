@@ -120,3 +120,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   making them would have meant changing data. The audit screenshot is cropped to the table.
 - Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
 - Source: branch `docs/getting-started`
+
+## 2026-10-04 — Workspace switch for agents that decide
+
+- Added the "Agents on the MCP surface" section to the workspace reference: `mocco_mcp_settings`, the
+  `agents_may_decide` opt-in (off by default, owners and admins change it, audited), and its place in the console.
+  The MCP spec records that slice 6 ships as three PRs, and the connect guide says the switch has landed before the
+  tools it unlocks.
+- Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
+- Source: branch `feat/mcp-agents-setting`

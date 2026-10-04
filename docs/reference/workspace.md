@@ -4,10 +4,10 @@ description: The workspace team-boundary model — tables, DB-enforced invariant
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-07-08
+updated: 2026-10-04
 confidence: high
 owner: andrea
-tags: [reference, workspace, auth, schema]
+tags: [reference, workspace, auth, schema, mcp]
 ---
 
 # Workspace model
@@ -35,11 +35,32 @@ The product term is **workspace**, everywhere users and the DB can see: tables a
 - **Sign-up creates no workspace.** The zero-workspace state is real: onboarding UI must offer "create your first workspace". (No auto-provisioned personal workspace in MVP — deliberate, to avoid noise workspaces; revisit if onboarding friction demands it.)
 - Creation policy (MVP): any authenticated user may create workspaces, no limit. Explicitly self-serve; revisit before commercial hosting.
 
+## Agents on the MCP surface
+
+`mocco_mcp_settings` holds what a workspace allows agents connected over MCP
+([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). It has one row per
+workspace, and a missing row means the defaults.
+
+| Setting | Default | Who changes it | Effect |
+|---|---|---|---|
+| `agents_may_decide` | `false` | owners and admins (`mcp.setAgentsMayDecide`, FORBIDDEN for a plain member) | Allows the deciding tools: voting on an approval and resuming a gate |
+
+- Any member can read the setting with `mcp.settings`. A non-member gets NOT_FOUND, as with
+  every other workspace-scoped procedure.
+- Each change records `changed_at` and `changed_by_user_id` on the row and appends
+  `mcp.agents_may_decide.changed` to the audit chain. Setting the value it already has is a
+  no-op and is not audited. `changed_by_user_id` is `SET NULL` when that user is deleted;
+  the audit entry still names them.
+- The switch grants nothing by itself. A deciding tool still acts as its caller, through
+  the same service the console uses, and that person's roles are the only authority.
+- In the console it is **Settings → Agents → Allow agents to decide**.
+
 ## Deferred (by design)
 
 - **Invitations** — the TABLE exists (`mocco_invitations`, vendor shape + email index) because the plugin's core read path (`get-full-organization`) hard-joins the model; without it the primary workspace load 500s (probe-verified). The invite FLOW lands together with the invite flow (requires email delivery wiring, plus: partial unique on pending (workspace,email), status enum, responded-at timestamp, email index, and a deliberate inviter-deletion policy — naive `inviter_id ON DELETE CASCADE` would silently destroy pending invites when the inviter leaves). ⚠️ The vendor's default table name is unprefixed `invitation`: the invite-flow PR must map it to `mocco_invitations` or the `mocco_` prefix invariant silently breaks.
 - **Frontend client plugin** — no longer needed: workspaces are consumed via tRPC (see Boundary enforcement), so the client session type never has to carry `activeOrganizationId`.
-- Teams, dynamic roles, workspace-level settings.
+- Teams, dynamic roles, and general workspace-level settings. The MCP agent setting above is
+  the only one so far.
 
 ## Known gaps (accepted for this slice, revisit with workspace UI)
 
