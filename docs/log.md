@@ -181,6 +181,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/concept-everything-but-code`
 
+## 2026-10-05 — Status page console: pages and components
+
+- The project's Status page section (#148, part 3) creates a status page, switches between pages (`?page=`),
+  renames it, changes its address and deletes it, and manages its component groups and components: add, rename,
+  regroup, move up and down, delete, and set the reported status next to the status the page shows. The status
+  product is now listed as available on the Products page. The [status page model](./reference/status.md) gains a
+  Console section; the feature map's Status row says what has a screen.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-console-pages` (issue #148)
+
 ## 2026-10-04 — Status page architecture decisions
 
 - Added ADR 0027 (status probes are pull-based agents: one `@mocco/probe` for hosted regions and private locations,

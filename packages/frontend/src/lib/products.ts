@@ -55,6 +55,7 @@ export const ProjectSections = {
   flags: 'flags',
   inbox: 'inbox',
   help: 'help',
+  status: 'status',
   apiKeys: 'apiKeys',
 } as const;
 export type ProjectSection = (typeof ProjectSections)[keyof typeof ProjectSections];
@@ -147,6 +148,13 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
     group: SectionGroups.release,
   },
   {
+    key: ProjectSections.status,
+    label: 'Status page',
+    href: Routes.projectStatus,
+    product: Products.status,
+    group: SectionGroups.operate,
+  },
+  {
     key: ProjectSections.inbox,
     label: 'Inbox',
     href: Routes.projectInbox,
@@ -194,7 +202,7 @@ export const productCatalog: Readonly<
   [Products.status]: {
     label: 'Status page',
     description: 'Uptime monitors, incidents and a public status page.',
-    available: false,
+    available: true,
     group: SectionGroups.operate,
   },
   [Products.reviews]: {
