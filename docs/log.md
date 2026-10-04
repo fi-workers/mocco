@@ -130,3 +130,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   and added a "where it stands" section to the roadmap, since the shipping order diverged from the waves.
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
+
+## 2026-10-04 — Status page architecture decisions
+
+- Added ADR 0027 (status probes are pull-based agents: one `@mocco/probe` for hosted regions and private locations,
+  Vercel functions and Cloudflare cron rejected as probers, hosting kept out of code) and ADR 0028 (public status
+  pages are static snapshots on object storage behind a CDN, the deliberate exception to ADR 0015's ISR). The status
+  spec links both, publishes through the storage domain's `ObjectStore` port instead of its own bucket settings, and
+  records that Fly.io has no Seoul region. The feature map gains a Status page section with the v1 scope and
+  non-goals.
+- Docs touched: `adr/0027-status-probes-are-pull-based-agents.md`, `adr/0028-status-pages-are-static-snapshots.md`,
+  `adr/README.md`, `index.md`, `specs/2026-09-24-status-page-design.md`, `reference/feature-map.md`
+- Source: branch `docs/status-adrs` (issue #147)
