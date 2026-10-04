@@ -35,6 +35,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
   [GuideSets.flags]: ['quickstart', 'browsers-and-apps', 'flags-as-code', 'stale-flags'],
   [GuideSets.messenger]: ['contact-us'],
   [GuideSets.help]: ['help-center'],
+  [GuideSets.status]: ['status-page'],
 };
 
 const SLUG = /^[a-z0-9-]+$/u;

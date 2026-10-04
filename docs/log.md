@@ -190,6 +190,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #357
 
+## 2026-10-05 — Status page console: incidents and maintenance
+
+- The status page section gains Components, Incidents and Maintenance views (`?tab=`): open and resolved incident
+  lists (`?filter=`), declaring an incident with severity and affected components, an incident page with updates
+  that offer only legal transitions (a refused one shows the domain error), the timeline, affected components and
+  the postmortem; and maintenance windows grouped by state, scheduled and canceled from the console. This finishes
+  the console part of #148.
+- Added the customer guide [Run a status page](./customer/status/status-page.md) with screenshots cropped to page
+  content, registered as the `status` guide set, and listed it in the getting-started overview (the status page is
+  no longer "on the roadmap").
+- Docs touched: `customer/status/status-page.md`, `customer/start/overview.md`,
+  `customer/start/workspace-and-projects.md`, `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-console-incidents` (issue #148)
+
 ## 2026-10-05 — Status page console: pages and components
 
 - The project's Status page section (#148, part 3) creates a status page, switches between pages (`?page=`),

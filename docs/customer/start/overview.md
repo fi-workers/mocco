@@ -51,10 +51,14 @@ In-app "contact us" for your users: signed in, or with an email they leave if th
 
 A public help site for your product. Write articles in Markdown with a live preview, or import an existing Mintlify site; publish them; and offer them in other languages, translated automatically when your Mocco has translation turned on and reviewed by your team. See [Publish a help center](../help/help-center.md).
 
+## Status page
+
+Tell your users whether your service works. List the parts of your service as components, declare incidents and post updates on them until they're resolved, write a postmortem, and schedule maintenance that Mocco starts and ends on time. Each component shows the worst of what you reported, its open incidents and maintenance in progress. See [Run a status page](../status/status-page.md).
+
 ## API keys and SDKs
 
 Your apps, servers and CI talk to Mocco with a project's API keys: a **publishable** key for web and React Native apps, a **secret** key for servers and CI. The SDKs wrap that API for each platform: `@mocco/js` for browsers, `@mocco/node` for servers, `@mocco/react-native` for React Native apps, the OpenFeature providers for feature flags, and `@mocco/cli` for publishing OTA updates from CI. See [API keys](./api-keys.md).
 
 ## Coming later
 
-The **Products** page also lists products that aren't available yet, under **On the roadmap**: a status page, app reviews, a feedback board, a forum, deep links and end-user identity. They can't be turned on until they ship.
+The **Products** page also lists products that aren't available yet, under **On the roadmap**: app reviews, a feedback board, a forum, deep links and end-user identity. They can't be turned on until they ship.

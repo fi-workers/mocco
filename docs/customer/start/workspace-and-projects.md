@@ -76,4 +76,4 @@ Deploy governance is always on. Products marked **Coming soon** aren't available
 
 - [Members and access](./members-and-access.md): who is in the workspace and who may approve.
 - [API keys](./api-keys.md): connect your apps and servers.
-- The guide for each product: [OTA and force update](../ota/overview.md), [feature flags](../flags/quickstart.md), [messenger](../messenger/contact-us.md), [notifications](../notifications/overview.md).
+- The guide for each product: [OTA and force update](../ota/overview.md), [feature flags](../flags/quickstart.md), [messenger](../messenger/contact-us.md), [status page](../status/status-page.md), [notifications](../notifications/overview.md).

@@ -10,6 +10,7 @@ export const GuideSets = {
   flags: 'flags',
   messenger: 'messenger',
   help: 'help',
+  status: 'status',
 } as const;
 export type GuideSet = (typeof GuideSets)[keyof typeof GuideSets];
 export const guideSetSchema = z.enum([
@@ -20,6 +21,7 @@ export const guideSetSchema = z.enum([
   GuideSets.flags,
   GuideSets.messenger,
   GuideSets.help,
+  GuideSets.status,
 ]);
 
 /** The side-nav heading of each set. */
@@ -31,4 +33,5 @@ export const guideSetLabels: Record<GuideSet, string> = {
   [GuideSets.flags]: 'Feature flags',
   [GuideSets.messenger]: 'Messenger',
   [GuideSets.help]: 'Help center',
+  [GuideSets.status]: 'Status page',
 };
