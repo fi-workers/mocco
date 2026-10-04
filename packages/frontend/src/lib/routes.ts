@@ -71,11 +71,28 @@ export const Routes = {
   projectHelp: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help`,
   projectHelpArticle: (id: string, projectId: string, articleId: string) =>
     `/workspaces/${id}/p/${projectId}/help/${articleId}`,
-  /** The project's status pages (#148); `pageId` selects the page shown. */
-  projectStatus: (id: string, projectId: string, pageId?: string) => {
+  /**
+   * The project's status pages (#148); `pageId` selects the page shown, `tab` its components,
+   * incidents or maintenance, and `filter` which incidents are listed.
+   */
+  projectStatus: (id: string, projectId: string, pageId?: string, view: { tab?: string; filter?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (pageId !== undefined) {
+      query.set('page', pageId);
+    }
+    if (view.tab !== undefined) {
+      query.set('tab', view.tab);
+    }
+    if (view.filter !== undefined) {
+      query.set('filter', view.filter);
+    }
     const path = `/workspaces/${id}/p/${projectId}/status`;
-    return pageId === undefined ? path : `${path}?page=${encodeURIComponent(pageId)}`;
+    const search = query.toString();
+    return search === '' ? path : `${path}?${search}`;
   },
+  /** One incident: its timeline, affected components and postmortem. */
+  projectStatusIncident: (id: string, projectId: string, incidentId: string) =>
+    `/workspaces/${id}/p/${projectId}/status/incidents/${incidentId}`,
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

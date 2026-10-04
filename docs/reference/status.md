@@ -25,6 +25,9 @@ code_refs:
   - packages/backend/src/transport/trpc/routers/status.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
+  - packages/frontend/src/components/status/incidents.tsx
+  - packages/frontend/src/components/status/incident-detail.tsx
+  - packages/frontend/src/components/status/maintenance.tsx
 ---
 
 # Status page model
@@ -43,8 +46,18 @@ components (name, optional description, optional group), renames, regroups and d
 components up and down (the screen rewrites `position` for the rows whose place changes). Each component shows the
 status the page shows (`displayedStatus`) next to a select for the status reported by hand; when an open incident
 or maintenance makes it show worse, the row says so. Page settings rename the page, change its address (a taken
-address is refused with the domain error) and delete it with everything on it. Incidents and maintenance have no
-screen yet.
+address is refused with the domain error) and delete it with everything on it.
+
+Each page has three views, chosen with `?tab=`: components (the default), incidents and maintenance. The incidents
+view lists the open or resolved incidents (`?filter=open|resolved`; resolved is the full list filtered on the
+client) and declares an incident with its title, severity, opening status, first update and affected components
+with impact. An incident's own route (`/status/incidents/[incidentId]`) posts updates whose status select offers
+only the current status and `INCIDENT_TRANSITIONS` from it; an update refused by the service (the incident moved
+on in another tab) shows the `IncidentTransitionError` text and reloads the incident. It also shows the timeline
+(newest first), replaces the affected components, and sets or clears the postmortem. The maintenance view groups
+windows into in progress, scheduled and past, schedules a window (`datetime-local` inputs in the viewer's time
+zone, with the components it covers), and cancels a scheduled or in-progress one. The customer guide is
+[Run a status page](../customer/status/status-page.md).
 
 ## Tables
 

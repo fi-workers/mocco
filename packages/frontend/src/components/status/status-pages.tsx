@@ -7,13 +7,15 @@ import { useRouter } from 'next/router';
 import { useId, useState } from 'react';
 
 import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
+import Incidents from '@frontend/components/status/incidents';
+import Maintenance from '@frontend/components/status/maintenance';
 import PageComponents from '@frontend/components/status/page-components';
-import { slugFromTitle } from '@frontend/components/status/status-ui';
+import { slugFromTitle, StatusTabs } from '@frontend/components/status/status-ui';
 import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { StatusOutputs } from '@frontend/components/status/status-ui';
+import type { StatusOutputs, StatusTab } from '@frontend/components/status/status-ui';
 
 interface Props {
   workspaceId: string;
@@ -21,6 +23,17 @@ interface Props {
 }
 
 type Page = StatusOutputs['pages']['pages'][number];
+
+const tabLabels: Readonly<Record<StatusTab, string>> = {
+  [StatusTabs.components]: 'Components',
+  [StatusTabs.incidents]: 'Incidents',
+  [StatusTabs.maintenance]: 'Maintenance',
+};
+
+/** The tab in the URL, or components. */
+function tabOf(value: unknown): StatusTab {
+  return Object.values(StatusTabs).find(tab => tab === value) ?? StatusTabs.components;
+}
 
 // eslint-disable-next-line sonarjs/null-dereference -- value is a string, never null
 const isBlank = (value: string) => value.trim() === '';
@@ -231,6 +244,7 @@ export default function StatusPages({ workspaceId, projectId }: Props) {
   if (page === undefined) {
     return null;
   }
+  const tab = tabOf(router.query.tab);
 
   return (
     <div className="flex flex-col gap-6">
@@ -265,15 +279,40 @@ export default function StatusPages({ workspaceId, projectId }: Props) {
           }}
         />
       ) : null}
-      <p className="font-mono text-xs text-muted-foreground">{page.slug}</p>
-      <PageComponents workspaceId={workspaceId} projectId={projectId} pageId={page.id} />
-      {/* Remount on a page switch or a saved change so the form starts from the saved values. */}
-      <PageSettings
-        key={`${page.id}:${page.title}:${page.slug}`}
-        workspaceId={workspaceId}
-        projectId={projectId}
-        page={page}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <nav aria-label="Page views" className="flex gap-1 rounded-lg bg-muted p-0.5">
+          {Object.values(StatusTabs).map(value => (
+            <Link
+              key={value}
+              href={Routes.projectStatus(workspaceId, projectId, page.id, { tab: value })}
+              aria-current={value === tab ? 'page' : undefined}
+              className={`rounded-md px-3 py-1 text-sm ${
+                value === tab ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}>
+              {tabLabels[value]}
+            </Link>
+          ))}
+        </nav>
+        <p className="font-mono text-xs text-muted-foreground">{page.slug}</p>
+      </div>
+      {tab === StatusTabs.incidents ? (
+        <Incidents workspaceId={workspaceId} projectId={projectId} pageId={page.id} />
+      ) : null}
+      {tab === StatusTabs.maintenance ? (
+        <Maintenance workspaceId={workspaceId} projectId={projectId} pageId={page.id} />
+      ) : null}
+      {tab === StatusTabs.components ? (
+        <>
+          <PageComponents workspaceId={workspaceId} projectId={projectId} pageId={page.id} />
+          {/* Remount on a page switch or a saved change so the form starts from the saved values. */}
+          <PageSettings
+            key={`${page.id}:${page.title}:${page.slug}`}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            page={page}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
