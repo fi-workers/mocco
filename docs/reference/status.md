@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -19,6 +19,8 @@ code_refs:
   - packages/backend/src/domain/status/StatusPageService.ts
   - packages/backend/src/domain/status/IncidentService.ts
   - packages/backend/src/domain/status/MaintenanceService.ts
+  - packages/backend/src/domain/status/MonitorService.ts
+  - packages/backend/src/domain/status/LocationService.ts
   - packages/backend/src/domain/status/ComponentStatusService.ts
   - packages/backend/src/domain/status/component-status.ts
   - packages/backend/src/domain/status/jobs.ts
@@ -41,7 +43,8 @@ code_refs:
 The status page product ([design spec](../specs/2026-09-24-status-page-design.md), issue #103) lands in slices.
 This page describes what is built: operators manage a project's status pages, components, incidents and scheduled
 maintenance by hand through the `status.*` tRPC router (#148), and every change is published as a static public page
-(#149, [below](#public-page)). There is no monitor, subscriber or deploy correlation yet.
+(#149, [below](#public-page)). Monitors and probe locations can be configured (#150, [below](#monitors-and-the-probe-protocol)),
+but nothing checks them yet. There is no subscriber or deploy correlation yet.
 
 ## Console
 
@@ -81,6 +84,11 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_maintenances` | A window: `title`, `body_md`, `scheduled_start`/`scheduled_end` (end after start, DB-checked), `status`, `actual_start`/`actual_end` |
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
+| `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
+| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `state`, `state_changed_at`, `next_round_at` |
+| `mocco_status_monitor_locations` | The locations a monitor runs at |
+| `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
+| `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
 
 Pages reference `mocco_projects(id, workspace_id)`. Groups, components, incidents and maintenance windows
 reference `mocco_status_pages(id, workspace_id, project_id)` through composite foreign keys, so no row can point at
@@ -197,6 +205,40 @@ also stored in each file's `.meta.json` sidecar, which a server should not expos
 published until the app (and its job tick) runs again; on start the next tick's safety run publishes every page that
 changed in the meantime. Posting an incident while the app is down needs the break-glass path, which isn't built yet.
 
+## Monitors and the probe protocol
+
+A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at the locations it is assigned to
+([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). This slice stores monitors and locations and
+manages them over tRPC. The probe protocol (`/api/ext/v1/probe/lease|results|heartbeat`), the verdict evaluator and
+the probe agent come next; until then a monitor stays `pending` and nothing checks it.
+
+**Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
+
+| Kind | Fields |
+|---|---|
+| `http` | `url` (http or https), `method` (`GET`, `HEAD`, `POST`), `body`, `expectedStatus` (empty means any 2xx), `keyword` with `keywordMode` (`contains`, `absent`), `latencyThresholdMs`, `timeoutMs` (1 to 30 seconds, default 10), `followRedirects` (default on), `tlsWarnDays` |
+| `tcp` | `host`, `port`, `timeoutMs` |
+
+A monitor also has `intervalSeconds` (60 to 86,400, default 60), `confirmations` and `recoveryConfirmations` (1 to
+10, default 2), `quorumMode` (`majority`, `any`, `all`), one to ten locations, and the components it reports on,
+each with the impact it has while the monitor is down. Request headers, which can carry secrets, aren't accepted yet.
+
+**Locations.** A workspace sees Mocco's shared locations (`workspace_id` null: hosted regions, or the embedded probe
+on a one-box install) and its own private ones. An owner or admin creates a private location with a `code` unique in
+the workspace; the answer carries its token (`mpl_` and 43 base64url characters) once, and only the token's SHA-256
+hash is stored. Rotating issues a new token and the old one stops working. A disabled location isn't offered to new
+monitors. Shared locations are provisioned with the hosted fleet and the embedded probe, not through the console.
+A monitor may use enabled shared locations and its workspace's own; any other location id is `NOT_FOUND`, so a
+monitor can't be pointed at another tenant's private network. Every linked component must be on one of the
+project's pages.
+
+**State.** A new monitor is `pending` with its first round due at once (`next_round_at`). Only two writers change
+`state`: the evaluator (next slice) and the operator's pause and resume. Both take the monitor's
+`pg_advisory_xact_lock` (`AdvisoryLockNamespaces.statusMonitor`) inside their transaction and append a row to
+`mocco_status_monitor_state_changes`. Pausing sets `paused`; resuming sets `pending` and makes a round due now. Pausing
+a paused monitor, or resuming one that isn't paused, changes nothing. Editing a monitor replaces its settings,
+locations and components and keeps its state. Deleting it deletes its links and history.
+
 ## Audit
 
 These changes are appended to the workspace's audit chain, after their transaction commits:
@@ -208,6 +250,8 @@ These changes are appended to the workspace's audit chain, after their transacti
 | `status.incident.created`, `status.incident.updated` (from, to), `status.incident.components_changed`, `status.incident.postmortem_changed` | `status_incident` |
 | `status.maintenance.scheduled`, `status.maintenance.canceled` | `status_maintenance` |
 | `status.maintenance.started`, `status.maintenance.completed` (by the tick, no actor) | `status_maintenance` |
+| `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed` | `status_monitor` |
+| `status.location.created`, `status.location.token_rotated`, `status.location.disabled` | `status_location` |
 
 Group and other component edits are not audited.
 
@@ -216,7 +260,7 @@ Group and other component edits are not audited.
 `status.*` is built on `productProcedure(Products.status)`: the caller must be a member of `workspaceId`,
 `projectId` must belong to it, and the status product must be enabled (`FORBIDDEN` otherwise). The same procedure
 maps the domain's errors: `StatusEntityNotFoundError` is `NOT_FOUND`; `StatusPageSlugTakenError`,
-`IncidentTransitionError` and `MaintenanceTransitionError` are `CONFLICT`; `MaintenanceWindowError` is
+`IncidentTransitionError`, `MaintenanceTransitionError` and `LocationCodeTakenError` are `CONFLICT`; `MaintenanceWindowError` is
 `BAD_REQUEST`. Every lookup is scoped by workspace and project, so another tenant's ids are `NOT_FOUND`. A test
 calls every procedure as a non-member and with another tenant's ids, and fails if a procedure is missing from it.
 
@@ -227,13 +271,16 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `createComponent`, `updateComponent`, `setComponentStatus`, `deleteComponent` | Components; `setComponentStatus` is audited |
 | `incidents`, `incident`, `createIncident`, `postIncidentUpdate`, `setIncidentComponents`, `setPostmortem` | Incidents; `incident` returns the timeline and affected components |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
+| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components and latest state changes |
+| `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
 Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)); see
 [MCP](#mcp) below. A mutating tool for posting an incident update, behind the workspace's switch, comes later.
 
 ## Not built yet
 
-Monitors and `status_source`; page `visibility`, `locale` and `theme`; the CDN host mapping
+Checking monitors (the probe protocol, the evaluator and `@mocco/probe`), component status derived from monitors
+(`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` (and a way to create or publish a
 draft, which arrives with monitor-origin incidents); repo and project links on components; run links
 (`suspected_run_id`, `mocco_status_incident_runs`); and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,

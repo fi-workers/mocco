@@ -1,5 +1,5 @@
-// Status page (#103, slice #148): a project's status pages, their components, incidents and
-// scheduled maintenance, managed by hand. Monitors, subscribers, the public snapshot and deploy
+// Status page (#103): a project's status pages, their components, incidents and scheduled
+// maintenance (#148), and its monitors and probe locations (#150). Subscribers and deploy
 // correlation come in later slices (docs/specs/2026-09-24-status-page-design.md).
 import { z } from 'zod';
 
@@ -139,3 +139,134 @@ export const maintenanceInputSchema = z
     path: ['scheduledEnd'],
   });
 export type MaintenanceInput = z.infer<typeof maintenanceInputSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// Monitors and probe locations (#150). A monitor is an HTTP or TCP check of a project, run
+// by `@mocco/probe` agents at the locations it is assigned to (ADR 0027). A location is a
+// hosted region (no workspace) or a workspace's private location, authenticated by its token.
+// ─────────────────────────────────────────────────────────────
+
+export const MonitorKinds = { http: 'http', tcp: 'tcp' } as const;
+export type MonitorKind = (typeof MonitorKinds)[keyof typeof MonitorKinds];
+
+/**
+ * A monitor's state. `pending` until its first verdict; the evaluator moves it through
+ * `up → suspect → down → recovering → up` (and `degraded` when latency fails by quorum);
+ * only an operator pauses and resumes it.
+ */
+export const MonitorStates = {
+  pending: 'pending',
+  up: 'up',
+  suspect: 'suspect',
+  down: 'down',
+  recovering: 'recovering',
+  degraded: 'degraded',
+  paused: 'paused',
+} as const;
+export type MonitorState = (typeof MonitorStates)[keyof typeof MonitorStates];
+
+/** How many reporting locations must agree on a round: half or more, one, or every one. */
+export const QuorumModes = { majority: 'majority', any: 'any', all: 'all' } as const;
+export type QuorumMode = (typeof QuorumModes)[keyof typeof QuorumModes];
+export const quorumModeSchema = z.enum(Object.values(QuorumModes) as [QuorumMode, ...QuorumMode[]]);
+
+/** Where a probe runs: Mocco's hosted region, a workspace's own network, or in-process on a one-box install. */
+export const LocationKinds = { hosted: 'hosted', private: 'private', embedded: 'embedded' } as const;
+export type LocationKind = (typeof LocationKinds)[keyof typeof LocationKinds];
+
+export const HttpMonitorMethods = { GET: 'GET', HEAD: 'HEAD', POST: 'POST' } as const;
+export type HttpMonitorMethod = (typeof HttpMonitorMethods)[keyof typeof HttpMonitorMethods];
+
+/** Whether the response body must contain the keyword or must not. */
+export const KeywordModes = { contains: 'contains', absent: 'absent' } as const;
+export type KeywordMode = (typeof KeywordModes)[keyof typeof KeywordModes];
+
+export const MonitorLimits = {
+  minIntervalSeconds: 60,
+  maxIntervalSeconds: 86_400,
+  defaultTimeoutMs: 10_000,
+  maxTimeoutMs: 30_000,
+  defaultConfirmations: 2,
+  maxConfirmations: 10,
+  maxLocations: 10,
+  maxComponents: 50,
+  urlMax: 2048,
+  requestBodyMax: 10_000,
+  keywordMax: 200,
+} as const;
+
+const timeoutMs = z.int().min(1000).max(MonitorLimits.maxTimeoutMs).default(MonitorLimits.defaultTimeoutMs);
+
+export const httpMonitorSpecSchema = z.object({
+  kind: z.literal(MonitorKinds.http),
+  url: z.url({ protocol: /^https?$/ }).max(MonitorLimits.urlMax),
+  method: z
+    .enum(Object.values(HttpMonitorMethods) as [HttpMonitorMethod, ...HttpMonitorMethod[]])
+    .default(HttpMonitorMethods.GET),
+  body: z.string().max(MonitorLimits.requestBodyMax).optional(),
+  /** The status codes that pass; empty means any 2xx. */
+  expectedStatus: z.array(z.int().min(100).max(599)).max(20).default([]),
+  keyword: z.string().min(1).max(MonitorLimits.keywordMax).optional(),
+  keywordMode: z.enum(Object.values(KeywordModes) as [KeywordMode, ...KeywordMode[]]).default(KeywordModes.contains),
+  /** A slower answer that otherwise passes makes the round `degraded`. */
+  latencyThresholdMs: z.int().min(1).max(MonitorLimits.maxTimeoutMs).optional(),
+  timeoutMs,
+  followRedirects: z.boolean().default(true),
+  /** Warn when the certificate expires within this many days. */
+  tlsWarnDays: z.int().min(1).max(365).optional(),
+});
+
+export const tcpMonitorSpecSchema = z.object({
+  kind: z.literal(MonitorKinds.tcp),
+  host: z.string().trim().min(1).max(253),
+  port: z.int().min(1).max(65_535),
+  timeoutMs,
+});
+
+/** What a probe checks, by kind. Stored as the monitor's `spec` and sent to probes in their leases. */
+export const monitorSpecSchema = z.discriminatedUnion('kind', [httpMonitorSpecSchema, tcpMonitorSpecSchema]);
+export type MonitorSpec = z.infer<typeof monitorSpecSchema>;
+
+export const monitorComponentSchema = z.object({ componentId: z.uuid(), impactWhenDown: componentImpactSchema });
+export type MonitorComponent = z.infer<typeof monitorComponentSchema>;
+
+const confirmations = z.int().min(1).max(MonitorLimits.maxConfirmations).default(MonitorLimits.defaultConfirmations);
+
+export const monitorInputSchema = z.object({
+  name,
+  spec: monitorSpecSchema,
+  intervalSeconds: z
+    .int()
+    .min(MonitorLimits.minIntervalSeconds)
+    .max(MonitorLimits.maxIntervalSeconds)
+    .default(MonitorLimits.minIntervalSeconds),
+  /** Consecutive failing rounds before `down`. */
+  confirmations,
+  /** Consecutive passing rounds before `recovering` is `up` again. */
+  recoveryConfirmations: confirmations,
+  quorumMode: quorumModeSchema.default(QuorumModes.majority),
+  locationIds: z.array(z.uuid()).min(1).max(MonitorLimits.maxLocations),
+  /** The components this monitor reports on, and what they show while it is down. */
+  components: z.array(monitorComponentSchema).max(MonitorLimits.maxComponents).default([]),
+});
+export type MonitorInput = z.infer<typeof monitorInputSchema>;
+
+/** A location code: lowercase letters, digits and inner hyphens ("fra", "office-vpn"). */
+export const LOCATION_CODE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
+
+export const locationInputSchema = z.object({ code: z.string().regex(LOCATION_CODE_PATTERN), name });
+export type LocationInput = z.infer<typeof locationInputSchema>;
+
+/** A location as the console sees it: never its token hash. */
+export const locationSchema = z.object({
+  id: z.uuid(),
+  workspaceId: z.uuid().nullable(),
+  code: z.string(),
+  name: z.string(),
+  kind: z.enum(Object.values(LocationKinds) as [LocationKind, ...LocationKind[]]),
+  lastSeenAt: z.date().nullable(),
+  agentVersion: z.string().nullable(),
+  disabledAt: z.date().nullable(),
+  createdAt: z.date(),
+});
+export type LocationDto = z.infer<typeof locationSchema>;

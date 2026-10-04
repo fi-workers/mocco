@@ -20,5 +20,7 @@ export const AdvisoryLockNamespaces = {
   auditChain: 1,
   /** Serializes changeset applies to one flag environment (`RulesetPublisher`). */
   flagEnvironment: 2,
+  /** Serializes writes of one status monitor's state (pause and resume, the verdict evaluator). */
+  statusMonitor: 3,
 } as const;
 export type AdvisoryLockNamespace = (typeof AdvisoryLockNamespaces)[keyof typeof AdvisoryLockNamespaces];

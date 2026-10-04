@@ -39,7 +39,9 @@ import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyServ
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
+import type { LocationService } from '@backend/domain/status/LocationService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import type { MonitorService } from '@backend/domain/status/MonitorService';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Session } from '@mocco/common/auth';
 
@@ -110,6 +112,9 @@ export interface Context {
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
+  /** Monitors and probe locations (#150). */
+  statusMonitors: MonitorService;
+  statusLocations: LocationService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Always present — what a workspace allows agents on the MCP surface (ADR 0025). */

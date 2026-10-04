@@ -54,7 +54,9 @@ import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyServ
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
+import type { LocationService } from '@backend/domain/status/LocationService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import type { MonitorService } from '@backend/domain/status/MonitorService';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Context } from '@backend/transport/trpc/trpc';
 
@@ -96,6 +98,8 @@ export interface TrpcDeps extends Services {
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
+  statusMonitors: MonitorService;
+  statusLocations: LocationService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -154,6 +158,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,
         statusMaintenances: deps.statusMaintenances,
+        statusMonitors: deps.statusMonitors,
+        statusLocations: deps.statusLocations,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,

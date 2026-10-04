@@ -33,7 +33,11 @@ import {
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
+  LocationKinds,
   MaintenanceStatuses,
+  MonitorKinds,
+  MonitorStates,
+  QuorumModes,
 } from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
@@ -120,7 +124,12 @@ import type {
   IncidentSeverity,
   IncidentStatus,
   IncidentVisibility,
+  LocationKind,
   MaintenanceStatus,
+  MonitorKind,
+  MonitorSpec,
+  MonitorState,
+  QuorumMode,
 } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
@@ -3388,5 +3397,179 @@ export const statusPageSnapshots = pgTable(
       foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
       name: 'mocco_status_page_snapshots_page_fk',
     }).onDelete('cascade'),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Status monitors (#150): HTTP and TCP checks of a project, run by `@mocco/probe` agents at
+// the locations they are assigned to (ADR 0027). A location is a hosted region (no
+// workspace) or a workspace's private location; its token is stored only as a SHA-256 hash.
+// The lease, result and verdict time series come with the probe protocol.
+// ─────────────────────────────────────────────────────────────
+
+/** Where probes run. `workspace_id` is null for Mocco's hosted regions and an embedded probe,
+ * which may check any workspace's monitors; a private location checks only its workspace's. */
+export const statusLocations = pgTable(
+  'mocco_status_locations',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    code: text().notNull(),
+    name: text().notNull(),
+    kind: text().$type<LocationKind>().notNull(),
+    tokenHash: text('token_hash').notNull(),
+    lastSeenAt: timestamp('last_seen_at'),
+    agentVersion: text('agent_version'),
+    disabledAt: timestamp('disabled_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_status_locations_token_hash_uq').on(t.tokenHash),
+    uniqueIndex('mocco_status_locations_workspace_code_uq')
+      .on(t.workspaceId, t.code)
+      .where(sql`${t.workspaceId} IS NOT NULL`),
+    uniqueIndex('mocco_status_locations_global_code_uq')
+      .on(t.code)
+      .where(sql`${t.workspaceId} IS NULL`),
+    check('mocco_status_locations_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(LocationKinds))})`),
+    // Only a private location belongs to a workspace.
+    check(
+      'mocco_status_locations_scope_check',
+      sql`(${t.kind} IN (${sqlInList([LocationKinds.private])})) = (${t.workspaceId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** An HTTP or TCP check of a project. `state` is written only by the evaluator and by pause and
+ * resume, both under the monitor's advisory lock; `next_round_at` is the probes' schedule. */
+export const statusMonitors = pgTable(
+  'mocco_status_monitors',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    name: text().notNull(),
+    kind: text().$type<MonitorKind>().notNull(),
+    spec: jsonb().$type<MonitorSpec>().notNull(),
+    intervalSeconds: integer('interval_s').notNull(),
+    confirmations: integer().notNull(),
+    recoveryConfirmations: integer('recovery_confirmations').notNull(),
+    quorumMode: text('quorum_mode').$type<QuorumMode>().notNull(),
+    state: text().$type<MonitorState>().notNull().default(MonitorStates.pending),
+    stateChangedAt: timestamp('state_changed_at').notNull().defaultNow(),
+    nextRoundAt: timestamp('next_round_at').notNull().defaultNow(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_status_monitors_project_idx').on(t.workspaceId, t.projectId),
+    // The probes' lease scan: rounds coming due on monitors that aren't paused.
+    index('mocco_status_monitors_next_round_idx')
+      .on(t.nextRoundAt)
+      .where(sql`${t.state} NOT IN (${sqlInList([MonitorStates.paused])})`),
+    // Lets locations, components and state changes reference (monitor_id, workspace_id).
+    unique('mocco_status_monitors_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_status_monitors_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_status_monitors_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(MonitorKinds))})`),
+    check('mocco_status_monitors_state_check', sql`${t.state} IN (${sqlInList(Object.values(MonitorStates))})`),
+    check(
+      'mocco_status_monitors_quorum_mode_check',
+      sql`${t.quorumMode} IN (${sqlInList(Object.values(QuorumModes))})`,
+    ),
+    check('mocco_status_monitors_interval_check', sql`${t.intervalSeconds} >= 60`),
+    check(
+      'mocco_status_monitors_confirmations_check',
+      sql`${t.confirmations} >= 1 AND ${t.recoveryConfirmations} >= 1`,
+    ),
+  ],
+);
+
+/** The locations a monitor runs at. The service allows hosted locations and the workspace's own. */
+export const statusMonitorLocations = pgTable(
+  'mocco_status_monitor_locations',
+  {
+    monitorId: uuid('monitor_id').notNull(),
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => statusLocations.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull(),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_monitor_locations_pk', columns: [t.monitorId, t.locationId] }),
+    index('mocco_status_monitor_locations_location_idx').on(t.locationId),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_monitor_locations_monitor_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** The components a monitor reports on, and what a component shows while the monitor is down. */
+export const statusComponentMonitors = pgTable(
+  'mocco_status_component_monitors',
+  {
+    componentId: uuid('component_id').notNull(),
+    monitorId: uuid('monitor_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    impactWhenDown: text('impact_when_down').$type<ComponentImpact>().notNull(),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_component_monitors_pk', columns: [t.componentId, t.monitorId] }),
+    index('mocco_status_component_monitors_monitor_idx').on(t.monitorId),
+    foreignKey({
+      columns: [t.componentId, t.workspaceId],
+      foreignColumns: [statusComponents.id, statusComponents.workspaceId],
+      name: 'mocco_status_component_monitors_component_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_component_monitors_monitor_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_component_monitors_impact_check',
+      sql`${t.impactWhenDown} IN (${sqlInList(Object.values(ComponentImpacts))})`,
+    ),
+  ],
+);
+
+/** Every change of a monitor's state: the source of truth for downtime (an outage runs from
+ * `down` to the next `up`). Append-only; `round_at` is the round that caused it, if any. */
+export const statusMonitorStateChanges = pgTable(
+  'mocco_status_monitor_state_changes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    monitorId: uuid('monitor_id').notNull(),
+    fromState: text('from_state').$type<MonitorState>().notNull(),
+    toState: text('to_state').$type<MonitorState>().notNull(),
+    at: timestamp().notNull(),
+    roundAt: timestamp('round_at'),
+    reason: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+  },
+  t => [
+    index('mocco_status_monitor_state_changes_monitor_at_idx').on(t.monitorId, t.at),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_monitor_state_changes_monitor_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_monitor_state_changes_from_check',
+      sql`${t.fromState} IN (${sqlInList(Object.values(MonitorStates))})`,
+    ),
+    check(
+      'mocco_status_monitor_state_changes_to_check',
+      sql`${t.toState} IN (${sqlInList(Object.values(MonitorStates))})`,
+    ),
   ],
 );

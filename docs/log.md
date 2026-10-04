@@ -152,6 +152,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status monitors and probe locations
+
+- The status reference gains "Monitors and the probe protocol": the monitor spec by kind, private and shared probe
+  locations with tokens shown once and stored as SHA-256 hashes, and how pause and resume share the monitor's
+  advisory lock with the evaluator and record state changes. Its tables, audit and tRPC sections list the new tables,
+  actions and procedures, and "Not built yet" names what checking a monitor still needs. The feature map's HTTP and
+  TCP monitors row says what is built so far.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-monitors-model` (#150, part 1)
+
 ## 2026-10-05 — Status pages publish as static snapshots
 
 - The status reference gains "Public page": how a change marks the page dirty and the `status.snapshot.publish`

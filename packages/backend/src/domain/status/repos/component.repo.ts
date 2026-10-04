@@ -43,6 +43,18 @@ export class ComponentRepo {
     return rows.map(row => row.id);
   }
 
+  /** The ids among `ids` that are components of the project, on any of its pages. */
+  async idsInProject(scope: StatusScope, ids: readonly string[]): Promise<string[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await this.db
+      .select({ id: c.id })
+      .from(c)
+      .where(and(scoped(scope), inArray(c.id, [...ids])));
+    return rows.map(row => row.id);
+  }
+
   /** The position after the page's last component. */
   async nextPosition(pageId: string): Promise<number> {
     const [row] = await this.db

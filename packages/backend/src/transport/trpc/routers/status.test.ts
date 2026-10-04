@@ -1,5 +1,6 @@
 import { ExecutorIds } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -23,6 +24,7 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { members, users } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { statusRouter } from '@backend/transport/trpc/routers/status';
@@ -50,7 +52,11 @@ interface Ids {
   componentId: string;
   incidentId: string;
   maintenanceId: string;
+  locationId: string;
+  monitorId: string;
 }
+
+const httpSpec = { kind: 'http', url: 'https://api.acme.test/health' } as const;
 
 /** One call per status procedure: `scope` is the tenant the caller claims, `ids` the entities it targets. */
 const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknown>> = {
@@ -92,10 +98,32 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
     }),
   cancelMaintenance: async (api, scope, ids) =>
     await api.status.cancelMaintenance({ ...scope, maintenanceId: ids.maintenanceId }),
+  monitors: async (api, scope) => await api.status.monitors(scope),
+  monitor: async (api, scope, ids) => await api.status.monitor({ ...scope, monitorId: ids.monitorId }),
+  // With the caller's own scope, the victim's private location is NOT_FOUND.
+  createMonitor: async (api, scope, ids) =>
+    await api.status.createMonitor({ ...scope, name: 'x', spec: httpSpec, locationIds: [ids.locationId] }),
+  updateMonitor: async (api, scope, ids) =>
+    await api.status.updateMonitor({
+      ...scope,
+      monitorId: ids.monitorId,
+      name: 'x',
+      spec: httpSpec,
+      locationIds: [ids.locationId],
+    }),
+  pauseMonitor: async (api, scope, ids) => await api.status.pauseMonitor({ ...scope, monitorId: ids.monitorId }),
+  resumeMonitor: async (api, scope, ids) => await api.status.resumeMonitor({ ...scope, monitorId: ids.monitorId }),
+  deleteMonitor: async (api, scope, ids) => await api.status.deleteMonitor({ ...scope, monitorId: ids.monitorId }),
+  locations: async (api, scope) => await api.status.locations(scope),
+  createLocation: async (api, scope) => await api.status.createLocation({ ...scope, code: 'attacker', name: 'x' }),
+  rotateLocationToken: async (api, scope, ids) =>
+    await api.status.rotateLocationToken({ ...scope, locationId: ids.locationId }),
+  disableLocation: async (api, scope, ids) =>
+    await api.status.disableLocation({ ...scope, locationId: ids.locationId }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
-const scopeOnly = new Set(['pages', 'createPage']);
+const scopeOnly = new Set(['pages', 'createPage', 'monitors', 'locations', 'createLocation']);
 
 /** The tRPC error code a call ends with, or 'ok'. */
 const outcome = async (run: () => Promise<unknown>): Promise<string | undefined> => {
@@ -128,12 +156,22 @@ const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
     scheduledEnd: new Date('2030-01-01T01:00:00Z'),
     componentIds: [component.id],
   });
+  const { location } = await api.status.createLocation({ ...scope, code: 'office', name: 'Office' });
+  const { monitor } = await api.status.createMonitor({
+    ...scope,
+    name: 'API health',
+    spec: httpSpec,
+    locationIds: [location.id],
+    components: [{ componentId: component.id, impactWhenDown: 'major_outage' }],
+  });
   return {
     pageId: page.id,
     groupId: group.id,
     componentId: component.id,
     incidentId: incident.id,
     maintenanceId: maintenance.id,
+    locationId: location.id,
+    monitorId: monitor.id,
   };
 };
 
@@ -306,5 +344,58 @@ describe('status router on pglite', () => {
     expect(ownPage.page.slug).toBe('evil');
     const { pages } = await attacker.api.status.pages(attacker.scope);
     expect(pages.map(page => page.id)).not.toContain(victim.pageId);
+    const monitor = await owner.api.status.monitor({ ...owner.scope, monitorId: victim.monitorId });
+    expect(monitor.monitor).toMatchObject({ name: 'API health', state: 'pending', locationIds: [victim.locationId] });
+    const { locations } = await owner.api.status.locations(owner.scope);
+    expect(locations).toEqual([expect.objectContaining({ id: victim.locationId, disabledAt: null })]);
+    const { locations: attackerLocations } = await attacker.api.status.locations(attacker.scope);
+    expect(attackerLocations.map(location => location.id)).not.toContain(victim.locationId);
+  });
+
+  it('manages monitors and locations; a token is shown once and a plain member only reads', async () => {
+    const { api, scope } = await setup('owner@example.com', 'acme');
+    const ids = await seed(api, scope, 'acme');
+
+    const { location, token } = await api.status.createLocation({ ...scope, code: 'dc-2', name: 'DC 2' });
+    expect(token).toMatch(/^mpl_/);
+    expect(location).not.toHaveProperty('tokenHash');
+    const { locations } = await api.status.locations(scope);
+    expect(locations.every(row => !('tokenHash' in row))).toBe(true);
+    await expect(api.status.createLocation({ ...scope, code: 'dc-2', name: 'Again' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    const { monitor } = await api.status.pauseMonitor({ ...scope, monitorId: ids.monitorId });
+    expect(monitor.state).toBe('paused');
+    await expect(
+      api.status.createMonitor({
+        ...scope,
+        name: 'x',
+        spec: httpSpec,
+        locationIds: [ids.locationId],
+        intervalSeconds: 30,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const member = await signedInCaller('member@example.com');
+    const [memberUser] = await t.db.select().from(users).where(eq(users.email, 'member@example.com'));
+    await t.db
+      .insert(members)
+      .values({ organizationId: scope.workspaceId, userId: memberUser?.id ?? '', role: 'member' });
+
+    await expect(member.status.locations(scope)).resolves.toMatchObject({ locations: expect.any(Array) });
+    await expect(member.status.monitors(scope)).resolves.toMatchObject({ monitors: [expect.any(Object)] });
+    await expect(member.status.createLocation({ ...scope, code: 'mine', name: 'x' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await expect(member.status.rotateLocationToken({ ...scope, locationId: location.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('requires the status product for locations', async () => {
+    const api = await signedInCaller('owner@example.com');
+    const { workspace: ws } = await api.workspace.create({ name: 'W' });
+
+    await expect(api.status.locations({ workspaceId: ws.id })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

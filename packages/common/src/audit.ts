@@ -95,6 +95,15 @@ export const AuditActions = {
   statusMaintenanceStarted: 'status.maintenance.started',
   /** The maintenance tick completed a window (no actor). */
   statusMaintenanceCompleted: 'status.maintenance.completed',
+  statusMonitorCreated: 'status.monitor.created',
+  statusMonitorUpdated: 'status.monitor.updated',
+  statusMonitorDeleted: 'status.monitor.deleted',
+  statusMonitorPaused: 'status.monitor.paused',
+  statusMonitorResumed: 'status.monitor.resumed',
+  /** A private probe location was created; its token is shown once. */
+  statusLocationCreated: 'status.location.created',
+  statusLocationTokenRotated: 'status.location.token_rotated',
+  statusLocationDisabled: 'status.location.disabled',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);
@@ -177,6 +186,14 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.statusMaintenanceCanceled]: 'Maintenance canceled',
   [AuditActions.statusMaintenanceStarted]: 'Maintenance started',
   [AuditActions.statusMaintenanceCompleted]: 'Maintenance completed',
+  [AuditActions.statusMonitorCreated]: 'Monitor created',
+  [AuditActions.statusMonitorUpdated]: 'Monitor changed',
+  [AuditActions.statusMonitorDeleted]: 'Monitor deleted',
+  [AuditActions.statusMonitorPaused]: 'Monitor paused',
+  [AuditActions.statusMonitorResumed]: 'Monitor resumed',
+  [AuditActions.statusLocationCreated]: 'Probe location created',
+  [AuditActions.statusLocationTokenRotated]: 'Probe location token rotated',
+  [AuditActions.statusLocationDisabled]: 'Probe location disabled',
 };
 
 /**
