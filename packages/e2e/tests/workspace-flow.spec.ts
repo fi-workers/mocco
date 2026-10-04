@@ -28,7 +28,7 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByRole('button', { name: 'Create workspace' }).click();
   await expect(page).toHaveURL(homeUrl);
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
-  await expect(page.getByText('Nothing is waiting.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Nothing is waiting for approval.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
   // --- Deploys (the repositories) is one click away in the workspace left nav ---
