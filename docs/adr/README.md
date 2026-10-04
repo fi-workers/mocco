@@ -40,9 +40,10 @@ related:
 | [0023](./0023-flag-targets-are-evaluation-scopes.md) | Flag targets are evaluation scopes, not governance types | draft | 2026-10-02 |
 | [0024](./0024-flags-openfeature-flagd-ruleset-ofrep.md) | Flags: OpenFeature-first, flagd ruleset, OFREP, one-way kill switch, MIT SDKs | draft | 2026-10-02 |
 | [0025](./0025-every-product-surface-ships-mcp-tools.md) | Every product surface ships MCP tools: thin adapters, caller identity, decisions need a person | draft | 2026-10-02 |
-| [0026](./0026-position-mocco-around-the-production-record.md) | Position Mocco around the production record, with products grouped by job | draft | 2026-10-04 |
+| [0026](./0026-position-mocco-around-the-production-record.md) | Position Mocco around the production record, with products grouped by job | superseded by 0029 | 2026-10-04 |
 | [0027](./0027-status-probes-are-pull-based-agents.md) | Status probes are pull-based agents: one `@mocco/probe` for hosted and private locations | draft | 2026-10-04 |
 | [0028](./0028-status-pages-are-static-snapshots.md) | Public status pages are static snapshots on object storage (the exception to 0015's ISR) | draft | 2026-10-04 |
+| [0029](./0029-mocco-is-everything-a-product-needs-except-the-code.md) | Mocco is everything a product needs, except the code | draft | 2026-10-04 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 

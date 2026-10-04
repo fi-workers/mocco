@@ -2,7 +2,8 @@
 title: Position Mocco around the production record, with products grouped by job
 description: Mocco is presented as one workspace to release, control and support an app, built on one record of what reached production and who approved it; "write ≠ ship" generalizes "write ≠ deploy", and the landing page and app navigation group products by job (Release, Support, Operate).
 type: adr
-status: draft
+status: superseded
+superseded_by: ./0029-mocco-is-everything-a-product-needs-except-the-code.md
 created: 2026-10-04
 updated: 2026-10-04
 confidence: medium
