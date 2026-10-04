@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -129,7 +129,7 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Rewrote the product description in the root `README.md`, `AGENTS.md` and `index.md` to list what has shipped,
   and added a "where it stands" section to the roadmap, since the shipping order diverged from the waves.
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
-- Source: branch `docs/positioning`
+- Source: PR #349
 
 ## 2026-10-04 — Mocco is everything a product needs, except the code
 
@@ -139,7 +139,7 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   navigation decisions carry over.
 - Rewrote the product description in the root `README.md`, `AGENTS.md` and `index.md` accordingly.
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
-- Source: branch `docs/concept-everything-but-code`
+- Source: PR #357
 
 ## 2026-10-04 — Customer screenshots show page content only
 
@@ -148,4 +148,4 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   [conventions](./meta/conventions.md): screenshots show content, not the app shell, except in the guides that
   teach the navigation. A navigation change no longer stales every guide.
 - Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
-- Source: branch `docs/content-only-screenshots`
+- Source: PR #359

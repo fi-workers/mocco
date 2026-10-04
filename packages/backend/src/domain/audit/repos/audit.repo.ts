@@ -61,6 +61,16 @@ export class AuditRepo {
       .orderBy(asc(schema.auditLog.seq));
   }
 
+  /** A workspace's `limit` newest entries, newest-first — a bounded read for summaries. */
+  async latest(workspaceId: string, limit: number) {
+    return await this.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.workspaceId, workspaceId))
+      .orderBy(desc(schema.auditLog.seq))
+      .limit(limit);
+  }
+
   /** Every entry in the workspace's chain, oldest-first — the input `verify` re-walks. */
   async all(workspaceId: string) {
     return await this.db

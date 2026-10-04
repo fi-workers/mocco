@@ -87,4 +87,10 @@ export class AuditService {
   async list(workspaceId: string, sinceSeq: bigint) {
     return await this.deps.audit.listByWorkspace(workspaceId, sinceSeq);
   }
+
+  /** A workspace's `limit` newest entries, newest-first — what a summary (Home) shows,
+   * without reading the whole chain. */
+  async recent(workspaceId: string, limit: number) {
+    return await this.deps.audit.latest(workspaceId, limit);
+  }
 }

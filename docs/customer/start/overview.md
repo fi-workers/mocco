@@ -4,7 +4,7 @@ description: The Mocco products you can use today — deploy governance, OTA and
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, getting-started, overview, guide]
@@ -57,4 +57,4 @@ Your apps, servers and CI talk to Mocco with a project's API keys: a **publishab
 
 ## Coming later
 
-The **Products** page also lists products that aren't available yet, marked **Coming soon**: a status page, app reviews, a feedback board, a forum, deep links and end-user identity. They can't be turned on until they ship.
+The **Products** page also lists products that aren't available yet, under **On the roadmap**: a status page, app reviews, a feedback board, a forum, deep links and end-user identity. They can't be turned on until they ship.

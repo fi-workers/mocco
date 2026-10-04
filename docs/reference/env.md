@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -92,7 +92,7 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 
 ## Function region
 
-On Vercel, `packages/frontend/vercel.json` pins the functions to `icn1` (Seoul), next to the production database (Supabase `ap-northeast-2`). Every request makes several sequential queries, so the function belongs where the database is: from the default `iad1` each round trip crossed the Pacific, and one console page load took about 10 s. A deployment with its database elsewhere sets `regions` to that database's region. Self-hosting ignores the file.
+On Vercel, `packages/frontend/vercel.json` pins the functions to `icn1` (Seoul), next to the production database (Supabase `ap-northeast-2`). A console tRPC call makes several sequential queries, so the function belongs where the database is: from the default `iad1` each round trip crossed the Pacific, and the batched tRPC call behind a console page took about 10 s (0.3 s from `icn1`). Public `/v1` handlers read the same database, so they benefit the same way; CORS preflights answer without it. A deployment with its database elsewhere sets `regions` to that database's region. Self-hosting ignores the file.
 
 ## Storage vars
 
