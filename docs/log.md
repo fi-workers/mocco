@@ -152,6 +152,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
 
+## 2026-10-05 — Agents can read feature flags
+
+- The connect guide lists `mocco_flags_search`, `mocco_flags_get` and `mocco_flags_changesets_search`, and says how a
+  flag tool picks its project and that it answers only where flags are turned on. The MCP spec marks the flag reads of
+  slice 8 shipped and lists what is left (OTA reads, a stale filter, mutating flag tools); the flags reference notes
+  the tools and the checks in front of them.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/flags.md`, `log.md`
+- Source: branch `feat/mcp-flags-read`
+
 ## 2026-10-04 — Workspace switch for agents that decide
 
 - Added the "Agents on the MCP surface" section to the workspace reference: `mocco_mcp_settings`, the

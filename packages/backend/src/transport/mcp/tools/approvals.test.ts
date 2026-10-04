@@ -175,6 +175,8 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       gates: { getPending: refuse, resume: refuse },
       scope: new WorkspaceScope({ memberships: new MembershipRepo(t.db) }),
       settings,
+      flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
+      projects: { resolve: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

@@ -20,6 +20,8 @@ describe('createMcpServer', () => {
       gates: { getPending: refuse, resume: refuse },
       scope: new WorkspaceScope({ memberships: { listForUser: refuse, isMember: refuse } }),
       settings: { agentsMayDecide: refuse },
+      flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
+      projects: { resolve: refuse },
       confirmations: undefined,
     });
 

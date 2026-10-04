@@ -4,7 +4,7 @@ description: How Mocco stores feature flags — environments (flag targets), fla
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, flags, openfeature, flagd]
@@ -299,5 +299,7 @@ The `flags` tRPC router uses `productProcedure(Products.flags)`: the caller must
 | `usage` | Evaluations per flag over the last `days` (default 7), and when each was last seen |
 | `stale`, `dismissStale` | Active stale findings (`includeDismissed` for all); hide one until a date, or show it again |
 | `ruleset` | An environment's current snapshot (version, ETag, document) |
+
+Agents read flags over MCP with `mocco_flags_search`, `mocco_flags_get` and `mocco_flags_changesets_search` (`transport/mcp/tools/flags.ts`): thin, read-only adapters over `listFlags`, `listEnvironments` and `history`, behind the same three checks (`ProjectScope`). Nothing on MCP changes a flag yet. See [Connect Mocco to your agent](../customer/mcp/connect.md).
 
 The console page is **Feature flags** in the project tabs (`/workspaces/:id/p/:projectId/flags`), with environments, flags, and per environment its segments and history. Each flag has a page (`…/flags/:flagKey?env=`) with its rules, fallthrough and preview.

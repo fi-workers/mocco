@@ -269,6 +269,8 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
       gates,
       scope: new WorkspaceScope({ memberships: new MembershipRepo(t.db) }),
       settings,
+      flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
+      projects: { resolve: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

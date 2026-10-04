@@ -40,6 +40,9 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_runs_get` | One run: its steps, and the gate holding it (with its `itemIndex`) and what would release it |
 | `mocco_approvals_search` | What is waiting on a human right now |
 | `mocco_approvals_get` | One request: the change it pins, the requirements, and the votes so far |
+| `mocco_flags_search` | Which feature flags a project has, by key or description text, lifecycle, or whether the repository defines them, and where each is on |
+| `mocco_flags_get` | One flag: its variants, what it serves in each environment, and whether `.mocco/flags.yml` manages it |
+| `mocco_flags_changesets_search` | Which flag changes wait for approval in a protected environment, each with the approval request deciding it |
 
 Reads take a `responseFormat`: `concise` by default, `detailed` when the agent wants the
 commit and the gate requirements too. That keeps a search from spending your context on
@@ -48,6 +51,11 @@ rows you did not ask about.
 **Which workspace?** If you belong to one, say nothing. If you belong to several, the
 tool asks which and names them — and a workspace you are not a member of is refused
 whether or not it exists.
+
+**Which project?** The flag tools read one project. If the workspace has one, say nothing;
+otherwise the tool names the projects to pick from. They answer only where the workspace
+has feature flags turned on, as the console does. The flag tools only read: change a flag
+in the console, or in `.mocco/flags.yml` for a flag the repository manages.
 
 **Deciding is separate and off by default.**
 

@@ -27,3 +27,14 @@ export class WorkspaceUnclearError extends BadRequestError {
     this.name = 'WorkspaceUnclearError';
   }
 }
+
+/** No project was named and the workspace has none, or more than one. Names the choices,
+ * like `WorkspaceUnclearError`, so the agent can pick one without asking. */
+export class ProjectUnclearError extends BadRequestError {
+  constructor(readonly choices: readonly { id: string; name: string }[]) {
+    super(
+      choices.length === 0 ? 'This workspace has no projects' : `Say which project with projectId: ${namesOf(choices)}`,
+    );
+    this.name = 'ProjectUnclearError';
+  }
+}
