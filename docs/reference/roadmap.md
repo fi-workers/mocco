@@ -39,7 +39,7 @@ Mocco knows what reached production, when, and who approved it. None of the comp
 
 ## Where it stands (2026-10-04)
 
-The waves below are the plan; the order things shipped differs. Shipped: deploy governance (wave 0), OTA and force update and feature flags (wave 1), and from wave 4 the messenger and the help center, plus notification relay, the public `/v1` API, SDKs, the `mocco` CLI and an MCP server ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). Not started: the status page (wave 2), app reviews and the feedback board (wave 3), the forum and end-user identity (wave 4), deep links and hosted auth (wave 5). Products are grouped by job — Release, Support, Operate, Platform (end-user identity) and Developers (the API, SDKs, CLI and MCP server) — per [ADR 0027](../adr/0027-mocco-is-everything-a-product-needs-except-the-code.md).
+The waves below are the plan; the order things shipped differs. Shipped: deploy governance (wave 0), OTA and force update and feature flags (wave 1), and from wave 4 the messenger and the help center, plus notification relay, the public `/v1` API, SDKs, the `mocco` CLI and an MCP server ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). Not started: the status page (wave 2), app reviews and the feedback board (wave 3), the forum and end-user identity (wave 4), deep links and hosted auth (wave 5). Products are grouped by job — Release, Support, Operate, Platform (end-user identity) and Developers (the API, SDKs, CLI and MCP server) — per [ADR 0029](../adr/0029-mocco-is-everything-a-product-needs-except-the-code.md).
 
 ## Waves
 

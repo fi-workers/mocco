@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/fi-workers/mocco/actions/workflows/ci.yml/badge.svg)](https://github.com/fi-workers/mocco/actions/workflows/ci.yml)
 
-> **Everything your product needs, except the code.** Ship it, run it and hear from the people who use it, in one workspace. Deploys, OTA updates, feature flags, alerts, in-app messaging and your help center share the same team, the same roles and the same history, instead of separate tools that don't know about each other ([ADR 0027](./docs/adr/0027-mocco-is-everything-a-product-needs-except-the-code.md)).
+> **Everything your product needs, except the code.** Ship it, run it and hear from the people who use it, in one workspace. Deploys, OTA updates, feature flags, alerts, in-app messaging and your help center share the same team, the same roles and the same history, instead of separate tools that don't know about each other ([ADR 0029](./docs/adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)).
 
 | Group          | Products today                                                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
