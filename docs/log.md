@@ -131,6 +131,25 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
 
+## 2026-10-04 — Mocco is everything a product needs, except the code
+
+- Added [ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md), superseding ADR 0026's
+  position: release, operations and support are equal parts of building and running a service, and the shared
+  team, roles and history set Mocco apart; "write ≠ ship" is the Release principle. ADR 0026's grouping and
+  navigation decisions carry over.
+- Rewrote the product description in the root `README.md`, `AGENTS.md` and `index.md` accordingly.
+- Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
+- Source: branch `docs/concept-everything-but-code`
+
+## 2026-10-04 — Customer screenshots show page content only
+
+- Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,
+  removing the old sidebar, project tabs and dev overlays, and added a "Customer guide screenshots" rule to the
+  [conventions](./meta/conventions.md): screenshots show content, not the app shell, except in the guides that
+  teach the navigation. A navigation change no longer stales every guide.
+- Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
+- Source: branch `docs/content-only-screenshots`
+
 ## 2026-10-04 — Audit log: what verify proves, and what it costs
 
 - Corrected the audit spec: a `seq` gap is normal (a rolled-back insert uses a value) and `verify` doesn't check

@@ -2,23 +2,25 @@ import Head from 'next/head';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { productCatalog } from '@frontend/lib/products';
+import { productCatalog, sectionGroupLabels, SectionGroups } from '@frontend/lib/products';
 import { Routes } from '@frontend/lib/routes';
+
+import type { SectionGroup } from '@frontend/lib/products';
 
 const GITHUB_URL = 'https://github.com/fi-workers/mocco';
 
 interface Pillar {
-  name: string;
+  group: SectionGroup;
   summary: string;
   products: { name: string; description: string; href: string }[];
 }
 
 // The products that have screens today, grouped by the job they do. The roadmap row
 // below is read from the product registry, so it never lists a product that shipped.
-const pillars: Pillar[] = [
+const pillarsByJob: Pillar[] = [
   {
-    name: 'Release',
-    summary: 'Every production change waits for the right people.',
+    group: SectionGroups.release,
+    summary: 'Write ≠ ship: every production change waits for the right people.',
     products: [
       {
         name: 'Deploy governance',
@@ -43,8 +45,8 @@ const pillars: Pillar[] = [
     ],
   },
   {
-    name: 'Support',
-    summary: 'Hear from your users where you ship to them.',
+    group: SectionGroups.support,
+    summary: 'Hear from the people who use what you built.',
     products: [
       {
         name: 'Messenger',
@@ -59,7 +61,7 @@ const pillars: Pillar[] = [
     ],
   },
   {
-    name: 'Operate',
+    group: SectionGroups.operate,
     summary: 'Know what happened, and who did it.',
     products: [
       {
@@ -76,27 +78,36 @@ const pillars: Pillar[] = [
   },
 ];
 
-// An illustration of the production record: one audit chain across products.
-const record = [
-  { time: '10:02', product: 'Deploy', text: 'Gate “production” approved by Minji', detail: 'acme/api · run 482' },
-  { time: '10:09', product: 'Deploy', text: 'api reached production', detail: 'commit 4f2c9e1' },
-  { time: '10:31', product: 'OTA', text: 'Release 1.8.3 promoted to 10% of production', detail: 'approved by Ben' },
-  { time: '11:05', product: 'Flags', text: 'new-checkout turned on in Production', detail: '2 of 2 approvals' },
-  { time: '11:12', product: 'Flags', text: 'Kill switch: new-checkout off', detail: 'applied at once · by Minji' },
+// Shown in the registry's group order, the order every list in Mocco follows.
+const groupOrder: readonly SectionGroup[] = Object.values(SectionGroups);
+const pillars = pillarsByJob.toSorted((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group));
+
+// An illustration of one morning in a workspace: every product in one feed.
+const feed = [
+  { time: '09:12', area: 'Release', text: 'api deployed to production', detail: 'gate approved by Minji' },
+  { time: '09:40', area: 'Operate', text: 'Sentry: CheckoutError is spiking', detail: 'posted to #oncall on Discord' },
+  { time: '09:41', area: 'Release', text: 'Kill switch: new-checkout off', detail: 'applied at once · by Ben' },
+  { time: '09:55', area: 'Support', text: '“I can’t pay with my card”', detail: 'new conversation in the inbox' },
+  {
+    time: '10:20',
+    area: 'Support',
+    text: 'Help article “Payment methods” published',
+    detail: 'in English, Korean and Japanese',
+  },
 ];
 
-const principles = [
+const reasons = [
   {
-    title: 'Risk waits for a role',
-    text: 'A deploy, an OTA push, a raised minimum version or a protected flag change pauses until people in the right role approve it.',
+    title: 'One team, one set of roles',
+    text: 'Invite people once. The role that approves a deploy also approves a flag change, an OTA release or a raised minimum version.',
   },
   {
-    title: 'Safety applies at once',
-    text: 'A rollback or a kill switch never waits for approval. It applies at once and is recorded in the audit log.',
+    title: 'One record',
+    text: 'Every approval, production change and credential release, from every product, lands in the same tamper-evident audit log.',
   },
   {
-    title: 'No standing keys',
-    text: 'A production step gets its cloud or OTA credential from Mocco only after its gate is approved.',
+    title: 'One place to look',
+    text: 'Home shows the approvals waiting across products; alerts from Sentry, Vercel and GitHub and your users’ messages arrive in the same workspace.',
   },
 ];
 
@@ -132,10 +143,10 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Mocco — ship fast, know what shipped</title>
+        <title>Mocco — everything your product needs, except the code</title>
         <meta
           name="description"
-          content="Deploys, OTA updates, force update and feature flags behind the same approvals and audit log — and your users' messages in the same workspace."
+          content="Ship it, run it and hear from the people who use it, in one workspace: deploy approvals, OTA updates, feature flags, alerts, in-app messaging and a help center that share one team, one set of roles and one history."
         />
       </Head>
       <div className="flex min-h-screen flex-col">
@@ -176,18 +187,16 @@ export default function Home() {
         <main className="flex flex-col">
           <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.1fr_1fr]">
             <div className="flex flex-col gap-6">
-              <p className="text-sm font-medium text-muted-foreground">
-                Release, control and support your app from one workspace
-              </p>
+              <p className="text-sm font-medium text-muted-foreground">For teams that build and run a service</p>
               <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl">
-                Ship fast.
+                Everything your product needs,
                 <br />
-                Know what shipped.
+                except the code.
               </h1>
               <p className="max-w-xl leading-relaxed text-pretty text-muted-foreground">
-                Mocco puts deploys, OTA updates, minimum app versions and feature flags behind the same approvals and
-                the same audit log. You always know what reached production, when, and who approved it — and you answer
-                your users from the same place.
+                Ship it, run it and hear from the people who use it — in one workspace. Deploys, OTA updates, feature
+                flags, alerts, in-app messaging and your help center share the same team, the same roles and the same
+                history, instead of ten tools that don’t know about each other.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link href={Routes.signUp} className={primaryButton}>
@@ -201,19 +210,19 @@ export default function Home() {
 
             <figure className="flex flex-col gap-3">
               <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                <p className="px-1 pb-3 text-xs font-medium text-muted-foreground">Example · one day of production</p>
+                <p className="px-1 pb-3 text-xs font-medium text-muted-foreground">
+                  Example · one morning in a workspace
+                </p>
                 <ol className="flex flex-col">
-                  {record.map(entry => (
+                  {feed.map(entry => (
                     <li
                       key={`${entry.time}-${entry.text}`}
                       className="flex gap-3 border-t border-border px-1 py-2.5 first:border-t-0">
                       <span className="w-11 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                         {entry.time}
                       </span>
-                      <span className="w-12 shrink-0">
-                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                          {entry.product}
-                        </span>
+                      <span className="w-16 shrink-0">
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">{entry.area}</span>
                       </span>
                       <span className="flex min-w-0 flex-col">
                         <span className="text-sm">{entry.text}</span>
@@ -224,31 +233,9 @@ export default function Home() {
                 </ol>
               </div>
               <figcaption className="text-xs text-muted-foreground">
-                One record across products: every production change names who approved it.
+                Release, operations and support in one feed, for one team.
               </figcaption>
             </figure>
-          </section>
-
-          <section className="border-y border-border bg-muted/40">
-            <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-16 sm:px-6">
-              <div className="flex max-w-2xl flex-col gap-3">
-                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Write ≠ ship.</h2>
-                <p className="leading-relaxed text-muted-foreground">
-                  Being able to push code — or to generate it — doesn’t mean being able to change production. Mocco
-                  keeps the two apart for every kind of release, not only deploys.
-                </p>
-              </div>
-              <ul className="grid gap-4 sm:grid-cols-3">
-                {principles.map(principle => (
-                  <li
-                    key={principle.title}
-                    className="flex flex-col gap-2 rounded-xl border border-border bg-background p-5">
-                    <h3 className="text-sm font-semibold">{principle.title}</h3>
-                    <p className="text-sm leading-relaxed text-muted-foreground">{principle.text}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
           </section>
 
           <section
@@ -257,16 +244,15 @@ export default function Home() {
             <div className="flex max-w-2xl flex-col gap-3">
               <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Use one product, or all of them.</h2>
               <p className="leading-relaxed text-muted-foreground">
-                Every product shares the workspace’s members, roles and audit log, so the approvers you set up once work
-                everywhere. Turn on what you need, per workspace.
+                Start with the one you need today and turn on the rest when you need them, per workspace.
               </p>
             </div>
             <div className="grid gap-8 lg:grid-cols-3">
               {pillars.map(pillar => (
-                <div key={pillar.name} className="flex flex-col gap-4">
+                <div key={pillar.group} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1">
                     <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                      {pillar.name}
+                      {sectionGroupLabels[pillar.group]}
                     </h3>
                     <p className="text-sm">{pillar.summary}</p>
                   </div>
@@ -295,6 +281,28 @@ export default function Home() {
             <p className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">Coming next:</span> {comingNext.join(' · ')}
             </p>
+          </section>
+
+          <section className="border-y border-border bg-muted/40">
+            <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-16 sm:px-6">
+              <div className="flex max-w-2xl flex-col gap-3">
+                <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">One workspace, not ten tools.</h2>
+                <p className="leading-relaxed text-muted-foreground">
+                  Separate tools each keep their own users, permissions and logs. In Mocco every product starts from the
+                  same ones.
+                </p>
+              </div>
+              <ul className="grid gap-4 sm:grid-cols-3">
+                {reasons.map(reason => (
+                  <li
+                    key={reason.title}
+                    className="flex flex-col gap-2 rounded-xl border border-border bg-background p-5">
+                    <h3 className="text-sm font-semibold">{reason.title}</h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{reason.text}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
 
           <section className="border-t border-border">
