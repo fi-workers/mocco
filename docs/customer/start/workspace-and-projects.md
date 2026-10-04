@@ -4,7 +4,7 @@ description: Create a Mocco account, create a workspace, create a project with i
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, getting-started, workspace, project, guide]
@@ -27,7 +27,7 @@ On the sign-up page, enter your name, email and a password of at least 8 charact
 
 ## 2. Create a workspace
 
-A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens its **Home**: the approvals waiting for your team in every product (a flag change in a protected environment, a raised minimum app version, a release on a protected OTA channel), the latest entries of the audit log, and your projects. Each waiting approval links to the screen where you approve it.
+A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens its **Home**: the approvals waiting for your team in every product (a deploy paused at a gate, a flag change in a protected environment, a raised minimum app version, a release on a protected OTA channel), the latest entries of the audit log, and your projects. Each waiting approval links to the screen where you approve it.
 
 ![Home: a channel rule change and a flag change waiting for approval, the latest audit entries, and the projects](./images/home.png)
 

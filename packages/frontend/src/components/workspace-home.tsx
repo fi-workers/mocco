@@ -1,4 +1,5 @@
 import { auditActionLabels } from '@mocco/common/audit';
+import { RunStates } from '@mocco/common/execution';
 import { FlagApprovalSubjects } from '@mocco/common/flags';
 import { ApprovalStates } from '@mocco/common/governance';
 import { OtaApprovalSubjects } from '@mocco/common/ota';
@@ -22,6 +23,16 @@ interface Props {
 interface Place {
   context: string;
   href: string;
+}
+
+interface WaitingItem {
+  key: string;
+  product: string;
+  title: string;
+  context: string | null;
+  by: string | null;
+  at: Date;
+  href: string | null;
 }
 
 interface Described {
@@ -155,6 +166,8 @@ export default function WorkspaceHome({ workspaceId }: Props) {
   const projectsQuery = trpc.project.list.useQuery({ workspaceId });
   const productsQuery = trpc.product.list.useQuery({ workspaceId });
   const approvalsQuery = trpc.approval.list.useQuery({ workspaceId, state: ApprovalStates.pending });
+  // Deploys paused at a gate wait for approval too; they live on runs, not approval requests.
+  const gatesQuery = trpc.run.list.useQuery({ workspaceId, state: RunStates.awaitingGate, limit: 20 });
   const membersQuery = trpc.workspace.members.useQuery({ workspaceId });
 
   const projects = projectsQuery.data?.projects ?? [];
@@ -275,6 +288,32 @@ export default function WorkspaceHome({ workspaceId }: Props) {
 
   const names = new Map((membersQuery.data?.members ?? []).map(member => [member.userId, member.user.name]));
   const nameOf = (userId: string | null) => (userId === null ? 'Mocco' : (names.get(userId) ?? 'Former member'));
+
+  // Everything waiting for someone's approval, newest first: deploys paused at a gate
+  // and the approval requests of every other product.
+  const waiting: WaitingItem[] = [
+    ...(gatesQuery.data?.runs ?? []).map(run => ({
+      key: `run-${run.id}`,
+      product: 'Deploy',
+      title: 'Deploy waiting at a gate',
+      context: `${run.repo} · ${run.branch} · ${run.sha.slice(0, 7)}`,
+      by: null,
+      at: run.createdAt,
+      href: Routes.workspaceRun(workspaceId, run.id),
+    })),
+    ...pending.map(request => {
+      const described = describe(request);
+      return {
+        key: request.id,
+        product: described.product,
+        title: described.title,
+        context: described.place?.context ?? null,
+        by: nameOf(request.requestedByUserId),
+        at: request.createdAt,
+        href: described.place?.href ?? null,
+      };
+    }),
+  ].toSorted((a, b) => b.at.getTime() - a.at.getTime());
   // A request whose screen couldn't be traced because a lookup failed, as opposed to
   // one that simply has no screen to link to.
   const haveLookupsFailed = [...environmentQueries, ...storeAppQueries, ...otaAppQueries, ...channelQueries].some(
@@ -292,7 +331,16 @@ export default function WorkspaceHome({ workspaceId }: Props) {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Waiting for approval</h2>
-        {approvalsQuery.isPending ? <Spinner /> : null}
+        {approvalsQuery.isPending || gatesQuery.isPending ? <Spinner /> : null}
+        {gatesQuery.isError ? (
+          <LoadError
+            what="the deploys waiting at a gate"
+            message={gatesQuery.error.message}
+            retry={() => {
+              fireAndForget(gatesQuery.refetch());
+            }}
+          />
+        ) : null}
         {approvalsQuery.isError ? (
           <LoadError
             what="the approvals"
@@ -307,39 +355,35 @@ export default function WorkspaceHome({ workspaceId }: Props) {
             Some approvals couldn’t be linked to their screen; reload the page to try again.
           </p>
         ) : null}
-        {approvalsQuery.isSuccess && !hasPending ? (
+        {approvalsQuery.isSuccess && gatesQuery.isSuccess && waiting.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            Nothing is waiting. Deploy gates are approved on each run, under Deploys.
+            Nothing is waiting for approval.
           </p>
         ) : null}
-        {hasPending ? (
+        {waiting.length > 0 ? (
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
-            {pending.map(request => {
-              const described = describe(request);
+            {waiting.map(item => {
               const body = (
                 <>
                   <span className="w-12 shrink-0">
-                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                      {described.product}
-                    </span>
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium">{item.product}</span>
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-sm font-medium">{described.title}</span>
+                    <span className="text-sm font-medium">{item.title}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {described.place === null ? null : `${described.place.context} · `}
-                      {nameOf(request.requestedByUserId)} · <Ago date={request.createdAt} />
+                      {item.context === null ? null : `${item.context} · `}
+                      {item.by === null ? null : `${item.by} · `}
+                      <Ago date={item.at} />
                     </span>
                   </span>
                 </>
               );
               return (
-                <li key={request.id}>
-                  {described.place === null ? (
+                <li key={item.key}>
+                  {item.href === null ? (
                     <div className="flex items-center gap-3 px-4 py-3">{body}</div>
                   ) : (
-                    <Link
-                      href={described.place.href}
-                      className="flex items-center gap-3 px-4 py-3 transition hover:bg-muted">
+                    <Link href={item.href} className="flex items-center gap-3 px-4 py-3 transition hover:bg-muted">
                       {body}
                       <span aria-hidden="true" className="text-muted-foreground">
                         →
