@@ -3,7 +3,12 @@
 // rules themselves are pinned in domain/status/probe.test.ts.
 import { randomUUID } from 'node:crypto';
 
-import { MonitorKinds, monitorInputSchema } from '@mocco/common/status';
+import {
+  MonitorKinds,
+  monitorInputSchema,
+  probeLeaseResponseSchema,
+  probeResultsResponseSchema,
+} from '@mocco/common/status';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -103,7 +108,10 @@ describe('/v1/probe (pglite)', () => {
   it('leases, accepts its own results, and rejects another location forging them', async () => {
     const leaseResponse = await post('/lease', officeToken, { agentVersion: '1.0.0', capacity: 10 });
     expect(leaseResponse.status).toBe(200);
-    const { leases, pollAfterMs } = (await leaseResponse.json()) as {
+    const body: unknown = await leaseResponse.json();
+    // The agent (@mocco/probe) parses the answer with these schemas: the route must keep to them.
+    expect(probeLeaseResponseSchema.safeParse(body).success).toBe(true);
+    const { leases, pollAfterMs } = body as {
       leases: { leaseId: string; monitorId: string; roundAt: string; spec: unknown }[];
       pollAfterMs: number;
     };
@@ -132,7 +140,9 @@ describe('/v1/probe (pglite)', () => {
 
     expect(forged.status).toBe(202);
     expect(await forged.json()).toEqual({ accepted: 0, duplicates: 0, rejected: [lease?.leaseId] });
-    expect(await own.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    const ownBody: unknown = await own.json();
+    expect(ownBody).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(probeResultsResponseSchema.safeParse(ownBody).success).toBe(true);
     expect(malformed.status).toBe(400);
     const stored = await t.db.select().from(statusCheckResults);
     expect(stored).toEqual([

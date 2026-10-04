@@ -152,6 +152,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status probe agent
+
+- The status reference gains "The probe agent": the `@mocco/probe` loop (lease, run at the round time with jitter,
+  report in batches, heartbeat, backoff, a clean stop), its environment, what each HTTP and TCP check measures and
+  how it fails, the hosted address block list checked on every connection and redirect hop, and a runbook for a
+  private location while the console can't create one. The probe protocol notes that `timings` may carry any subset
+  of phases and that the answers have schemas the agent parses with. "Not built yet" now lists the embedded probe,
+  hosted locations and publishing. The SDK packages page lists `@mocco/probe`; the feature map's HTTP and TCP monitors
+  row becomes Prototype, checked end to end from a private location.
+- Docs touched: `reference/status.md`, `reference/sdk.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-probe-agent` (#150, part 4)
+
 ## 2026-10-05 — Status verdict evaluator
 
 - The status reference gains "Verdicts and the state machine": when a round closes, how the quorum and the verdict

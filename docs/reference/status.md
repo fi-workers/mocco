@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -26,6 +26,14 @@ code_refs:
   - packages/backend/src/domain/status/VerdictEvaluator.ts
   - packages/backend/src/domain/status/consensus.ts
   - packages/backend/src/transport/ext/v1/probe.ts
+  - packages/probe/src/agent.ts
+  - packages/probe/src/client.ts
+  - packages/probe/src/config.ts
+  - packages/probe/src/http-check.ts
+  - packages/probe/src/tcp-check.ts
+  - packages/probe/src/address-policy.ts
+  - packages/probe/src/resolve.ts
+  - packages/probe/Dockerfile
   - packages/backend/src/domain/status/ComponentStatusService.ts
   - packages/backend/src/domain/status/component-status.ts
   - packages/backend/src/domain/status/jobs.ts
@@ -48,8 +56,9 @@ code_refs:
 The status page product ([design spec](../specs/2026-09-24-status-page-design.md), issue #103) lands in slices.
 This page describes what is built: operators manage a project's status pages, components, incidents and scheduled
 maintenance by hand through the `status.*` tRPC router (#148), and every change is published as a static public page
-(#149, [below](#public-page)). Monitors and probe locations can be configured (#150, [below](#monitors-and-the-probe-protocol)),
-but nothing checks them yet. There is no subscriber or deploy correlation yet.
+(#149, [below](#public-page)). Monitors and probe locations are configured over tRPC and checked by the `@mocco/probe`
+agent run at a private location (#150, [below](#monitors-and-the-probe-protocol)). There is no subscriber or deploy
+correlation yet.
 
 ## Console
 
@@ -219,7 +228,8 @@ A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at 
 ([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). Monitors and locations are managed over tRPC, and
 agents lease and report rounds over the [probe protocol](#probe-protocol); the
 [verdict evaluator](#verdicts-and-the-state-machine) closes each round and moves the monitor's state and schedule. The
-probe agent itself comes next, so nothing runs the checks yet.
+[probe agent](#the-probe-agent) runs the checks; for now it runs at private locations only (no hosted fleet, no
+embedded mode yet).
 
 **Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
 
@@ -254,12 +264,14 @@ locations and components and keeps its state. Deleting it deletes its links and 
 `/v1` surface but not authenticated by an API key: the bearer is a location token. A missing or unknown token, or the
 token of a disabled location, is `401` with problem type `invalid_location_token`, before anything is read. Calls are
 limited to 600 a minute per location. `ProbeService` decides everything; the routes only parse
-(`probeLeaseRequestSchema`, `probeResultsRequestSchema`, `probeHeartbeatRequestSchema` in `@mocco/common/status`).
+(`probeLeaseRequestSchema`, `probeResultsRequestSchema`, `probeHeartbeatRequestSchema` in `@mocco/common/status`). The
+answers have schemas there too (`probeLeaseResponseSchema`, `probeResultsResponseSchema`): the agent parses with them,
+and the route test checks the routes' answers against them.
 
 | Route | Body | Answer |
 |---|---|---|
 | `POST /lease` | `agentVersion`, `capacity` (1 to 200, default 50) | `200 { leases: [{ leaseId, monitorId, roundAt, expiresAt, spec }], pollAfterMs }` |
-| `POST /results` | `results`: 1 to 200 of `{ leaseId, monitorId, roundAt, outcome (ok, fail), errorKind?, statusCode?, latencyMs?, timings?, tlsExpiresAt?, detail? }` | `202 { accepted, duplicates, rejected: [leaseId] }` |
+| `POST /results` | `results`: 1 to 200 of `{ leaseId, monitorId, roundAt, outcome (ok, fail), errorKind?, statusCode?, latencyMs?, timings? (any of dns, connect, tls, ttfb), tlsExpiresAt?, detail? }` | `202 { accepted, duplicates, rejected: [leaseId] }` |
 | `POST /heartbeat` | `agentVersion`, `inflight` | `204` |
 
 **Leasing.** A lease call takes the rounds due at the location within the next 60 seconds: the monitor's
@@ -280,6 +292,71 @@ After storing results, the report runs the evaluator for those monitors, so a ro
 closes at once; a failure there is logged and never fails the report.
 
 **Seen.** Every lease call and heartbeat sets the location's `last_seen_at` and `agent_version`.
+
+### The probe agent
+
+`@mocco/probe` (`packages/probe`, MIT, `mocco-probe` bin) is one location's agent: a stateless Node 22 process with no
+database. It runs the [protocol](#probe-protocol) in a loop:
+
+1. **Lease** with capacity `MOCCO_PROBE_CONCURRENCY`, then wait the answer's `pollAfterMs` (0 when the batch was full)
+   before the next lease. A lease whose spec it can't parse (a monitor kind newer than the agent) is skipped and
+   logged, so its round is `no_data` for this location.
+2. **Run** each check at its `roundAt` plus up to 2 seconds of jitter, at most `MOCCO_PROBE_CONCURRENCY` at once.
+3. **Report** results in batches of up to 200, a second after the first one is ready. A failed post is retried with
+   backoff; a result whose lease has expired is dropped, since the server would refuse it.
+4. **Heartbeat** every 30 seconds with the number of checks in flight.
+
+A failed lease call backs off exponentially with jitter (1 second doubling to 60). A `401` stops the agent with exit
+code 1: the token is wrong, rotated, or its location is disabled. On `SIGTERM` or `SIGINT` it stops leasing, drops
+checks that haven't started (their rounds become `no_data`), waits for running ones and posts their results, then
+exits 0. It logs one JSON line per event to stdout.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MOCCO_URL` | (required) | Mocco's origin, e.g. `https://www.mocco.work`; the agent calls `/api/ext/v1/probe/*` on it |
+| `MOCCO_PROBE_TOKEN` | (required) | The location token (`mpl_…`), shown once by `createLocation` or `rotateLocationToken` |
+| `MOCCO_PROBE_CONCURRENCY` | `20` | Checks run at once, and the lease capacity (1 to 200) |
+| `MOCCO_PROBE_HOSTED` | `false` | `true` on Mocco's hosted fleet: apply the address block list below |
+
+**Checks.** An HTTP check sends the spec's method and body with `User-Agent: mocco-probe/<version>` through undici
+(imported only in `http-check.ts`, lint-enforced). It passes when the final status is in `expectedStatus` (any 2xx
+when empty) and the keyword rule holds; the keyword is looked for in the first megabyte of the body only. It follows up
+to five redirects itself (a 303, or a 301/302 after a POST, continues as a GET); a sixth, or a redirect to a scheme
+other than http or https, fails with `status`. `latencyMs` is the time to the final response's headers, redirects
+included; an answer over `latencyThresholdMs` still passes, with `errorKind: latency`, and the evaluator decides
+`degraded`. `timings` has the final connection's `dns`, `connect`, `tls` and `ttfb`. An https check reports the
+certificate's `tlsExpiresAt`, and inside `tlsWarnDays` its `detail` says how many days are left; an invalid or
+expired certificate fails the handshake with `tls`. A TCP check resolves the host and passes when a connection opens.
+The spec's `timeoutMs` bounds the whole check, name resolution included (`timeout`). Other failures are `dns` or
+`connect`.
+
+**Address policy.** A hosted probe (`MOCCO_PROBE_HOSTED=true`) refuses targets that aren't on the public internet:
+0.0.0.0/8, 10/8, 100.64/10 (CGNAT), 127/8, 169.254/16 (link-local, with the metadata address 169.254.169.254),
+172.16/12, 192.168/16, 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 192.88.99/24, multicast and
+240/4; ::, ::1, fc00::/7 (with fd00::/8 and fd00:ec2::254), fe80::/10, fec0::/10, ff00::/8, 64:ff9b:1::/48, 100::/64,
+2001::/32 (Teredo), 2001:db8::/32 and 2002::/16 (6to4), and IPv4-mapped forms of the IPv4 ranges (`address-policy.ts`).
+Every connection resolves its host first, refuses it if any address it resolves to is blocked, and connects to the
+address it checked, never to the name again; redirects are followed by the agent, so every hop goes through the same
+step. A name that resolves to a public address for the check and a private one a moment later (DNS rebinding) never
+gets a second lookup. A refused target fails with `connect` and a `detail` naming the address. Private locations skip
+the list: reaching private targets is their purpose. Nothing in the lease says whether a location is hosted yet, so
+the fleet sets the variable.
+
+**Running a private location.** The console can't create locations yet, so an owner or admin creates one with the
+`status.createLocation` procedure and keeps the token it returns. Then, on a machine that can reach the targets and
+make outbound HTTPS calls to Mocco:
+
+```bash
+MOCCO_URL=https://www.mocco.work MOCCO_PROBE_TOKEN=mpl_... npx @mocco/probe
+# or the container (packages/probe/Dockerfile, built from the repository root)
+docker build -f packages/probe/Dockerfile -t mocco-probe .
+docker run -d --restart unless-stopped -e MOCCO_URL=https://www.mocco.work -e MOCCO_PROBE_TOKEN=mpl_... mocco-probe
+```
+
+Neither the npm package nor `ghcr.io/fi-workers/mocco-probe` is published yet, so for now run it from a checkout
+(`yarn probe build && node packages/probe/dist/cli.js`) or build the image yourself. Add the location to a monitor's
+`locationIds`; the location's `last_seen_at` and `agent_version` show it is polling. Running two agents with one token
+splits that location's work between them.
 
 ### Verdicts and the state machine
 
@@ -365,7 +442,8 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-Running checks (`@mocco/probe`, the embedded probe and hosted locations), heartbeat monitors, a location-unhealthy
+The embedded probe (`STATUS_PROBE_EMBEDDED`), hosted locations, publishing `@mocco/probe` to npm and its image to
+GHCR, heartbeat monitors, a location-unhealthy
 alert, component status derived from monitors
 (`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` (and a way to create or publish a

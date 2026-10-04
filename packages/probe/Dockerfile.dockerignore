@@ -1,0 +1,15 @@
+# Context for packages/probe/Dockerfile (the repository root): yarn needs every workspace's
+# manifest to read the lockfile, but only the probe's and common's sources.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+.git
+docs
+infra
+packages/*/src
+!packages/probe/src
+!packages/common/src
+packages/probe/src/**/*.test.ts
+packages/probe/src/testing
