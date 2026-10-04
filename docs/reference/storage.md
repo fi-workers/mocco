@@ -4,7 +4,7 @@ description: The neutral object-store port and its drivers, the mocco_objects le
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-01
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, platform, storage, s3, r2]
@@ -39,6 +39,8 @@ Unset, local dev uses `filesystem` (under `.mocco-storage/` in the working direc
 ## Keys and visibility
 
 Keys are `<pub|prv>/w/<workspace>/[p/<project>/]<product>/<object id>/<filename>`, with the filename reduced to lowercase letters, digits, dot, dash and underscore. Public objects (`pub/`) have a stable URL: `STORAGE_PUBLIC_BASE_URL` (a CDN in front of the bucket) for `s3`, or the unsigned route path for `filesystem`. Expose only the `pub/` prefix publicly. Private objects (`prv/`) are readable only through an expiring signed URL.
+
+Status pages publish fixed files outside this ledger under `pub/status/<slug>/` (no workspace segment, because the CDN maps a page's host to that prefix; see [status pages](./status.md#public-page)). They go through the same `ObjectStore` with their own `Cache-Control`. The filesystem driver writes every object to a temporary file and renames it into place, so a static server over the directory never serves half a file.
 
 ## Uploads
 

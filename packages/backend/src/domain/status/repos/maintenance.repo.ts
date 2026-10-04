@@ -1,5 +1,5 @@
 import { MaintenanceStatuses } from '@mocco/common/status';
-import { and, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -25,6 +25,22 @@ export class MaintenanceRepo {
       .where(and(scoped(scope), eq(m.pageId, pageId)))
       .orderBy(desc(m.scheduledStart))
       .limit(200);
+  }
+
+  /** The page's windows in progress or still to come, soonest first. */
+  async listUpcoming(scope: StatusScope, pageId: string): Promise<MaintenanceRow[]> {
+    return await this.db
+      .select()
+      .from(m)
+      .where(
+        and(
+          scoped(scope),
+          eq(m.pageId, pageId),
+          inArray(m.status, [MaintenanceStatuses.scheduled, MaintenanceStatuses.inProgress]),
+        ),
+      )
+      .orderBy(asc(m.scheduledStart))
+      .limit(50);
   }
 
   async find(scope: StatusScope, id: string): Promise<MaintenanceRow | undefined> {

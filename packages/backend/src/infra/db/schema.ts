@@ -32,6 +32,7 @@ import {
   ComponentStatuses,
   IncidentSeverities,
   IncidentStatuses,
+  IncidentVisibilities,
   MaintenanceStatuses,
 } from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
@@ -118,6 +119,7 @@ import type {
   ComponentStatus,
   IncidentSeverity,
   IncidentStatus,
+  IncidentVisibility,
   MaintenanceStatus,
 } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
@@ -3115,6 +3117,10 @@ export const statusPages = pgTable(
     projectId: uuid('project_id').notNull(),
     slug: text().notNull(),
     title: text().notNull(),
+    // Set by every change that affects the public page; the snapshot publish job clears it.
+    dirtyAt: timestamp('dirty_at'),
+    publishedAt: timestamp('published_at'),
+    publishedVersion: integer('published_version'),
     createdAt,
     updatedAt,
   },
@@ -3204,6 +3210,7 @@ export const statusIncidents = pgTable(
     title: text().notNull(),
     status: text().$type<IncidentStatus>().notNull(),
     severity: text().$type<IncidentSeverity>().notNull(),
+    visibility: text().$type<IncidentVisibility>().notNull().default(IncidentVisibilities.published),
     startedAt: timestamp('started_at').notNull().defaultNow(),
     identifiedAt: timestamp('identified_at'),
     resolvedAt: timestamp('resolved_at'),
@@ -3225,6 +3232,10 @@ export const statusIncidents = pgTable(
     check(
       'mocco_status_incidents_severity_check',
       sql`${t.severity} IN (${sqlInList(Object.values(IncidentSeverities))})`,
+    ),
+    check(
+      'mocco_status_incidents_visibility_check',
+      sql`${t.visibility} IN (${sqlInList(Object.values(IncidentVisibilities))})`,
     ),
     check(
       'mocco_status_incidents_resolved_check',
@@ -3349,6 +3360,33 @@ export const statusMaintenanceComponents = pgTable(
       columns: [t.componentId, t.workspaceId],
       foreignColumns: [statusComponents.id, statusComponents.workspaceId],
       name: 'mocco_status_maintenance_components_component_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A published version of a status page's public snapshot (ADR 0028). The last twenty are kept,
+ * so a page can be rolled back and a self-hoster can rebuild the public directory. */
+export const statusPageSnapshots = pgTable(
+  'mocco_status_page_snapshots',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    version: integer().notNull(),
+    etag: text().notNull(),
+    body: jsonb().notNull(),
+    builtAt: timestamp('built_at').notNull(),
+    uploadedAt: timestamp('uploaded_at'),
+    uploadError: text('upload_error'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_status_page_snapshots_page_version_uq').on(t.pageId, t.version),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_page_snapshots_page_fk',
     }).onDelete('cascade'),
   ],
 );

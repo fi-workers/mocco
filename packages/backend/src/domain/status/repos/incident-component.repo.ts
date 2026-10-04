@@ -1,5 +1,5 @@
-import { IncidentStatuses } from '@mocco/common/status';
-import { and, eq, ne } from 'drizzle-orm';
+import { IncidentStatuses, IncidentVisibilities } from '@mocco/common/status';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -23,6 +23,17 @@ export class IncidentComponentRepo {
       .where(and(eq(ic.workspaceId, workspaceId), eq(ic.incidentId, incidentId)));
   }
 
+  /** The affected components of each of `incidentIds`. */
+  async listForIncidents(workspaceId: string, incidentIds: readonly string[]): Promise<IncidentComponentRow[]> {
+    if (incidentIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(ic)
+      .where(and(eq(ic.workspaceId, workspaceId), inArray(ic.incidentId, [...incidentIds])));
+  }
+
   /** Replace the incident's affected components with `components` (a repeated component keeps
    * its last impact). Run it inside a transaction. */
   async replace(workspaceId: string, incidentId: string, components: readonly AffectedComponent[]): Promise<void> {
@@ -35,8 +46,8 @@ export class IncidentComponentRepo {
     }
   }
 
-  /** The impacts unresolved incidents put on a page's components. */
-  async openImpactsForPage(scope: StatusScope, pageId: string) {
+  /** The impacts unresolved incidents put on a page's components; `isPublishedOnly` leaves out drafts. */
+  async openImpactsForPage(scope: StatusScope, pageId: string, isPublishedOnly = false) {
     return await this.db
       .select({ componentId: ic.componentId, impact: ic.impact })
       .from(ic)
@@ -47,6 +58,7 @@ export class IncidentComponentRepo {
           eq(i.projectId, scope.projectId),
           eq(i.pageId, pageId),
           ne(i.status, IncidentStatuses.resolved),
+          isPublishedOnly ? eq(i.visibility, IncidentVisibilities.published) : undefined,
         ),
       );
   }

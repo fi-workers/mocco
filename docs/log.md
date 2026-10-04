@@ -152,6 +152,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status pages publish as static snapshots
+
+- The status reference gains "Public page": how a change marks the page dirty and the `status.snapshot.publish`
+  job builds, stores and uploads a version, what the snapshot may contain (published incidents only), the files
+  and their cache headers, and a self-host runbook (serve `pub/status` with any static server; what visitors see
+  while the app is down). The tables list `mocco_status_page_snapshots`, the page's publish columns and incident
+  `visibility`, and the stale "MCP tools come in the next slice" line now points at the MCP section. The storage
+  reference notes the `pub/status/` prefix and atomic filesystem writes; the feature map marks the public page Live.
+- Docs touched: `reference/status.md`, `reference/storage.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-static-snapshot` (#149)
+
 ## 2026-10-05 — Agents can read the status page
 
 - The connect guide lists `mocco_status_pages_get`, `mocco_status_incidents_search`, `mocco_status_incidents_get` and

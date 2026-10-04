@@ -16,6 +16,7 @@ import { MaintenanceRepo } from '@backend/domain/status/repos/maintenance.repo';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { MaintenanceRow } from '@backend/domain/status/repos/maintenance.repo';
 import type { StatusScope } from '@backend/domain/status/scope';
+import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Db } from '@backend/infra/db/types';
 import type { MaintenanceInput } from '@mocco/common/status';
@@ -24,6 +25,8 @@ export interface MaintenanceDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   pages: Pick<StatusPageService, 'requirePage'>;
+  /** Marks the public page dirty with each change and requests a publish. */
+  snapshots: Pick<SnapshotScheduler, 'change'>;
   now?: () => Date;
 }
 
@@ -76,7 +79,8 @@ export class MaintenanceService {
     if (missing !== undefined) {
       throw new StatusEntityNotFoundError('component', missing);
     }
-    const maintenance = await this.deps.db.transaction(async tx => {
+    const maintenance = await this.deps.snapshots.change(async (tx, touch) => {
+      touch({ workspaceId: scope.workspaceId, pageId: input.pageId });
       const created = await new MaintenanceRepo(tx).insert({
         ...scope,
         pageId: input.pageId,
@@ -107,12 +111,13 @@ export class MaintenanceService {
   /** Cancel a window that hasn't completed; one in progress ends now. */
   async cancel(scope: StatusScope, actorUserId: string, maintenanceId: string) {
     const now = this.now();
-    const { maintenance, from } = await this.deps.db.transaction(async tx => {
+    const { maintenance, from } = await this.deps.snapshots.change(async (tx, touch) => {
       const windows = new MaintenanceRepo(tx);
       const current = await windows.findForUpdate(scope, maintenanceId);
       if (current === undefined) {
         throw new StatusEntityNotFoundError('maintenance', maintenanceId);
       }
+      touch({ workspaceId: scope.workspaceId, pageId: current.pageId });
       if (current.status !== MaintenanceStatuses.scheduled && current.status !== MaintenanceStatuses.inProgress) {
         throw new MaintenanceTransitionError(current.status);
       }
@@ -137,9 +142,14 @@ export class MaintenanceService {
    * overlapping ticks can't move a window twice. Runs as the `status.maintenance.tick` job.
    */
   async tick(now: Date = this.now()): Promise<{ started: number; completed: number }> {
-    const windows = new MaintenanceRepo(this.deps.db);
-    const completed = await windows.completeDue(now);
-    const started = await windows.startDue(now);
+    const { completed, started } = await this.deps.snapshots.change(async (tx, touch) => {
+      const windows = new MaintenanceRepo(tx);
+      const moved = { completed: await windows.completeDue(now), started: await windows.startDue(now) };
+      touch(
+        ...[...moved.completed, ...moved.started].map(row => ({ workspaceId: row.workspaceId, pageId: row.pageId })),
+      );
+      return moved;
+    });
     await this.recordSystem(completed, AuditActions.statusMaintenanceCompleted);
     await this.recordSystem(started, AuditActions.statusMaintenanceStarted);
     return { started: started.length, completed: completed.length };

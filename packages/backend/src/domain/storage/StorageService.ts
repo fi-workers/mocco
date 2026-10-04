@@ -298,4 +298,10 @@ export class StorageService {
     await this.deps.objects.hardDelete(expired.map(object => object.id));
     return { abandoned: stale.length, dropped: expired.length };
   }
+
+  /** The store itself, for products that publish fixed public files outside the ledger
+   * (status pages, ADR 0028). */
+  get store(): ObjectStore {
+    return this.deps.store;
+  }
 }
