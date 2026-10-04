@@ -1,13 +1,19 @@
-// Status router (#148): a project's status pages and their components. Every procedure
-// requires the status product to be enabled and the project to belong to the workspace
-// (`productProcedure`), which also maps the domain's error families
-// (StatusEntityNotFoundError → NOT_FOUND, StatusPageSlugTakenError → CONFLICT). Entities are
-// looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND.
+// Status router (#148): a project's status pages, components, incidents and maintenance.
+// Every procedure requires the status product to be enabled and the project to belong to
+// the workspace (`productProcedure`), which also maps the domain's error families
+// (StatusEntityNotFoundError → NOT_FOUND, IncidentTransitionError and the other conflicts →
+// CONFLICT, MaintenanceWindowError → BAD_REQUEST). Entities are looked up within the
+// caller's workspace and project, so another tenant's id is NOT_FOUND.
 import { Products } from '@mocco/common/project';
 import {
+  affectedComponentsSchema,
   componentGroupInputSchema,
   componentInputSchema,
   componentStatusSchema,
+  incidentCreateInputSchema,
+  incidentUpdateInputSchema,
+  maintenanceInputSchema,
+  postmortemInputSchema,
   statusPageInputSchema,
 } from '@mocco/common/status';
 import { z } from 'zod';
@@ -19,6 +25,8 @@ const projectInput = z.object({ workspaceId: z.uuid(), projectId: z.uuid() });
 const pageInput = projectInput.extend({ pageId: z.uuid() });
 const groupInput = projectInput.extend({ groupId: z.uuid() });
 const componentInput = projectInput.extend({ componentId: z.uuid() });
+const incidentInput = projectInput.extend({ incidentId: z.uuid() });
+const maintenanceInput = projectInput.extend({ maintenanceId: z.uuid() });
 const protectedStatusProcedure = productProcedure(Products.status);
 
 const scopeOf = (input: { workspaceId: string; projectId: string }) => ({
@@ -31,7 +39,7 @@ export const statusRouter = router({
     pages: await ctx.statusPages.listPages(scopeOf(input)),
   })),
 
-  /** The page with its groups and components, in order. */
+  /** The page with its groups and components; each component carries the status it shows. */
   page: protectedStatusProcedure
     .input(pageInput)
     .query(async ({ ctx, input }) => await ctx.statusPages.getPage(scopeOf(input), input.pageId)),
@@ -102,4 +110,62 @@ export const statusRouter = router({
     await ctx.statusPages.deleteComponent(scopeOf(input), input.componentId);
     return { ok: true } as const;
   }),
+
+  incidents: protectedStatusProcedure
+    .input(pageInput.extend({ openOnly: z.boolean().default(false) }))
+    .query(async ({ ctx, input }) => ({
+      incidents: await ctx.statusIncidents.list(scopeOf(input), input.pageId, input.openOnly),
+    })),
+
+  /** The incident with its timeline and affected components. */
+  incident: protectedStatusProcedure
+    .input(incidentInput)
+    .query(async ({ ctx, input }) => await ctx.statusIncidents.get(scopeOf(input), input.incidentId)),
+
+  createIncident: protectedStatusProcedure
+    .input(projectInput.and(incidentCreateInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      incident: await ctx.statusIncidents.create(scopeOf(input), ctx.session.user.id, input),
+    })),
+
+  /** Post a timeline update; an illegal status change is CONFLICT. */
+  postIncidentUpdate: protectedStatusProcedure.input(incidentInput.and(incidentUpdateInputSchema)).mutation(
+    async ({ ctx, input }) =>
+      await ctx.statusIncidents.postUpdate(scopeOf(input), ctx.session.user.id, input.incidentId, {
+        status: input.status,
+        body: input.body,
+      }),
+  ),
+
+  setIncidentComponents: protectedStatusProcedure
+    .input(incidentInput.extend({ components: affectedComponentsSchema }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.statusIncidents.setComponents(scopeOf(input), ctx.session.user.id, input.incidentId, input.components);
+      return { ok: true } as const;
+    }),
+
+  setPostmortem: protectedStatusProcedure
+    .input(incidentInput.and(postmortemInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      incident: await ctx.statusIncidents.setPostmortem(
+        scopeOf(input),
+        ctx.session.user.id,
+        input.incidentId,
+        input.postmortem,
+      ),
+    })),
+
+  maintenances: protectedStatusProcedure.input(pageInput).query(async ({ ctx, input }) => ({
+    maintenances: await ctx.statusMaintenances.list(scopeOf(input), input.pageId),
+  })),
+
+  scheduleMaintenance: protectedStatusProcedure
+    .input(projectInput.and(maintenanceInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      maintenance: await ctx.statusMaintenances.schedule(scopeOf(input), ctx.session.user.id, input),
+    })),
+
+  cancelMaintenance: protectedStatusProcedure.input(maintenanceInput).mutation(async ({ ctx, input }) => ({
+    maintenance: await ctx.statusMaintenances.cancel(scopeOf(input), ctx.session.user.id, input.maintenanceId),
+  })),
 });

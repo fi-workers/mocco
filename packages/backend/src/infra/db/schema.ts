@@ -27,7 +27,13 @@ import {
   OtaUpdateKinds,
 } from '@mocco/common/ota-hosting';
 import { AppPlatforms, Products } from '@mocco/common/project';
-import { ComponentStatuses } from '@mocco/common/status';
+import {
+  ComponentImpacts,
+  ComponentStatuses,
+  IncidentSeverities,
+  IncidentStatuses,
+  MaintenanceStatuses,
+} from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
 import {
@@ -107,7 +113,13 @@ import type {
   OtaUpdateKind,
 } from '@mocco/common/ota-hosting';
 import type { AppPlatform, Product } from '@mocco/common/project';
-import type { ComponentStatus } from '@mocco/common/status';
+import type {
+  ComponentImpact,
+  ComponentStatus,
+  IncidentSeverity,
+  IncidentStatus,
+  MaintenanceStatus,
+} from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
 // Table prefix: mocco_. Better Auth tables must also use the mocco_ prefix.
@@ -3088,10 +3100,10 @@ export const mcpSettings = pgTable('mocco_mcp_settings', {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Status page (#103, slice #148): a project's status pages and their components, managed by
-// hand. Every row carries `workspace_id`; children reach their page through composite FKs on
-// (page_id, workspace_id, project_id), so a row can never point at another tenant's page.
-// Incidents and maintenance come next; monitors, subscribers and snapshots in later slices.
+// Status page (#103, slice #148): a project's status pages, their components, incidents and
+// scheduled maintenance, managed by hand. Every row carries `workspace_id`; children reach their
+// page through composite FKs on (page_id, workspace_id, project_id), so a row can never point
+// at another tenant's page. Monitors, subscribers, snapshots and run links come in later slices.
 // ─────────────────────────────────────────────────────────────
 
 /** A status page of a project. `slug` is global: it becomes the public host label. */
@@ -3145,8 +3157,8 @@ export const statusComponentGroups = pgTable(
   ],
 );
 
-/** A part of the service a page reports on. `status` is the one an operator sets by hand; once
- * incidents and maintenance land, the status a page shows also counts them. */
+/** A part of the service a page reports on. `status` is the one an operator sets by hand; the
+ * displayed status also counts open incidents and maintenance in progress (ComponentStatusService). */
 export const statusComponents = pgTable(
   'mocco_status_components',
   {
@@ -3165,6 +3177,8 @@ export const statusComponents = pgTable(
   },
   t => [
     index('mocco_status_components_page_idx').on(t.pageId, t.position),
+    // Lets incident and maintenance links reference (component_id, workspace_id).
+    unique('mocco_status_components_id_workspace_uq').on(t.id, t.workspaceId),
     foreignKey({
       columns: [t.pageId, t.workspaceId, t.projectId],
       foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
@@ -3176,5 +3190,165 @@ export const statusComponents = pgTable(
       name: 'mocco_status_components_group_fk',
     }),
     check('mocco_status_components_status_check', sql`${t.status} IN (${sqlInList(Object.values(ComponentStatuses))})`),
+  ],
+);
+
+/** An incident on a page. Invariant (DB-checked): `resolved_at` is set iff `status = 'resolved'`. */
+export const statusIncidents = pgTable(
+  'mocco_status_incidents',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    title: text().notNull(),
+    status: text().$type<IncidentStatus>().notNull(),
+    severity: text().$type<IncidentSeverity>().notNull(),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    identifiedAt: timestamp('identified_at'),
+    resolvedAt: timestamp('resolved_at'),
+    postmortemMd: text('postmortem_md'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_status_incidents_workspace_status_idx').on(t.workspaceId, t.status),
+    index('mocco_status_incidents_page_started_idx').on(t.pageId, t.startedAt),
+    unique('mocco_status_incidents_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_incidents_page_fk',
+    }).onDelete('cascade'),
+    check('mocco_status_incidents_status_check', sql`${t.status} IN (${sqlInList(Object.values(IncidentStatuses))})`),
+    check(
+      'mocco_status_incidents_severity_check',
+      sql`${t.severity} IN (${sqlInList(Object.values(IncidentSeverities))})`,
+    ),
+    check(
+      'mocco_status_incidents_resolved_check',
+      sql`(${t.status} IN (${sqlInList([IncidentStatuses.resolved])})) = (${t.resolvedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** An incident's timeline. Append-only; each entry is also in the audit log. */
+export const statusIncidentUpdates = pgTable(
+  'mocco_status_incident_updates',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    incidentId: uuid('incident_id').notNull(),
+    status: text().$type<IncidentStatus>().notNull(),
+    bodyMd: text('body_md').notNull(),
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    index('mocco_status_incident_updates_incident_idx').on(t.incidentId, t.createdAt),
+    foreignKey({
+      columns: [t.incidentId, t.workspaceId],
+      foreignColumns: [statusIncidents.id, statusIncidents.workspaceId],
+      name: 'mocco_status_incident_updates_incident_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_incident_updates_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(IncidentStatuses))})`,
+    ),
+  ],
+);
+
+/** The components an incident affects, and how badly. */
+export const statusIncidentComponents = pgTable(
+  'mocco_status_incident_components',
+  {
+    incidentId: uuid('incident_id').notNull(),
+    componentId: uuid('component_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    impact: text().$type<ComponentImpact>().notNull(),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_incident_components_pk', columns: [t.incidentId, t.componentId] }),
+    index('mocco_status_incident_components_component_idx').on(t.componentId),
+    foreignKey({
+      columns: [t.incidentId, t.workspaceId],
+      foreignColumns: [statusIncidents.id, statusIncidents.workspaceId],
+      name: 'mocco_status_incident_components_incident_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.componentId, t.workspaceId],
+      foreignColumns: [statusComponents.id, statusComponents.workspaceId],
+      name: 'mocco_status_incident_components_component_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_incident_components_impact_check',
+      sql`${t.impact} IN (${sqlInList(Object.values(ComponentImpacts))})`,
+    ),
+  ],
+);
+
+/** A scheduled maintenance window on a page. The maintenance tick starts and completes it. */
+export const statusMaintenances = pgTable(
+  'mocco_status_maintenances',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    title: text().notNull(),
+    bodyMd: text('body_md').notNull().default(''),
+    status: text().$type<MaintenanceStatus>().notNull().default(MaintenanceStatuses.scheduled),
+    scheduledStart: timestamp('scheduled_start').notNull(),
+    scheduledEnd: timestamp('scheduled_end').notNull(),
+    actualStart: timestamp('actual_start'),
+    actualEnd: timestamp('actual_end'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_status_maintenances_page_start_idx').on(t.pageId, t.scheduledStart),
+    // The tick's scan: windows still to start or complete.
+    index('mocco_status_maintenances_due_idx')
+      .on(t.scheduledStart, t.scheduledEnd)
+      .where(sql`${t.status} IN (${sqlInList([MaintenanceStatuses.scheduled, MaintenanceStatuses.inProgress])})`),
+    unique('mocco_status_maintenances_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_maintenances_page_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_maintenances_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(MaintenanceStatuses))})`,
+    ),
+    check('mocco_status_maintenances_window_check', sql`${t.scheduledEnd} > ${t.scheduledStart}`),
+  ],
+);
+
+/** The components a maintenance window covers. */
+export const statusMaintenanceComponents = pgTable(
+  'mocco_status_maintenance_components',
+  {
+    maintenanceId: uuid('maintenance_id').notNull(),
+    componentId: uuid('component_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_maintenance_components_pk', columns: [t.maintenanceId, t.componentId] }),
+    index('mocco_status_maintenance_components_component_idx').on(t.componentId),
+    foreignKey({
+      columns: [t.maintenanceId, t.workspaceId],
+      foreignColumns: [statusMaintenances.id, statusMaintenances.workspaceId],
+      name: 'mocco_status_maintenance_components_maintenance_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.componentId, t.workspaceId],
+      foreignColumns: [statusComponents.id, statusComponents.workspaceId],
+      name: 'mocco_status_maintenance_components_component_fk',
+    }).onDelete('cascade'),
   ],
 );
