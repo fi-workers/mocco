@@ -4,7 +4,7 @@ description: Create a Mocco account, create a workspace, create a project with i
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, getting-started, workspace, project, guide]
@@ -41,11 +41,11 @@ Open **Projects** in the workspace's side nav. Enter the project's **Name** and 
 
 Mocco opens the new project. The project menu in the top bar switches between projects, and **All projects** goes back to the list.
 
-A project you no longer work on can be archived from the bottom of its **Overview** tab with **Archive**. An archived project is read-only and hidden from the list; nothing is deleted. **Show archived** on the Projects page lists it again, and **Unarchive** on its Overview brings it back.
+A project you no longer work on can be archived from the bottom of its **Overview** page with **Archive**. An archived project is read-only and hidden from the list; nothing is deleted. **Show archived** on the Projects page lists it again, and **Unarchive** on its Overview brings it back.
 
 ## 4. Register your apps
 
-On the project's **Overview** tab, choose **Add app** under **Apps**. Add one app per build target, choose its **Platform** and give it a **Name**:
+On the project's **Overview** page, choose **Add app** under **Apps**. Add one app per build target, choose its **Platform** and give it a **Name**:
 
 - **iOS**: the **Bundle ID**, and the numeric **App Store ID** if the app is in the App Store.
 - **Android**: the **Application ID**, and the **Play package** if it differs from the application ID.
@@ -54,17 +54,17 @@ On the project's **Overview** tab, choose **Add app** under **Apps**. Add one ap
 
 Then choose **Add app**.
 
-![Adding an iOS app on the project Overview tab](./images/add-app.png)
+![Adding an iOS app on the project Overview page](./images/add-app.png)
 
 Store apps (iOS and Android) are what force update works on. A web app's origins decide where a publishable key may be used from a browser; see [API keys](./api-keys.md).
 
 ## 5. Link repositories
 
-Under **Repositories** on the same tab, choose a repository and **Link** to say which repos this project ships from. A repository appears here once GitHub is connected and the repository is added on the workspace's **Overview** page; see [Deploy governance](../governance/overview.md#connect-github). A repository can be linked to more than one project, and **Unlink** removes it.
+Under **Repositories** on the same page, choose a repository and **Link** to say which repos this project ships from. A repository appears here once GitHub is connected and the repository is added on the workspace's **Deploys** page; see [Deploy governance](../governance/overview.md#connect-github). A repository can be linked to more than one project, and **Unlink** removes it.
 
 ## 6. Turn on products
 
-Open **Products** in the workspace's side nav and choose **Turn on** next to each product you want. Its tabs appear in every project right away: **Force update**, **OTA tokens** and **OTA hosting** for OTA and force update, **Feature flags**, and **Inbox** for Messenger. **Turn off** hides them again.
+Open **Products** in the workspace's side nav and choose **Turn on** next to each product you want. Its pages appear in every project's side nav right away: **Force update**, **OTA hosting** and **OTA tokens** for OTA and force update and **Feature flags** under **Release**, and **Inbox** for Messenger and **Help center** under **Support**. **Turn off** hides them again.
 
 ![The Products page](./images/products.png)
 

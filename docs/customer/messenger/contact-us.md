@@ -4,7 +4,7 @@ description: Let your app's signed-in users contact your team from inside the ap
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, messenger, support, guide]
@@ -19,11 +19,11 @@ Messenger lets the people signed in to your app write to your team without leavi
 
 ## 1. Turn on Messenger
 
-A workspace member turns on **Messenger** on the workspace's **Products** page. Each project then shows an **Inbox** tab.
+A workspace member turns on **Messenger** on the workspace's **Products** page. Each project then shows an **Inbox** page.
 
 ## 2. Set up the messenger
 
-On the project's **Inbox** tab, choose **Set up messenger**. Mocco creates the project's **identity secret** and shows it once: copy it and store it as a secret on your server (for example `MOCCO_MESSENGER_SECRET`).
+On the project's **Inbox** page, choose **Set up messenger**. Mocco creates the project's **identity secret** and shows it once: copy it and store it as a secret on your server (for example `MOCCO_MESSENGER_SECRET`).
 
 ![Setting up the messenger: the identity secret, shown once, and how your server signs a user id](./images/messenger-setup.png)
 
@@ -33,7 +33,7 @@ If the secret leaks, choose **Rotate secret** in the inbox settings. Signatures 
 
 ## 3. Create a key for your app
 
-On the **API keys** tab, create a **Publishable** key with the **messenger:chat** scope. It is safe to ship in the app: on its own it can't open anything without a signature from your server.
+On the **API keys** page, create a **Publishable** key with the **messenger:chat** scope. It is safe to ship in the app: on its own it can't open anything without a signature from your server.
 
 ## 4. Sign the user id on your server
 
@@ -207,7 +207,7 @@ The device remembers the guest, so they see your replies the next time they open
 
 ## 6. Answer from the inbox
 
-The **Inbox** tab lists open conversations, newest activity first, with unread ones marked. **Closed** lists the rest. The inbox checks for new messages every few seconds while it is open.
+The **Inbox** page lists open conversations, newest activity first, with unread ones marked. **Closed** lists the rest. The inbox checks for new messages every few seconds while it is open.
 
 ![The inbox: one open conversation from Minji, a bug report](./images/messenger-inbox.png)
 

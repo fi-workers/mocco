@@ -4,7 +4,7 @@ description: What Mocco's OTA product does today — force update for store apps
 type: guide
 status: active
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, ota, force-update, guide]
@@ -28,7 +28,7 @@ Mocco puts the changes that reach your users' phones behind the same approvals a
 ## Before you start
 
 - Turn on **OTA and force update** under **Products** in your workspace.
-- Create a project and add your iOS and Android apps on the project's **Overview** tab. Force update works per store app.
+- Create a project and add your iOS and Android apps on the project's **Overview** page. Force update works per store app.
 - Create the roles your approvers hold under **Access** (for example `mobile-release`) and add their members. Only workspace owners and admins can change roles.
 
 ## Setup order

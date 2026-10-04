@@ -4,7 +4,7 @@ description: Store your OTA tool's publishing token in Mocco, allow one pipeline
 type: guide
 status: active
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, ota, credential-broker, github-actions, guide]
@@ -22,7 +22,7 @@ Your OTA tool publishes with a token. Once Mocco holds that token and nobody els
 
 ## 1. Store the token
 
-Create a publishing token in your OTA tool (the tool guides say how, and how narrowly each tool lets you scope it). Then open the project's **OTA tokens** tab, choose the tool, give the token a name such as `acme-production`, paste it and choose **Add token**.
+Create a publishing token in your OTA tool (the tool guides say how, and how narrowly each tool lets you scope it). Then open the project's **OTA tokens** page, choose the tool, give the token a name such as `acme-production`, paste it and choose **Add token**.
 
 ![The Add a publishing token form](./images/tokens-add.png)
 

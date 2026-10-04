@@ -166,7 +166,8 @@ export default function WorkspaceAccess({ workspaceId }: Props) {
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight">Access</h1>
         <p className="text-sm text-muted-foreground">
-          Define roles and assign members. Gates require an authorized role to resume a run.
+          Define roles and assign members. Approvals in every product — a deploy gate, a protected flag change, an OTA
+          release — ask for these roles.
           {isAdmin ? null : ' You have read-only access; owners and admins manage roles.'}
         </p>
       </div>
