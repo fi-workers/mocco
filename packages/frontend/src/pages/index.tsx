@@ -20,7 +20,7 @@ interface Pillar {
 const pillarsByJob: Pillar[] = [
   {
     group: SectionGroups.release,
-    summary: 'Write ≠ ship: every production change waits for the right people.',
+    summary: 'Write ≠ ship: changes that add risk wait for the right people.',
     products: [
       {
         name: 'Deploy governance',

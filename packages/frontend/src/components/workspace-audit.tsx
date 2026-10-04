@@ -1,3 +1,5 @@
+import { auditActionLabels } from '@mocco/common/audit';
+
 import { Button } from '@frontend/components/ui/button';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { trpc } from '@frontend/lib/trpc';
@@ -126,7 +128,9 @@ export default function WorkspaceAudit({ workspaceId }: Props) {
               {entries.map(entry => (
                 <tr key={entry.id} className="border-b border-border last:border-b-0">
                   <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{entry.seq}</td>
-                  <td className="px-4 py-2 font-medium">{entry.action}</td>
+                  <td className="px-4 py-2 font-medium" title={entry.action}>
+                    {auditActionLabels[entry.action]}
+                  </td>
                   <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{actorLabel(entry)}</td>
                   <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{subjectLabel(entry)}</td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">{entry.createdAt.toLocaleString()}</td>

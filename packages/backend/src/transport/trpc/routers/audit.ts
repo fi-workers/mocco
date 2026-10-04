@@ -60,6 +60,16 @@ export const auditRouter = router({
       return { entries: entries.map(entry => ({ ...entry, seq: entry.seq.toString() })) };
     }),
 
+  // The `limit` newest entries, newest-first — a bounded read for summaries like the
+  // workspace Home, so they never pull the whole chain.
+  recent: protectedAuditProcedure
+    .input(workspaceScopedInput.extend({ limit: z.number().int().min(1).max(50).default(10) }))
+    .output(z.object({ entries: z.array(auditEntrySchema) }))
+    .query(async ({ ctx, input }) => {
+      const entries = await ctx.audit.recent(input.workspaceId, input.limit);
+      return { entries: entries.map(entry => ({ ...entry, seq: entry.seq.toString() })) };
+    }),
+
   // Re-walk the workspace's chain and report whether it is intact. `brokenAtSeq` (the
   // proof-of-tamper coordinate) is a bigint on the service side, stringified for the
   // wire like every other bigserial.

@@ -294,6 +294,18 @@ describe('AuditService (pglite)', () => {
     spy.mockRestore();
   });
 
+  it('recent returns the newest entries first, bounded and per workspace', async () => {
+    const workspaceA = await seedWorkspace('A');
+    const workspaceB = await seedWorkspace('B');
+    await recordSubjects(workspaceA, ['a1', 'a2', 'a3']);
+    await recordSubjects(workspaceB, ['b1']);
+
+    const recent = await service.recent(workspaceA, 2);
+    expect(recent.map(entry => entry.subjectId)).toEqual(['a3', 'a2']);
+    const recentB = await service.recent(workspaceB, 10);
+    expect(recentB.map(entry => entry.subjectId)).toEqual(['b1']);
+  });
+
   it('verify and list are scoped per workspace (tenant isolation)', async () => {
     const workspaceA = await seedWorkspace('A');
     const workspaceB = await seedWorkspace('B');
