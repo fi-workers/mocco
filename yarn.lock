@@ -2595,7 +2595,9 @@ __metadata:
   dependencies:
     "@playwright/test": "npm:1.61.1"
     "@types/node": "npm:22.20.0"
+    "@types/pg": "npm:8.20.0"
     eslint: "npm:10.6.0"
+    pg: "npm:8.22.0"
     typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
@@ -2617,6 +2619,7 @@ __metadata:
   resolution: "@mocco/frontend@workspace:packages/frontend"
   dependencies:
     "@base-ui/react": "npm:1.6.0"
+    "@better-auth/oauth-provider": "npm:1.7.7"
     "@eslint-react/eslint-plugin": "npm:5.10.4"
     "@hookform/resolvers": "npm:5.4.0"
     "@mocco/backend": "workspace:*"

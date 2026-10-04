@@ -1,7 +1,7 @@
 // The external inbound surface (ADR 0011): a Hono app on the App Router, kept
 // separate from the internal tRPC (Pages Router). App-Router handlers get the
 // raw fetch Request — required for webhook HMAC verification (slice 3b).
-// This is the only `app/` file; the Pages-Router UI is unchanged.
+// The Pages-Router UI is unchanged; `app/` holds only external inbound routes like this one.
 import { extHandler } from '@mocco/backend/ext/app';
 
 // Vercel function limit for the ext surface, in seconds. The job tick runs here and must

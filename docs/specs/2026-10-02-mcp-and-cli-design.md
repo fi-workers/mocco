@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -339,6 +339,18 @@ version — does not flatten the nested copies under yarn's node-modules linker 
 
 Until that resolves, slice 4 cannot land. The schema work is done and saved on
 `feat/mcp-auth-server`.
+
+### What slice 4 left out, found by connecting a client
+
+Slice 4 registered the authorization server, and slice 5 served tools behind it, but a
+client could not get through: discovery 404'd because the auth handler, which answers the
+root `.well-known` paths, is mounted under `/api/auth` and never saw them; the sign-in page
+dropped the signed authorization request, so signing in only started a session; and the
+consent page that `mcp()` redirects to did not exist. The fix routes
+`/.well-known/oauth-protected-resource/*` and `/.well-known/oauth-authorization-server/*`
+to the auth handler, adds the vendor's `oauthProviderClient` so sign-in, sign-up and
+consent carry the signed request, and adds `/auth/consent`. An e2e test
+(`packages/e2e/tests/mcp-sign-in.spec.ts`) now walks the whole path a real client takes.
 
 ### A related duplicate, now fixed
 
