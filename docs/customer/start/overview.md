@@ -4,7 +4,7 @@ description: The Mocco products you can use today — deploy governance, OTA and
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, getting-started, overview, guide]
@@ -25,7 +25,7 @@ Your team works in a **workspace**. Inside it, a **project** is one product you 
 
 You turn products on and off on the workspace's **Products** page. Deploy governance is always on.
 
-![The Products page: deploy governance always on, the other products with Turn on and Turn off, and the ones still to come marked Coming soon](./images/products.png)
+![The Products page: products grouped under Release and Support, deploy governance always on, the others with Turn on and Turn off, and the ones still to come listed under On the roadmap](./images/products.png)
 
 ## Deploy governance
 

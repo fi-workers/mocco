@@ -3,14 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 
 // Full session round-trip against the real server + Postgres, all client-rendered:
-// sign up → zero-workspace onboarding → create (lands on its dashboard) → create
+// sign up → zero-workspace onboarding → create (lands on its Home) → create
 // a second via the switcher → switch between them → sign out (session cleared,
 // /workspaces gated) → sign back in (/workspaces jumps into a workspace, both
 // persist). This is the cookie/session path the pglite unit tests can't exercise.
 test('sign up, create + switch workspaces via dashboards, sign out and back in', async ({ page }) => {
   const email = `e2e-${randomUUID()}@example.com`;
   const password = 'e2e-password-123';
-  const dashboardUrl = /\/workspaces\/[0-9a-f-]+$/;
+  const homeUrl = /\/workspaces\/[0-9a-f-]+\/home$/;
 
   // --- Sign up ---
   await page.goto('/auth/sign-up');
@@ -23,13 +23,18 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByRole('heading', { name: 'Create your first workspace' })).toBeVisible();
 
-  // --- Create the first workspace → land on its dashboard ---
+  // --- Create the first workspace → land on its Home ---
   await page.getByLabel('Workspace name').fill('Acme Lab');
   await page.getByRole('button', { name: 'Create workspace' }).click();
-  await expect(page).toHaveURL(dashboardUrl);
-  await expect(page.getByRole('link', { name: 'Members' })).toBeVisible(); // workspace left nav
-  await expect(page.getByRole('heading', { name: 'No repositories yet' })).toBeVisible();
+  await expect(page).toHaveURL(homeUrl);
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+  await expect(page.getByText('Nothing is waiting.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
+
+  // --- Deploys (the repositories) is one click away in the workspace left nav ---
+  await page.getByRole('link', { name: 'Deploys' }).click();
+  await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+$/);
+  await expect(page.getByRole('heading', { name: 'No repositories yet' })).toBeVisible();
 
   // --- Members: the creator is listed ---
   await page.getByRole('link', { name: 'Members' }).click();
@@ -37,20 +42,20 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await expect(page.getByText('E2E User')).toBeVisible();
   await expect(page.getByText(email)).toBeVisible();
 
-  // --- Create a second workspace via the switcher → its dashboard ---
+  // --- Create a second workspace via the switcher → its Home ---
   await page.getByRole('button', { name: 'Acme Lab' }).click();
   await page.getByRole('menuitem', { name: 'New workspace' }).click();
   await expect(page).toHaveURL(/\/workspaces\?create=1$/);
   await expect(page.getByRole('heading', { name: 'Create a workspace' })).toBeVisible();
   await page.getByLabel('Workspace name').fill('Beta Co');
   await page.getByRole('button', { name: 'Create workspace' }).click();
-  await expect(page).toHaveURL(dashboardUrl);
+  await expect(page).toHaveURL(homeUrl);
   await expect(page.getByRole('button', { name: 'Beta Co' })).toBeVisible(); // switcher label
 
   // --- Switch back to Acme through the switcher ---
   await page.getByRole('button', { name: 'Beta Co' }).click();
   await page.getByRole('menuitem', { name: 'Acme Lab' }).click();
-  await expect(page).toHaveURL(dashboardUrl);
+  await expect(page).toHaveURL(homeUrl);
   await expect(page.getByRole('button', { name: 'Acme Lab' })).toBeVisible(); // switcher label
 
   // --- Rename via Settings; the switcher label follows ---
@@ -71,7 +76,7 @@ test('sign up, create + switch workspaces via dashboards, sign out and back in',
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(dashboardUrl);
+  await expect(page).toHaveURL(homeUrl);
   await page.getByRole('button', { name: /Acme Labs|Beta Co/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Acme Labs' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Beta Co' })).toBeVisible();

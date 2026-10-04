@@ -131,6 +131,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
 
+## 2026-10-04 — Mocco is everything a product needs, except the code
+
+- Added [ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md), superseding ADR 0026's
+  position: release, operations and support are equal parts of building and running a service, and the shared
+  team, roles and history set Mocco apart; "write ≠ ship" is the Release principle. ADR 0026's grouping and
+  navigation decisions carry over.
+- Rewrote the product description in the root `README.md`, `AGENTS.md` and `index.md` accordingly.
+- Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
+- Source: branch `docs/concept-everything-but-code`
+
 ## 2026-10-04 — MCP sign-in, end to end
 
 - The connect guide gains "Approving the connection" with a screenshot of the new consent screen, the correct

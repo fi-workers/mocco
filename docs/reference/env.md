@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-10-01
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -89,6 +89,10 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 `HELP_CUSTOM_DOMAINS` (comma-separated `domain=site-slug` pairs, such as `help.showyourti.me=showyourtime`, read by `next.config.ts` at build time) serves a help center on the customer's own domain. Each domain must also be added to the Vercel project and point at it (a CNAME to Vercel's DNS). The console links the site there instead of `<slug>.<HELP_SITES_DOMAIN>`.
 
 `AI_GATEWAY_API_KEY` (a Vercel AI Gateway key) turns on help center translation: publishing an article queues a translation into each language the site offers. `HELP_TRANSLATION_MODEL` picks the model (an AI Gateway model id, default `anthropic/claude-sonnet-5`). Unset, nothing is translated and readers get the source language.
+
+## Function region
+
+On Vercel, `packages/frontend/vercel.json` pins the functions to `icn1` (Seoul), next to the production database (Supabase `ap-northeast-2`). Every request makes several sequential queries, so the function belongs where the database is: from the default `iad1` each round trip crossed the Pacific, and one console page load took about 10 s. A deployment with its database elsewhere sets `regions` to that database's region. Self-hosting ignores the file.
 
 ## Storage vars
 

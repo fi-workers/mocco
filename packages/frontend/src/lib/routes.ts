@@ -9,7 +9,10 @@ export const Routes = {
   // Where the authorization server sends someone to approve an app (provider.ts CONSENT_PAGE).
   consent: '/auth/consent',
   workspaces: '/workspaces',
+  /** A workspace's Deploys section (its repositories); GitHub setup returns here. */
   workspace: (id: string) => `/workspaces/${id}`,
+  /** A workspace's Home: approvals waiting across products, recent activity, projects. */
+  workspaceHome: (id: string) => `/workspaces/${id}/home`,
   workspaceMembers: (id: string) => `/workspaces/${id}/members`,
   workspaceAccess: (id: string) => `/workspaces/${id}/access`,
   workspaceAudit: (id: string) => `/workspaces/${id}/audit`,

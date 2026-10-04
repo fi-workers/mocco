@@ -33,7 +33,7 @@ export default function WorkspaceSwitcher({ workspaces, activeId }: Props) {
             key={ws.id}
             nativeButton={false}
             render={
-              <Link href={Routes.workspace(ws.id)}>
+              <Link href={Routes.workspaceHome(ws.id)}>
                 <span className="flex-1 truncate">{ws.name}</span>
                 {ws.id === activeId && <CheckIcon className="size-4" />}
               </Link>
