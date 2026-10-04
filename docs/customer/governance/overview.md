@@ -35,7 +35,7 @@ Open the workspace's **Deploys** page. With no repositories yet, it shows **Conn
 
 Back in Mocco, each repository the app can see is listed under **Add a repository from** your account; choose **Add** next to it. It then appears under **Connected repositories**.
 
-![The workspace Overview page: a connected repository and its watched branch](./images/repositories.png)
+![The workspace Deploys page: two connected repositories and their watched branches](./images/repositories.png)
 
 Each connected repository has a watched branch, its default branch unless you change it. Type the branch and choose **Save**. Once a watched branch is saved, **Commits** lists the commits Mocco has synced from it, newest first, and **Load more** shows older ones. Each commit opens its own page.
 

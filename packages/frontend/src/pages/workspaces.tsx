@@ -39,7 +39,7 @@ export default function WorkspacesPage() {
 
     const target = activeId ?? firstId;
     if (target) {
-      fireAndForget(router.replace(Routes.workspace(target)));
+      fireAndForget(router.replace(Routes.workspaceHome(target)));
     }
   }, [isReady, isForceCreate, hasWorkspace, activeId, firstId, router]);
 
@@ -59,13 +59,13 @@ export default function WorkspacesPage() {
           {hasWorkspace ? 'Create a workspace' : 'Create your first workspace'}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          A workspace is your team boundary — repos, members and deploy governance live inside it.
+          A workspace is your team boundary — its projects, members, roles and audit log live inside it.
         </p>
       </div>
       <WorkspaceForm
         onSubmit={async values => {
           const { workspace } = await createWorkspace(values);
-          await router.push(Routes.workspace(workspace.id));
+          await router.push(Routes.workspaceHome(workspace.id));
         }}
       />
     </main>
