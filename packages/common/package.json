@@ -27,6 +27,7 @@
     "./ota": "./src/ota.ts",
     "./ota-hosting": "./src/ota-hosting.ts",
     "./project": "./src/project.ts",
+    "./status": "./src/status.ts",
     "./storage": "./src/storage.ts",
     "./workspace": "./src/workspace.ts"
   },

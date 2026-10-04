@@ -38,6 +38,7 @@ import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Session } from '@mocco/common/auth';
 
 /** Per-request tRPC context — session read via the neutral auth surface. Optional
@@ -103,6 +104,8 @@ export interface Context {
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
   helpTranslations: HelpTranslationService;
+  /** Status pages and their components (#148). */
+  statusPages: StatusPageService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Always present — what a workspace allows agents on the MCP surface (ADR 0025). */

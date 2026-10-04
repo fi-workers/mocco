@@ -17,6 +17,7 @@ import { productRouter } from '@backend/transport/trpc/routers/product';
 import { projectRouter } from '@backend/transport/trpc/routers/project';
 import { roleRouter } from '@backend/transport/trpc/routers/role';
 import { runRouter } from '@backend/transport/trpc/routers/run';
+import { statusRouter } from '@backend/transport/trpc/routers/status';
 import { workspaceRouter } from '@backend/transport/trpc/routers/workspace';
 import { publicProcedure, router } from '@backend/transport/trpc/trpc';
 
@@ -37,6 +38,7 @@ export const appRouter = router({
   flags: flagsRouter,
   messenger: messengerRouter,
   help: helpRouter,
+  status: statusRouter,
   apiKey: apiKeyRouter,
   mcp: mcpRouter,
   inbound: inboundRouter,
