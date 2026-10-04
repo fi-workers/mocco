@@ -121,6 +121,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
 - Source: branch `docs/getting-started`
 
+## 2026-10-04 — MCP sign-in, end to end
+
+- The connect guide gains "Approving the connection" with a screenshot of the new consent screen, the correct
+  discovery paths (`/.well-known/oauth-protected-resource/api/mcp`, `/.well-known/oauth-authorization-server/api/auth`),
+  and a troubleshooting row for a sign-in that loses the client's request. The MCP spec records what slice 4 left out
+  and how it was found.
+- Docs touched: `customer/mcp/connect.md`, `customer/mcp/images/mcp-consent.png`,
+  `specs/2026-10-02-mcp-and-cli-design.md`
+- Source: branch `fix/mcp-sign-in-flow`
+
 ## 2026-10-04 — Positioning around the production record
 
 - Added [ADR 0026](./adr/0026-position-mocco-around-the-production-record.md): Mocco is one workspace to release,
@@ -141,12 +151,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/concept-everything-but-code`
 
-## 2026-10-04 — MCP sign-in, end to end
+## 2026-10-04 — Customer screenshots show page content only
 
-- The connect guide gains "Approving the connection" with a screenshot of the new consent screen, the correct
-  discovery paths (`/.well-known/oauth-protected-resource/api/mcp`, `/.well-known/oauth-authorization-server/api/auth`),
-  and a troubleshooting row for a sign-in that loses the client's request. The MCP spec records what slice 4 left out
-  and how it was found.
-- Docs touched: `customer/mcp/connect.md`, `customer/mcp/images/mcp-consent.png`,
-  `specs/2026-10-02-mcp-and-cli-design.md`
-- Source: branch `fix/mcp-sign-in-flow`
+- Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,
+  removing the old sidebar, project tabs and dev overlays, and added a "Customer guide screenshots" rule to the
+  [conventions](./meta/conventions.md): screenshots show content, not the app shell, except in the guides that
+  teach the navigation. A navigation change no longer stales every guide.
+- Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
+- Source: branch `docs/content-only-screenshots`
