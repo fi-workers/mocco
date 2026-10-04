@@ -171,6 +171,10 @@ has several servers loaded.
 | `mocco_ota_releases_search` | A hosted app's releases matching a filter (text or commit, runtime, state, platform) |
 | `mocco_ota_adoption_get` | Devices per channel and release (24 h) and monthly active devices |
 | `mocco_ota_version_policies_search` | Each store app's minimum, recommended and blocked versions |
+| `mocco_status_pages_get` | A status page's components and the status each shows now (derived) |
+| `mocco_status_incidents_search` | A project's incidents, open by default (status, severity, page, title text) |
+| `mocco_status_incidents_get` | One incident: its update timeline, affected components, postmortem |
+| `mocco_status_maintenances_search` | Maintenance windows, scheduled and in progress by default |
 
 **Deciding** — person only, refused for a key with a message saying why:
 
@@ -303,6 +307,18 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    channel's deployment history, a stale flag filter (it lives in `StaleFlagDetector`, a
    second service), and any tool that changes a flag or an OTA channel, which needs the
    deciding machinery and its own design pass.
+
+   The status page reads follow the status backend, as ADR 0025 asks of every product
+   (*shipped*): `mocco_status_pages_get`, `mocco_status_incidents_search`,
+   `mocco_status_incidents_get` and `mocco_status_maintenances_search`, read-only, behind
+   `ProjectScope` with `Products.status`. They read the services the console's `status`
+   router reads (`StatusPageService.getPage`, `IncidentService.list` / `get`,
+   `MaintenanceService.list`), so a component's status is the one the service derives
+   from the status set by hand, open incidents and maintenance in progress. A page is
+   found among the project's own (`listPages`); the page read may leave it out when the
+   project has one, and the searches read every page unless one is named. Still to come:
+   declaring an incident and posting its updates, which are said to customers and need
+   their own design pass before an agent may do them.
 
 ### How the vote is built (slice 6b)
 

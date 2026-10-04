@@ -184,6 +184,9 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
       otaMetrics: f.ota.otaMetrics,
       versionPolicies: f.ota.versionPolicies,
       projectApps: project.projects,
+      statusPages: { listPages: refuse, getPage: refuse },
+      statusIncidents: { list: refuse, get: refuse },
+      statusMaintenances: { list: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

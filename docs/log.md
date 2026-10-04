@@ -152,6 +152,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Agents can read the status page
+
+- The connect guide lists `mocco_status_pages_get`, `mocco_status_incidents_search`, `mocco_status_incidents_get` and
+  `mocco_status_maintenances_search`, and says how a status tool picks its project and page. The MCP spec lists the
+  status reads as shipped and what is left (a tool that declares or updates an incident); the status reference notes
+  the tools and the checks in front of them.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/status.md`, `log.md`
+- Source: branch `feat/mcp-status-read`
+
 ## 2026-10-05 — Agents can read OTA
 
 - The connect guide lists `mocco_ota_channels_search`, `mocco_ota_releases_search`, `mocco_ota_adoption_get` and

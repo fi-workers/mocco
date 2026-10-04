@@ -47,6 +47,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_ota_releases_search` | Which OTA releases CI uploaded, newest first, by message or commit, runtime version, state or platform |
 | `mocco_ota_adoption_get` | How many devices checked in during the last 24 hours, per channel and release, and the app's monthly active devices |
 | `mocco_ota_version_policies_search` | The minimum supported, recommended and blocked versions of each iOS and Android app, and whether tightening them needs approval |
+| `mocco_status_pages_get` | What a status page says right now: each component and the status it shows, counting open incidents and maintenance in progress |
+| `mocco_status_incidents_search` | Which incidents are open (or were), newest first, by status, severity, page or title text |
+| `mocco_status_incidents_get` | One incident: every update posted to it, the components it affects and how badly, and its postmortem |
+| `mocco_status_maintenances_search` | Which maintenance windows are scheduled or in progress, and the components each covers |
 
 Reads take a `responseFormat`: `concise` by default, `detailed` when the agent wants the
 commit and the gate requirements too. That keeps a search from spending your context on
@@ -65,6 +69,12 @@ The OTA tools pick their project the same way and answer only where OTA is turne
 channel, release and adoption tools read one hosted app: leave `appId` out when the
 project hosts one, or the tool names the apps to pick from. They only read; promote, roll
 out, pause, roll back and change a version policy in the console or with `mocco ota`.
+
+The status page tools pick their project the same way and answer only where the status
+page is turned on. `mocco_status_pages_get` reads one page: leave `pageId` out when the
+project has one, or the tool names the pages to pick from. The incident and maintenance
+searches read every page of the project unless you name one. They only read; declare an
+incident, post an update and schedule maintenance in the console.
 
 **Deciding is separate and off by default.**
 

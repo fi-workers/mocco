@@ -13,6 +13,7 @@ import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
+import { getStatusDomain } from '@backend/domain/status/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 import { createConfirmations } from '@backend/transport/mcp/confirmation';
@@ -29,6 +30,7 @@ export function getMcpHandler(): McpHttpHandler {
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(getDb()) });
     const { projects, products } = getProjectDomain();
     const ota = getOtaDomain();
+    const status = getStatusDomain();
     state.handler = createMcpHttpHandler({
       runs: getExecution().runs,
       approvals: getGovernance().approvals,
@@ -40,6 +42,9 @@ export function getMcpHandler(): McpHttpHandler {
       otaMetrics: ota.otaMetrics,
       versionPolicies: ota.versionPolicies,
       projectApps: projects,
+      statusPages: status.statusPages,
+      statusIncidents: status.statusIncidents,
+      statusMaintenances: status.statusMaintenances,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects, products }),
       settings: getMcpSettings(),
