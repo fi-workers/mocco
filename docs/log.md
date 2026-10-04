@@ -152,6 +152,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
 
+## 2026-10-05 — Agents can read OTA
+
+- The connect guide lists `mocco_ota_channels_search`, `mocco_ota_releases_search`, `mocco_ota_adoption_get` and
+  `mocco_ota_version_policies_search`, and says how an OTA tool picks its project and hosted app. The MCP spec marks
+  the OTA reads of slice 8 shipped and lists what is left; the OTA hosting and version policy references note the
+  tools and the checks in front of them.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/ota-hosting.md`,
+  `reference/ota-version-policy.md`, `log.md`
+- Source: branch `feat/mcp-ota-read`
+
 ## 2026-10-05 — Agents can read feature flags
 
 - The connect guide lists `mocco_flags_search`, `mocco_flags_get` and `mocco_flags_changesets_search`, and says how a

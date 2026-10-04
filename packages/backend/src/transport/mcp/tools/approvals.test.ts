@@ -177,6 +177,12 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       settings,
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
       projects: { resolve: refuse },
+      otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
+      otaChannels: { listHeads: refuse },
+      otaReleases: { listReleases: refuse },
+      otaMetrics: { channelReach: refuse, monthlyActiveDevices: refuse },
+      versionPolicies: { get: refuse, listChanges: refuse },
+      projectApps: { listApps: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

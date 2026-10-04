@@ -38,3 +38,16 @@ export class ProjectUnclearError extends BadRequestError {
     this.name = 'ProjectUnclearError';
   }
 }
+
+/** No app was named and the project has none of the kind the tool reads, or more than
+ * one. Names the choices, like `ProjectUnclearError`. `kind` says which apps count, e.g.
+ * `hosted OTA app` or `iOS or Android app`. */
+export class AppUnclearError extends BadRequestError {
+  constructor(
+    kind: string,
+    readonly choices: readonly { id: string; name: string }[],
+  ) {
+    super(choices.length === 0 ? `This project has no ${kind}` : `Say which app with appId: ${namesOf(choices)}`);
+    this.name = 'AppUnclearError';
+  }
+}

@@ -4,7 +4,7 @@ description: How a project's React Native app becomes a Mocco-hosted OTA app ser
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, ota, expo-updates, signing, channels]
@@ -155,3 +155,5 @@ The Hosted by Mocco tab links each channel to its page (`…/ota-hosting/channel
 ## tRPC surface
 
 `ota.hosting.metrics.adoption | channelReach`, `ota.hosting.apps.list | create`, `ota.hosting.releases.list | get`, `ota.hosting.certificates.usage`, `ota.hosting.channels.timeline`, `ota.hosting.trustPolicies.list | create | delete` (create and delete owner/admin), `ota.hosting.certificates.list | add | retire` (add/retire owner/admin), `ota.hosting.channels.list | create | changePolicy | heads | previewPromotion | promote | changeRollout | stop`. All require the OTA product. Votes on pending channel-policy requests go through `approval.vote`.
+
+Agents read hosted OTA over MCP with `mocco_ota_channels_search` (what each channel head serves and rolls out), `mocco_ota_releases_search` and `mocco_ota_adoption_get` (devices per channel and release in the last 24 hours, and monthly active devices) in `transport/mcp/tools/ota.ts`: thin, read-only adapters over `listHeads`, `listReleases` and `channelReach` / `monthlyActiveDevices`, behind the same checks as `productProcedure(Products.ota)` (`ProjectScope`), with the app looked up inside the project like `requireApp`. Nothing on MCP promotes, rolls out or stops yet. See [Connect Mocco to your agent](../customer/mcp/connect.md).
