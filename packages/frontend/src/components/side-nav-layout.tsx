@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 
 import { groupEntries, sectionGroupLabels } from '@frontend/lib/products';
 import { cn } from '@frontend/lib/utils';
@@ -24,15 +25,36 @@ interface Props {
   children: ReactNode;
 }
 
+// On a phone the nav is a horizontal strip that can be wider than the screen; centre the
+// current section in it so the reader sees where they are without scrolling sideways.
+// A no-op when the strip fits (and on wider screens, where the nav is a column).
+function revealInStrip(link: HTMLElement | null): void {
+  const strip = link?.closest('nav');
+  if (!link || !strip || strip.scrollWidth <= strip.clientWidth) {
+    return;
+  }
+  strip.scrollLeft = link.offsetLeft - (strip.clientWidth - link.offsetWidth) / 2;
+}
+
 // The sidebar frame shared by the workspace and project layouts: a grouped nav beside
 // the page content. On narrow screens the nav becomes a scrollable strip above the
 // content, without group headings, so no page overflows a phone's width.
 export default function SideNavLayout({ header, label, items, activeKey, footer, children }: Props) {
+  const navRef = useRef<HTMLElement>(null);
+  // Items arrive as the enabled products load, so re-centre whenever the set changes.
+  const itemKeys = items.map(item => item.key).join(' ');
+  useEffect(() => {
+    revealInStrip(navRef.current?.querySelector<HTMLElement>('[aria-current="page"]') ?? null);
+  }, [activeKey, itemKeys]);
+
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="flex shrink-0 flex-col gap-3 border-b border-border px-3 py-3 md:w-56 md:gap-4 md:border-r md:border-b-0 md:py-6">
         {header}
-        <nav aria-label={label} className="flex gap-0.5 overflow-x-auto md:flex-col md:gap-4 md:overflow-visible">
+        <nav
+          ref={navRef}
+          aria-label={label}
+          className="relative flex gap-0.5 overflow-x-auto md:flex-col md:gap-4 md:overflow-visible">
           {groupEntries(items).map(section => (
             <div key={section.group ?? 'top'} className="flex shrink-0 gap-0.5 md:flex-col">
               {section.group === null ? null : (
