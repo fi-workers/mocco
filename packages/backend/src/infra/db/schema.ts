@@ -3066,3 +3066,20 @@ export const helpRedirects = pgTable(
     }).onDelete('cascade'),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────
+// MCP (ADR 0025): per-workspace settings for the agent surface. The tokens and clients
+// themselves are the authorization server's tables above; this is what a workspace
+// decides about agents.
+// ─────────────────────────────────────────────────────────────
+
+/** A workspace's MCP settings. No row means the defaults: agents read, never decide. */
+export const mcpSettings = pgTable('mocco_mcp_settings', {
+  workspaceId: uuid('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  agentsMayDecide: boolean('agents_may_decide').notNull().default(false),
+  changedAt: timestamp('changed_at').notNull().defaultNow(),
+  // SET NULL: the setting outlives the person who switched it; the audit chain keeps who.
+  changedByUserId: uuid('changed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+});

@@ -8,6 +8,7 @@ import { flagsRouter } from '@backend/transport/trpc/routers/flags';
 import { helpRouter } from '@backend/transport/trpc/routers/help';
 import { inboundRouter } from '@backend/transport/trpc/routers/inbound';
 import { integrationRouter } from '@backend/transport/trpc/routers/integration';
+import { mcpRouter } from '@backend/transport/trpc/routers/mcp';
 import { messengerRouter } from '@backend/transport/trpc/routers/messenger';
 import { notificationRouter } from '@backend/transport/trpc/routers/notification';
 import { otaRouter } from '@backend/transport/trpc/routers/ota';
@@ -37,6 +38,7 @@ export const appRouter = router({
   messenger: messengerRouter,
   help: helpRouter,
   apiKey: apiKeyRouter,
+  mcp: mcpRouter,
   inbound: inboundRouter,
   notification: notificationRouter,
 });

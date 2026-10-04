@@ -25,8 +25,9 @@ You sign in once in the browser and the client holds the token.
 https://www.mocco.club/api/mcp
 ```
 
-> The read tools are in. Deciding — approving, resuming, promoting — is the next slice;
-> until then an agent can tell you a deploy is blocked but cannot unblock it. The plan is
+> The read tools are in, and so is the workspace switch for deciding (below). The deciding
+> tools themselves (approving, resuming, promoting) come next. Until they do, an agent can
+> tell you a deploy is blocked but can't unblock it, whatever the switch says. The plan is
 > in the [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do

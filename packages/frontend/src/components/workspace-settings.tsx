@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import { useState } from 'react';
 
 import { Button } from '@frontend/components/ui/button';
+import WorkspaceAgents from '@frontend/components/workspace-agents';
 import WorkspaceForm from '@frontend/components/workspace-form';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
@@ -12,7 +13,8 @@ interface Props {
   workspaceId: string;
 }
 
-// Workspace settings: rename (shares the WorkspaceForm) and a guarded delete.
+// Workspace settings: rename (shares the WorkspaceForm), what agents may do, and a
+// guarded delete.
 export default function WorkspaceSettings({ workspaceId }: Props) {
   const router = useRouter();
   const utils = trpc.useUtils();
@@ -38,7 +40,9 @@ export default function WorkspaceSettings({ workspaceId }: Props) {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Rename this workspace or delete it.</p>
+        <p className="text-sm text-muted-foreground">
+          Rename this workspace, decide what agents may do in it, or delete it.
+        </p>
       </div>
 
       <section className="flex flex-col gap-3">
@@ -52,6 +56,8 @@ export default function WorkspaceSettings({ workspaceId }: Props) {
           />
         ) : null}
       </section>
+
+      <WorkspaceAgents workspaceId={workspaceId} />
 
       <section className="flex flex-col gap-3 rounded-xl border border-destructive/40 p-4">
         <div>

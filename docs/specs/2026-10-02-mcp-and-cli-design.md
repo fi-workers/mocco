@@ -269,7 +269,9 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 5. **The MCP server with the read tools** — `transport/mcp`, `runtime/mcp.ts`, the App
    Router route, read-only by default. Proves the shape against a real client.
 6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
-   confirmation and the opt-in that enables them.
+   confirmation and the opt-in that enables them. It ships as three PRs: the per-workspace
+   opt-in (`mocco_mcp_settings`, *shipped*), then `approvals:write` with the confirmation
+   round trip and `mocco_approvals_vote`, then `mocco_gates_resume`.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
    `@mocco/cli`, which becomes an alias.
 8. **OTA and flags tools** — once the shape has survived a real week.
