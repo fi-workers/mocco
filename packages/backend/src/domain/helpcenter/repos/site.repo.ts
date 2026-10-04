@@ -45,7 +45,7 @@ export class HelpSiteRepo {
   async update(
     workspaceId: string,
     projectId: string,
-    values: { slug?: string; sourceLocale?: string; locales?: string[] },
+    values: { slug?: string; sourceLocale?: string; locales?: string[]; allowAiTraining?: boolean },
   ) {
     try {
       return expectOne(

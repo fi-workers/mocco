@@ -42,6 +42,18 @@ export const helpRouter = router({
         await ctx.helpSites.update(input.workspaceId, input.projectId, ctx.session.user.id, input),
     ),
 
+  setAiTraining: helpProcedure
+    .input(projectInput.extend({ allowAiTraining: z.boolean() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpSites.setAiTraining(
+          input.workspaceId,
+          input.projectId,
+          ctx.session.user.id,
+          input.allowAiTraining,
+        ),
+    ),
+
   tree: helpProcedure.input(projectInput).query(async ({ ctx, input }) => ({
     collections: await ctx.helpAuthoring.tree(input.workspaceId, input.projectId),
   })),

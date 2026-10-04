@@ -4,7 +4,7 @@ description: Set up a public help site for a project, write articles in Markdown
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, help-center, guide]
@@ -89,6 +89,14 @@ Readers who pick a language see its translation, and the article list shows tran
 ## Use your own domain
 
 Your help center is at `<address>.help.mocco.club` from the start. To serve it on your own domain, such as `help.example.com`, ask the Mocco team to add the domain, then point it at Mocco with a DNS record (a `CNAME` to the target they give you). Once the record resolves, the site and every old address of an imported site answer on your domain. The **Help center** page then links your domain.
+
+## Search engines and AI
+
+Your help center tells search engines where every article is, in every language it's offered in, at `/sitemap.xml` on its address (your own domain, once you have one). Search engines and AI search — Google, Bing, ChatGPT search, Claude, Perplexity — can always read it, so people asking them find your answers.
+
+AI companies also send crawlers that collect text to train their models. They're allowed by default. To keep them out, clear **Allow AI training crawlers** at the bottom of the **Help center** page. Your site's `/robots.txt` then turns away GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot, meta-externalagent and Bytespider, while search keeps working. Crawlers honor robots.txt on their next visit; it doesn't remove what they collected before.
+
+![The Search engines and AI section of the Help center page, with Allow AI training crawlers cleared](./images/crawlers.png)
 
 ## 5. What readers see
 

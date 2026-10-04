@@ -1,6 +1,6 @@
 ---
 title: Search engines and crawlers
-description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt and sitemap.xml so far.
+description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers) and sitemap.xml so far.
 type: reference
 status: active
 created: 2026-10-05
@@ -29,7 +29,7 @@ URLs are absolute on `SERVICE_DOMAIN` (else `VERCEL_URL`), whatever host asked. 
 
 ## A help center's host
 
-- **robots.txt** allows every crawler and disallows `/*/search` — results render in the browser, so the page is empty to a crawler.
+- **robots.txt** allows every crawler and disallows `/*/search` — results render in the browser, so the page is empty to a crawler. With the site's **Allow AI training crawlers** off (`mocco_help_sites.allow_ai_training`, default on; `help.setAiTraining`, audited as `help.site.ai_training.changed`), it adds a group for the training crawlers in `AI_TRAINING_CRAWLERS` — GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot, meta-externalagent, Bytespider — that disallows everything. A crawler follows the most specific group naming it, so those leave while search agents (OAI-SearchBot, Claude-SearchBot, PerplexityBot, Googlebot, Bingbot) keep the `*` group. A slug with no site is a 404.
 - **sitemap.xml** lists each language's home and each published article in every language it is really served in: the source, plus each language that has a translation (another language redirects to the source's address, so it isn't listed). Each URL carries `xhtml:link` hreflang alternates for all its versions, itself included, and `x-default` (the source) — Google's reciprocal form. `lastmod` is the article's last publish for the source, and the translation's creation for a translated version. A slug with no site is a 404.
 
 URLs are absolute on the site's canonical origin: its custom domain when `HELP_CUSTOM_DOMAINS` maps one, else its Mocco subdomain — so the subdomain copy of a site with a custom domain points crawlers at the custom domain.
