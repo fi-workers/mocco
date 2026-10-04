@@ -56,6 +56,7 @@ import { SigningService } from '@backend/domain/ota/SigningService';
 import { UploadService } from '@backend/domain/ota/UploadService';
 import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
+import { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import { createSnapshotService, createStatusDomain } from '@backend/domain/status/compose';
 import { createStatusHandlers, snapshotSafetySchedule, statusSchedules } from '@backend/domain/status/jobs';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
@@ -168,6 +169,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createStatusHandlers({
       maintenances: createStatusDomain(db, { audit, queue, now: deps.now }).statusMaintenances,
       snapshots: createSnapshotService(db, { store: deps.storage?.store, queue, now: deps.now }),
+      retention: new CheckResultRetention({ db }),
       now: deps.now,
     }),
     ...createOtaHandlers({

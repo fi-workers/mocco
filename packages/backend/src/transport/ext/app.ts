@@ -39,6 +39,7 @@ import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getRateLimiter } from '@backend/domain/ratelimit/instance';
+import { getStatusDomain } from '@backend/domain/status/instance';
 import { storageSignerFromEnv } from '@backend/domain/storage/config';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
 import { getStorageDomain } from '@backend/domain/storage/instance';
@@ -439,6 +440,7 @@ export async function extHandler(request: Request): Promise<Response> {
       messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
       runs: { runs: execution.runs },
       help: { help: getHelpDomain().helpPublic, originOf: slug => helpSiteOrigin(slug, env) },
+      probe: { probes: getStatusDomain().statusProbes },
     },
     storage:
       storageStore instanceof FilesystemObjectStore

@@ -21,6 +21,9 @@ code_refs:
   - packages/backend/src/domain/status/MaintenanceService.ts
   - packages/backend/src/domain/status/MonitorService.ts
   - packages/backend/src/domain/status/LocationService.ts
+  - packages/backend/src/domain/status/ProbeService.ts
+  - packages/backend/src/domain/status/CheckResultRetention.ts
+  - packages/backend/src/transport/ext/v1/probe.ts
   - packages/backend/src/domain/status/ComponentStatusService.ts
   - packages/backend/src/domain/status/component-status.ts
   - packages/backend/src/domain/status/jobs.ts
@@ -89,6 +92,8 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
+| `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
+| `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#raw-results-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
 
 Pages reference `mocco_projects(id, workspace_id)`. Groups, components, incidents and maintenance windows
 reference `mocco_status_pages(id, workspace_id, project_id)` through composite foreign keys, so no row can point at
@@ -208,9 +213,10 @@ changed in the meantime. Posting an incident while the app is down needs the bre
 ## Monitors and the probe protocol
 
 A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at the locations it is assigned to
-([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). This slice stores monitors and locations and
-manages them over tRPC. The probe protocol (`/api/ext/v1/probe/lease|results|heartbeat`), the verdict evaluator and
-the probe agent come next; until then a monitor stays `pending` and nothing checks it.
+([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). Monitors and locations are managed over tRPC, and
+agents lease and report rounds over the [probe protocol](#probe-protocol). The verdict evaluator, which advances
+`next_round_at` and moves `state`, and the probe agent come next; until then a monitor stays `pending` and is leased
+once per location.
 
 **Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
 
@@ -233,11 +239,55 @@ monitor can't be pointed at another tenant's private network. Every linked compo
 project's pages.
 
 **State.** A new monitor is `pending` with its first round due at once (`next_round_at`). Only two writers change
-`state`: the evaluator (next slice) and the operator's pause and resume. Both take the monitor's
+`state`: the evaluator (a later slice) and the operator's pause and resume. Both take the monitor's
 `pg_advisory_xact_lock` (`AdvisoryLockNamespaces.statusMonitor`) inside their transaction and append a row to
 `mocco_status_monitor_state_changes`. Pausing sets `paused`; resuming sets `pending` and makes a round due now. Pausing
 a paused monitor, or resuming one that isn't paused, changes nothing. Editing a monitor replaces its settings,
 locations and components and keeps its state. Deleting it deletes its links and history.
+
+### Probe protocol
+
+`/api/ext/v1/probe/*` on the ext app ([ADR 0011](../adr/0011-external-api-surface-architecture.md)), under the public
+`/v1` surface but not authenticated by an API key: the bearer is a location token. A missing or unknown token, or the
+token of a disabled location, is `401` with problem type `invalid_location_token`, before anything is read. Calls are
+limited to 600 a minute per location. `ProbeService` decides everything; the routes only parse
+(`probeLeaseRequestSchema`, `probeResultsRequestSchema`, `probeHeartbeatRequestSchema` in `@mocco/common/status`).
+
+| Route | Body | Answer |
+|---|---|---|
+| `POST /lease` | `agentVersion`, `capacity` (1 to 200, default 50) | `200 { leases: [{ leaseId, monitorId, roundAt, expiresAt, spec }], pollAfterMs }` |
+| `POST /results` | `results`: 1 to 200 of `{ leaseId, monitorId, roundAt, outcome (ok, fail), errorKind?, statusCode?, latencyMs?, timings?, tlsExpiresAt?, detail? }` | `202 { accepted, duplicates, rejected: [leaseId] }` |
+| `POST /heartbeat` | `agentVersion`, `inflight` | `204` |
+
+**Leasing.** A lease call takes the rounds due at the location within the next 60 seconds: the monitor's
+`next_round_at`, for monitors assigned to the location and not paused. A private location only gets its own
+workspace's monitors, even if an assignment row says otherwise. In one transaction, the location's assignment rows are
+selected `FOR UPDATE SKIP LOCKED` (so two agents of one location split the work instead of waiting on each other) and
+the leases are inserted `ON CONFLICT DO NOTHING` on the unique (monitor, location, round), so a round is never leased
+twice to one location. Other locations lock other rows and get their own lease of the same round. A lease expires at
+the round's time plus the check's timeout plus 15 seconds. `pollAfterMs` is 15 seconds, or 0 when the batch was full.
+
+**Results.** A result is stored only if its lease belongs to the reporting location, names the same monitor and
+round, hasn't been reported, and hasn't expired. A result for another location's lease, another monitor or round, or
+an expired lease is listed in `rejected` and stored nowhere, so a stolen token can't speak for another location. A
+result for a lease already reported, or repeated in the same batch, counts as a duplicate: retrying a batch is safe.
+Results are inserted `ON CONFLICT DO NOTHING` on (monitor, round, location), and their leases are then marked
+`reported_at`. A probe reports `ok` or `fail`; `no_data` is reserved for the evaluator, for a lease nobody reported.
+
+**Seen.** Every lease call and heartbeat sets the location's `last_seen_at` and `agent_version`.
+
+### Raw results and their partitions
+
+`mocco_status_check_results` is range-partitioned by UTC day on `round_at`, one partition per day named
+`mocco_status_check_results_pYYYYMMDD`. drizzle-kit can't declare a partitioned table, so migration 0056 creates the
+table from `schema.ts` and the custom migration 0057 recreates it, still empty, as the partitioned parent with the same
+columns, key, checks and index. The drift check still compares `schema.ts` to the snapshots, which don't record
+partitioning.
+
+The `status.retention` job runs every hour (`CheckResultRetention`). It creates the partitions for today and the next
+two days, and drops the partitions older than 14 days with all their rows, so old results go without a `DELETE`. If a
+result arrives for a day with no partition yet (a fresh install before the job's first run), the insert creates that
+day's partition and retries once.
 
 ## Audit
 
@@ -279,7 +329,7 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-Checking monitors (the probe protocol, the evaluator and `@mocco/probe`), component status derived from monitors
+Checking monitors (the verdict evaluator with `mocco_status_round_verdicts`, and `@mocco/probe`), component status derived from monitors
 (`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` (and a way to create or publish a
 draft, which arrives with monitor-origin incidents); repo and project links on components; run links

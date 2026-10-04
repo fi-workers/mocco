@@ -65,7 +65,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 20 });
 
-    expect(report).toMatchObject({ ran: 16, errors: [], outcomes: { succeeded: 16 } });
+    expect(report).toMatchObject({ ran: 17, errors: [], outcomes: { succeeded: 17 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -85,6 +85,7 @@ describe('job runtime composition (pglite)', () => {
         FlagJobKinds.staleDigest,
         StatusJobKinds.maintenanceTick,
         StatusJobKinds.snapshotPublish,
+        StatusJobKinds.retention,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);

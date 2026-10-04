@@ -152,6 +152,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status probe protocol
+
+- The status reference gains "Probe protocol" (the `/v1/probe` lease, results and heartbeat routes, location-token
+  auth, `SKIP LOCKED` leasing and which results are accepted, refused or duplicates) and "Raw results and their
+  partitions" (day partitions of `mocco_status_check_results`, the custom migration that creates the parent, and the
+  hourly `status.retention` job). Its tables list the leases and results, and "Not built yet" now names the evaluator
+  and the agent. The feature map's HTTP and TCP monitors row adds the protocol to what is built.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-probe-protocol` (#150, part 2)
+
 ## 2026-10-05 — Status monitors and probe locations
 
 - The status reference gains "Monitors and the probe protocol": the monitor spec by kind, private and shared probe
