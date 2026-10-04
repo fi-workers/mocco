@@ -4,7 +4,7 @@ description: How Mocco gates deploys — connect GitHub, describe a pipeline of 
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, governance, gates, approvals, github, guide]
@@ -24,14 +24,14 @@ On GitHub, anyone who can push to a repository can usually deploy it too. Mocco 
 
 Deploy governance is always on in every workspace. The pieces are:
 
-- **Repositories** on the workspace's **Overview** page: the GitHub repositories Mocco watches.
+- **Repositories** on the workspace's **Deploys** page: the GitHub repositories Mocco watches.
 - **A `.mocco.yml` file** in each repository: its pipeline, with steps and gates.
 - **Commits** and **runs**: each commit on the watched branch can be run through its pipeline, and the run page is where approvers act.
 - **Roles** and **Credential releases** on the **Access** page: who approves, and which gate unlocks which credential.
 
 ## Connect GitHub
 
-Open the workspace's **Overview** page. With no repositories yet, it shows **Connect GitHub**. Choose it and install the Mocco GitHub App on your GitHub account or organization, giving it access to the repositories you want. If your organization requires an admin to approve app installs, Mocco says the installation is awaiting approval until they do.
+Open the workspace's **Deploys** page. With no repositories yet, it shows **Connect GitHub**. Choose it and install the Mocco GitHub App on your GitHub account or organization, giving it access to the repositories you want. If your organization requires an admin to approve app installs, Mocco says the installation is awaiting approval until they do.
 
 Back in Mocco, each repository the app can see is listed under **Add a repository from** your account; choose **Add** next to it. It then appears under **Connected repositories**.
 
@@ -39,7 +39,7 @@ Back in Mocco, each repository the app can see is listed under **Add a repositor
 
 Each connected repository has a watched branch, its default branch unless you change it. Type the branch and choose **Save**. Once a watched branch is saved, **Commits** lists the commits Mocco has synced from it, newest first, and **Load more** shows older ones. Each commit opens its own page.
 
-To use the repository's releases in a project, link it on the project's **Overview** tab; see [Set up a workspace and projects](../start/workspace-and-projects.md#5-link-repositories).
+To use the repository's releases in a project, link it on the project's **Overview** page; see [Set up a workspace and projects](../start/workspace-and-projects.md#5-link-repositories).
 
 ## Describe the pipeline
 

@@ -4,7 +4,7 @@ description: Create environments and a flag in Mocco, bind a server key to one e
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, flags, openfeature, guide]
@@ -22,22 +22,22 @@ Mocco's feature flags work with [OpenFeature](https://openfeature.dev), so your 
 
 ## 1. Turn on feature flags
 
-A workspace member turns on **Feature flags** on the workspace's **Products** page. The project then shows a **Feature flags** tab.
+A workspace member turns on **Feature flags** on the workspace's **Products** page. The project then shows a **Feature flags** page.
 
 ## 2. Create environments and a flag
 
-On the **Feature flags** tab, create an environment for each place your code runs, for example `staging` and `production`. An environment is just a separate set of rules: its name means nothing special to Mocco.
+On the **Feature flags** page, create an environment for each place your code runs, for example `staging` and `production`. An environment is just a separate set of rules: its name means nothing special to Mocco.
 
 Then create a flag, for example `new-checkout`. A flag is `boolean` by default; choose `string`, `number` or `json` to give it named variants instead, such as `{ "short": "Pay", "long": "Pay securely" }`. A new flag is added to every environment switched **off**, so your code keeps using its own default until you switch the flag on. Each change applies at once and is recorded in the environment's history, with who changed what.
 
-![The Feature flags tab: the flags in each environment, Staging's segments and its history](./images/flags-tab.png)
+![The Feature flags page: the flags in each environment, Staging's segments and its history](./images/flags-tab.png)
 
 ## 3. Target users
 
 Open a flag to decide who gets which variant, per environment:
 
 - **Rules** are tried in order, and the first rule whose conditions all match serves its variant. A condition compares an attribute of the evaluation context your code passes (`plan is one of pro, enterprise`, `appVersion version ≥ 2.1.0`, `email ends with @acme.com`) or checks membership of a segment.
-- **Segments** are named groups for an environment, defined on the Feature flags tab: targeting keys that are always in or never in, plus attribute conditions.
+- **Segments** are named groups for an environment, defined on the Feature flags page: targeting keys that are always in or never in, plus attribute conditions.
 - **When no rule matches**, the flag serves a variant or a **percentage rollout**. Rollouts are bucketed on the context's `targetingKey`, so a user always lands in the same bucket, and raising a share from 10% to 20% only adds users.
 
 **Preview** evaluates your unsaved changes for any context before you save, with the same evaluator the SDKs use.
@@ -46,7 +46,7 @@ Open a flag to decide who gets which variant, per environment:
 
 ## 4. Protect an environment
 
-On the Feature flags tab, pick an environment and choose **Edit protection**. Choose the role whose members approve changes, how many approvals are needed, and whether the person who proposed a change may approve it. A role is defined on the workspace's **Access** page.
+On the **Feature flags** page, pick an environment and choose **Edit protection**. Choose the role whose members approve changes, how many approvals are needed, and whether the person who proposed a change may approve it. A role is defined on the workspace's **Access** page.
 
 Once an environment is protected, saving a change sends it for approval instead of applying it:
 
@@ -63,13 +63,13 @@ Changing or removing an environment's protection is itself approved under its cu
 
 If a flag causes trouble, open it, enter a reason in **Kill switch** and choose **Kill**. Everyone in that environment gets the flag's **off variant** at once, whatever its rules say. That includes SDKs and flagd clients that don't know about Mocco: the served rules themselves say "off".
 
-A kill never waits for approval, even in a protected environment, and is always recorded with who did it and why. In a protected environment, the kill is then up for review by the environment's approvers, who mark it reviewed or flag a problem. The **off variant** is set on the flag's page; changing it, and restoring a killed flag, are normal changes, so they need approval in a protected environment. On the Feature flags tab, **Edit protection** also sets which roles may kill flags in that environment (by default, any workspace member).
+A kill never waits for approval, even in a protected environment, and is always recorded with who did it and why. In a protected environment, the kill is then up for review by the environment's approvers, who mark it reviewed or flag a problem. The **off variant** is set on the flag's page; changing it, and restoring a killed flag, are normal changes, so they need approval in a protected environment. On the **Feature flags** page, **Edit protection** also sets which roles may kill flags in that environment (by default, any workspace member).
 
 ![A killed flag in a protected environment: everyone gets off, a restore can be proposed, and the kill waits for review](./images/flags-kill.png)
 
 ## 6. Create a server key for one environment
 
-On the project's **API keys** tab, create a **Secret** key with the **flags:read** scope and choose the environment it reads. A key reads exactly one environment, so create one key per environment and give each server the key for its own environment. Copy the key from the notice; it is shown only once.
+On the project's **API keys** page, create a **Secret** key with the **flags:read** scope and choose the environment it reads. A key reads exactly one environment, so create one key per environment and give each server the key for its own environment. Copy the key from the notice; it is shown only once.
 
 ![Creating a secret key with flags:read: the form asks which environment the key reads](./images/flags-key.png)
 

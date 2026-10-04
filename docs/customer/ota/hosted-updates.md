@@ -4,7 +4,7 @@ description: Serve signed Expo Updates from Mocco to the stock expo-updates clie
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, ota, expo-updates, guide]
@@ -20,9 +20,9 @@ Mocco can serve your React Native app's over-the-air updates itself. The app kee
 
 ## 1. Connect the app
 
-On the project's **Overview** tab, add your app with the platform **React Native**. Then open **OTA hosting** and choose **Host OTA updates**. Mocco shows the app's manifest URL and the `expo.updates` block for `app.json`.
+On the project's **Overview** page, add your app with the platform **React Native**. Then open **OTA hosting** and choose **Host OTA updates**. Mocco shows the app's manifest URL and the `expo.updates` block for `app.json`.
 
-![The OTA hosting tab: the manifest URL, certificates, channels and releases](./images/hosting-overview.png)
+![The OTA hosting page: the manifest URL, certificates, channels and releases](./images/hosting-overview.png)
 
 In your app's repository, run:
 

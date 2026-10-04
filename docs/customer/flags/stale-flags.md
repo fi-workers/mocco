@@ -4,7 +4,7 @@ description: How Mocco spots feature flags that look ready to remove from your c
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, flags, telemetry, guide]
@@ -32,7 +32,7 @@ Flags marked **permanent** (for example an operational switch you keep on purpos
 
 ## See and dismiss the hints
 
-The **Feature flags** tab shows how many flags may be ready for cleanup, with a badge on each.
+The **Feature flags** page shows how many flags may be ready for cleanup, with a badge on each.
 
 ![The flags table with "Never evaluated" and "Not evaluated lately" badges](./images/flags-stale-list.png)
 

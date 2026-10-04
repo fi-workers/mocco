@@ -16,7 +16,7 @@ export default function WorkspaceRunPage() {
   return (
     <AppShell>
       {id && runId ? (
-        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.overview}>
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.deploys}>
           <RunDetail workspaceId={id} runId={runId} />
         </WorkspaceLayout>
       ) : null}

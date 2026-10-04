@@ -4,7 +4,7 @@ description: Set a minimum, recommended and blocked versions for each store app,
 type: guide
 status: active
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, ota, force-update, approvals, guide]
@@ -15,7 +15,7 @@ related:
 
 # Force update
 
-Each iOS and Android app of a project has its own version policy. Open the project and choose the **Force update** tab, then pick the app at the top.
+Each iOS and Android app of a project has its own version policy. Open the project and choose the **Force update** page, then pick the app at the top.
 
 ## What the app is told
 

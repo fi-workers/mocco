@@ -4,7 +4,7 @@ description: Deploy hot-updater bundles only after a Mocco gate is approved, by 
 type: guide
 status: active
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [customer, ota, hot-updater, guide]
@@ -31,7 +31,7 @@ HOT_UPDATER_CLOUDFLARE_D1_DATABASE_ID=…
 HOT_UPDATER_CLOUDFLARE_API_TOKEN=…
 ```
 
-Add it in Mocco's **OTA tokens** tab with the tool **hot-updater**, for example as `acme-production`. Its provider id is `ota-hot-updater`. The variable names for each provider are in hot-updater's [managed provider docs](https://github.com/gronxb/hot-updater/tree/main/docs/content/docs/managed).
+Add it in Mocco's **OTA tokens** page with the tool **hot-updater**, for example as `acme-production`. Its provider id is `ota-hot-updater`. The variable names for each provider are in hot-updater's [managed provider docs](https://github.com/gronxb/hot-updater/tree/main/docs/content/docs/managed).
 
 ## Deploy
 
