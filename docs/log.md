@@ -202,6 +202,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/feature-map.md`, `index.md`, `log.md`
 - Source: branch `feat/status-model` (issue #148)
 
+## 2026-10-05 — Status incidents and maintenance
+
+- Extended the [status page model](./reference/status.md) with the rest of #148: incidents with their timeline,
+  affected components and postmortem, the transition rules and the `resolved_at` invariant, scheduled maintenance
+  and the `status.maintenance.tick` job, how a component's shown status is derived, and the new audit actions and
+  router procedures. The feature map's "Components, incidents and maintenance" row now describes all of it
+  (still Prototype, backend only).
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `index.md`, `log.md`
+- Source: branch `feat/status-incidents-model` (issue #148)
+
 ## 2026-10-04 — Customer screenshots show page content only
 
 - Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,

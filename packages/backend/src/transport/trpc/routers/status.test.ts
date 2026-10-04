@@ -48,6 +48,8 @@ interface Ids {
   pageId: string;
   groupId: string;
   componentId: string;
+  incidentId: string;
+  maintenanceId: string;
 }
 
 /** One call per status procedure: `scope` is the tenant the caller claims, `ids` the entities it targets. */
@@ -69,6 +71,27 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
     await api.status.setComponentStatus({ ...scope, componentId: ids.componentId, status: 'major_outage' }),
   deleteComponent: async (api, scope, ids) =>
     await api.status.deleteComponent({ ...scope, componentId: ids.componentId }),
+  incidents: async (api, scope, ids) => await api.status.incidents({ ...scope, pageId: ids.pageId }),
+  incident: async (api, scope, ids) => await api.status.incident({ ...scope, incidentId: ids.incidentId }),
+  createIncident: async (api, scope, ids) =>
+    await api.status.createIncident({ ...scope, pageId: ids.pageId, title: 'x', severity: 'minor', body: 'x' }),
+  postIncidentUpdate: async (api, scope, ids) =>
+    await api.status.postIncidentUpdate({ ...scope, incidentId: ids.incidentId, status: 'resolved', body: 'x' }),
+  setIncidentComponents: async (api, scope, ids) =>
+    await api.status.setIncidentComponents({ ...scope, incidentId: ids.incidentId, components: [] }),
+  setPostmortem: async (api, scope, ids) =>
+    await api.status.setPostmortem({ ...scope, incidentId: ids.incidentId, postmortem: 'x' }),
+  maintenances: async (api, scope, ids) => await api.status.maintenances({ ...scope, pageId: ids.pageId }),
+  scheduleMaintenance: async (api, scope, ids) =>
+    await api.status.scheduleMaintenance({
+      ...scope,
+      pageId: ids.pageId,
+      title: 'x',
+      scheduledStart: new Date('2026-10-05T10:00:00Z'),
+      scheduledEnd: new Date('2026-10-05T11:00:00Z'),
+    }),
+  cancelMaintenance: async (api, scope, ids) =>
+    await api.status.cancelMaintenance({ ...scope, maintenanceId: ids.maintenanceId }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
@@ -84,12 +107,34 @@ const outcome = async (run: () => Promise<unknown>): Promise<string | undefined>
   }
 };
 
-/** A page with a group and a component in it. */
+/** A page with one of everything. */
 const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
   const { page } = await api.status.createPage({ ...scope, slug, title: 'Status' });
   const { group } = await api.status.createGroup({ ...scope, pageId: page.id, name: 'Core' });
   const { component } = await api.status.createComponent({ ...scope, pageId: page.id, name: 'API', groupId: group.id });
-  return { pageId: page.id, groupId: group.id, componentId: component.id };
+  const { incident } = await api.status.createIncident({
+    ...scope,
+    pageId: page.id,
+    title: 'Errors',
+    severity: 'major',
+    body: 'Investigating',
+    components: [{ componentId: component.id, impact: 'partial_outage' }],
+  });
+  const { maintenance } = await api.status.scheduleMaintenance({
+    ...scope,
+    pageId: page.id,
+    title: 'Upgrade',
+    scheduledStart: new Date('2030-01-01T00:00:00Z'),
+    scheduledEnd: new Date('2030-01-01T01:00:00Z'),
+    componentIds: [component.id],
+  });
+  return {
+    pageId: page.id,
+    groupId: group.id,
+    componentId: component.id,
+    incidentId: incident.id,
+    maintenanceId: maintenance.id,
+  };
 };
 
 describe('status router on pglite', () => {
@@ -194,6 +239,33 @@ describe('status router on pglite', () => {
     await expect(api.status.page({ ...scope, pageId: ids.pageId })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('runs incidents and maintenance and maps their errors', async () => {
+    const { api, scope } = await setup('owner@example.com', 'acme');
+    const ids = await seed(api, scope, 'acme');
+
+    const detail = await api.status.page({ ...scope, pageId: ids.pageId });
+    expect(detail.components).toEqual([
+      expect.objectContaining({ id: ids.componentId, status: 'operational', displayedStatus: 'partial_outage' }),
+    ]);
+    await api.status.postIncidentUpdate({ ...scope, incidentId: ids.incidentId, status: 'resolved', body: 'Fixed' });
+    await expect(
+      api.status.postIncidentUpdate({ ...scope, incidentId: ids.incidentId, status: 'monitoring', body: 'x' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      api.status.scheduleMaintenance({
+        ...scope,
+        pageId: ids.pageId,
+        title: 'Backwards',
+        scheduledStart: new Date('2030-01-01T01:00:00Z'),
+        scheduledEnd: new Date('2030-01-01T00:00:00Z'),
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const { incidents } = await api.status.incidents({ ...scope, pageId: ids.pageId, openOnly: true });
+    const { maintenances } = await api.status.maintenances({ ...scope, pageId: ids.pageId });
+    expect(incidents).toEqual([]);
+    expect(maintenances).toEqual([expect.objectContaining({ id: ids.maintenanceId, componentIds: [ids.componentId] })]);
+  });
+
   it('covers every status procedure in the cross-tenant table', () => {
     expect(new Set(Object.keys(calls))).toEqual(new Set(Object.keys(statusRouter._def.procedures)));
   });
@@ -228,6 +300,8 @@ describe('status router on pglite', () => {
     expect(detail.components).toEqual([
       expect.objectContaining({ name: 'API', status: 'operational', groupId: victim.groupId }),
     ]);
+    const incident = await owner.api.status.incident({ ...owner.scope, incidentId: victim.incidentId });
+    expect(incident.incident).toMatchObject({ status: 'investigating', postmortemMd: null });
     const ownPage = await attacker.api.status.page({ ...attacker.scope, pageId: own.pageId });
     expect(ownPage.page.slug).toBe('evil');
     const { pages } = await attacker.api.status.pages(attacker.scope);

@@ -1,8 +1,10 @@
-import { ConflictError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
-/** A status page, group or component the project doesn't have — NOT_FOUND. */
+import type { IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
+
+/** A status page, group, component, incident or maintenance window the project doesn't have — NOT_FOUND. */
 export class StatusEntityNotFoundError extends NotFoundError {
-  constructor(kind: 'page' | 'group' | 'component', id: string, options?: ErrorOptions) {
+  constructor(kind: 'page' | 'group' | 'component' | 'incident' | 'maintenance', id: string, options?: ErrorOptions) {
     super(`Status ${kind} ${id} was not found`, options);
     this.name = 'StatusEntityNotFoundError';
   }
@@ -13,5 +15,29 @@ export class StatusPageSlugTakenError extends ConflictError {
   constructor(slug: string, options?: ErrorOptions) {
     super(`The status page address "${slug}" is taken`, options);
     this.name = 'StatusPageSlugTakenError';
+  }
+}
+
+/** An update asked for a status change the incident lifecycle doesn't allow — CONFLICT. */
+export class IncidentTransitionError extends ConflictError {
+  constructor(from: IncidentStatus, to: IncidentStatus, options?: ErrorOptions) {
+    super(from === to ? `The incident is already ${from}` : `An incident can't go from ${from} to ${to}`, options);
+    this.name = 'IncidentTransitionError';
+  }
+}
+
+/** Canceling a window that already completed or was canceled — CONFLICT. */
+export class MaintenanceTransitionError extends ConflictError {
+  constructor(status: MaintenanceStatus, options?: ErrorOptions) {
+    super(`A ${status} maintenance window can't be canceled`, options);
+    this.name = 'MaintenanceTransitionError';
+  }
+}
+
+/** A maintenance window that ends before it starts — BAD_REQUEST. */
+export class MaintenanceWindowError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('A maintenance window ends after it starts', options);
+    this.name = 'MaintenanceWindowError';
   }
 }

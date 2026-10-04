@@ -38,6 +38,8 @@ import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { IncidentService } from '@backend/domain/status/IncidentService';
+import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Session } from '@mocco/common/auth';
 
@@ -104,8 +106,10 @@ export interface Context {
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
   helpTranslations: HelpTranslationService;
-  /** Status pages and their components (#148). */
+  /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;
+  statusIncidents: IncidentService;
+  statusMaintenances: MaintenanceService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
   /** Always present — what a workspace allows agents on the MCP surface (ADR 0025). */

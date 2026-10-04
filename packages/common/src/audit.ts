@@ -84,6 +84,17 @@ export const AuditActions = {
   statusPageDeleted: 'status.page.deleted',
   /** An operator set a component's status by hand. */
   statusComponentStatusChanged: 'status.component.status_changed',
+  statusIncidentCreated: 'status.incident.created',
+  /** An update was posted to an incident's timeline; the payload carries the status change. */
+  statusIncidentUpdated: 'status.incident.updated',
+  statusIncidentComponentsChanged: 'status.incident.components_changed',
+  statusIncidentPostmortemChanged: 'status.incident.postmortem_changed',
+  statusMaintenanceScheduled: 'status.maintenance.scheduled',
+  statusMaintenanceCanceled: 'status.maintenance.canceled',
+  /** The maintenance tick started a window (no actor). */
+  statusMaintenanceStarted: 'status.maintenance.started',
+  /** The maintenance tick completed a window (no actor). */
+  statusMaintenanceCompleted: 'status.maintenance.completed',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);
