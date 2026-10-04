@@ -8,7 +8,8 @@ import pg from 'pg';
 // sends the person through sign-in and consent, swaps the code for a token, and lists
 // the tools. Every step is one a real client (Claude Code, Cursor) takes, and each one
 // once broke silently — discovery 404'd, sign-in forgot the authorization, and the
-// consent page did not exist — so the whole path is pinned here, not piecewise.
+// consent page did not exist — so the whole path is pinned here, not piecewise. It ends
+// where deciding begins: a token that only signed in is challenged for `approvals:write`.
 
 const PORT = 3100;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -45,11 +46,12 @@ async function registerClient(clientId: string): Promise<void> {
   }
 }
 
-const mcpHeaders = (token: string, method: string) => ({
+const mcpHeaders = (token: string, method: string, name?: string) => ({
   authorization: `Bearer ${token}`,
   accept: 'application/json, text/event-stream',
   'mcp-protocol-version': PROTOCOL_VERSION,
   'mcp-method': method,
+  ...(name !== undefined && { 'mcp-name': name }),
 });
 
 const envelope = {
@@ -79,6 +81,8 @@ test('an MCP client discovers the server, signs a person in, and lists the tools
   expect(refused.status()).toBe(401);
   const metadataUrl = /resource_metadata="([^"]+)"/u.exec(refused.headers()['www-authenticate'] ?? '')?.[1];
   expect(metadataUrl).toBe(`${ORIGIN}/.well-known/oauth-protected-resource/api/mcp`);
+  // The first connection asks only to sign in; deciding is stepped up to later.
+  expect(refused.headers()['www-authenticate']).toContain('scope="openid profile email offline_access"');
 
   const resource = await request.get(metadataUrl ?? '');
   expect(resource.status()).toBe(200);
@@ -153,6 +157,34 @@ test('an MCP client discovers the server, signs a person in, and lists the tools
   expect(listed.status()).toBe(200);
   const { result } = (await listed.json()) as { result: { tools: { name: string }[] } };
   expect(result.tools.map(tool => tool.name)).toEqual(
-    expect.arrayContaining(['mocco_runs_search', 'mocco_runs_get', 'mocco_approvals_search', 'mocco_approvals_get']),
+    expect.arrayContaining([
+      'mocco_runs_search',
+      'mocco_runs_get',
+      'mocco_approvals_search',
+      'mocco_approvals_get',
+      'mocco_approvals_vote',
+    ]),
   );
+
+  // --- Deciding needs more than signing in: the client is challenged to step up ---
+  const vote = await request.post('/api/mcp', {
+    headers: mcpHeaders(token, 'tools/call', 'mocco_approvals_vote'),
+    data: {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'mocco_approvals_vote',
+        arguments: { requestId: randomUUID(), decision: 'approve' },
+        _meta: envelope,
+      },
+    },
+  });
+  expect(vote.status()).toBe(403);
+  const stepUp = vote.headers()['www-authenticate'] ?? '';
+  expect(stepUp).toContain('error="insufficient_scope"');
+  // Everything the token has, plus the scope it lacks: the client re-authorizes with that set.
+  const challenged = /scope="([^"]*)"/u.exec(stepUp)?.[1]?.split(' ') ?? [];
+  expect(challenged).toHaveLength(4);
+  expect(challenged).toEqual(expect.arrayContaining(['approvals:write', 'openid', 'profile', 'offline_access']));
 });
