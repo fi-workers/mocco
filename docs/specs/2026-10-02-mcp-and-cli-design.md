@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -269,7 +269,9 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 5. **The MCP server with the read tools** — `transport/mcp`, `runtime/mcp.ts`, the App
    Router route, read-only by default. Proves the shape against a real client.
 6. **The deciding tools** — `mocco_approvals_vote`, `mocco_gates_resume`, with the MRTR
-   confirmation and the opt-in that enables them.
+   confirmation and the opt-in that enables them. It ships as three PRs: the per-workspace
+   opt-in (`mocco_mcp_settings`, *shipped*), then `approvals:write` with the confirmation
+   round trip and `mocco_approvals_vote`, then `mocco_gates_resume`.
 7. **`@mocco/cli`** — `login`, the governance commands, `ota` absorbed from
    `@mocco/cli`, which becomes an alias.
 8. **OTA and flags tools** — once the shape has survived a real week.
@@ -339,6 +341,18 @@ version — does not flatten the nested copies under yarn's node-modules linker 
 
 Until that resolves, slice 4 cannot land. The schema work is done and saved on
 `feat/mcp-auth-server`.
+
+### What slice 4 left out, found by connecting a client
+
+Slice 4 registered the authorization server, and slice 5 served tools behind it, but a
+client could not get through: discovery 404'd because the auth handler, which answers the
+root `.well-known` paths, is mounted under `/api/auth` and never saw them; the sign-in page
+dropped the signed authorization request, so signing in only started a session; and the
+consent page that `mcp()` redirects to did not exist. The fix routes
+`/.well-known/oauth-protected-resource/*` and `/.well-known/oauth-authorization-server/*`
+to the auth handler, adds the vendor's `oauthProviderClient` so sign-in, sign-up and
+consent carry the signed request, and adds `/auth/consent`. An e2e test
+(`packages/e2e/tests/mcp-sign-in.spec.ts`) now walks the whole path a real client takes.
 
 ### A related duplicate, now fixed
 

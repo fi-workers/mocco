@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useForm } from 'react-hook-form';
 
 import { Button } from '@frontend/components/ui/button';
@@ -17,6 +18,9 @@ const INPUT = 'h-11 rounded-lg border border-input bg-background px-3 text-sm ou
 // + the mode's zod schema (sign-up also requires a name).
 export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const isSignUp = mode === 'sign-up';
+  // Kept across the sign-in/sign-up switch: when an app sent someone here to authorize,
+  // its signed request rides in the query string, and dropping it would drop the app.
+  const router = useRouter();
   const submitLabel = isSignUp ? 'Create account' : 'Sign in';
 
   const {
@@ -35,6 +39,11 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
     const result = isSignUp ? await signUp({ email, password, name }) : await signIn({ email, password });
     if (result.error) {
       setError('root', { message: result.error.message ?? 'Something went wrong' });
+      return;
+    }
+    // An app is waiting on this sign-in (an MCP client's authorization): the server
+    // answered with where to go next and the browser is already on its way there.
+    if (result.isRedirecting) {
       return;
     }
     // Full navigation (not client push) so the destination reads the freshly-set
@@ -83,7 +92,7 @@ export default function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           {submitLabel}
         </Button>
         <Link
-          href={isSignUp ? Routes.signIn : Routes.signUp}
+          href={{ pathname: isSignUp ? Routes.signIn : Routes.signUp, query: router.query }}
           className="text-center text-sm text-muted-foreground transition hover:text-foreground">
           {isSignUp ? 'Have an account? Sign in' : 'No account? Create one'}
         </Link>

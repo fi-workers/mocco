@@ -10,6 +10,7 @@ import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createApprovalService } from '@backend/domain/governance/instance';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { createMcpSettingsService } from '@backend/domain/mcp/instance';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
 import { createOtaDomain } from '@backend/domain/ota/instance';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -38,6 +39,7 @@ export function contextServices(db: Db) {
     ...createMessengerDomain(db, { audit, box: () => box }),
     ...createHelpDomain(db, { audit }),
     apiKeys: createApiKeyService(db, { projects: project.projects, audit }),
+    mcpSettings: createMcpSettingsService(db, audit),
     // Optional services default to absent; a test that exercises one passes it after the spread.
     connection: undefined,
     commitSync: undefined,

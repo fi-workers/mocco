@@ -121,6 +121,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/start/*`, `customer/governance/*`, `log.md`
 - Source: branch `docs/getting-started`
 
+## 2026-10-04 — MCP sign-in, end to end
+
+- The connect guide gains "Approving the connection" with a screenshot of the new consent screen, the correct
+  discovery paths (`/.well-known/oauth-protected-resource/api/mcp`, `/.well-known/oauth-authorization-server/api/auth`),
+  and a troubleshooting row for a sign-in that loses the client's request. The MCP spec records what slice 4 left out
+  and how it was found.
+- Docs touched: `customer/mcp/connect.md`, `customer/mcp/images/mcp-consent.png`,
+  `specs/2026-10-02-mcp-and-cli-design.md`
+- Source: branch `fix/mcp-sign-in-flow`
+
 ## 2026-10-04 — Positioning around the production record
 
 - Added [ADR 0026](./adr/0026-position-mocco-around-the-production-record.md): Mocco is one workspace to release,
@@ -130,6 +140,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   and added a "where it stands" section to the roadmap, since the shipping order diverged from the waves.
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
+
+## 2026-10-04 — Workspace switch for agents that decide
+
+- Added the "Agents on the MCP surface" section to the workspace reference: `mocco_mcp_settings`, the
+  `agents_may_decide` opt-in (off by default, owners and admins change it, audited), and its place in the console.
+  The MCP spec records that slice 6 ships as three PRs, and the connect guide says the switch has landed before the
+  tools it unlocks.
+- Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
+- Source: branch `feat/mcp-agents-setting`
 
 ## 2026-10-04 — Mocco is everything a product needs, except the code
 
