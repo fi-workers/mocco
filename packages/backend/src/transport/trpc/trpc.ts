@@ -23,6 +23,7 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
 import type { InboxService } from '@backend/domain/messenger/InboxService';
 import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
@@ -104,6 +105,8 @@ export interface Context {
   helpTranslations: HelpTranslationService;
   /** Always present — API keys for the public /v1 surface (ADR 0017). */
   apiKeys: ApiKeyService;
+  /** Always present — what a workspace allows agents on the MCP surface (ADR 0025). */
+  mcpSettings: McpSettingsService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set (sources store sealed secrets);
    * the inbound router asserts it. */
   inbound: InboundDomain | undefined;

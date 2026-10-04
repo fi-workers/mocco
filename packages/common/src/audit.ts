@@ -78,6 +78,8 @@ export const AuditActions = {
   messengerGuestsChanged: 'messenger.guests.changed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
+  /** A workspace turned the MCP deciding tools on or off. */
+  mcpAgentsMayDecideChanged: 'mcp.agents_may_decide.changed',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);

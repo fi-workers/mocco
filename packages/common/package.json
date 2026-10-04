@@ -19,6 +19,7 @@
     "./help": "./src/help.ts",
     "./help-import": "./src/help-import.ts",
     "./messenger": "./src/messenger.ts",
+    "./mcp": "./src/mcp.ts",
     "./mocco-config": "./src/mocco-config.ts",
     "./notification": "./src/notification.ts",
     "./notification-activity": "./src/notification-activity.ts",

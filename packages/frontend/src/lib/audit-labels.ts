@@ -66,4 +66,5 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.messengerGuestsChanged]: 'Messenger guest access changed',
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
+  [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',
 };

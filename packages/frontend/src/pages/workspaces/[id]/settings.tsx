@@ -5,7 +5,7 @@ import WorkspaceLayout from '@frontend/components/workspace-layout';
 import WorkspaceSettings from '@frontend/components/workspace-settings';
 import { WorkspaceSections } from '@frontend/lib/products';
 
-// Workspace settings (rename + delete), client-rendered inside the workspace frame.
+// Workspace settings (rename, agents, delete), client-rendered inside the workspace frame.
 export default function WorkspaceSettingsPage() {
   const router = useRouter();
   const id = typeof router.query.id === 'string' ? router.query.id : null;

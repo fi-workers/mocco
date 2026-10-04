@@ -10,6 +10,7 @@ import { getGovernance } from '@backend/domain/governance/instance';
 import { getHelpDomain } from '@backend/domain/helpcenter/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { getIntegration } from '@backend/domain/integration/instance';
+import { getMcpSettings } from '@backend/domain/mcp/instance';
 import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
@@ -36,6 +37,7 @@ import type { InboundDomain } from '@backend/domain/inbound/instance';
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { CommitSyncService } from '@backend/domain/integration/CommitSyncService';
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
+import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
 import type { InboxService } from '@backend/domain/messenger/InboxService';
 import type { MessengerSettingsService } from '@backend/domain/messenger/MessengerSettingsService';
 import type { ActivityService } from '@backend/domain/notification/ActivityService';
@@ -69,6 +71,7 @@ export interface TrpcDeps extends Services {
   versionPolicies: VersionPolicyService;
   externalCredentials: ExternalCredentialService;
   apiKeys: ApiKeyService;
+  mcpSettings: McpSettingsService;
   otaHosting: OtaHostingService;
   otaSigning: SigningService;
   otaUploads: UploadService;
@@ -123,6 +126,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         versionPolicies: deps.versionPolicies,
         externalCredentials: deps.externalCredentials,
         apiKeys: deps.apiKeys,
+        mcpSettings: deps.mcpSettings,
         otaHosting: deps.otaHosting,
         otaSigning: deps.otaSigning,
         otaUploads: deps.otaUploads,
@@ -171,6 +175,7 @@ export function productionServices(): TrpcDeps {
     versionPolicies: getOtaDomain().versionPolicies,
     externalCredentials: getOtaDomain().externalCredentials,
     apiKeys: getApiKeys(),
+    mcpSettings: getMcpSettings(),
     otaHosting: getOtaDomain().otaHosting,
     otaSigning: getOtaDomain().otaSigning,
     otaUploads: getOtaDomain().otaUploads,
