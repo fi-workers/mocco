@@ -6,6 +6,8 @@ export const Routes = {
   signIn: '/auth/sign-in',
   signUp: '/auth/sign-up',
   signOut: '/auth/sign-out',
+  // Where the authorization server sends someone to approve an app (provider.ts CONSENT_PAGE).
+  consent: '/auth/consent',
   workspaces: '/workspaces',
   workspace: (id: string) => `/workspaces/${id}`,
   workspaceMembers: (id: string) => `/workspaces/${id}/members`,

@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-03
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -123,12 +123,28 @@ VS Code runs the OAuth flow itself, so there is nothing to put in `headers` or `
 ### Anything else
 
 Any client on the **2026-07-28** MCP revision works: point it at the URL and let it
-discover the rest. The server publishes its protected-resource metadata at
-`/.well-known/oauth-protected-resource`, so a conforming client finds the authorization
-server without being told.
+discover the rest. An unauthenticated call is answered with a `401` that points to the
+protected-resource metadata at `/.well-known/oauth-protected-resource/api/mcp`, which names
+the authorization server; its own metadata is at
+`/.well-known/oauth-authorization-server/api/auth`. A conforming client follows both
+without being told.
 
 It serves that revision only, over `POST`. A client still on the older HTTP+SSE transport
 will not connect — upgrade it, or use the `mocco` CLI in the meantime.
+
+## Approving the connection
+
+The first time a client connects, your browser opens Mocco. Sign in if you aren't already,
+and Mocco asks whether to let that app act as you:
+
+![The consent screen: the app's name, the account it would act as, what it will be able to do, and Allow or Deny](./images/mcp-consent.png)
+
+**Allow** sends you back to the client, which finishes connecting by itself. **Deny** tells
+the client you said no, and it gets nothing. Once you allow an app, Mocco remembers, so
+reconnecting it later doesn't ask again.
+
+Only allow an app you just started connecting. If this screen appears and you didn't start
+anything, choose Deny.
 
 ## Turning the deciding tools on
 
@@ -145,4 +161,5 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | The client asks for a token or header | It is treating this as a key-authenticated server. Remove the header; this one is OAuth |
 | `405 Method Not Allowed` on connect | The client is trying `GET` or `DELETE`. It is on the old transport — upgrade it |
 | Sign-in succeeds, tools are missing | The deciding tools are off for that workspace, or your roles do not include them |
+| The browser opens Mocco's sign-in and then lands on your workspaces instead of the client | The page was opened without the client's request in its address. Start the connection again from the client |
 | Tools from the wrong workspace | You belong to several. Ask the agent to switch workspace, or pin one in the client config |

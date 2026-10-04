@@ -11,7 +11,9 @@
   "devDependencies": {
     "@playwright/test": "1.61.1",
     "@types/node": "22.20.0",
+    "@types/pg": "8.20.0",
     "eslint": "10.6.0",
+    "pg": "8.22.0",
     "typescript": "5.9.3"
   },
   "engines": {
