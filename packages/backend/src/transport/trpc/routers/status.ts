@@ -1,9 +1,11 @@
-// Status router (#148): a project's status pages, components, incidents and maintenance.
-// Every procedure requires the status product to be enabled and the project to belong to
-// the workspace (`productProcedure`), which also maps the domain's error families
-// (StatusEntityNotFoundError → NOT_FOUND, IncidentTransitionError and the other conflicts →
-// CONFLICT, MaintenanceWindowError → BAD_REQUEST). Entities are looked up within the
-// caller's workspace and project, so another tenant's id is NOT_FOUND.
+// Status router (#148, #150): a project's status pages, components, incidents, maintenance
+// and monitors. Every project procedure requires the status product to be enabled and the
+// project to belong to the workspace (`productProcedure`), which also maps the domain's error
+// families (StatusEntityNotFoundError → NOT_FOUND, IncidentTransitionError and the other
+// conflicts → CONFLICT, MaintenanceWindowError → BAD_REQUEST). Entities are looked up within
+// the caller's workspace and project, so another tenant's id is NOT_FOUND. Probe locations
+// belong to the workspace: listing them needs membership, and creating, rotating or disabling
+// one (which issues or revokes a token) needs an owner or admin.
 import { Products } from '@mocco/common/project';
 import {
   affectedComponentsSchema,
@@ -12,13 +14,20 @@ import {
   componentStatusSchema,
   incidentCreateInputSchema,
   incidentUpdateInputSchema,
+  locationInputSchema,
+  locationSchema,
   maintenanceInputSchema,
+  monitorInputSchema,
   postmortemInputSchema,
   statusPageInputSchema,
 } from '@mocco/common/status';
 import { z } from 'zod';
 
-import { productProcedure } from '@backend/transport/trpc/project-procedures';
+import {
+  productProcedure,
+  protectedWorkspaceProcedure,
+  rethrowProjectDomainError,
+} from '@backend/transport/trpc/project-procedures';
 import { router } from '@backend/transport/trpc/trpc';
 
 const projectInput = z.object({ workspaceId: z.uuid(), projectId: z.uuid() });
@@ -27,7 +36,41 @@ const groupInput = projectInput.extend({ groupId: z.uuid() });
 const componentInput = projectInput.extend({ componentId: z.uuid() });
 const incidentInput = projectInput.extend({ incidentId: z.uuid() });
 const maintenanceInput = projectInput.extend({ maintenanceId: z.uuid() });
+const monitorInput = projectInput.extend({ monitorId: z.uuid() });
+const workspaceInput = z.object({ workspaceId: z.uuid() });
+const locationInput = workspaceInput.extend({ locationId: z.uuid() });
 const protectedStatusProcedure = productProcedure(Products.status);
+
+/** Run a pre-next() check, surfacing its domain error as the mapped tRPC error. */
+const check = async (run: () => Promise<void>): Promise<void> => {
+  try {
+    await run();
+  } catch (error) {
+    rethrowProjectDomainError(error);
+    throw error;
+  }
+};
+
+/** A workspace-level status procedure: membership (NOT_FOUND otherwise) and the status product
+ * enabled (FORBIDDEN otherwise). */
+const statusWorkspaceProcedure = protectedWorkspaceProcedure.use(async ({ ctx, getRawInput, next }) => {
+  const { workspaceId } = workspaceInput.parse(await getRawInput());
+  await check(async () => {
+    await ctx.products.assertEnabled(workspaceId, Products.status);
+  });
+  return await next();
+});
+
+/** Also requires an owner or admin (FORBIDDEN for a plain member): location tokens are credentials. */
+const adminStatusWorkspaceProcedure = statusWorkspaceProcedure.use(async ({ ctx, getRawInput, next }) => {
+  const { workspaceId } = workspaceInput.parse(await getRawInput());
+  await check(async () => {
+    await ctx.workspace.assertAdmin(ctx.headers, workspaceId);
+  });
+  return await next();
+});
+
+const locationWithToken = z.object({ location: locationSchema, token: z.string() });
 
 const scopeOf = (input: { workspaceId: string; projectId: string }) => ({
   workspaceId: input.workspaceId,
@@ -168,4 +211,74 @@ export const statusRouter = router({
   cancelMaintenance: protectedStatusProcedure.input(maintenanceInput).mutation(async ({ ctx, input }) => ({
     maintenance: await ctx.statusMaintenances.cancel(scopeOf(input), ctx.session.user.id, input.maintenanceId),
   })),
+
+  /** The project's monitors, each with its location ids and components. */
+  monitors: protectedStatusProcedure.input(projectInput).query(async ({ ctx, input }) => ({
+    monitors: await ctx.statusMonitors.list(scopeOf(input)),
+  })),
+
+  /** The monitor with its locations, components and latest state changes. */
+  monitor: protectedStatusProcedure
+    .input(monitorInput)
+    .query(async ({ ctx, input }) => await ctx.statusMonitors.get(scopeOf(input), input.monitorId)),
+
+  createMonitor: protectedStatusProcedure
+    .input(projectInput.and(monitorInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      monitor: await ctx.statusMonitors.create(scopeOf(input), ctx.session.user.id, input),
+    })),
+
+  /** Replace the monitor's settings, locations and components; its state is kept. */
+  updateMonitor: protectedStatusProcedure
+    .input(monitorInput.and(monitorInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      monitor: await ctx.statusMonitors.update(scopeOf(input), ctx.session.user.id, input.monitorId, input),
+    })),
+
+  pauseMonitor: protectedStatusProcedure.input(monitorInput).mutation(async ({ ctx, input }) => ({
+    monitor: await ctx.statusMonitors.pause(scopeOf(input), ctx.session.user.id, input.monitorId),
+  })),
+
+  resumeMonitor: protectedStatusProcedure.input(monitorInput).mutation(async ({ ctx, input }) => ({
+    monitor: await ctx.statusMonitors.resume(scopeOf(input), ctx.session.user.id, input.monitorId),
+  })),
+
+  deleteMonitor: protectedStatusProcedure.input(monitorInput).mutation(async ({ ctx, input }) => {
+    await ctx.statusMonitors.delete(scopeOf(input), ctx.session.user.id, input.monitorId);
+    return { ok: true } as const;
+  }),
+
+  /** The enabled hosted locations and the workspace's own; never a token or its hash. */
+  locations: statusWorkspaceProcedure
+    .input(workspaceInput)
+    .output(z.object({ locations: z.array(locationSchema) }))
+    .query(async ({ ctx, input }) => ({ locations: await ctx.statusLocations.list(input.workspaceId) })),
+
+  /** Create a private location. The token is in this answer only. */
+  createLocation: adminStatusWorkspaceProcedure
+    .input(workspaceInput.and(locationInputSchema))
+    .output(locationWithToken)
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.statusLocations.create(input.workspaceId, ctx.session.user.id, {
+          code: input.code,
+          name: input.name,
+        }),
+    ),
+
+  /** Issue a new token for a private location; the old one stops working. */
+  rotateLocationToken: adminStatusWorkspaceProcedure
+    .input(locationInput)
+    .output(locationWithToken)
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.statusLocations.rotateToken(input.workspaceId, ctx.session.user.id, input.locationId),
+    ),
+
+  disableLocation: adminStatusWorkspaceProcedure
+    .input(locationInput)
+    .output(z.object({ location: locationSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      location: await ctx.statusLocations.disable(input.workspaceId, ctx.session.user.id, input.locationId),
+    })),
 });

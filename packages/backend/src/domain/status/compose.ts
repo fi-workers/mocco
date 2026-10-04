@@ -2,7 +2,9 @@
 // production singletons, tests and the job runtime call it with their own db.
 import { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
 import { IncidentService } from '@backend/domain/status/IncidentService';
+import { LocationService } from '@backend/domain/status/LocationService';
 import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import { MonitorService } from '@backend/domain/status/MonitorService';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
@@ -17,6 +19,8 @@ export interface StatusDomain {
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
+  statusMonitors: MonitorService;
+  statusLocations: LocationService;
 }
 
 export interface StatusDomainDeps {
@@ -39,6 +43,8 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusPages,
     statusIncidents: new IncidentService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
     statusMaintenances: new MaintenanceService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
+    statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
+    statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
   };
 }
 

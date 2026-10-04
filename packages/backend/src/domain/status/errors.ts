@@ -4,7 +4,11 @@ import type { IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
 
 /** A status page, group, component, incident or maintenance window the project doesn't have — NOT_FOUND. */
 export class StatusEntityNotFoundError extends NotFoundError {
-  constructor(kind: 'page' | 'group' | 'component' | 'incident' | 'maintenance', id: string, options?: ErrorOptions) {
+  constructor(
+    kind: 'page' | 'group' | 'component' | 'incident' | 'maintenance' | 'monitor' | 'location',
+    id: string,
+    options?: ErrorOptions,
+  ) {
     super(`Status ${kind} ${id} was not found`, options);
     this.name = 'StatusEntityNotFoundError';
   }
@@ -15,6 +19,14 @@ export class StatusPageSlugTakenError extends ConflictError {
   constructor(slug: string, options?: ErrorOptions) {
     super(`The status page address "${slug}" is taken`, options);
     this.name = 'StatusPageSlugTakenError';
+  }
+}
+
+/** The workspace already has a location with the code — CONFLICT. */
+export class LocationCodeTakenError extends ConflictError {
+  constructor(code: string, options?: ErrorOptions) {
+    super(`A location with the code "${code}" already exists`, options);
+    this.name = 'LocationCodeTakenError';
   }
 }
 

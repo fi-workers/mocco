@@ -1,0 +1,80 @@
+import { and, asc, eq, sql } from 'drizzle-orm';
+
+import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
+import { expectOne } from '@backend/infra/db/rows';
+import * as schema from '@backend/infra/db/schema';
+
+import type { StatusScope } from '@backend/domain/status/scope';
+import type { Db } from '@backend/infra/db/types';
+import type { MonitorState } from '@mocco/common/status';
+
+export type MonitorRow = typeof schema.statusMonitors.$inferSelect;
+type MonitorInsert = typeof schema.statusMonitors.$inferInsert;
+/** The settings an operator edits; state and schedule belong to pause, resume and the evaluator. */
+export type MonitorSettings = Pick<
+  MonitorInsert,
+  'name' | 'kind' | 'spec' | 'intervalSeconds' | 'confirmations' | 'recoveryConfirmations' | 'quorumMode'
+>;
+
+const m = schema.statusMonitors;
+const scoped = (scope: StatusScope) => and(eq(m.workspaceId, scope.workspaceId), eq(m.projectId, scope.projectId));
+
+/** Data access for mocco_status_monitors. Scoped by workspace and project. */
+export class MonitorRepo {
+  constructor(private readonly db: Db) {}
+
+  async list(scope: StatusScope): Promise<MonitorRow[]> {
+    return await this.db.select().from(m).where(scoped(scope)).orderBy(asc(m.name), asc(m.createdAt)).limit(500);
+  }
+
+  async find(scope: StatusScope, id: string): Promise<MonitorRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(m)
+      .where(and(scoped(scope), eq(m.id, id)));
+    return row;
+  }
+
+  /** Take the monitor's state lock for the rest of the transaction, then read it. Every writer
+   * of `state` (pause, resume, the evaluator) goes through here. Call inside a transaction only. */
+  async lockForStateChange(scope: StatusScope, id: string): Promise<MonitorRow | undefined> {
+    await this.db.execute(sql`SELECT pg_advisory_xact_lock(${AdvisoryLockNamespaces.statusMonitor}, hashtext(${id}))`);
+    return await this.find(scope, id);
+  }
+
+  async insert(row: MonitorInsert): Promise<MonitorRow> {
+    return expectOne(await this.db.insert(m).values(row).returning());
+  }
+
+  async updateSettings(scope: StatusScope, id: string, values: MonitorSettings): Promise<MonitorRow | undefined> {
+    const [row] = await this.db
+      .update(m)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(scoped(scope), eq(m.id, id)))
+      .returning();
+    return row;
+  }
+
+  /** Set the state (under `lockForStateChange`); `nextRoundAt` reschedules the next round. */
+  async setState(
+    scope: StatusScope,
+    id: string,
+    values: { state: MonitorState; stateChangedAt: Date; nextRoundAt?: Date },
+  ): Promise<MonitorRow> {
+    return expectOne(
+      await this.db
+        .update(m)
+        .set({ ...values, updatedAt: values.stateChangedAt })
+        .where(and(scoped(scope), eq(m.id, id)))
+        .returning(),
+    );
+  }
+
+  async delete(scope: StatusScope, id: string): Promise<boolean> {
+    const rows = await this.db
+      .delete(m)
+      .where(and(scoped(scope), eq(m.id, id)))
+      .returning({ id: m.id });
+    return rows.length > 0;
+  }
+}
