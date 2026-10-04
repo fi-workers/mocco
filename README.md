@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/fi-workers/mocco/actions/workflows/ci.yml/badge.svg)](https://github.com/fi-workers/mocco/actions/workflows/ci.yml)
 
-> **Ship fast. Know what shipped.** Mocco is one workspace to release, control and support your app. Deploys, OTA updates, minimum app versions and feature flags go through the same approvals and the same audit log, so Mocco knows what reached production, when, and who approved it — and you answer your users from the same place ([ADR 0026](./docs/adr/0026-position-mocco-around-the-production-record.md)).
+> **Everything your product needs, except the code.** Ship it, run it and hear from the people who use it, in one workspace. Deploys, OTA updates, feature flags, alerts, in-app messaging and your help center share the same team, the same roles and the same history, instead of separate tools that don't know about each other ([ADR 0029](./docs/adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)).
 
 | Group          | Products today                                                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -13,7 +13,7 @@
 
 Next on the [roadmap](./docs/reference/roadmap.md): status page, app reviews, feedback board, forum, deep links and end-user identity.
 
-**Write ≠ ship.** Being able to push code (or to generate it) doesn't mean being able to change production. A deploy waits at a gate until someone with the right Mocco role resumes it, and the production step never obtains cloud credentials (OIDC/STS) without that approval, so deleting the verify step bypasses nothing. The same holds for an OTA release on a protected channel, a raised minimum app version and a change to a protected flag environment. A rollback or a kill switch applies at once and is recorded.
+**Release: write ≠ ship.** Being able to push code (or to generate it) doesn't mean being able to change production. A deploy waits at a gate until someone with the right Mocco role resumes it, and the production step never obtains cloud credentials (OIDC/STS) without that approval, so deleting the verify step bypasses nothing. The same holds for an OTA release on a protected channel, a raised minimum app version and a change to a protected flag environment. A rollback or a kill switch applies at once and is recorded.
 
 ## Quickstart (local)
 
