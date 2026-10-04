@@ -396,7 +396,7 @@ describe('GateService (pglite)', () => {
 
       const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'resume');
 
-      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
       const resumed = entries.find(entry => entry.action === AuditActions.gateResumed);
       expect(resumed).toBeDefined();
       expect(resumed?.actorUserId).toBe(alice);
@@ -421,7 +421,7 @@ describe('GateService (pglite)', () => {
 
       const { gate } = await gateService.resume(workspaceId, runId, 0, alice, 'reject', 'not safe');
 
-      const entries = await new AuditRepo(t.db).all(workspaceId);
+      const entries = await new AuditRepo(t.db).listByWorkspace(workspaceId, 0n);
       const rejected = entries.find(entry => entry.action === AuditActions.gateRejected);
       expect(rejected).toBeDefined();
       expect(rejected?.actorUserId).toBe(alice);

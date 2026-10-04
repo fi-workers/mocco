@@ -130,3 +130,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   and added a "where it stands" section to the roadmap, since the shipping order diverged from the waves.
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
+
+## 2026-10-04 — Audit log: what verify proves, and what it costs
+
+- Corrected the audit spec: a `seq` gap is normal (a rolled-back insert uses a value) and `verify` doesn't check
+  for gaps; a middle deletion breaks the `prev_hash` link instead. Tail truncation is stated as a known limitation
+  until KMS signing. The spec also records that `verify` walks the chain in pages and that the console no longer
+  polls it, and that a credential request with a bad run token isn't audited.
+- The audit customer guide says the check runs when the page opens and on Re-verify, explains numbering gaps,
+  and names tail truncation.
+- Docs touched: `superpowers/specs/2026-07-29-slice8-audit-log-design.md`, `customer/start/audit-log.md`, `log.md`
+- Source: branch `fix/audit-verify-cost` (issue #92)

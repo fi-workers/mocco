@@ -61,12 +61,14 @@ export class AuditRepo {
       .orderBy(asc(schema.auditLog.seq));
   }
 
-  /** Every entry in the workspace's chain, oldest-first — the input `verify` re-walks. */
-  async all(workspaceId: string) {
+  /** At most `limit` entries with `seq > afterSeq`, oldest-first — one keyset page of
+   * the chain, so `verify` walks it in fixed-size batches instead of loading it whole. */
+  async chainPage(workspaceId: string, afterSeq: bigint, limit: number) {
     return await this.db
       .select()
       .from(schema.auditLog)
-      .where(eq(schema.auditLog.workspaceId, workspaceId))
-      .orderBy(asc(schema.auditLog.seq));
+      .where(and(eq(schema.auditLog.workspaceId, workspaceId), gt(schema.auditLog.seq, afterSeq)))
+      .orderBy(asc(schema.auditLog.seq))
+      .limit(limit);
   }
 }

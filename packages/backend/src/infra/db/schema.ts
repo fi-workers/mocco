@@ -907,7 +907,8 @@ export const credentialGrants = pgTable(
 export const auditLog = pgTable(
   'mocco_audit_log',
   {
-    // Monotonic chain order (a gap on `verify` proves a removal). PK.
+    // Monotonic chain order. PK. Gaps are normal (a rolled-back insert still uses a
+    // value); a removal shows up as a broken `prev_hash` link, not as a gap.
     seq: bigserial({ mode: 'bigint' }).primaryKey(),
     // Non-sequential stable handle — safe for UI/URL exposure (never the chain key).
     id: uuid().notNull().defaultRandom().unique(),

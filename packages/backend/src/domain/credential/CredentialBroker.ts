@@ -80,8 +80,8 @@ export interface CredentialBrokerDeps {
   grants: CredentialGrantRepo;
   provider: CredentialProvider;
   /** The append-only audit chain (slice 8). An ALLOW appends `credential.issued`
-   * (provider/role/ttl/gate — NEVER the secret value); each DENY appends
-   * `credential.denied` with the (loggable) reason. Fail-open (AuditService.record
+   * (provider/role/ttl/gate — NEVER the secret value); each DENY past the run-token
+   * check appends `credential.denied` with the (loggable) reason. Fail-open (AuditService.record
    * swallows + logs), so an audit failure never changes the broker's verdict. */
   audit: AuditService;
 }
@@ -132,15 +132,18 @@ export class CredentialBroker {
    *   f. issue through the provider port
    */
   async issue(request: CredentialRequest): Promise<CredentialDecision> {
-    // (a) run + token — a manual dispatch has no token, so it dies here. A run that
-    // can't be resolved has no workspace to attribute an audit entry to (the chain is
-    // per-workspace), so this sole branch denies WITHOUT an audit append.
+    // (a) run + token — a manual dispatch has no token, so it dies here. Neither
+    // branch appends to the audit chain: a run that can't be resolved has no
+    // workspace to attribute an entry to, and a request that fails token verification
+    // proves nothing about a legitimate actor. Auditing it would let anyone who has
+    // seen a run id (they appear in URLs and logs) grow that workspace's chain
+    // without authenticating. Both are still logged.
     const run = await this.deps.runs.findById(request.runId);
     if (run === undefined) {
       return deny(BrokerDenials.runNotFound);
     }
     if (!isTokenValid(request.token, run.callbackTokenHash)) {
-      return await this.denyAudited(run, request.stepIndex, BrokerDenials.badToken);
+      return deny(BrokerDenials.badToken);
     }
 
     // (b) the step must have been advanced to by mocco (dispatched|running).

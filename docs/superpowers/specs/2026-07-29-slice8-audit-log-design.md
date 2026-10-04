@@ -4,7 +4,7 @@ description: An always-on, tamper-evident audit trail — every governance event
 type: spec
 status: active
 created: 2026-07-29
-updated: 2026-07-29
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [spec, slice, audit, hash-chain, compliance]
@@ -28,7 +28,8 @@ The governance loop is complete (gates + credential broker), but its decisions l
 ## 2. Key decisions
 
 - **Per-workspace chain.** Each workspace has its own chain (its own `prev_hash` lineage), so one workspace's volume/tampering never affects another; the chain boundary matches the tenant boundary.
-- **Monotonic `seq` (bigserial) + the hash chain.** `seq` orders entries; `hash` binds each entry to its predecessor. A gap or a recomputed-hash mismatch on `verify` proves tampering.
+- **Monotonic `seq` (bigserial) + the hash chain.** `seq` orders entries; `hash` binds each entry to its predecessor. `verify` reports the first entry whose stored `prev_hash` doesn't link to its predecessor's hash, or whose recomputed hash doesn't match the stored one: that entry was changed, or an entry before it was removed or reordered. `verify` does not check `seq` contiguity, and shouldn't: a rolled-back insert still consumes a bigserial value, so gaps are normal, and a deletion in the middle already breaks the `prev_hash` link.
+- **Known limitation: tail truncation.** Deleting the newest entries leaves a shorter chain that still reconciles; nothing in the database proves the removed entries existed. A self-chain can't detect this without an external anchor, which the deferred KMS signing provides. Until then, an intact chain means no entry was altered and none was removed before the last one, not that none was removed from the end.
 - **Append is a pure-core + thin-service split.** A pure `chainEntry(prevHash, entry) → { canonical, hash }` (unit-tested SSOT); `AuditService.append` reads the workspace's last hash, computes, inserts. `verify` re-walks and recomputes.
 - **The write-path emits from the services that already own the events** (GateService, CredentialBroker, RunService) — audit is a cross-cutting append at the decision point, recording the actor + subject + payload, incl. the resuming principals/roles as-of-resume (ADR 0010).
 - **Fail-open on append, fail-closed on verify.** An audit-append failure must never break the governed action (log + continue — the action already happened); `verify` reports any break explicitly.
@@ -41,9 +42,9 @@ The governance loop is complete (gates + credential broker), but its decisions l
 
 - **Pure `chainEntry(prevHash, entry)`** (`domain/audit/chain.ts`) — deterministic canonical serialization of the entry's stable fields + `sha-256`. Unit-tested SSOT (same input → same hash; order-independent-of-insertion-time; a changed field changes the hash).
 - **`AuditRepo`** (ADR 0012) — `lastHash(workspaceId)`, `append(row)`, `listByWorkspace(workspaceId, sinceSeq)`, `all(workspaceId)` (for verify).
-- **`AuditService`** — `record(workspaceId, { actorUserId, action, subjectType, subjectId, payload })`: read `lastHash`, `chainEntry`, insert; **fail-open** (log, never throw into the caller). `verify(workspaceId)`: re-walk all entries, recompute each `hash` from the running `prev`, return `{ intact: true } | { intact: false; brokenAtSeq }`.
-- **Write-path wiring** — `GateService` (on resume→`gate.resumed`, reject→`gate.rejected`, recording the principals/roles), `CredentialBroker` (on issue→`credential.issued`, DENY→`credential.denied` with the reason), `RunService.trigger` (`run.triggered`) call `AuditService.record`. Injected (composition root), so tests can assert the append without HTTP.
-- **Read surface** — an `audit` tRPC (`list` + `verify`, workspace-scoped) and an audit page (`/workspaces/[id]/audit`): the entries table + a **chain-intact badge** (green verified / red broken-at-seq), silent-polling per the React Query convention.
+- **`AuditService`** — `record(workspaceId, { actorUserId, action, subjectType, subjectId, payload })`: read `lastHash`, `chainEntry`, insert; **fail-open** (log, never throw into the caller). `verify(workspaceId)`: re-walk all entries in keyset pages (constant memory, linear time), recompute each `hash` from the running `prev`, return `{ intact: true } | { intact: false; brokenAtSeq }`.
+- **Write-path wiring** — `GateService` (on resume→`gate.resumed`, reject→`gate.rejected`, recording the principals/roles), `CredentialBroker` (on issue→`credential.issued`, DENY→`credential.denied` with the reason, except an unknown run or a bad run token: those prove nothing about a legitimate actor and would let an unauthenticated caller grow the chain, so they are logged only), `RunService.trigger` (`run.triggered`) call `AuditService.record`. Injected (composition root), so tests can assert the append without HTTP.
+- **Read surface** — an `audit` tRPC (`list` + `verify`, workspace-scoped) and an audit page (`/workspaces/[id]/audit`): the entries table (silent-polling per the React Query convention) + a **chain-intact badge** (green verified / red broken-at-seq). The badge is not polled: `verify` is linear in the chain, so it runs when the page opens and on "Re-verify".
 
 ## 5. PRs (sequential, each base=main)
 
@@ -56,6 +57,6 @@ pglite + unit (`expectOne` from rows): pure `chainEntry` (determinism, field-sen
 
 ## 7. Deferred & open
 
-**Deferred:** KMS/asymmetric signing; export; retention; the `credential_tokens` issuance detail (folds here as `credential.issued` payload); global cross-workspace chain.
+**Deferred:** KMS/asymmetric signing (also the fix for tail truncation, §2); a persisted verification checkpoint so `verify` only re-walks entries added since the last good run (needs a table, so a migration); export; retention; the `credential_tokens` issuance detail (folds here as `credential.issued` payload); global cross-workspace chain.
 
 **Open:** exact canonical form (stable key order over the entry's `{workspace_id, action, subject_type, subject_id, payload, actor_user_id}` — exclude `seq`/`created_at` from the hash so it's reproducible? — decide in PR 1: hash covers the semantic fields + `prev_hash`, not the DB-assigned `seq`/`created_at`, so the chain is verifiable from content alone).
