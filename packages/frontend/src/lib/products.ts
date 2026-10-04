@@ -11,11 +11,15 @@ import { Routes } from '@frontend/lib/routes';
 
 import type { Product } from '@mocco/common/project';
 
-/** The jobs Mocco's products and sections are grouped by, in display order. */
+/**
+ * The jobs Mocco's products and sections are grouped by, in display order — the one
+ * order every list follows (sidebars, Products page, landing): ship it, run it, hear
+ * from the people who use it (ADR 0029).
+ */
 export const SectionGroups = {
   release: 'release',
-  support: 'support',
   operate: 'operate',
+  support: 'support',
   platform: 'platform',
   developers: 'developers',
   workspace: 'workspace',
@@ -24,8 +28,8 @@ export type SectionGroup = (typeof SectionGroups)[keyof typeof SectionGroups];
 
 export const sectionGroupLabels: Readonly<Record<SectionGroup, string>> = {
   [SectionGroups.release]: 'Release',
-  [SectionGroups.support]: 'Support',
   [SectionGroups.operate]: 'Operate',
+  [SectionGroups.support]: 'Support',
   [SectionGroups.platform]: 'Platform',
   [SectionGroups.developers]: 'Developers',
   [SectionGroups.workspace]: 'Workspace',

@@ -2,22 +2,24 @@ import Head from 'next/head';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { productCatalog } from '@frontend/lib/products';
+import { productCatalog, sectionGroupLabels, SectionGroups } from '@frontend/lib/products';
 import { Routes } from '@frontend/lib/routes';
+
+import type { SectionGroup } from '@frontend/lib/products';
 
 const GITHUB_URL = 'https://github.com/fi-workers/mocco';
 
 interface Pillar {
-  name: string;
+  group: SectionGroup;
   summary: string;
   products: { name: string; description: string; href: string }[];
 }
 
 // The products that have screens today, grouped by the job they do. The roadmap row
 // below is read from the product registry, so it never lists a product that shipped.
-const pillars: Pillar[] = [
+const pillarsByJob: Pillar[] = [
   {
-    name: 'Release',
+    group: SectionGroups.release,
     summary: 'Write ≠ ship: every production change waits for the right people.',
     products: [
       {
@@ -43,7 +45,7 @@ const pillars: Pillar[] = [
     ],
   },
   {
-    name: 'Support',
+    group: SectionGroups.support,
     summary: 'Hear from the people who use what you built.',
     products: [
       {
@@ -59,7 +61,7 @@ const pillars: Pillar[] = [
     ],
   },
   {
-    name: 'Operate',
+    group: SectionGroups.operate,
     summary: 'Know what happened, and who did it.',
     products: [
       {
@@ -75,6 +77,10 @@ const pillars: Pillar[] = [
     ],
   },
 ];
+
+// Shown in the registry's group order, the order every list in Mocco follows.
+const groupOrder: readonly SectionGroup[] = Object.values(SectionGroups);
+const pillars = pillarsByJob.toSorted((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group));
 
 // An illustration of one morning in a workspace: every product in one feed.
 const feed = [
@@ -243,10 +249,10 @@ export default function Home() {
             </div>
             <div className="grid gap-8 lg:grid-cols-3">
               {pillars.map(pillar => (
-                <div key={pillar.name} className="flex flex-col gap-4">
+                <div key={pillar.group} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1">
                     <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                      {pillar.name}
+                      {sectionGroupLabels[pillar.group]}
                     </h3>
                     <p className="text-sm">{pillar.summary}</p>
                   </div>
