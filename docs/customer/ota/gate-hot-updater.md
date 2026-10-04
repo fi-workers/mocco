@@ -31,7 +31,7 @@ HOT_UPDATER_CLOUDFLARE_D1_DATABASE_ID=…
 HOT_UPDATER_CLOUDFLARE_API_TOKEN=…
 ```
 
-Add it in Mocco's **OTA tokens** page with the tool **hot-updater**, for example as `acme-production`. Its provider id is `ota-hot-updater`. The variable names for each provider are in hot-updater's [managed provider docs](https://github.com/gronxb/hot-updater/tree/main/docs/content/docs/managed).
+Add it on Mocco's **OTA updates** page, on the **Your OTA tool** tab, with the tool **hot-updater**, for example as `acme-production`. Its provider id is `ota-hot-updater`. The variable names for each provider are in hot-updater's [managed provider docs](https://github.com/gronxb/hot-updater/tree/main/docs/content/docs/managed).
 
 ## Deploy
 

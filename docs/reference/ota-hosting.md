@@ -4,7 +4,7 @@ description: How a project's React Native app becomes a Mocco-hosted OTA app ser
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [reference, ota, expo-updates, signing, channels]
@@ -45,7 +45,7 @@ An OTA app hosts updates for one of a project's apps whose platform is **React N
 
 The public API base is `https://<PUBLIC_API_DOMAIN>/v1` when that host is set, else `<app origin>/api/ext/v1`. `*.localhost` hosts are plain http, like `localhost`. Apps require signed updates (`signing_required`) by default.
 
-The console's **OTA hosting** tab shows the `expo.updates` block to paste into `app.json`: the URL, `requestHeaders: { "expo-channel-name": … }`, `codeSigningCertificate` and `codeSigningMetadata: { keyid: "root", alg: "rsa-v1_5-sha256" }`.
+The console's **OTA updates** section, on its **Hosted by Mocco** tab, shows the `expo.updates` block to paste into `app.json`: the URL, `requestHeaders: { "expo-channel-name": … }`, `codeSigningCertificate` and `codeSigningMetadata: { keyid: "root", alg: "rsa-v1_5-sha256" }`.
 
 ## Signing certificates
 
@@ -90,7 +90,7 @@ CI can get an upload session three ways, and none needs more than 15 minutes; ev
 | A **GitHub Actions OIDC token** (trusted publishing) | `POST /v1/ota/auth/oidc {appId, token}` | `github:repo:<id>:ref:<ref>` | the trust policy's `allowed_channels` |
 | A **gated Mocco run step** | the credential broker, provider `mocco`, role = the OTA app id | `mocco:run:<runId>` | any unprotected channel |
 
-**Trust policies** (OTA hosting → Trusted publishing; owners and admins) name a GitHub repository by its numeric id, so a rename or a fork can't match, plus a ref pattern (`refs/heads/main`, or `*` as a wildcard: `refs/tags/v*`). They can optionally pin the workflow (`job_workflow_ref`) and the environment. They also list the unprotected channels sessions may promote to. The exchange verifies the token against GitHub's JWKS (issuer `https://token.actions.githubusercontent.com`, audience Mocco's public API origin, expiry), then takes the oldest matching policy. Every refusal is the same `403` "OIDC token not accepted"; the reason is logged and audited as `ota.upload.denied`.
+**Trust policies** (OTA updates → Hosted by Mocco → Trusted publishing; owners and admins) name a GitHub repository by its numeric id, so a rename or a fork can't match, plus a ref pattern (`refs/heads/main`, or `*` as a wildcard: `refs/tags/v*`). They can optionally pin the workflow (`job_workflow_ref`) and the environment. They also list the unprotected channels sessions may promote to. The exchange verifies the token against GitHub's JWKS (issuer `https://token.actions.githubusercontent.com`, audience Mocco's public API origin, expiry), then takes the oldest matching policy. Every refusal is the same `403` "OIDC token not accepted"; the reason is logged and audited as `ota.upload.denied`.
 
 In a workflow, `fi-workers/mocco/actions/ota-publish` runs `mocco ota publish --oidc` (the default in Actions when `MOCCO_API_KEY` is unset). The job needs `permissions: id-token: write` and the signing key in `MOCCO_OTA_SIGNING_KEY`. With a `channel` it promotes through the session once the release is verified. The console shows the workflow step under the policies. The action runs the published `@mocco/cli`, which ships with SDK packaging.
 
@@ -146,7 +146,7 @@ Responses carry `expo-sfv-version: 0` and `cache-control: private, max-age=0`. E
 
 ## Console pages
 
-The OTA hosting tab links each channel to its page (`…/ota-hosting/channels/{id}?app=&platform=&range=`): what each head serves and rolls out with its controls and reach, the waiting requests, and its history from `mocco_ota_deployments` (actor, release, share change, approval, reason) for 7 days, 30 days or all. Platform and range are URL state. Each release has a page (`…/ota-hosting/releases/{id}?app=`): its signed updates including the pre-signed rollbacks, the heads serving it, its adoption, its approval requests and a Promote control. Each certificate shows the runtime versions that depend on it: finalize records which certificate verified each update (`mocco_ota_updates.certificate_id`). A release published with `--mandatory` carries `extra.mocco.mandatory`, which `useMoccoUpdate()` from `@mocco/react-native/ota` applies at the next safe point (when the app returns to the foreground). The `@mocco/react-native` Expo config plugin writes the same `expo.updates` block as `mocco ota init`.
+The Hosted by Mocco tab links each channel to its page (`…/ota-hosting/channels/{id}?app=&platform=&range=`): what each head serves and rolls out with its controls and reach, the waiting requests, and its history from `mocco_ota_deployments` (actor, release, share change, approval, reason) for 7 days, 30 days or all. Platform and range are URL state. Each release has a page (`…/ota-hosting/releases/{id}?app=`): its signed updates including the pre-signed rollbacks, the heads serving it, its adoption, its approval requests and a Promote control. Each certificate shows the runtime versions that depend on it: finalize records which certificate verified each update (`mocco_ota_updates.certificate_id`). A release published with `--mandatory` carries `extra.mocco.mandatory`, which `useMoccoUpdate()` from `@mocco/react-native/ota` applies at the next safe point (when the app returns to the foreground). The `@mocco/react-native` Expo config plugin writes the same `expo.updates` block as `mocco ota init`.
 
 ## Tables (migrations 0022–0029)
 

@@ -16,7 +16,7 @@ related:
 
 After Microsoft retired App Center, teams moved to hosted CodePush services or ran Microsoft's open-sourced server. Each has its own CLI, and each publishes with an access key. Mocco holds that key and releases it to your publishing step after the gate. Set up [Release a token to your pipeline](./pipeline.md) first; this page covers the key and the commands for each service.
 
-Store the key in Mocco's **OTA tokens** page with the tool **CodePush (hosted)**, for example as `acme-production`. Its provider id is `ota-codepush`. The released value is in `$OTA_TOKEN` in the publishing job.
+Store the key on Mocco's **OTA updates** page, on the **Your OTA tool** tab, with the tool **CodePush (hosted)**, for example as `acme-production`. Its provider id is `ota-codepush`. The released value is in `$OTA_TOKEN` in the publishing job.
 
 ## Revopush
 

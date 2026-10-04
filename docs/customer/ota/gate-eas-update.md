@@ -22,7 +22,7 @@ Use a **robot user** rather than a person's token. A personal access token acts 
 
 Expo doesn't let you limit a token to one project or one channel. On the Enterprise plan, *protected channels* limit publishing to production to the Release Manager role; without them the Release Manager role has the same access as Developer.
 
-Store the token in Mocco's **OTA tokens** page with the tool **EAS Update**, for example as `acme-production`. Its provider id is `ota-eas`.
+Store the token on Mocco's **OTA updates** page, on the **Your OTA tool** tab, with the tool **EAS Update**, for example as `acme-production`. Its provider id is `ota-eas`.
 
 ## Publish
 

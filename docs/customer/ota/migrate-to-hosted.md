@@ -4,7 +4,7 @@ description: What changes when you move an app from App Center CodePush or EAS U
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, ota, codepush, eas-update, migration, guide]
@@ -23,7 +23,7 @@ EAS Update already uses `expo-updates`, so the code stays the same.
 
 | EAS Update | Mocco |
 |---|---|
-| `updates.url` `https://u.expo.dev/<project>` | the manifest URL from **OTA hosting** (`mocco ota init` writes it) |
+| `updates.url` `https://u.expo.dev/<project>` | the manifest URL from **OTA updates** → **Hosted by Mocco** (`mocco ota init` writes it) |
 | `eas update --channel` | `mocco ota publish --channel` (or the `ota-publish` action) |
 | Channels and branches | Channels; a release is promoted between channels, never re-uploaded |
 | Code signing (optional) | Required: `mocco ota init` makes the key and certificate |
