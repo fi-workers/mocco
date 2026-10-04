@@ -25,8 +25,8 @@ You sign in once in the browser and the client holds the token.
 https://www.mocco.club/api/mcp
 ```
 
-> The read tools are in, and so is the first deciding tool: voting on an approval request.
-> Resuming a paused run comes next, then promoting. The plan is in the
+> The read tools are in, and so are the deciding tools: voting on an approval request and
+> resuming or rejecting a paused run. The plan is in the
 > [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -37,7 +37,7 @@ you belong to — never more, because the server has no privileges of its own.
 | Tool | Answers |
 |---|---|
 | `mocco_runs_search` | Which runs are running, waiting or failed. Filter by `awaiting_gate` for "what is blocked" |
-| `mocco_runs_get` | One run: its steps, and the gate holding it with what would release it |
+| `mocco_runs_get` | One run: its steps, and the gate holding it (with its `itemIndex`) and what would release it |
 | `mocco_approvals_search` | What is waiting on a human right now |
 | `mocco_approvals_get` | One request: the change it pins, the requirements, and the votes so far |
 
@@ -54,21 +54,26 @@ whether or not it exists.
 | Tool | Does |
 |---|---|
 | `mocco_approvals_vote` | Approves or rejects a pending request as you, with an optional reason |
+| `mocco_gates_resume` | Resumes or rejects the gate a run is paused at, as you, with an optional reason |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
 
-When it is on, every vote asks you first. Your client shows what is about to happen — approve
-or reject, the kind of request, what it is about, the exact change it would let through, and
-your reason — and nothing is voted until you answer yes. Declining, or closing the prompt,
+When it is on, every decision asks you first. For a vote, your client shows what is about to
+happen — approve or reject, the kind of request, what it is about, the exact change it would
+let through, and your reason. For a paused run, it shows resume or reject (a reject halts the
+run), the repository, the commit with its branch, the gate and what it requires, and your
+reason. Nothing is recorded until you answer yes. Declining, or closing the prompt,
 votes nothing. That confirmation is the protocol's own step, not a prompt we wrote, and it
 is what stops a page of text your agent read somewhere from turning into a production
-deploy. A confirmation is good for five minutes and only for the vote it showed: change the
-decision or the reason and you are asked again.
+deploy. A confirmation is good for five minutes and only for the decision it showed: change
+the decision or the reason and you are asked again.
 
-The vote is then cast exactly as if you had clicked it in the console. The request's own
-rules still apply: you need one of the roles it asks for, you cannot approve a change you
-requested when the request forbids it, and you get one vote.
+The decision is then recorded exactly as if you had clicked it in the console. The request's
+or gate's own rules still apply: you need one of the roles it asks for, you cannot approve a
+change you requested, or resume a run you triggered, when it forbids that, and you get one
+vote. A gate that needs several people stays paused until they have all voted; the tool says
+where it stands.
 
 ## What it will never do
 
@@ -76,8 +81,8 @@ requested when the request forbids it, and you get one vote.
   with your identity. An agent cannot approve what you could not approve.
 - **Accept an API key for a decision.** A key is a project, not a person, and an approval
   has to name someone who could have been asked. Keys get the read tools.
-- **Hide anything from the audit trail.** A vote cast through an agent appears in the
-  chain exactly like one cast in the console, naming you.
+- **Hide anything from the audit trail.** A vote or resume made through an agent appears in
+  the chain exactly like one made in the console, naming you.
 
 ## Add it
 
@@ -160,11 +165,12 @@ anything, choose Deny.
 
 ### Allowing an app to vote
 
-Connecting does not let an app vote. The first time your agent tries to, Mocco answers that
+Connecting does not let an app vote or resume. The first time your agent tries to, Mocco answers that
 the connection needs one more permission, and your client opens the same screen again with
 one new line: **Approve or reject changes as you, in workspaces that allow agents to
-decide**. Allow it and the client carries on with the vote, which still asks you to confirm
-it. Deny it and the app keeps reading, as before.
+decide**. Allow it and the client carries on with the decision, which still asks you to
+confirm it. Deny it and the app keeps reading, as before. The same permission covers voting
+and resuming: what you may decide is still set by your roles.
 
 You are asked once per app. The permission does nothing in a workspace that has not allowed
 agents to decide, and nothing beyond what your roles allow anywhere.
@@ -186,6 +192,10 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not vote in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "This connection may not vote" | The app was never allowed to vote. Reconnect it and allow the voting permission when asked |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
+| "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
+| "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |
+| "cannot resume a gate on a run you triggered" | The gate forbids the person who started the run from releasing it. Someone else in its roles has to |
+| "not in a role authorized to resume" | Your roles do not cover this gate. Someone in one of the roles `mocco_runs_get` lists has to |
 | The browser reports an invalid scope when you allow voting | The app was connected before voting existed, and Mocco has not yet refreshed what it may ask for. It does within the hour; try again then |
 | The browser opens Mocco's sign-in and then lands on your workspaces instead of the client | The page was opened without the client's request in its address. Start the connection again from the client |
 | Tools from the wrong workspace | You belong to several. Ask the agent to switch workspace, or pin one in the client config |

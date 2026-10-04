@@ -93,6 +93,31 @@ export class GateService {
     }
   }
 
+  /** The run with its repository and commit, scoped the same way as `requireRun`. */
+  private async requireRunWithContext(workspaceId: string, runId: string, gateItemIndex: number) {
+    try {
+      return await this.deps.runs.getWithContextInWorkspace(workspaceId, runId);
+    } catch (error) {
+      if (error instanceof EntityNotFoundError) {
+        throw new GateNotCurrentError(runId, gateItemIndex, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  /** The gate the run is paused at, when it is the one asked for — or GateNotCurrentError.
+   * A not-current or foreign gate is not actionable (NOT_FOUND). */
+  private async requireCurrentGate(run: { id: string; state: string; currentIndex: number }, gateItemIndex: number) {
+    if (run.state !== RunStates.awaitingGate || run.currentIndex !== gateItemIndex) {
+      throw new GateNotCurrentError(run.id, gateItemIndex);
+    }
+    const gate = await this.deps.runGates.findByRunAndIndex(run.id, gateItemIndex);
+    if (gate === undefined || gate.state !== GateStates.pending) {
+      throw new GateNotCurrentError(run.id, gateItemIndex);
+    }
+    return gate;
+  }
+
   /** Halt the run: settle the gate rejected and mark the run rejected (terminal). */
   private async rejectRun(
     workspaceId: string,
@@ -151,6 +176,18 @@ export class GateService {
   }
 
   /**
+   * The gate a run is paused at, with what the run is deploying (repository, commit,
+   * branch) — what a person is shown before they resume or reject it. The same guard as
+   * `resume`: anything but the run's current pending gate is GateNotCurrentError, so a
+   * confirmation is never shown for a gate a vote could not reach.
+   */
+  async getPending(workspaceId: string, runId: string, gateItemIndex: number) {
+    const { run, repo, commit } = await this.requireRunWithContext(workspaceId, runId, gateItemIndex);
+    const gate = await this.requireCurrentGate(run, gateItemIndex);
+    return { run, repo, commit, gate };
+  }
+
+  /**
    * Cast a vote on the run's current gate and drive the outcome.
    *
    * Guards, in order (each fail-closed): the gate must be the run's current pending
@@ -168,15 +205,7 @@ export class GateService {
     reason?: string,
   ) {
     const run = await this.requireRun(workspaceId, runId, gateItemIndex);
-    // The gate must be the exact one the run is paused at — a not-current/foreign gate
-    // is not actionable (NOT_FOUND).
-    if (run.state !== RunStates.awaitingGate || run.currentIndex !== gateItemIndex) {
-      throw new GateNotCurrentError(runId, gateItemIndex);
-    }
-    const gate = await this.deps.runGates.findByRunAndIndex(runId, gateItemIndex);
-    if (gate === undefined || gate.state !== GateStates.pending) {
-      throw new GateNotCurrentError(runId, gateItemIndex);
-    }
+    const gate = await this.requireCurrentGate(run, gateItemIndex);
     const { requirements } = gate;
 
     // The shared voter guards (prevent_self against the run's triggerer — the fuller

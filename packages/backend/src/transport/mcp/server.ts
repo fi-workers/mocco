@@ -4,17 +4,18 @@
 // one domain service with the caller's own identity, and that service's checks are the
 // only authority. Composition is `runtime/mcp.ts`, above the domains.
 //
-// One tool decides (`mocco_approvals_vote`); it is gated by scope, by the workspace's
-// opt-in and by a confirmation round trip whose signed state is verified here, before
-// any tool sees it.
+// Two tools decide (`mocco_approvals_vote`, `mocco_gates_resume`); each is gated by
+// scope, by the workspace's opt-in and by a confirmation round trip whose signed state is
+// verified here, before any tool sees it.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
+import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
-export type McpToolDeps = RunToolDeps & ApprovalToolDeps;
+export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
 const SERVER_INFO = { name: 'mocco', version: '0.1.0' } as const;
@@ -30,6 +31,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   });
   registerRunTools(server, deps);
   registerApprovalTools(server, deps);
+  registerGateTools(server, deps);
   return server;
 }
 
