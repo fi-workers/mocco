@@ -28,6 +28,8 @@ import {
 } from '@mocco/common/ota-hosting';
 import { AppPlatforms, Products } from '@mocco/common/project';
 import {
+  CheckErrorKinds,
+  CheckOutcomes,
   ComponentImpacts,
   ComponentStatuses,
   IncidentSeverities,
@@ -119,6 +121,8 @@ import type {
 } from '@mocco/common/ota-hosting';
 import type { AppPlatform, Product } from '@mocco/common/project';
 import type {
+  CheckErrorKind,
+  CheckOutcome,
   ComponentImpact,
   ComponentStatus,
   IncidentSeverity,
@@ -3570,6 +3574,72 @@ export const statusMonitorStateChanges = pgTable(
     check(
       'mocco_status_monitor_state_changes_to_check',
       sql`${t.toState} IN (${sqlInList(Object.values(MonitorStates))})`,
+    ),
+  ],
+);
+
+/** One check a location owes for one round of a monitor. The unique (monitor, location, round)
+ * makes assignment idempotent: two agents of a location can never lease the same round twice. */
+export const statusProbeLeases = pgTable(
+  'mocco_status_probe_leases',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    monitorId: uuid('monitor_id').notNull(),
+    locationId: uuid('location_id')
+      .notNull()
+      .references(() => statusLocations.id, { onDelete: 'cascade' }),
+    roundAt: timestamp('round_at').notNull(),
+    leasedAt: timestamp('leased_at').notNull(),
+    /** Results are refused after this; an unreported lease then counts as `no_data`. */
+    expiresAt: timestamp('expires_at').notNull(),
+    reportedAt: timestamp('reported_at'),
+  },
+  t => [
+    uniqueIndex('mocco_status_probe_leases_monitor_location_round_uq').on(t.monitorId, t.locationId, t.roundAt),
+    index('mocco_status_probe_leases_location_idx').on(t.locationId, t.roundAt),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_probe_leases_monitor_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * Raw check results, one per (monitor, round, location). Range-partitioned by `round_at`, one
+ * partition per UTC day: migration 0057 turns this table into the partitioned parent (drizzle
+ * can't declare partitioning), and the `status.retention` job creates the coming days'
+ * partitions and drops those past retention. No uuid PK and no foreign keys, like the audit
+ * log's documented exception: an append-only time series dropped a day at a time.
+ */
+export const statusCheckResults = pgTable(
+  'mocco_status_check_results',
+  {
+    monitorId: uuid('monitor_id').notNull(),
+    roundAt: timestamp('round_at').notNull(),
+    locationId: uuid('location_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    leaseId: uuid('lease_id').notNull(),
+    outcome: text().$type<CheckOutcome>().notNull(),
+    errorKind: text('error_kind').$type<CheckErrorKind>(),
+    statusCode: smallint('status_code'),
+    latencyMs: integer('latency_ms'),
+    timings: jsonb().$type<Record<string, number>>(),
+    tlsExpiresAt: timestamp('tls_expires_at'),
+    detail: text(),
+    receivedAt: timestamp('received_at').notNull(),
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_check_results_pk', columns: [t.monitorId, t.roundAt, t.locationId] }),
+    index('mocco_status_check_results_workspace_round_idx').on(t.workspaceId, t.roundAt),
+    check(
+      'mocco_status_check_results_outcome_check',
+      sql`${t.outcome} IN (${sqlInList(Object.values(CheckOutcomes))})`,
+    ),
+    check(
+      'mocco_status_check_results_error_kind_check',
+      sql`${t.errorKind} IS NULL OR ${t.errorKind} IN (${sqlInList(Object.values(CheckErrorKinds))})`,
     ),
   ],
 );

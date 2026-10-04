@@ -10,6 +10,7 @@ import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@back
 import { createOfrepRoutes } from '@backend/transport/ext/v1/ofrep';
 import { createOtaServingRoutes } from '@backend/transport/ext/v1/ota-manifest';
 import { createOtaUploadRoutes } from '@backend/transport/ext/v1/ota-uploads';
+import { createProbeRoutes } from '@backend/transport/ext/v1/probe';
 import { createRunReadRoutes } from '@backend/transport/ext/v1/runs';
 
 export function createV1Routes(deps: V1Deps): Hono<V1Env> {
@@ -45,6 +46,10 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   if (deps.flags !== undefined) {
     app.route('/flags', createFlagServingRoutes(deps, deps.flags));
     app.route('/ofrep/v1', createOfrepRoutes(deps, deps.flags));
+  }
+
+  if (deps.probe !== undefined) {
+    app.route('/probe', createProbeRoutes(deps, deps.probe));
   }
 
   return app;

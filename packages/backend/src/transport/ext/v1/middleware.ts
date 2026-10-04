@@ -16,6 +16,7 @@ import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
+import type { ProbeProtocolDeps } from '@backend/transport/ext/v1/probe';
 import type { RunReadDeps } from '@backend/transport/ext/v1/runs';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { Context } from 'hono';
@@ -32,6 +33,8 @@ export interface V1Deps {
   /** Run reads for a project's repositories; undefined leaves /v1/runs unmounted. */
   runs?: RunReadDeps;
   help?: HelpServingDeps;
+  /** The status probe protocol (location tokens, not keys); undefined leaves /v1/probe unmounted. */
+  probe?: ProbeProtocolDeps;
 }
 
 export interface V1Env {

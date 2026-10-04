@@ -26,6 +26,20 @@ export class LocationRepo {
       .orderBy(asc(l.kind), asc(l.code));
   }
 
+  /** The enabled location a token hash authenticates, of any workspace or none. */
+  async findEnabledByTokenHash(tokenHash: string): Promise<LocationRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(l)
+      .where(and(eq(l.tokenHash, tokenHash), isNull(l.disabledAt)));
+    return row;
+  }
+
+  /** Record that the location's agent was seen (any probe call). */
+  async recordSeen(id: string, values: { lastSeenAt: Date; agentVersion: string }): Promise<void> {
+    await this.db.update(l).set(values).where(eq(l.id, id));
+  }
+
   /** One of the workspace's own (private) locations. */
   async findOwn(workspaceId: string, id: string): Promise<LocationRow | undefined> {
     const [row] = await this.db

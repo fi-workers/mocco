@@ -5,6 +5,7 @@ import { IncidentService } from '@backend/domain/status/IncidentService';
 import { LocationService } from '@backend/domain/status/LocationService';
 import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import { MonitorService } from '@backend/domain/status/MonitorService';
+import { ProbeService } from '@backend/domain/status/ProbeService';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
@@ -21,6 +22,7 @@ export interface StatusDomain {
   statusMaintenances: MaintenanceService;
   statusMonitors: MonitorService;
   statusLocations: LocationService;
+  statusProbes: ProbeService;
 }
 
 export interface StatusDomainDeps {
@@ -45,6 +47,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusMaintenances: new MaintenanceService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
+    statusProbes: new ProbeService({ db, ...now }),
   };
 }
 

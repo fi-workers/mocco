@@ -5,12 +5,14 @@ import { z } from 'zod';
 import { defineJob, handleJob, type JobHandler } from '@backend/domain/jobs/handlers';
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
+import type { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import type { SnapshotService } from '@backend/domain/status/SnapshotService';
 
 export const StatusJobKinds = {
   maintenanceTick: 'status.maintenance.tick',
   snapshotPublish: 'status.snapshot.publish',
+  retention: 'status.retention',
 } as const;
 
 /** Start and complete scheduled maintenance windows. */
@@ -19,8 +21,13 @@ export const tickMaintenance = defineJob(StatusJobKinds.maintenanceTick, z.objec
 /** Publish one page's public snapshot; without a page, the safety run requests every page with work left. */
 export const publishSnapshot = defineJob(StatusJobKinds.snapshotPublish, z.object({ pageId: z.uuid().optional() }));
 
+/** Create the coming days' raw result partitions and drop the ones past retention. */
+export const runRetention = defineJob(StatusJobKinds.retention, z.object({}));
+
 export const statusSchedules: SystemSchedule[] = [
   { kind: StatusJobKinds.maintenanceTick, payload: {}, intervalSeconds: 60 },
+  // Hourly, so a missed run never leaves the next day without a partition.
+  { kind: StatusJobKinds.retention, payload: {}, intervalSeconds: 3600 },
 ];
 
 /** The five-minute safety run, registered only when an object store is configured. */
@@ -34,6 +41,7 @@ export function createStatusHandlers(deps: {
   maintenances: Pick<MaintenanceService, 'tick'>;
   /** Undefined when no object store is configured. */
   snapshots: Pick<SnapshotService, 'publish' | 'sweep'> | undefined;
+  retention: Pick<CheckResultRetention, 'run'>;
   now: () => Date;
 }): JobHandler[] {
   return [
@@ -45,6 +53,9 @@ export function createStatusHandlers(deps: {
         return;
       }
       await (payload.pageId === undefined ? deps.snapshots.sweep() : deps.snapshots.publish(payload.pageId));
+    }),
+    handleJob(runRetention, async () => {
+      await deps.retention.run(deps.now());
     }),
   ];
 }

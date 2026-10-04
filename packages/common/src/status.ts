@@ -270,3 +270,68 @@ export const locationSchema = z.object({
   createdAt: z.date(),
 });
 export type LocationDto = z.infer<typeof locationSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// The probe protocol (ADR 0027): `@mocco/probe` agents lease the rounds due at their location,
+// run them, and report one result per lease. `/api/ext/v1/probe/*`, location-token auth.
+// ─────────────────────────────────────────────────────────────
+
+/** What one location saw in one round. A probe reports `ok` or `fail`; `no_data` is what the
+ * evaluator assumes for a lease nobody reported, and it never counts as downtime. */
+export const CheckOutcomes = { ok: 'ok', fail: 'fail', noData: 'no_data' } as const;
+export type CheckOutcome = (typeof CheckOutcomes)[keyof typeof CheckOutcomes];
+
+/** Why a check failed (or, for `latency`, why it was slow). */
+export const CheckErrorKinds = {
+  timeout: 'timeout',
+  dns: 'dns',
+  connect: 'connect',
+  tls: 'tls',
+  status: 'status',
+  keyword: 'keyword',
+  latency: 'latency',
+} as const;
+export type CheckErrorKind = (typeof CheckErrorKinds)[keyof typeof CheckErrorKinds];
+
+export const ProbeProtocol = {
+  /** A lease call returns the rounds due within this many seconds. */
+  leaseLookaheadSeconds: 60,
+  /** A result is accepted until the round's time plus the check's timeout plus this grace. */
+  resultGraceSeconds: 15,
+  /** How long an agent waits before its next lease call. */
+  pollAfterMs: 15_000,
+  maxCapacity: 200,
+  maxResults: 200,
+  detailMax: 512,
+} as const;
+
+export const probeLeaseRequestSchema = z.object({
+  agentVersion: z.string().trim().min(1).max(64),
+  /** How many checks the agent will take in this call. */
+  capacity: z.int().min(1).max(ProbeProtocol.maxCapacity).default(50),
+});
+
+export const probeResultSchema = z.object({
+  leaseId: z.uuid(),
+  monitorId: z.uuid(),
+  roundAt: z.coerce.date(),
+  outcome: z.enum([CheckOutcomes.ok, CheckOutcomes.fail]),
+  errorKind: z.enum(Object.values(CheckErrorKinds) as [CheckErrorKind, ...CheckErrorKind[]]).optional(),
+  statusCode: z.int().min(100).max(599).optional(),
+  latencyMs: z.int().min(0).max(600_000).optional(),
+  /** Phase timings in milliseconds (dns, connect, tls, ttfb). */
+  timings: z.record(z.enum(['dns', 'connect', 'tls', 'ttfb']), z.number().min(0).max(600_000)).optional(),
+  tlsExpiresAt: z.coerce.date().optional(),
+  /** Truncated to 512 characters. */
+  detail: z.string().optional(),
+});
+export type ProbeResult = z.infer<typeof probeResultSchema>;
+
+export const probeResultsRequestSchema = z.object({
+  results: z.array(probeResultSchema).min(1).max(ProbeProtocol.maxResults),
+});
+
+export const probeHeartbeatRequestSchema = z.object({
+  agentVersion: z.string().trim().min(1).max(64),
+  inflight: z.int().min(0).max(10_000).default(0),
+});
