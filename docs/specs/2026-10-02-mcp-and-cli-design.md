@@ -167,6 +167,10 @@ has several servers loaded.
 | `mocco_flags_search` | A project's flags matching a filter (text, lifecycle, repo-managed) |
 | `mocco_flags_get` | One flag: variants, per-environment state, whether the repo manages it |
 | `mocco_flags_changesets_search` | Flag changes waiting for approval, with the request deciding each |
+| `mocco_ota_channels_search` | A hosted app's channels and what each serves now (release, rollout share, paused) |
+| `mocco_ota_releases_search` | A hosted app's releases matching a filter (text or commit, runtime, state, platform) |
+| `mocco_ota_adoption_get` | Devices per channel and release (24 h) and monthly active devices |
+| `mocco_ota_version_policies_search` | Each store app's minimum, recommended and blocked versions |
 
 **Deciding** — person only, refused for a key with a message saying why:
 
@@ -286,9 +290,19 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    project-scoped, so a `ProjectScope` (`domain/mcp/ProjectScope.ts`) makes the checks the
    console's `productProcedure` makes — membership, the flags product, the project in that
    workspace — and, like the workspace, the project may be left out when there is exactly
-   one. Still to come: the OTA reads, a stale filter (it lives in `StaleFlagDetector`,
-   a second service), and any tool that changes a flag, which needs the deciding
-   machinery and its own design pass.
+   one. The OTA reads follow (*shipped*): `mocco_ota_channels_search`,
+   `mocco_ota_releases_search`, `mocco_ota_adoption_get` and
+   `mocco_ota_version_policies_search`, read-only, behind the same `ProjectScope` with
+   `Products.ota`. Each reads the service the console's `ota` routers read for the same
+   answer (`OtaChannelService.listHeads`, `UploadService.listReleases`,
+   `OtaMetricsService.channelReach`, `VersionPolicyService.get`); a hosted app is first
+   found inside the project with `OtaHostingService`, as every `ota.hosting` procedure
+   does, and may be left out when the project hosts one. A pending version-policy change
+   is an approval request, so the policy tool points at `mocco_approvals_search` instead
+   of reading governance itself. Still to come: per-release adoption over time, a
+   channel's deployment history, a stale flag filter (it lives in `StaleFlagDetector`, a
+   second service), and any tool that changes a flag or an OTA channel, which needs the
+   deciding machinery and its own design pass.
 
 ### How the vote is built (slice 6b)
 

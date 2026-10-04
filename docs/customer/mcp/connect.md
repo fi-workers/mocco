@@ -43,6 +43,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_flags_search` | Which feature flags a project has, by key or description text, lifecycle, or whether the repository defines them, and where each is on |
 | `mocco_flags_get` | One flag: its variants, what it serves in each environment, and whether `.mocco/flags.yml` manages it |
 | `mocco_flags_changesets_search` | Which flag changes wait for approval in a protected environment, each with the approval request deciding it |
+| `mocco_ota_channels_search` | What each OTA channel serves now, per platform and runtime version: the release, a rollout in progress and its share, and whether it is paused or rolled back |
+| `mocco_ota_releases_search` | Which OTA releases CI uploaded, newest first, by message or commit, runtime version, state or platform |
+| `mocco_ota_adoption_get` | How many devices checked in during the last 24 hours, per channel and release, and the app's monthly active devices |
+| `mocco_ota_version_policies_search` | The minimum supported, recommended and blocked versions of each iOS and Android app, and whether tightening them needs approval |
 
 Reads take a `responseFormat`: `concise` by default, `detailed` when the agent wants the
 commit and the gate requirements too. That keeps a search from spending your context on
@@ -56,6 +60,11 @@ whether or not it exists.
 otherwise the tool names the projects to pick from. They answer only where the workspace
 has feature flags turned on, as the console does. The flag tools only read: change a flag
 in the console, or in `.mocco/flags.yml` for a flag the repository manages.
+
+The OTA tools pick their project the same way and answer only where OTA is turned on. The
+channel, release and adoption tools read one hosted app: leave `appId` out when the
+project hosts one, or the tool names the apps to pick from. They only read; promote, roll
+out, pause, roll back and change a version policy in the console or with `mocco ota`.
 
 **Deciding is separate and off by default.**
 

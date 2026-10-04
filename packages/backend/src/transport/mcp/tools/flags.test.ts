@@ -179,6 +179,12 @@ describe('mocco_flags_* (pglite, over HTTP)', () => {
       flags: domain.flags,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
+      otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
+      otaChannels: { listHeads: refuse },
+      otaReleases: { listReleases: refuse },
+      otaMetrics: { channelReach: refuse, monthlyActiveDevices: refuse },
+      versionPolicies: { get: refuse, listChanges: refuse },
+      projectApps: { listApps: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

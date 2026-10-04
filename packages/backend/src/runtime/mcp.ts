@@ -11,6 +11,7 @@ import { getGovernance } from '@backend/domain/governance/instance';
 import { getMcpSettings } from '@backend/domain/mcp/instance';
 import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
+import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
@@ -27,11 +28,18 @@ export function getMcpHandler(): McpHttpHandler {
     const secret = getEnv().AUTH_SECRET;
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(getDb()) });
     const { projects, products } = getProjectDomain();
+    const ota = getOtaDomain();
     state.handler = createMcpHttpHandler({
       runs: getExecution().runs,
       approvals: getGovernance().approvals,
       gates: getGovernance().gates,
       flags: getFlagsDomain().flags,
+      otaHosting: ota.otaHosting,
+      otaChannels: ota.otaChannels,
+      otaReleases: ota.otaUploads,
+      otaMetrics: ota.otaMetrics,
+      versionPolicies: ota.versionPolicies,
+      projectApps: projects,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects, products }),
       settings: getMcpSettings(),

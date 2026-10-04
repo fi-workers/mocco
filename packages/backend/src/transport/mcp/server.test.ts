@@ -22,6 +22,12 @@ describe('createMcpServer', () => {
       settings: { agentsMayDecide: refuse },
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
       projects: { resolve: refuse },
+      otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
+      otaChannels: { listHeads: refuse },
+      otaReleases: { listReleases: refuse },
+      otaMetrics: { channelReach: refuse, monthlyActiveDevices: refuse },
+      versionPolicies: { get: refuse, listChanges: refuse },
+      projectApps: { listApps: refuse },
       confirmations: undefined,
     });
 
