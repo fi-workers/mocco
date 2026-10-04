@@ -5,14 +5,16 @@ import { z } from 'zod';
 import { defineJob, handleJob, type JobHandler } from '@backend/domain/jobs/handlers';
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
-import type { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import type { SnapshotService } from '@backend/domain/status/SnapshotService';
+import type { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
+import type { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 
 export const StatusJobKinds = {
   maintenanceTick: 'status.maintenance.tick',
   snapshotPublish: 'status.snapshot.publish',
   retention: 'status.retention',
+  evaluate: 'status.evaluate',
 } as const;
 
 /** Start and complete scheduled maintenance windows. */
@@ -24,7 +26,11 @@ export const publishSnapshot = defineJob(StatusJobKinds.snapshotPublish, z.objec
 /** Create the coming days' raw result partitions and drop the ones past retention. */
 export const runRetention = defineJob(StatusJobKinds.retention, z.object({}));
 
+/** Close the monitor rounds that are due, decide them, and move the monitors' states. */
+export const evaluateRounds = defineJob(StatusJobKinds.evaluate, z.object({}));
+
 export const statusSchedules: SystemSchedule[] = [
+  { kind: StatusJobKinds.evaluate, payload: {}, intervalSeconds: 60 },
   { kind: StatusJobKinds.maintenanceTick, payload: {}, intervalSeconds: 60 },
   // Hourly, so a missed run never leaves the next day without a partition.
   { kind: StatusJobKinds.retention, payload: {}, intervalSeconds: 3600 },
@@ -41,7 +47,8 @@ export function createStatusHandlers(deps: {
   maintenances: Pick<MaintenanceService, 'tick'>;
   /** Undefined when no object store is configured. */
   snapshots: Pick<SnapshotService, 'publish' | 'sweep'> | undefined;
-  retention: Pick<CheckResultRetention, 'run'>;
+  retention: Pick<TimeSeriesRetention, 'run'>;
+  verdicts: Pick<VerdictEvaluator, 'evaluate'>;
   now: () => Date;
 }): JobHandler[] {
   return [
@@ -56,6 +63,9 @@ export function createStatusHandlers(deps: {
     }),
     handleJob(runRetention, async () => {
       await deps.retention.run(deps.now());
+    }),
+    handleJob(evaluateRounds, async () => {
+      await deps.verdicts.evaluate({ now: deps.now() });
     }),
   ];
 }

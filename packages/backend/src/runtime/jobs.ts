@@ -56,9 +56,9 @@ import { SigningService } from '@backend/domain/ota/SigningService';
 import { UploadService } from '@backend/domain/ota/UploadService';
 import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
-import { CheckResultRetention } from '@backend/domain/status/CheckResultRetention';
 import { createSnapshotService, createStatusDomain } from '@backend/domain/status/compose';
 import { createStatusHandlers, snapshotSafetySchedule, statusSchedules } from '@backend/domain/status/jobs';
+import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
 import { createStorageHandlers, storageGcSchedule } from '@backend/domain/storage/jobs';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
@@ -140,6 +140,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     appOrigin: deps.appOrigin,
   });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
+  const status = createStatusDomain(db, { audit, queue, now: deps.now });
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
     ...createEventHandlers({ bus, events: new DomainEventRepo(db) }),
@@ -167,9 +168,10 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createStatusHandlers({
-      maintenances: createStatusDomain(db, { audit, queue, now: deps.now }).statusMaintenances,
+      maintenances: status.statusMaintenances,
       snapshots: createSnapshotService(db, { store: deps.storage?.store, queue, now: deps.now }),
-      retention: new CheckResultRetention({ db }),
+      retention: new TimeSeriesRetention({ db }),
+      verdicts: status.statusVerdicts,
       now: deps.now,
     }),
     ...createOtaHandlers({

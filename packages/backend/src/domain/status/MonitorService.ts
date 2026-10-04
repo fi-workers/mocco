@@ -106,11 +106,19 @@ export class MonitorService {
       if (!change.applies(current.state)) {
         return { monitor: current, from: undefined };
       }
-      const monitor = await monitors.setState(scope, monitorId, {
-        state: change.to,
-        stateChangedAt: now,
-        ...(change.to === MonitorStates.pending && { nextRoundAt: now }),
-      });
+      const monitor = await monitors.setState(
+        scope,
+        monitorId,
+        {
+          state: change.to,
+          stateChangedAt: now,
+          ...(change.to === MonitorStates.pending && { nextRoundAt: now }),
+          // Pausing or resuming starts over: earlier rounds don't count toward confirmations.
+          consecutiveFails: 0,
+          consecutiveOks: 0,
+        },
+        now,
+      );
       await new MonitorStateChangeRepo(tx).append({
         workspaceId: scope.workspaceId,
         monitorId,
