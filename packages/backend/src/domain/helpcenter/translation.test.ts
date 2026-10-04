@@ -141,6 +141,28 @@ describe('help center translation (pglite)', () => {
     ]);
   });
 
+  it('lists each published article in the languages it is served in, for the sitemap', async () => {
+    const help = domainWith(fakeTranslator());
+    const article = await published(help);
+    const before = await help.helpPublic.sitemap('syt');
+    await help.drain();
+
+    const after = await help.helpPublic.sitemap('syt');
+
+    expect(before.articles).toEqual([
+      [{ locale: 'ko', path: `/ko/articles/${article.shortId}-widget`, lastModified: expect.any(Date) }],
+    ]);
+    expect(after.homes.map(home => home.path)).toEqual(['/ko', '/en', '/ja']);
+    expect(after.articles[0]?.map(version => version.path)).toEqual([
+      `/ko/articles/${article.shortId}-widget`,
+      `/en/articles/${article.shortId}-widget`,
+      `/ja/articles/${article.shortId}-widget`,
+    ]);
+    await help.helpAuthoring.unpublish(workspaceId, projectId, authorId, article.id);
+    const unpublished = await help.helpPublic.sitemap('syt');
+    expect(unpublished.articles).toEqual([]);
+  });
+
   it('keeps a reviewed translation when the source changes, showing it as stale', async () => {
     const help = domainWith(fakeTranslator());
     const article = await published(help);

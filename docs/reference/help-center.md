@@ -4,7 +4,7 @@ description: How Mocco stores a project's help center — a public slug and lang
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, help-center, support]
@@ -48,6 +48,8 @@ Text lives in `mocco_help_revisions`, append-only, one row per save: locale, tit
 ## Public site
 
 With `HELP_SITES_DOMAIN` set, `https://<slug>.<domain>/` serves the site ([ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/` redirects to the source language, `/{locale}` lists the published collections, `/{locale}/articles/{shortId}-{slug}` shows an article (a stale slug or a missing language redirects to the canonical path), and an unknown site is a 404. Pages are generated on first request and regenerated at most every 60 seconds. With the job tick's secret set (`CRON_SECRET` or `JOBS_TICK_SECRET`), a publish, unpublish, delete or new translation also rebuilds the pages it touched at once: the backend (`HelpRevalidation`, `HttpHelpRevalidator`) POSTs their internal paths to `/api/help/revalidate` on its own origin with that secret as a bearer, and the route calls `res.revalidate` for the site's home and the article, in every language. Other pages, whose article list may show a new title, catch up within the minute; a failed rebuild is logged and left to the 60-second refresh. Article Markdown renders through the same tree as the customer guides; links may be `http(s)`, `mailto`, site paths or anchors, and images must be `https`.
+
+Each site also answers `/robots.txt` and `/sitemap.xml` (every language version of each published article, with hreflang alternates) on its canonical origin — see [Search engines and crawlers](./seo.md).
 
 ## Custom domains
 

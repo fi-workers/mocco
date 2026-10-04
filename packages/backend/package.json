@@ -15,6 +15,7 @@
     "./mcp/handler": "./src/transport/mcp/handler.ts",
     "./ota/instance": "./src/domain/ota/instance.ts",
     "./project/instance": "./src/domain/project/instance.ts",
+    "./seo/handler": "./src/transport/seo/handler.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
     "./trpc/root": "./src/transport/trpc/root.ts",
     "./trpc/trpc": "./src/transport/trpc/trpc.ts"
