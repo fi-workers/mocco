@@ -4,7 +4,7 @@ description: Authoring conventions for the wiki — filenames, relative-path lin
 type: meta
 status: active
 created: 2026-06-30
-updated: 2026-09-24
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [meta, conventions]
@@ -34,6 +34,12 @@ related:
 
 - One document = one topic. Self-contained (understandable without other documents).
 - MOCs (overviews) growing faster than the source is a sign of health.
+
+## Customer guide screenshots
+
+- **Show the page content, not the app shell.** Crop each screenshot to the content column: below the top bar, right of the sidebar, and below the project header. The shell (sidebar, top bar, project tabs) changes whenever the navigation does, and a shell in every screenshot makes every guide stale at once.
+- **Exception: guides that teach the navigation** (the `start` set) keep the shell, because where things are in it is what they show. Retake those when the navigation changes.
+- Capture from a local run with realistic data; never change real customer data to stage a screenshot. Hide the dev-only overlays (the Next.js indicator) and keep tabs or filters that belong to the page itself.
 
 ## Medallion gate (inherited from the owner's convention)
 

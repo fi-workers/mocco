@@ -131,6 +131,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/positioning`
 
+## 2026-10-04 — Workspace switch for agents that decide
+
+- Added the "Agents on the MCP surface" section to the workspace reference: `mocco_mcp_settings`, the
+  `agents_may_decide` opt-in (off by default, owners and admins change it, audited), and its place in the console.
+  The MCP spec records that slice 6 ships as three PRs, and the connect guide says the switch has landed before the
+  tools it unlocks.
+- Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
+- Source: branch `feat/mcp-agents-setting`
+
 ## 2026-10-04 — Mocco is everything a product needs, except the code
 
 - Added [ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md), superseding ADR 0026's
@@ -141,11 +150,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*` (status), `adr/0029-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: branch `docs/concept-everything-but-code`
 
-## 2026-10-04 — Workspace switch for agents that decide
+## 2026-10-04 — Customer screenshots show page content only
 
-- Added the "Agents on the MCP surface" section to the workspace reference: `mocco_mcp_settings`, the
-  `agents_may_decide` opt-in (off by default, owners and admins change it, audited), and its place in the console.
-  The MCP spec records that slice 6 ships as three PRs, and the connect guide says the switch has landed before the
-  tools it unlocks.
-- Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
-- Source: branch `feat/mcp-agents-setting`
+- Cropped the 25 flags, messenger, help center, OTA hosting and deploy governance screenshots to the page content,
+  removing the old sidebar, project tabs and dev overlays, and added a "Customer guide screenshots" rule to the
+  [conventions](./meta/conventions.md): screenshots show content, not the app shell, except in the guides that
+  teach the navigation. A navigation change no longer stales every guide.
+- Docs touched: `customer/*/images/*`, `meta/conventions.md`, `log.md`
+- Source: branch `docs/content-only-screenshots`
