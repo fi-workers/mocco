@@ -4,7 +4,7 @@ description: Set up a public help site for a project, write articles in Markdown
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, help-center, guide]
@@ -19,11 +19,11 @@ A help center is a public site with your product's help articles. You write them
 
 ## 1. Turn on the help center
 
-A workspace member turns on **Help center** on the workspace's **Products** page. Each project then shows a **Help center** tab.
+A workspace member turns on **Help center** on the workspace's **Products** page. Each project then shows a **Help center** page.
 
 ## 2. Set up the site
 
-On the project's **Help center** tab, pick:
+On the project's **Help center** page, pick:
 
 - **Address**: the site's name in its web address, such as `showyourtime` for `showyourtime.help.mocco.club`. It must be unique across Mocco.
 - **Written in**: the language you write articles in.
@@ -35,15 +35,15 @@ Then choose **Set up help center**.
 
 ## 3. Organize and add articles
 
-A help center has **collections** (the top level, such as "Getting started"), which hold **sections** (such as "Basics"), which hold **articles**. Add a collection at the bottom of the tab, a section inside a collection, and an article inside a section. A new article opens in the editor.
+A help center has **collections** (the top level, such as "Getting started"), which hold **sections** (such as "Basics"), which hold **articles**. Add a collection at the bottom of the page, a section inside a collection, and an article inside a section. A new article opens in the editor.
 
-The tab shows every article with its state: **Draft** has never been published, **Published** is on the site, and **Unpublished changes** means the site still shows an earlier version than the one you saved. The site's address is at the top; select it to open the site.
+The page shows every article with its state: **Draft** has never been published, **Published** is on the site, and **Unpublished changes** means the site still shows an earlier version than the one you saved. The site's address is at the top; select it to open the site.
 
-![The Help center tab: a collection with a section and two published articles, and the site's address](./images/help-center.png)
+![The Help center page: a collection with a section and two published articles, and the site's address](./images/help-center.png)
 
 ## Import from Mintlify
 
-If your help site is on Mintlify, bring it over instead of writing it again. On the **Help center** tab, under **Import from Mintlify**, pick your docs folder (the one with `docs.json`), leave **Publish the imported articles** on if they should go live at once, and choose **Import**.
+If your help site is on Mintlify, bring it over instead of writing it again. On the **Help center** page, under **Import from Mintlify**, pick your docs folder (the one with `docs.json`), leave **Publish the imported articles** on if they should go live at once, and choose **Import**.
 
 - `docs.json`'s tabs, groups and pages become collections, sections and articles, in the same order.
 - Mintlify's components become plain Markdown: steps become a numbered list, tips and notes become quoted notes, and update entries become headings.
@@ -88,7 +88,7 @@ Readers who pick a language see its translation, and the article list shows tran
 
 ## Use your own domain
 
-Your help center is at `<address>.help.mocco.club` from the start. To serve it on your own domain, such as `help.example.com`, ask the Mocco team to add the domain, then point it at Mocco with a DNS record (a `CNAME` to the target they give you). Once the record resolves, the site and every old address of an imported site answer on your domain. The **Help center** tab then links your domain.
+Your help center is at `<address>.help.mocco.club` from the start. To serve it on your own domain, such as `help.example.com`, ask the Mocco team to add the domain, then point it at Mocco with a DNS record (a `CNAME` to the target they give you). Once the record resolves, the site and every old address of an imported site answer on your domain. The **Help center** page then links your domain.
 
 ## 5. What readers see
 
@@ -102,7 +102,7 @@ Readers can search from the box at the top of every page. Every word they type h
 
 ## Suggest articles in your app
 
-Your app can search the help center too, for example to show related articles while someone writes to you, so they may find the answer before they send. Create a **Publishable** key with the **help:read** scope on the **API keys** tab (an app that already uses Messenger can add the scope to its key). Then, in React Native:
+Your app can search the help center too, for example to show related articles while someone writes to you, so they may find the answer before they send. Create a **Publishable** key with the **help:read** scope on the **API keys** page (an app that already uses Messenger can add the scope to its key). Then, in React Native:
 
 ```tsx
 import { createHelp, useHelpSearch } from '@mocco/react-native/messenger';

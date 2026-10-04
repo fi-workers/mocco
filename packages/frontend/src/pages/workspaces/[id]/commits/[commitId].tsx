@@ -16,7 +16,7 @@ export default function WorkspaceCommitPage() {
   return (
     <AppShell>
       {id && commitId ? (
-        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.overview}>
+        <WorkspaceLayout workspaceId={id} active={WorkspaceSections.deploys}>
           <CommitDetail workspaceId={id} commitId={commitId} />
         </WorkspaceLayout>
       ) : null}

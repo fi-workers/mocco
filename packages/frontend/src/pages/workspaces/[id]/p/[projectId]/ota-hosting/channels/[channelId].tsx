@@ -15,7 +15,7 @@ export default function ProjectOtaChannelPage() {
   return (
     <AppShell>
       {id && projectId && channelId ? (
-        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaHosting}>
+        <ProjectLayout workspaceId={id} projectId={projectId} active={ProjectSections.otaUpdates}>
           <OtaChannelPage workspaceId={id} projectId={projectId} channelId={channelId} />
         </ProjectLayout>
       ) : null}

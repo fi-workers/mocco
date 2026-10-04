@@ -14,7 +14,7 @@ function noticeFor(query: ReturnType<typeof useRouter>['query']): string | null 
   return null;
 }
 
-// A workspace's Overview section: connect a GitHub App, then register repositories
+// A workspace's Deploys section: connect a GitHub App, then register repositories
 // and choose the branch mocco watches. Read-only observation for now — deploys are
 // gated in later slices.
 export default function WorkspaceOverview({ workspaceId }: { workspaceId: string }) {
@@ -46,8 +46,8 @@ export default function WorkspaceOverview({ workspaceId }: { workspaceId: string
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight">Repositories</h1>
-        <p className="text-sm text-muted-foreground">The repositories in this workspace and the deploys mocco gates.</p>
+        <h1 className="text-xl font-semibold tracking-tight">Deploys</h1>
+        <p className="text-sm text-muted-foreground">The repositories Mocco watches, and the deploys it gates.</p>
       </header>
 
       {notice ? <p className="rounded-lg border border-border bg-muted px-4 py-3 text-sm">{notice}</p> : null}

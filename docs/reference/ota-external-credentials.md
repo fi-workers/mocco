@@ -4,7 +4,7 @@ description: How Mocco holds the publishing token of a team's existing OTA tool 
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-27
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [reference, ota, credential-broker, secrets, governance]
@@ -50,7 +50,7 @@ code_refs:
 
 ## Console
 
-The project's **OTA tokens** tab (`/workspaces/{id}/p/{projectId}/ota-tokens`, shown when the OTA product is enabled):
+The **Your OTA tool** tab of the project's **OTA updates** section (`/workspaces/{id}/p/{projectId}/ota-tokens`, shown when the OTA product is enabled):
 
 - **Add:** tool, name (checked against the slug pattern before submit) and the token in a password field. The field is cleared after a successful add.
 - **Each token:** name, tool, fingerprint, provider id, who added it and when, and the last rotation. A token whose last rotation (or creation) is 90 days old or more gets a *rotate* badge.

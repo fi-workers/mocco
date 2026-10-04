@@ -4,7 +4,7 @@ description: Mocco's product lines, the order they ship in, the shared foundatio
 type: reference
 status: active
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-10-04
 confidence: medium
 owner: andrea
 tags: [reference, roadmap, product, platform]
@@ -36,6 +36,10 @@ Mocco knows what reached production, when, and who approved it. None of the comp
 | Community forum | [#97](https://github.com/fi-workers/mocco/issues/97) | A thread is marked "fixed in production" when the linked fix deploys |
 | Smart deep links | [#102](https://github.com/fi-workers/mocco/issues/102) | Release-aware routing: users on a build too old for the target screen get an update prompt |
 | End-user identity and auth | [#100](https://github.com/fi-workers/mocco/issues/100) | One end-user identity shared by messenger, forum and feedback; auth config changes gated and audited |
+
+## Where it stands (2026-10-04)
+
+The waves below are the plan; the order things shipped differs. Shipped: deploy governance (wave 0), OTA and force update and feature flags (wave 1), and from wave 4 the messenger and the help center, plus notification relay, the public `/v1` API, SDKs, the `mocco` CLI and an MCP server ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). Not started: the status page (wave 2), app reviews and the feedback board (wave 3), the forum and end-user identity (wave 4), deep links and hosted auth (wave 5). Products are grouped by job — Release, Support, Operate, Platform (end-user identity) and Developers (the API, SDKs, CLI and MCP server) — per [ADR 0029](../adr/0029-mocco-is-everything-a-product-needs-except-the-code.md).
 
 ## Waves
 

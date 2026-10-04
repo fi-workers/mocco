@@ -4,7 +4,7 @@ description: Use Mocco feature flags from a web page, a React app or a React Nat
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, flags, openfeature, react, react-native, guide]
@@ -28,7 +28,7 @@ Open a flag and tick **Available to browsers and apps**. Only flags marked this 
 
 ## 2. Allow your site's origin
 
-A publishable key works on a web page only if the page's origin belongs to one of the project's **Web** apps. On the project's **Overview** tab, add a Web app (or choose **Edit origins** on one) and enter each origin your pages are served from, such as `https://app.acme.com` or `http://localhost:5173` for local development. An origin is a scheme and host, with no path.
+A publishable key works on a web page only if the page's origin belongs to one of the project's **Web** apps. On the project's **Overview** page, add a Web app (or choose **Edit origins** on one) and enter each origin your pages are served from, such as `https://app.acme.com` or `http://localhost:5173` for local development. An origin is a scheme and host, with no path.
 
 ![Editing a Web app's origins on the project overview](./images/flags-origins.png)
 
@@ -36,7 +36,7 @@ Apps (React Native) don't send an origin, so this step is only for web pages.
 
 ## 3. Create a publishable key for one environment
 
-On the **API keys** tab, create a **Publishable** key with **flags:read** and choose the environment it reads. Like a server key, it reads exactly one environment, so build each environment of your app with its own key. A publishable key is safe to ship: it can only read the answers for the flags you marked in step 1.
+On the **API keys** page, create a **Publishable** key with **flags:read** and choose the environment it reads. Like a server key, it reads exactly one environment, so build each environment of your app with its own key. A publishable key is safe to ship: it can only read the answers for the flags you marked in step 1.
 
 ![Creating a publishable flags:read key for Production](./images/flags-pub-key.png)
 

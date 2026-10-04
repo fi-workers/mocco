@@ -4,7 +4,7 @@ description: A project's publishable and secret API keys — which kind goes whe
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-04
 confidence: high
 owner: andrea
 tags: [customer, getting-started, api-keys, api, guide]
@@ -18,15 +18,15 @@ related:
 
 # API keys
 
-Your apps, servers and CI call Mocco's API with a project's API keys. A key belongs to one project and can only reach that project's data. You manage them on the project's **API keys** tab.
+Your apps, servers and CI call Mocco's API with a project's API keys. A key belongs to one project and can only reach that project's data. You manage them on the project's **API keys** page.
 
-![The API keys tab: publishable and secret keys, each with its hint, scopes and last use](./images/api-keys.png)
+![The API keys page: publishable and secret keys, each with its hint, scopes and last use](./images/api-keys.png)
 
 ## Publishable or secret
 
 There are two kinds of key, and the first characters of a key tell you which one it is.
 
-A **publishable** key (`mk_pub_…`) is made to ship inside your web or React Native app, where anyone can read it. It can only hold the scopes a client app needs, none of which can change your settings. From a browser it works only on the origins of the project's web apps, which you set with **Edit origins** on the project's **Overview** tab. A page on any other site gets `403 origin_not_allowed`.
+A **publishable** key (`mk_pub_…`) is made to ship inside your web or React Native app, where anyone can read it. It can only hold the scopes a client app needs, none of which can change your settings. From a browser it works only on the origins of the project's web apps, which you set with **Edit origins** on the project's **Overview** page. A page on any other site gets `403 origin_not_allowed`.
 
 A **secret** key (`mk_sec_…`) is for your servers and CI. It can hold any scope, so keep it in your secret store, never in an app. Mocco refuses a secret key sent from a web page (`401 secret_key_from_browser`), so frontend code can't use one by mistake. If a secret key ends up in an app or a public repository anyway, revoke it.
 
@@ -52,7 +52,7 @@ Some calls need no key at all: the force-update version check and the OTA manife
 
 Owners and admins create keys; members see the list read-only.
 
-1. On the project's **API keys** tab, choose **Create key**.
+1. On the project's **API keys** page, choose **Create key**.
 2. Under **Kind**, choose **Publishable** or **Secret**. A publishable key offers only `ota:read`, `flags:read` and `messenger:chat`.
 3. Give the key a **Name** that says where it is used, such as `Acme web` or `CI publishing`.
 4. Tick its **Scopes**. With `flags:read`, choose the **Flag environment** the key reads.
