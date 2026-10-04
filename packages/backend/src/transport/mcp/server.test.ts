@@ -16,8 +16,10 @@ describe('createMcpServer', () => {
   it('registers its tools without calling anything', () => {
     const server = createMcpServer({
       runs: { searchInWorkspace: refuse, get: refuse },
-      approvals: { list: refuse, get: refuse },
+      approvals: { list: refuse, get: refuse, vote: refuse },
       scope: new WorkspaceScope({ memberships: { listForUser: refuse, isMember: refuse } }),
+      settings: { agentsMayDecide: refuse },
+      confirmations: undefined,
     });
 
     expect(server).toBeDefined();

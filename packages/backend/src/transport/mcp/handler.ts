@@ -5,7 +5,15 @@
 // cannot be replayed here. It then hands over the token's claims; the subject is the
 // person, and it is put into `authInfo.extra` because the SDK's `AuthInfo` describes the
 // token rather than the user.
+//
+// Scopes are enforced in two places, each where it can be decided. The 401 that starts a
+// connection names only the sign-in scopes, so a client never asks for `approvals:write`
+// up front. The deciding tools declare `approvals:write` themselves (`scopeChallenge` in
+// `tools/approvals.ts`), and the SDK answers a call to one with a 403
+// `insufficient_scope` before the tool runs — judged on the parsed request it is about to
+// execute, not on a header that merely names it.
 import { requireMcpAuth } from '@better-auth/mcp';
+import { mcpSignInScopes } from '@mocco/common/mcp';
 
 import { getMcpAuth } from '@backend/domain/auth/instance';
 import { getMcpHandler } from '@backend/runtime/mcp';
@@ -31,10 +39,12 @@ export async function mcpHandler(request: Request): Promise<Response> {
           token: '',
           clientId: typeof claims.client_id === 'string' ? claims.client_id : '',
           scopes: scopesOf(claims.scope),
+          // Lets a step-up challenge point the client at our protected-resource metadata.
+          resource: new URL(mcpResource),
           extra: { [MCP_USER_ID]: claims.sub },
         },
       }),
-    { resource: mcpResource },
+    { resource: mcpResource, challengeScopes: mcpSignInScopes },
   );
   return await guarded(request);
 }

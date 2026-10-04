@@ -150,6 +150,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/workspace.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`
 - Source: branch `feat/mcp-agents-setting`
 
+## 2026-10-05 — Agents can vote on approvals
+
+- The connect guide lists `mocco_approvals_vote`, says what the confirmation shows and that declining votes nothing,
+  adds "Allowing an app to vote" for the step-up consent, and replaces the stale "tools are missing" troubleshooting
+  row with the refusals a person can now meet. The MCP spec marks slice 6b shipped and records how the scope,
+  step-up, confirmation state and errors are built; the workspace reference notes the vote tool reads the switch.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/workspace.md`,
+  `log.md`
+- Source: branch `feat/mcp-approvals-vote`
+
 ## 2026-10-04 — Mocco is everything a product needs, except the code
 
 - Added [ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md), superseding ADR 0026's

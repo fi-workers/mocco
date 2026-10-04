@@ -1,3 +1,4 @@
+import { McpScopes } from '@mocco/common/mcp';
 import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
@@ -14,6 +15,7 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   profile: 'See your name',
   email: 'See your email address',
   offline_access: 'Stay signed in without asking you again',
+  [McpScopes.approvalsWrite]: 'Approve or reject changes as you, in workspaces that allow agents to decide',
 };
 
 const scopesOf = (scope: unknown): string[] =>
