@@ -48,8 +48,10 @@ jobs:
           - lint-react-doctor
           - lint-e2e
           - lint-sdk
+          - lint-probe
           - test-common
           - test-cli
+          - test-probe
           - test-sdk
           - db:drift
           - schema:drift

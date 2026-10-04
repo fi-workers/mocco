@@ -1,6 +1,6 @@
 ---
 title: SDK packages
-description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin) and @mocco/cli — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and npm trusted publishing.
+description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node, @mocco/react-native (with the ota subpath and Expo config plugin), @mocco/cli and @mocco/probe — how they're built, typed against the /v1 schemas, developed without a build, and published with changesets and npm trusted publishing.
 type: reference
 status: active
 created: 2026-10-02
@@ -24,6 +24,7 @@ code_refs:
   - packages/sdk-openfeature-react-native/src/openfeature-react-native.ts
   - packages/sdk-core/src/telemetry.ts
   - .github/workflows/publish.yml
+  - packages/probe/tsup.config.ts
 ---
 
 # SDK packages
@@ -41,10 +42,11 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 | `@mocco/openfeature-web` | browsers | `MoccoWebProvider({ publishableKey })`: OpenFeature's OFREP web provider with Mocco's defaults (Mocco evaluates; the change stream, a 60 s polling fallback, a refresh on tab focus, the last evaluation in `localStorage`). Dependency: `@openfeature/ofrep-web-provider`; peer: `@openfeature/web-sdk` |
 | `@mocco/openfeature-react-native` | React Native apps | `MoccoReactNativeProvider({ publishableKey, storage, appState, EventSource })`: OFREP evaluation with the last answers kept in AsyncStorage (served at launch and offline), a refresh on returning to the foreground, polling while active, and the change stream through `react-native-sse`. The app passes those in, so the package has no native or React Native dependency. Peer: `@openfeature/web-sdk` |
 | `@mocco/cli` | CI | the `mocco` bin (`init`, `publish`, `promote`, `pause`, `rollback`); `@mocco/common` is bundled in |
+| `@mocco/probe` | status page probe locations | the `mocco-probe` bin, the agent that runs a location's uptime checks ([status page model](./status.md#the-probe-agent)); `@mocco/common` is bundled in, `undici` and `zod` are dependencies. Also a container image (`packages/probe/Dockerfile`, to be published as `ghcr.io/fi-workers/mocco-probe`); its tests trust a checked-in self-signed certificate through `NODE_EXTRA_CA_CERTS` |
 
 ## Building and developing
 
-- `yarn sdk:build` builds them in dependency order with tsup: ESM + CJS + `.d.ts` for sdk-core, node, react-native, flags-core and the three OpenFeature providers; ESM for js; an ESM bin for the CLI. `dist/` is git-ignored; `verify` builds before linting.
+- `yarn sdk:build` builds them in dependency order with tsup: ESM + CJS + `.d.ts` for sdk-core, node, react-native, flags-core and the three OpenFeature providers; ESM for js; an ESM bin for the CLI and the probe. `dist/` is git-ignored; `verify` builds before linting.
 - Development needs no build: each package's `exports` start with an `@mocco/source` condition pointing at `src/`. TypeScript resolves it through `customConditions` in `tsconfig.base.json`, and each package's `vitest.config.ts` through `resolve.conditions` (the backend's too, for its end-to-end SDK tests such as `flags-sdk.test.ts`). Published consumers never use that condition.
 - The SDKs ship **types only** for the wire format (`packages/sdk-core/src/wire.ts`): no zod in a bundle. `transport/ext/v1/sdk-contract.test.ts` asserts with `expectTypeOf` that they match the route schemas in `@mocco/common` (what the SDK sends is what the route accepts; what the route answers is what the SDK types). Add an assertion whenever an SDK calls a new route.
 - `@mocco/react-native` declares the slice of its peers' types it uses (`src/types/peer-modules.d.ts`) so `react-native`'s type tree stays out of the repo.

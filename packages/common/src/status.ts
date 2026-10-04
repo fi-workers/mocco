@@ -325,8 +325,8 @@ export const probeResultSchema = z.object({
   errorKind: z.enum(Object.values(CheckErrorKinds) as [CheckErrorKind, ...CheckErrorKind[]]).optional(),
   statusCode: z.int().min(100).max(599).optional(),
   latencyMs: z.int().min(0).max(600_000).optional(),
-  /** Phase timings in milliseconds (dns, connect, tls, ttfb). */
-  timings: z.record(z.enum(['dns', 'connect', 'tls', 'ttfb']), z.number().min(0).max(600_000)).optional(),
+  /** Phase timings in milliseconds (dns, connect, tls, ttfb); a check reports the phases it had. */
+  timings: z.partialRecord(z.enum(['dns', 'connect', 'tls', 'ttfb']), z.number().min(0).max(600_000)).optional(),
   tlsExpiresAt: z.coerce.date().optional(),
   /** Truncated to 512 characters. */
   detail: z.string().optional(),
@@ -340,4 +340,27 @@ export const probeResultsRequestSchema = z.object({
 export const probeHeartbeatRequestSchema = z.object({
   agentVersion: z.string().trim().min(1).max(64),
   inflight: z.int().min(0).max(10_000).default(0),
+});
+
+/** One round leased to a location: run `spec` at `roundAt` and report by `expiresAt`. */
+export const probeLeaseSchema = z.object({
+  leaseId: z.uuid(),
+  monitorId: z.uuid(),
+  roundAt: z.coerce.date(),
+  expiresAt: z.coerce.date(),
+  spec: monitorSpecSchema,
+});
+export type ProbeLeaseDto = z.infer<typeof probeLeaseSchema>;
+
+/** The lease answer. Agents parse each lease on its own, so a kind they don't know skips one lease, not the batch. */
+export const probeLeaseResponseSchema = z.object({
+  leases: z.array(probeLeaseSchema),
+  /** How long to wait before the next lease call; 0 when the batch was full. */
+  pollAfterMs: z.int().min(0),
+});
+
+export const probeResultsResponseSchema = z.object({
+  accepted: z.int().min(0),
+  duplicates: z.int().min(0),
+  rejected: z.array(z.uuid()),
 });
