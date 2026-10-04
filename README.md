@@ -2,11 +2,18 @@
 
 [![CI](https://github.com/fi-workers/mocco/actions/workflows/ci.yml/badge.svg)](https://github.com/fi-workers/mocco/actions/workflows/ci.yml)
 
-> An **all-in-one platform for developers**: shipping, operating, and supporting a product from one workspace.
-> The first product is **deploy governance** on top of GitHub Actions. GitHub Actions runs your pipelines; Mocco owns the **pause/resume gates** (approvals, separation of duties, audit, and credential gating).
-> Next on the [roadmap](./docs/reference/roadmap.md): OTA release management, feature flags, status pages, app-review analysis, feedback boards, customer messaging, help center, forum, deep links, and end-user auth. They all build on one advantage: Mocco knows what reached production, when, and who approved it.
+> **Ship fast. Know what shipped.** Mocco is one workspace to release, control and support your app. Deploys, OTA updates, minimum app versions and feature flags go through the same approvals and the same audit log, so Mocco knows what reached production, when, and who approved it — and you answer your users from the same place ([ADR 0026](./docs/adr/0026-position-mocco-around-the-production-record.md)).
 
-**Deploy governance: write ≠ deploy.** Having GitHub write access does not mean you can deploy. Unless someone with the right Mocco role resumes the gate, the production deploy never obtains cloud credentials (OIDC/STS). That's why deleting the verify step doesn't bypass anything.
+| Group          | Products today                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Release**    | Deploy governance on GitHub Actions · OTA updates (hosted, or gating your own tool) · Force update · Feature flags (OpenFeature) |
+| **Support**    | Messenger · Help center                                                                                                          |
+| **Operate**    | Notifications (Mocco, Sentry, Vercel, GitHub → Discord) · Audit log                                                              |
+| **Developers** | Public `/v1` API with API keys · SDKs (MIT) · `mocco` CLI · MCP server                                                           |
+
+Next on the [roadmap](./docs/reference/roadmap.md): status page, app reviews, feedback board, forum, deep links and end-user identity.
+
+**Write ≠ ship.** Being able to push code (or to generate it) doesn't mean being able to change production. A deploy waits at a gate until someone with the right Mocco role resumes it, and the production step never obtains cloud credentials (OIDC/STS) without that approval, so deleting the verify step bypasses nothing. The same holds for an OTA release on a protected channel, a raised minimum app version and a change to a protected flag environment. A rollback or a kill switch applies at once and is recorded.
 
 ## Quickstart (local)
 
