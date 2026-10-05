@@ -1,6 +1,7 @@
 // The help center's services over a db (#96). Pure (no instance imports); instance.ts
 // binds the production deps, tests bind pglite.
 import { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
 import { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
@@ -23,6 +24,7 @@ export interface HelpDomain {
   helpImport: HelpImportService;
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
+  helpFeedback: HelpFeedbackService;
 }
 
 export function createHelpDomain(
@@ -36,6 +38,8 @@ export function createHelpDomain(
     revalidator?: HelpPageRevalidator;
     /** Queue an IndexNow submission after each public change (production only, #367). */
     indexNow?: boolean;
+    /** Keys "Was this helpful?" visitor hashes; tests pass a constant. */
+    feedbackSecret?: () => string;
     now?: () => Date;
   },
 ): HelpDomain {
@@ -90,5 +94,14 @@ export function createHelpDomain(
     helpImport,
     helpImages,
     helpTranslations,
+    helpFeedback: new HelpFeedbackService({
+      db,
+      secret:
+        deps.feedbackSecret ??
+        (() => {
+          throw new Error('Help feedback needs a secret (AUTH_SECRET)');
+        }),
+      ...(deps.now !== undefined && { now: deps.now }),
+    }),
   };
 }

@@ -67,6 +67,7 @@ export async function loadHelpArticle(site: string, locale: string, ref: string)
     }
     const blocks: DocBlock[] = helpArticleBlocks(article.body);
     return {
+      shortId: article.shortId,
       title: article.title,
       locale: article.locale,
       canonicalPath: article.canonicalPath,

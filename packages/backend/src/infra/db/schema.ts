@@ -3157,6 +3157,38 @@ export const helpRedirects = pgTable(
   ],
 );
 
+/**
+ * "Was this helpful?" answers (#216): one per visitor, article and day (UTC), the latest
+ * answer winning. `visitor_hash` is a keyed hash, never a raw address or client id.
+ */
+export const helpFeedback = pgTable(
+  'mocco_help_feedback',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    articleId: uuid('article_id').notNull(),
+    /** The language the visitor read the article in. */
+    locale: text().notNull(),
+    helpful: boolean().notNull(),
+    comment: text(),
+    visitorHash: text('visitor_hash').notNull(),
+    day: date({ mode: 'string' }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_feedback_visitor_day_uq').on(t.articleId, t.visitorHash, t.day),
+    index('mocco_help_feedback_project_article_day_idx').on(t.projectId, t.articleId, t.day),
+    foreignKey({
+      columns: [t.articleId, t.workspaceId],
+      foreignColumns: [helpArticles.id, helpArticles.workspaceId],
+      name: 'mocco_help_feedback_article_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_feedback_comment_check', sql`char_length(${t.comment}) <= 500`),
+  ],
+);
+
 // ─────────────────────────────────────────────────────────────
 // MCP (ADR 0025): per-workspace settings for the agent surface. The tokens and clients
 // themselves are the authorization server's tables above; this is what a workspace

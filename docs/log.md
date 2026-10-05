@@ -202,6 +202,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
 - Source: branch `feat/help-v1-read` (#216)
 
+## 2026-10-05 — Help center: Was this helpful?
+
+- The help center reference gains "Was this helpful?": `mocco_help_feedback` (migration 0065), the two surfaces (`/v1` and
+  the public site's `/api/help/feedback`), one answer per visitor, article and day, the keyed visitor hash with its
+  network fallback, the per-address limit, no audit, and the editor's 30-day section; `helpfulness` joins the operator
+  API. The public API lists `POST /v1/help/articles/{id}/feedback`, the SDK reference `sendFeedback`, and the feature
+  map gains a row.
+- The customer guide shows the widget under articles and the editor's section, with two screenshots, and how to send
+  feedback from an app.
+- Docs touched: `reference/help-center.md`, `reference/public-api.md`, `reference/sdk.md`, `reference/feature-map.md`,
+  `customer/help/help-center.md`, `customer/help/images/helpful-widget.png`, `customer/help/images/helpfulness.png`,
+  `log.md`
+- Source: branch `feat/help-feedback` (#216)
+
 ## 2026-10-05 — Help center editor: images and autosave
 
 - The help center reference gains "Images": `HelpImageService` (moved out of the import service), uploads completed

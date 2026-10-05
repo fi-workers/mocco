@@ -78,3 +78,36 @@ export const helpV1ArticleSchema = z.object({
   publishedAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
+
+/** The longest comment a "Was this helpful?" answer may carry. */
+export const HELP_FEEDBACK_COMMENT_MAX = 500;
+
+/**
+ * "Was this helpful?" (`POST /v1/help/articles/:id/feedback`, and the public site's widget).
+ * `visitorId` is an opaque id the client generates and keeps (the SDK and the site's widget
+ * do); Mocco stores only a keyed hash of it. Without one, the network address and user
+ * agent stand in, hashed with the day, so one answer per article per day is counted.
+ */
+export const helpV1FeedbackInputSchema = z.object({
+  helpful: z.boolean(),
+  locale: helpV1LocaleSchema.optional(),
+  comment: z.string().trim().max(HELP_FEEDBACK_COMMENT_MAX).optional(),
+  visitorId: z
+    .string()
+    .regex(/^[\w-]{8,64}$/u)
+    .optional(),
+});
+
+export const helpV1FeedbackResultSchema = z.object({
+  /** False when this visitor already answered today: the newer answer replaced the older one. */
+  counted: z.boolean(),
+});
+
+/** An article's answers over the last `days` days (the console's article editor). */
+export const helpfulnessSchema = z.object({
+  days: z.number(),
+  helpful: z.number(),
+  notHelpful: z.number(),
+  comments: z.array(z.object({ helpful: z.boolean(), comment: z.string(), locale: z.string(), createdAt: z.date() })),
+});
+export type Helpfulness = z.infer<typeof helpfulnessSchema>;

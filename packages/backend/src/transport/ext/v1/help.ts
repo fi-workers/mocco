@@ -10,6 +10,8 @@ import {
   helpV1ArticleRefSchema,
   helpV1ArticleSchema,
   helpV1CollectionResultSchema,
+  helpV1FeedbackInputSchema,
+  helpV1FeedbackResultSchema,
   helpV1LocaleQuerySchema,
   helpV1SearchQuerySchema,
   helpV1SearchResultSchema,
@@ -17,9 +19,11 @@ import {
 } from '@mocco/common/help-v1';
 import { Hono } from 'hono';
 
-import { requireKey } from '@backend/transport/ext/v1/middleware';
+import { HELP_FEEDBACK_RATE_LIMIT } from '@backend/domain/helpcenter/HelpFeedbackService';
+import { clientAddressOf, ipBucketOf, limit, requireKey } from '@backend/transport/ext/v1/middleware';
 import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
+import type { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { Context } from 'hono';
@@ -27,6 +31,7 @@ import type { z } from 'zod';
 
 export interface HelpServingDeps {
   help: Pick<HelpPublicReadService, 'searchInProject' | 'siteInProject' | 'articleInProject'>;
+  feedback: Pick<HelpFeedbackService, 'recordInProject'>;
   /** The site's public origin, for absolute article URLs; null when not served. */
   originOf: (slug: string) => string | null;
 }
@@ -194,6 +199,48 @@ export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1En
     } catch (error) {
       if (isMissingSite(error)) {
         return noHelpCenter();
+      }
+      throw error;
+    }
+  });
+
+  app.post('/articles/:ref/feedback', read, async c => {
+    const ref = helpV1ArticleRefSchema.safeParse(c.req.param('ref'));
+    let raw: unknown = null;
+    try {
+      raw = await c.req.json();
+    } catch {
+      // Not JSON: refused below.
+    }
+    const body = helpV1FeedbackInputSchema.safeParse(raw);
+    if (!ref.success || !body.success) {
+      return problemResponse(
+        problemOf(400, ProblemCodes.badRequest, 'Send { helpful } (and optionally locale, comment, visitorId)'),
+      );
+    }
+    const limited = await limit(deps, `help-feedback:${ipBucketOf(c)}`, HELP_FEEDBACK_RATE_LIMIT);
+    if (limited.refused !== undefined) {
+      return limited.refused;
+    }
+    const { workspaceId, projectId } = c.var.principal;
+    const { visitorId, helpful, locale, comment } = body.data;
+    try {
+      const result = await help.feedback.recordInProject(
+        workspaceId,
+        projectId,
+        ref.data,
+        { helpful, ...(locale !== undefined && { locale }), ...(comment !== undefined && { comment }) },
+        visitorId === undefined
+          ? { network: { address: clientAddressOf(c), userAgent: c.req.header('user-agent') ?? '' } }
+          : { visitorId },
+      );
+      return c.json(helpV1FeedbackResultSchema.parse(result), 201);
+    } catch (error) {
+      if (isMissingSite(error)) {
+        return noHelpCenter();
+      }
+      if (error instanceof Error && error.name === 'HelpNodeNotFoundError') {
+        return problemResponse(problemOf(404, ProblemCodes.notFound, 'No such published article'));
       }
       throw error;
     }
