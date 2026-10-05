@@ -4,7 +4,7 @@ description: How any domain asks for an N-of-M approval of a pinned change (or r
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, governance, approvals, audit]
@@ -37,6 +37,18 @@ States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All
 - **`pre_approval`** gates a change. When it is approved, the handler for its `subject_type` runs **once** with the approved row. Handlers must be idempotent and apply exactly the pinned `action`. The owning product's composition root binds its handler with `registerHandler` (the dependency points product → governance, never the reverse). Voting on a `pre_approval` whose subject has no handler fails before anything is recorded, so a request can never be approved without a way to apply it.
 - **`review`** records the post-hoc review of a change that was applied at once (a rollback, a pause, a relaxed version policy). Approving it runs no handler; it closes the evidence gap.
 
+## Subject labels
+
+`subject_type` and `subject_id` stay opaque to governance, so the product that owns a subject names it. Its composition root binds a **labeler** with `registerLabeler(subjectTypes, labeler)`: given a batch of requests, it returns a short label for each subject it can name, read in **one query for the whole batch**. `listLabeled` lists the requests and then calls each labeler once with its requests, in parallel, so a listing takes one query plus one per labeling product, however many requests or projects it holds. A request no labeler names gets `subjectLabel: null`.
+
+| Subject types | Labeled by | Label |
+|---|---|---|
+| `flags.changeset`, `flags.change_gate`, `flags.kill` | `FlagGovernanceService.labelApprovalSubjects` (`action.environmentId`) | the environment's name: `Production` |
+| `ota.channel_policy`, `ota.channel_change` | `OtaHostingService.labelApprovalSubjects` (`subject_id`) | `<name> channel`: `production channel` |
+| `ota.version_policy` | none yet | `null` |
+
+Home shows the label after the project's name ("QA App · Production"). Only subjects in the request's own workspace are named.
+
 ## Rules
 
 - **Requirements are pinned** at creation. A later policy edit supersedes pending requests (`supersedePending`); it never rewrites them.
@@ -58,4 +70,4 @@ States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All
 
 ## tRPC surface
 
-`approval.list | get | vote`, all workspace-scoped (a non-member gets `NOT_FOUND`). There is no `create`: requests are opened by product domains through `ApprovalService.request`, never directly by a client.
+`approval.list | get | vote`, all workspace-scoped (a non-member gets `NOT_FOUND`). `list` returns each request with its `subjectLabel` (`listLabeled`). There is no `create`: requests are opened by product domains through `ApprovalService.request`, never directly by a client.

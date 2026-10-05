@@ -12,7 +12,7 @@ import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { ApprovalRequestDto } from '@mocco/common/governance';
+import type { ApprovalListItemDto } from '@mocco/common/governance';
 
 interface Props {
   workspaceId: string;
@@ -56,7 +56,7 @@ function LoadError({ what, message, retry }: { what: string; message: string; re
   );
 }
 
-function actionString(request: ApprovalRequestDto, key: string): string | null {
+function actionString(request: ApprovalListItemDto, key: string): string | null {
   const value = request.action[key];
   return typeof value === 'string' ? value : null;
 }
@@ -155,7 +155,8 @@ function ProjectList({ workspaceId }: { workspaceId: string }) {
 
 // The workspace's Home: what is waiting for the team's approval across products, the
 // latest governed changes, and the projects. Each approval request records its project,
-// so linking it to the screen where it's decided needs no lookups.
+// and the list names its subject (an environment, a channel), so linking it to the screen
+// where it's decided needs no lookups — Home stays at a fixed number of queries.
 export default function WorkspaceHome({ workspaceId }: Props) {
   const projectsQuery = trpc.project.list.useQuery({ workspaceId });
   const approvalsQuery = trpc.approval.list.useQuery({ workspaceId, state: ApprovalStates.pending });
@@ -166,11 +167,17 @@ export default function WorkspaceHome({ workspaceId }: Props) {
   const projectNames = new Map((projectsQuery.data?.projects ?? []).map(project => [project.id, project.name]));
   const pending = approvalsQuery.data?.requests ?? [];
 
-  // Where a request is decided: its project (recorded on the request) and the screen there.
-  const describe = (request: ApprovalRequestDto): Described => {
-    const { projectId } = request;
-    const at = (href: (project: string) => string): Place | null =>
-      projectId === null ? null : { context: projectNames.get(projectId) ?? 'Project', href: href(projectId) };
+  // Where a request is decided: its project (recorded on the request), what in it the
+  // request is about ("QA App · Production"), and the screen there.
+  const describe = (request: ApprovalListItemDto): Described => {
+    const { projectId, subjectLabel } = request;
+    const at = (href: (project: string) => string): Place | null => {
+      if (projectId === null) {
+        return null;
+      }
+      const project = projectNames.get(projectId) ?? 'Project';
+      return { context: subjectLabel === null ? project : `${project} · ${subjectLabel}`, href: href(projectId) };
+    };
     const environmentId = actionString(request, 'environmentId') ?? undefined;
     switch (request.subjectType) {
       case FlagApprovalSubjects.changeset: {
