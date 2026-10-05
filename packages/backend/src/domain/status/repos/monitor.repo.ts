@@ -2,6 +2,7 @@ import { MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { and, asc, eq, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
+import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
@@ -53,6 +54,15 @@ export class MonitorRepo {
     return row;
   }
 
+  /** The project's monitor with this key (#159). */
+  async findByKey(scope: StatusScope, key: string): Promise<MonitorRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(m)
+      .where(and(scoped(scope), eq(m.key, key)));
+    return row;
+  }
+
   /** Take the monitor's state lock for the rest of the transaction, then read it. Every writer
    * of `state` (pause, resume, the evaluator) goes through here. Call inside a transaction only. */
   async lockForStateChange(scope: StatusScope, id: string): Promise<MonitorRow | undefined> {
@@ -81,8 +91,13 @@ export class MonitorRepo {
     );
   }
 
+  /** Insert a monitor; a key the project already uses is a UniqueConstraintError. */
   async insert(row: MonitorInsert): Promise<MonitorRow> {
-    return expectOne(await this.db.insert(m).values(row).returning());
+    try {
+      return expectOne(await this.db.insert(m).values(row).returning());
+    } catch (error) {
+      return rethrowUniqueViolation(error);
+    }
   }
 
   async updateSettings(scope: StatusScope, id: string, values: MonitorSettings): Promise<MonitorRow | undefined> {

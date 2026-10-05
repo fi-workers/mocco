@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, the /v1 management API for CI and scripts with its OpenAPI description, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -62,6 +62,9 @@ code_refs:
   - packages/backend/src/domain/status/DeployWatchService.ts
   - packages/backend/src/domain/status/subscribers.ts
   - packages/backend/src/transport/ext/v1/monitors.ts
+  - packages/backend/src/transport/ext/v1/status.ts
+  - packages/backend/src/transport/ext/v1/status-openapi.ts
+  - packages/common/src/status-v1.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
   - packages/frontend/src/components/status/incidents.tsx
@@ -156,7 +159,7 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`, `heartbeat`), `spec` (jsonb; a heartbeat's holds only its kind), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id`; for a [heartbeat](#heartbeat-monitors), `heartbeat_token_hash` (unique), `heartbeat_period_s`, `heartbeat_grace_s`, `last_ping_at`, `last_start_at` and `last_duration_ms`. A DB check (`mocco_status_monitors_heartbeat_check`, migration 0068) requires a heartbeat to have the token hash, a period and a grace of 60 seconds or more and both confirmations at 1, and a probe kind to have no token, period, grace or pings |
+| `mocco_status_monitors` | A check of a project: `key` (the caller's name for a monitor made through the [`/v1` API](#the-v1-management-api), unique in the project and null for one made in the console; lowercase letters, digits and inner dots, underscores and hyphens, 1 to 100 characters, DB-checked; migration 0069), `name`, `kind` (`http`, `tcp`, `heartbeat`), `spec` (jsonb; a heartbeat's holds only its kind), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id`; for a [heartbeat](#heartbeat-monitors), `heartbeat_token_hash` (unique), `heartbeat_period_s`, `heartbeat_grace_s`, `last_ping_at`, `last_start_at` and `last_duration_ms`. A DB check (`mocco_status_monitors_heartbeat_check`, migration 0068) requires a heartbeat to have the token hash, a period and a grace of 60 seconds or more and both confirmations at 1, and a probe kind to have no token, period, grace or pings |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_incident_runs` | The runs linked to an incident ([deploy correlation](#deploy-correlation)): `relation` (`suspected`, `before_window`, `fix`, `manual`), `score` (a suggestion's), `linked_by_user_id` (null for a suggestion). Keyed by (incident, run), with an index on `run_id` for the run's side; deleting the incident or the run deletes the link |
@@ -778,6 +781,62 @@ These changes are appended to the workspace's audit chain, after their transacti
 
 Group and other component edits are not audited, and neither are the runs Mocco suggests for an incident.
 
+A change made through the [`/v1` API](#the-v1-management-api) is recorded with the key's creator as the actor (none
+once they're deleted) and `principal: "apikey:<key id>"` in the payload, so the log tells a script from a person. A
+monitor made that way also has its `key` in `status.monitor.created` and `status.monitor.deleted`, and its state
+changes say `by: "api_key"`.
+
+## The /v1 management API
+
+Monitors, incidents, maintenance and component statuses as code, for CI and scripts (#159):
+`transport/ext/v1/status.ts`, mounted on the [public `/v1` API](./public-api.md#routes). Every route takes a secret key
+of the project: reads need `status:read` and changes `status:write` (a publishable key is `403 wrong_key_kind`, a
+missing scope `403 insufficient_scope`). The route only parses and maps errors; the same services as the console decide,
+scoped by the key's workspace and project, so another project's or workspace's monitor, page, component, incident or
+window is `404`, exactly like one that doesn't exist. Not-found errors are `404`; `IncidentTransitionError`, `MaintenanceTransitionError`, `MonitorKindError` and `MonitorPausedError` are `409 conflict`,
+and `MaintenanceWindowError` and a body or query zod refuses are `400 bad_request`.
+
+**Upsert by key.** `PUT /v1/monitors/by-key/{key}` takes the console's monitor input (`monitorInputSchema`) and makes the
+project's monitor with that key match it. `MonitorService.upsertByKey` creates it (`201`, outcome `created`) when there
+is none; otherwise it compares the stored settings, locations and components with the asked ones (ignoring key order in
+`spec` and the order of the lists) and changes the monitor only if they differ (`200`, `updated`). An identical body is
+`200 unchanged`: no write, no audit entry, the same answer as before, so a pipeline can run the same upsert on every
+deploy. Switching between a heartbeat and a probe kind is `409`, as in the console. A new heartbeat's `mhb_` ping token
+is in the `created` answer only (`heartbeatToken`, null otherwise). Two upserts of a new key racing both succeed: the
+loser hits `mocco_status_monitors_project_key_uq` and updates the monitor the winner made. Keys are per project, so the
+same key in another project is another monitor.
+
+**What answers carry.** Each route builds its answer field by field from the service's rows, then parses it with its
+`@mocco/common/status-v1` schema, which drops anything the schema doesn't list. A monitor's `target` is
+`monitorTargetOf` (an HTTP URL's host and port, or a TCP host and port) and `check` holds only the method, the expected
+statuses, the latency threshold, the timeout, redirects and the TLS warning, because a URL's credentials, path and query,
+a request body and a keyword can hold secrets. No answer has a heartbeat token's hash, a location's token hash or a
+workspace id.
+
+| Route | Scope | Answer |
+|---|---|---|
+| `GET /v1/locations` | `status:read` | `{ locations: [{ id, code, name, kind, disabled }] }`: Mocco's shared locations and the workspace's own, for `locationIds` |
+| `GET /v1/monitors` · `GET /v1/monitors/{id}` | `status:read` | `{ monitors: [Monitor] }` · `Monitor`: `id`, `key`, `name`, `kind`, `target`, `state`, `stateChangedAt`, `check` (null for a heartbeat), `heartbeat` (period, grace, last ping, last start, last duration; null for a probe kind), `intervalSeconds`, `confirmations`, `recoveryConfirmations`, `quorumMode`, `incidentPolicy`, `locationIds`, `components`, `createdAt`, `updatedAt` |
+| `PUT /v1/monitors/by-key/{key}` | `status:write` | `{ outcome, monitor, heartbeatToken }`; `400` for a bad key or body, `404` for a location or component the project can't use |
+| `POST /v1/monitors/{id}/pause` · `…/resume` | `status:write` | The monitor as it is now (pausing a paused one changes nothing) |
+| `DELETE /v1/monitors/{id}` | `status:write` | `204` |
+| `POST /v1/monitors/{id}/check` | `status:write` | An ad-hoc round ([the deploy watch](#the-deploy-watch)) |
+| `GET /v1/pages` · `GET /v1/pages/{id}/components` | `status:read` | `{ pages: [{ id, slug, title, createdAt, updatedAt }] }` · `{ components: [{ id, pageId, groupId, name, description, position, status, displayedStatus, updatedAt }] }` |
+| `PATCH /v1/components/{id}` | `status:write` | Body `{ status }`: the status set by hand (`setComponentStatus`); answers the component with its `displayedStatus` |
+| `GET /v1/incidents?pageId=&open=` · `GET /v1/incidents/{id}` | `status:read` | `{ incidents: [Incident] }` (newest first, drafts included; `open=true` leaves out resolved ones) · `{ incident, updates: [{ id, status, body, createdAt }], components: [{ componentId, impact }] }` |
+| `POST /v1/incidents` | `status:write` | Body `incidentCreateInputSchema` (`pageId`, `title`, `severity`, `status`, `body`, `components`); `201` with the incident as `GET` reads it. A published incident with `origin: manual` |
+| `POST /v1/incidents/{id}/updates` | `status:write` | Body `{ status, body }`; `201 { incident, update }`; `409` for a step the lifecycle doesn't allow |
+| `PUT /v1/incidents/{id}/components` | `status:write` | Body `{ components }`, replacing them; the incident as `GET` reads it |
+| `GET /v1/maintenances?pageId=` | `status:read` | `{ maintenances: [{ id, pageId, title, body, status, scheduledStart, scheduledEnd, actualStart, actualEnd, componentIds, createdAt, updatedAt }] }` |
+| `POST /v1/maintenances` · `POST /v1/maintenances/{id}/cancel` | `status:write` | Body as `maintenanceInputSchema` with ISO 8601 times; `201` · the window, `409` once it completed or was canceled |
+| `GET /v1/status/openapi.json` | none | The OpenAPI 3.1 description |
+
+**OpenAPI.** `transport/ext/v1/status-openapi.ts` lists the operations above (with `x-mocco-scope`) and generates
+their request and answer schemas with `z.toJSONSchema` from the same zod schemas the routes parse with. It is served at
+`GET /v1/status/openapi.json` (no key, the anonymous per-address limit, cached five minutes) with the base the request
+came in on as its server. `status-openapi.test.ts` fails if a mounted status route is missing from it or it lists one
+that isn't mounted, and validates real answers from the routes against its schemas.
+
 ## tRPC
 
 `status.*` is built on `productProcedure(Products.status)`: the caller must be a member of `workspaceId`,
@@ -804,7 +863,9 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-Hosted locations, publishing `@mocco/probe` to npm and its image to
+The SDK's `status.*` namespace over the [`/v1` API](#the-v1-management-api) (with a key-resolving
+`locations` helper), an `api` incident origin, and changing an incident's title or severity through `/v1`; hosted
+locations, publishing `@mocco/probe` to npm and its image to
 GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in the console), a heartbeat that goes down when a
 `/start` isn't followed by a finish within a time limit, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was

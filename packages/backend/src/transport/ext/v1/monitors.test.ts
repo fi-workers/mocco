@@ -22,6 +22,7 @@ import { statusMonitors, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { MONITOR_CHECK_RATE_LIMIT } from '@backend/transport/ext/v1/monitors';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
+import { statusApiDepsOf } from '@backend/transport/ext/v1/status';
 
 import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import type { StatusDomain } from '@backend/domain/status/compose';
@@ -124,7 +125,7 @@ describe('POST /v1/monitors/:id/check (pglite)', () => {
       createV1Routes({
         apiKeys,
         limiter: new MemoryRateLimiter(),
-        monitors: { monitors: status.statusMonitors },
+        status: statusApiDepsOf(status),
       }),
     );
   });

@@ -5,12 +5,13 @@ import { StatusEntityNotFoundError, StatusPageSlugTakenError } from '@backend/do
 import { ComponentGroupRepo } from '@backend/domain/status/repos/component-group.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { StatusPageRepo } from '@backend/domain/status/repos/page.repo';
+import { actorOf } from '@backend/domain/status/scope';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
-import type { StatusScope } from '@backend/domain/status/scope';
+import type { StatusActor, StatusScope } from '@backend/domain/status/scope';
 import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { Db } from '@backend/infra/db/types';
 import type { ComponentGroupInput, ComponentInput, ComponentStatus, StatusPageInput } from '@mocco/common/status';
@@ -207,7 +208,8 @@ export class StatusPageService {
 
   /** Set the status an operator reports by hand (audited). Open incidents and maintenance
    * still count toward the status the component shows. */
-  async setComponentStatus(scope: StatusScope, actorUserId: string, componentId: string, status: ComponentStatus) {
+  async setComponentStatus(scope: StatusScope, actor: StatusActor, componentId: string, status: ComponentStatus) {
+    const { userId, via } = actorOf(actor);
     const before = await new ComponentRepo(this.deps.db).find(scope, componentId);
     const updated =
       before === undefined
@@ -220,11 +222,11 @@ export class StatusPageService {
       throw new StatusEntityNotFoundError('component', componentId);
     }
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusComponentStatusChanged,
       subjectType: 'status_component',
       subjectId: componentId,
-      payload: { pageId: updated.pageId, from: before.status, to: status },
+      payload: { pageId: updated.pageId, from: before.status, to: status, ...via },
     });
     return updated;
   }

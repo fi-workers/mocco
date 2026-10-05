@@ -629,3 +629,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   and names tail truncation.
 - Docs touched: `superpowers/specs/2026-07-29-slice8-audit-log-design.md`, `customer/start/audit-log.md`, `log.md`
 - Source: branch `fix/audit-verify-cost` (issue #92)
+
+## 2026-10-06 — Status: the /v1 management API
+
+- Documented the `/v1` status management API (#159) in the [status page model](./reference/status.md#the-v1-management-api):
+  monitors upserted idempotently by a project-unique `key` (new column, migration 0069), incidents and their updates,
+  maintenance, pages and component statuses, the `status:read` scope next to `status:write`, the explicit DTOs and what
+  they leave out, how a key's changes are audited, and the OpenAPI 3.1 description at `/v1/status/openapi.json`. The
+  [public API](./reference/public-api.md) lists the routes and scopes, and the feature map has a "Monitors and incidents
+  as code" row. The SDK's `status.*` namespace is the next slice.
+- Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-v1-api` (issue #159)

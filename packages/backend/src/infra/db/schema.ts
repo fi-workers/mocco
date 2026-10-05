@@ -3553,6 +3553,9 @@ export const statusMonitors = pgTable(
     id: uuid().primaryKey().defaultRandom(),
     workspaceId: uuid('workspace_id').notNull(),
     projectId: uuid('project_id').notNull(),
+    /** The caller's own name for a monitor made through `/v1` (#159), unique in the project, so an
+     * upsert from CI finds the monitor it made. Null for a monitor made in the console. */
+    key: text(),
     name: text().notNull(),
     kind: text().$type<MonitorKind>().notNull(),
     spec: jsonb().$type<StoredMonitorSpec>().notNull(),
@@ -3588,6 +3591,7 @@ export const statusMonitors = pgTable(
   },
   t => [
     index('mocco_status_monitors_project_idx').on(t.workspaceId, t.projectId),
+    uniqueIndex('mocco_status_monitors_project_key_uq').on(t.projectId, t.key),
     uniqueIndex('mocco_status_monitors_heartbeat_token_uq').on(t.heartbeatTokenHash),
     // The probes' lease scan: rounds coming due on monitors that aren't paused.
     index('mocco_status_monitors_next_round_idx')
@@ -3607,6 +3611,7 @@ export const statusMonitors = pgTable(
       sql`${t.quorumMode} IN (${sqlInList(Object.values(QuorumModes))})`,
     ),
     check('mocco_status_monitors_interval_check', sql`${t.intervalSeconds} >= 60`),
+    check('mocco_status_monitors_key_check', sql`${t.key} ~ '^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$'`),
     check(
       'mocco_status_monitors_watch_check',
       sql`(${t.watchUntil} IS NULL) = (${t.watchIntervalSeconds} IS NULL) AND (${t.watchIntervalSeconds} IS NULL OR ${t.watchIntervalSeconds} >= 30)`,

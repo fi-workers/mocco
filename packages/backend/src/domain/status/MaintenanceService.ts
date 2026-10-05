@@ -12,10 +12,11 @@ import {
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { MaintenanceComponentRepo } from '@backend/domain/status/repos/maintenance-component.repo';
 import { MaintenanceRepo } from '@backend/domain/status/repos/maintenance.repo';
+import { actorOf } from '@backend/domain/status/scope';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { MaintenanceRow } from '@backend/domain/status/repos/maintenance.repo';
-import type { StatusScope } from '@backend/domain/status/scope';
+import type { StatusActor, StatusScope } from '@backend/domain/status/scope';
 import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Db } from '@backend/infra/db/types';
@@ -69,7 +70,8 @@ export class MaintenanceService {
     }));
   }
 
-  async schedule(scope: StatusScope, actorUserId: string, input: MaintenanceInput) {
+  async schedule(scope: StatusScope, actor: StatusActor, input: MaintenanceInput) {
+    const { userId, via } = actorOf(actor);
     if (input.scheduledEnd <= input.scheduledStart) {
       throw new MaintenanceWindowError();
     }
@@ -88,13 +90,13 @@ export class MaintenanceService {
         bodyMd: input.body,
         scheduledStart: input.scheduledStart,
         scheduledEnd: input.scheduledEnd,
-        createdByUserId: actorUserId,
+        createdByUserId: userId,
       });
       await new MaintenanceComponentRepo(tx).insertMany(scope.workspaceId, created.id, input.componentIds);
       return created;
     });
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusMaintenanceScheduled,
       ...subject(maintenance.id),
       payload: {
@@ -103,13 +105,15 @@ export class MaintenanceService {
         scheduledStart: input.scheduledStart.toISOString(),
         scheduledEnd: input.scheduledEnd.toISOString(),
         componentIds: input.componentIds,
+        ...via,
       },
     });
     return maintenance;
   }
 
   /** Cancel a window that hasn't completed; one in progress ends now. */
-  async cancel(scope: StatusScope, actorUserId: string, maintenanceId: string) {
+  async cancel(scope: StatusScope, actor: StatusActor, maintenanceId: string) {
+    const { userId, via } = actorOf(actor);
     const now = this.now();
     const { maintenance, from } = await this.deps.snapshots.change(async (tx, touch) => {
       const windows = new MaintenanceRepo(tx);
@@ -128,10 +132,10 @@ export class MaintenanceService {
       return { maintenance: canceled, from: current.status };
     });
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusMaintenanceCanceled,
       ...subject(maintenanceId),
-      payload: { from },
+      payload: { from, ...via },
     });
     return maintenance;
   }
