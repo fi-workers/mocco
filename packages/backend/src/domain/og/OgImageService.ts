@@ -19,8 +19,11 @@ export interface OgImageDeps {
   /** Keys the signatures; derived from AUTH_SECRET in production. */
   secret: string;
   render: OgRenderer;
-  /** Where rendered images are kept; without one every request renders (local dev). */
-  store?: Pick<ObjectStore, 'get' | 'put'>;
+  /**
+   * Where rendered images are kept; without one every request renders. A getter, read only
+   * when an image is asked for, so issuing a path at build time needs no storage or database.
+   */
+  store: () => Pick<ObjectStore, 'get' | 'put'> | undefined;
 }
 
 /** Rendered images never change under their URL. */
@@ -80,13 +83,14 @@ export class OgImageService {
       return undefined;
     }
     const key = `pub/og/${parsedTemplate.data}/${signature}.png`;
-    const stored = await this.deps.store?.get(key);
+    const store = this.deps.store();
+    const stored = await store?.get(key);
     if (stored !== null && stored !== undefined) {
       return stored;
     }
     const png = await this.render(parsedTemplate.data, data);
-    if (png !== undefined && this.deps.store !== undefined) {
-      await this.deps.store.put(key, png, {
+    if (png !== undefined && store !== undefined) {
+      await store.put(key, png, {
         contentType: 'image/png',
         cacheControl: OG_CACHE_CONTROL,
         visibility: Visibilities.public,

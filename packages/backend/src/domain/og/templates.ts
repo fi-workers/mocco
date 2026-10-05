@@ -111,7 +111,7 @@ export const OgTemplates = {
             ? []
             : [
                 text(
-                  { fontSize: 30, color: MUTED, lineHeight: 1.4, maxHeight: 84, overflow: 'hidden' },
+                  { fontSize: 30, color: MUTED, lineHeight: 1.4, maxHeight: 126, overflow: 'hidden' },
                   fields.description,
                 ),
               ]),

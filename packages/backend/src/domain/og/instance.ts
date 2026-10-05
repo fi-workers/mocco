@@ -8,7 +8,7 @@ import path from 'node:path';
 import { OgImageService } from '@backend/domain/og/OgImageService';
 import { createOgRenderer } from '@backend/domain/og/renderer';
 import { getStorageDomain } from '@backend/domain/storage/instance';
-import { getEnv } from '@backend/infra/config/env';
+import { getBuildEnv } from '@backend/infra/config/env';
 
 import type { OgFont } from '@backend/domain/og/renderer';
 
@@ -29,18 +29,21 @@ export async function loadOgFonts(dir: string): Promise<OgFont[]> {
 
 const state: { og?: OgImageService | null } = {};
 
-/** The OG image service, or undefined without AUTH_SECRET (nothing to sign with). */
+/**
+ * The OG image service, or undefined without AUTH_SECRET (nothing to sign with). Building
+ * it reads only the secret, so pages can issue cards during `next build`; fonts and the
+ * store are reached only when an image is served.
+ */
 export function getOgImages(): OgImageService | undefined {
   if (state.og === undefined) {
-    const env = getEnv();
-    const store = getStorageDomain()?.store;
+    const env = getBuildEnv();
     state.og =
       env.AUTH_SECRET === undefined
         ? null
         : new OgImageService({
             secret: createHmac('sha256', env.AUTH_SECRET).update('mocco-og-images').digest('base64url'),
             render: createOgRenderer(async () => await loadOgFonts(ogFontsDir(process.cwd()))),
-            ...(store !== undefined && { store }),
+            store: () => getStorageDomain()?.store,
           });
   }
   return state.og ?? undefined;

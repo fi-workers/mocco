@@ -119,3 +119,11 @@ export function getEnv(): Env {
   state.env ??= schema.parse(process.env);
   return state.env;
 }
+
+/** What statically generated pages may read while `next build` runs, validated on its own,
+ * so a build without the runtime env (no DATABASE_URL, as in CI) still works. */
+const buildSchema = schema.pick({ AUTH_SECRET: true });
+
+export function getBuildEnv(): z.infer<typeof buildSchema> {
+  return buildSchema.parse(process.env);
+}

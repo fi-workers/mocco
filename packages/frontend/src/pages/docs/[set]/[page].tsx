@@ -5,6 +5,7 @@ import DocContent from '@frontend/components/doc-content';
 import SeoHead from '@frontend/components/seo-head';
 import { listGuides, listGuideSlugs, readGuidePage } from '@frontend/lib/customer-docs';
 import { guideSetLabels, guideSetSchema, GuideSets } from '@frontend/lib/guide-sets';
+import { moccoArticleCard } from '@frontend/lib/og-card';
 import { Routes } from '@frontend/lib/routes';
 import { breadcrumbLd, organizationLd, siteOrigin, techArticleLd, websiteLd } from '@frontend/lib/seo';
 import { cn } from '@frontend/lib/utils';
@@ -17,6 +18,8 @@ interface Props {
   set: GuideSet;
   page: DocPage;
   nav: DocNavEntry[];
+  /** This guide's share card (an issued OG image path), or null for Mocco's static card. */
+  card: string | null;
 }
 
 // The customer guides, one set per product area (notifications, ota), statically
@@ -30,10 +33,12 @@ export const getStaticPaths: GetStaticPaths = () => ({
 export const getStaticProps: GetStaticProps<Props> = ({ params }) => {
   const set = guideSetSchema.parse(params?.set);
   const slug = typeof params?.page === 'string' ? params.page : '';
-  return { props: { set, page: readGuidePage(set, slug), nav: listGuides(set) } };
+  const page = readGuidePage(set, slug);
+  const card = moccoArticleCard({ eyebrow: guideSetLabels[set], title: page.title, description: page.description });
+  return { props: { set, page, nav: listGuides(set), card } };
 };
 
-export default function GuidePage({ set, page, nav }: Props) {
+export default function GuidePage({ set, page, nav, card }: Props) {
   const origin = siteOrigin();
   const path = Routes.guide(set, page.slug);
   const first = nav[0]?.slug ?? page.slug;
@@ -45,6 +50,7 @@ export default function GuidePage({ set, page, nav }: Props) {
         url={`${origin}${path}`}
         origin={origin}
         type="article"
+        image={card === null ? null : { path: card, alt: `${guideSetLabels[set]}: ${page.title}` }}
         markdownUrl={`${origin}${path}.md`}
         jsonLd={[
           organizationLd(origin),

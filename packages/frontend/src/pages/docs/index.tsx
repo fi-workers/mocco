@@ -4,6 +4,7 @@ import Link from 'next/link';
 import SeoHead from '@frontend/components/seo-head';
 import { listGuides } from '@frontend/lib/customer-docs';
 import { guideSetLabels, GuideSets } from '@frontend/lib/guide-sets';
+import { moccoSimpleCard } from '@frontend/lib/og-card';
 import { Routes } from '@frontend/lib/routes';
 import { breadcrumbLd, organizationLd, siteOrigin, websiteLd } from '@frontend/lib/seo';
 
@@ -13,17 +14,21 @@ import type { GetStaticProps } from 'next';
 
 interface Props {
   sets: { set: GuideSet; guides: DocNavEntry[] }[];
+  card: string | null;
 }
 
 // Every customer guide set and its guides on one page, statically generated like the guides.
 export const getStaticProps: GetStaticProps<Props> = () => ({
-  props: { sets: Object.values(GuideSets).map(set => ({ set, guides: listGuides(set) })) },
+  props: {
+    sets: Object.values(GuideSets).map(set => ({ set, guides: listGuides(set) })),
+    card: moccoSimpleCard({ title: 'Mocco docs', subtitle: 'Guides for every product, and for agents as Markdown' }),
+  },
 });
 
 const DESCRIPTION =
   'Guides for every Mocco product: deploy governance, OTA updates, feature flags, the status page, notifications, the messenger, the help center and connecting agents over MCP.';
 
-export default function DocsIndex({ sets }: Props) {
+export default function DocsIndex({ sets, card }: Props) {
   const origin = siteOrigin();
   return (
     <>
@@ -33,6 +38,7 @@ export default function DocsIndex({ sets }: Props) {
         url={`${origin}${Routes.docs}`}
         origin={origin}
         markdownUrl={`${origin}/llms.txt`}
+        image={card === null ? null : { path: card, alt: 'Mocco docs' }}
         jsonLd={[
           organizationLd(origin),
           websiteLd(origin),
