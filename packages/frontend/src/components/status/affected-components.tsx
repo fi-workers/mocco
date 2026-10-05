@@ -1,5 +1,5 @@
-// Pick the components an incident affects and how badly (#148): one row per component of the
-// page, "Not affected" or an impact.
+// Pick the components an incident affects and how badly (#148), or what a monitor puts on its
+// components while it is down (#150): one row per component of the page, "Not affected" or an impact.
 import { componentImpactSchema, ComponentImpacts } from '@mocco/common/status';
 
 import { inputClass } from '@frontend/components/notifications/notification-ui';
@@ -16,10 +16,12 @@ export default function AffectedComponentsPicker({
   components,
   value,
   onChange,
+  legend = 'Affected components',
 }: {
   components: readonly Component[];
   value: readonly AffectedComponent[];
   onChange: (next: AffectedComponent[]) => void;
+  legend?: string;
 }) {
   if (components.length === 0) {
     return <p className="text-sm text-muted-foreground">This page has no components yet.</p>;
@@ -33,7 +35,7 @@ export default function AffectedComponentsPicker({
 
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="mb-1 text-xs font-medium text-muted-foreground">Affected components</legend>
+      <legend className="mb-1 text-xs font-medium text-muted-foreground">{legend}</legend>
       <ul className="flex flex-col gap-1.5">
         {components.map(component => (
           <li key={component.id} className="flex flex-wrap items-center justify-between gap-2">

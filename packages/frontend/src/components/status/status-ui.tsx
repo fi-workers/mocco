@@ -1,10 +1,13 @@
-// Labels and badges shared by the status page screens (#148).
+// Labels and badges shared by the status page screens (#148) and the monitor screens (#150).
 import {
   ComponentImpacts,
   ComponentStatuses,
   IncidentSeverities,
   IncidentStatuses,
   MaintenanceStatuses,
+  MonitorKinds,
+  MonitorStates,
+  RoundVerdicts,
 } from '@mocco/common/status';
 
 import { StatusBadge, Tones } from '@frontend/components/notifications/notification-ui';
@@ -17,6 +20,9 @@ import type {
   IncidentSeverity,
   IncidentStatus,
   MaintenanceStatus,
+  MonitorSpec,
+  MonitorState,
+  RoundVerdict,
 } from '@mocco/common/status';
 import type { inferRouterOutputs } from '@trpc/server';
 
@@ -24,7 +30,12 @@ import type { inferRouterOutputs } from '@trpc/server';
 export type StatusOutputs = inferRouterOutputs<AppRouter>['status'];
 
 /** The views of a status page in the console (`?tab=`). */
-export const StatusTabs = { components: 'components', incidents: 'incidents', maintenance: 'maintenance' } as const;
+export const StatusTabs = {
+  components: 'components',
+  incidents: 'incidents',
+  maintenance: 'maintenance',
+  monitors: 'monitors',
+} as const;
 export type StatusTab = (typeof StatusTabs)[keyof typeof StatusTabs];
 
 /** Which incidents the incidents view lists (`?filter=`). */
@@ -117,4 +128,64 @@ export function MaintenanceStatusBadge({ status }: { status: MaintenanceStatus }
 /** A date and time in the viewer's locale, e.g. "Oct 5, 2026, 14:30". */
 export function formatWhen(date: Date): string {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+export const monitorStateLabels: Readonly<Record<MonitorState, string>> = {
+  [MonitorStates.pending]: 'Pending',
+  [MonitorStates.up]: 'Up',
+  [MonitorStates.suspect]: 'Suspect',
+  [MonitorStates.down]: 'Down',
+  [MonitorStates.recovering]: 'Recovering',
+  [MonitorStates.degraded]: 'Degraded',
+  [MonitorStates.paused]: 'Paused',
+};
+
+const monitorStateTones: Readonly<Record<MonitorState, Tone>> = {
+  [MonitorStates.pending]: Tones.neutral,
+  [MonitorStates.up]: Tones.ok,
+  [MonitorStates.suspect]: Tones.warn,
+  [MonitorStates.down]: Tones.danger,
+  [MonitorStates.recovering]: Tones.warn,
+  [MonitorStates.degraded]: Tones.warn,
+  [MonitorStates.paused]: Tones.neutral,
+};
+
+/** A monitor's state, as a badge. */
+export function MonitorStateBadge({ state }: { state: MonitorState }) {
+  return <StatusBadge tone={monitorStateTones[state]}>{monitorStateLabels[state]}</StatusBadge>;
+}
+
+const roundVerdictTones: Readonly<Record<RoundVerdict, Tone>> = {
+  [RoundVerdicts.ok]: Tones.ok,
+  [RoundVerdicts.degraded]: Tones.warn,
+  [RoundVerdicts.fail]: Tones.danger,
+  [RoundVerdicts.unknown]: Tones.neutral,
+};
+
+export const roundVerdictLabels: Readonly<Record<RoundVerdict, string>> = {
+  [RoundVerdicts.ok]: 'Passed',
+  [RoundVerdicts.degraded]: 'Slow',
+  [RoundVerdicts.fail]: 'Failed',
+  [RoundVerdicts.unknown]: 'No quorum',
+};
+
+/** A closed round's verdict, as a badge. */
+export function RoundVerdictBadge({ verdict }: { verdict: RoundVerdict }) {
+  return <StatusBadge tone={roundVerdictTones[verdict]}>{roundVerdictLabels[verdict]}</StatusBadge>;
+}
+
+/**
+ * What a monitor checks, for the console: the method, origin and path of an HTTP check (never its
+ * URL credentials or query, which can hold secrets), or `host:port` for TCP.
+ */
+export function monitorTargetLabel(spec: MonitorSpec): string {
+  if (spec.kind === MonitorKinds.tcp) {
+    return `${spec.host}:${String(spec.port)}`;
+  }
+  try {
+    const url = new URL(spec.url);
+    return `${spec.method} ${url.origin}${url.pathname}`;
+  } catch {
+    return spec.method;
+  }
 }

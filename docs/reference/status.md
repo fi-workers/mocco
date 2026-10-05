@@ -65,6 +65,9 @@ code_refs:
   - packages/frontend/src/components/status/maintenance.tsx
   - packages/frontend/src/components/status/recent-deploys.tsx
   - packages/frontend/src/components/status/run-incidents.tsx
+  - packages/frontend/src/components/status/monitors.tsx
+  - packages/frontend/src/components/status/monitor-form.tsx
+  - packages/frontend/src/components/status/monitor-detail.tsx
 ---
 
 # Status page model
@@ -102,6 +105,20 @@ windows into in progress, scheduled and past, schedules a window (`datetime-loca
 zone, with the components it covers), and cancels a scheduled or in-progress one. An incident's route also lists the
 deploys around it, and the run page its incidents ([deploy correlation](#deploy-correlation)). The customer guide is
 [Run a status page](../customer/status/status-page.md).
+
+One more view reads beyond the page. **Monitors** (`?tab=monitors`, `monitors.tsx`) lists the project's monitors, the
+same on every page: state badge, target (`monitorTargetLabel`: the method, origin and path, never URL credentials or
+query), when the state last changed and the linked components, rereading every 15 seconds. **New monitor** opens the
+form (`monitor-form.tsx`) that edit reuses: HTTP (method, URL, a POST body, expected status codes, keyword present or
+absent, the slow threshold, follow redirects) or TCP (host, port), the timeout, the interval (60 seconds or more),
+down and up confirmations, the locations (enabled ones, plus any disabled one the monitor already uses), the quorum,
+each component of each of the project's pages with its impact while down, and the incident policy. The fields are
+parsed with `monitorInputSchema` before the call, so a bad field shows its zod issue, and a refused save shows the
+server's error. A monitor's route (`/status/monitors/[monitorId]`, `monitor-detail.tsx`) shows its settings, the
+open monitor incident (with a Draft badge), the latest ten rounds and 50 state changes with their reasons, **Watching
+after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. It doesn't chart
+the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). The customer guide is
+[Monitor your service](../customer/status/monitor-your-service.md).
 
 ## Tables
 
@@ -713,7 +730,9 @@ alert, a per-component `status_source` switch, TLS expiry warnings, and a reconc
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
-`origin` and `suspected_run_id` in the console and the incident DTO; a latency chart in the console (the series is on `status.monitor`); and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
+`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
+latency chart in the console's monitor view (the series is `history` on `status.monitor`); and gate-linked maintenance
+(`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
 ## MCP
