@@ -2,6 +2,12 @@
 // against the route schemas (platform foundations §11).
 import { type whoamiResponseSchema } from '@mocco/common/apikey';
 import {
+  type helpV1ArticleSchema,
+  type helpV1CollectionResultSchema,
+  type helpV1SearchResultSchema,
+  type helpV1SiteSchema,
+} from '@mocco/common/help-v1';
+import {
   type attachmentCreateInputSchema,
   type contactConversationSchema,
   type contactMessageSchema,
@@ -21,6 +27,10 @@ import {
 import { describe, expectTypeOf, it } from 'vitest';
 
 import type {
+  HelpArticle,
+  HelpCollection,
+  HelpSearchResult,
+  HelpSite,
   MessengerAttachmentRequest,
   MessengerConversation,
   MessengerConversationRequest,
@@ -52,6 +62,13 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<OtaFinalizeRequest>().toExtend<z.input<typeof finalizeRequestSchema>>();
     expectTypeOf<UploadResponse>().toExtend<OtaUploadResponse>();
     expectTypeOf<z.output<typeof promotionResultSchema>>().toExtend<OtaPromotionResult>();
+  });
+
+  it('help: what the read routes answer is what the SDK types', () => {
+    expectTypeOf<z.output<typeof helpV1SearchResultSchema>>().toExtend<HelpSearchResult>();
+    expectTypeOf<z.output<typeof helpV1SiteSchema>>().toExtend<HelpSite>();
+    expectTypeOf<z.output<typeof helpV1CollectionResultSchema>>().toExtend<{ collection: HelpCollection }>();
+    expectTypeOf<z.output<typeof helpV1ArticleSchema>>().toExtend<HelpArticle>();
   });
 
   it('messenger: what the SDK sends is accepted, and what the routes answer is what it types', () => {

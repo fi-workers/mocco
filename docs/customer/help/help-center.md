@@ -138,3 +138,18 @@ function Suggestions({ text }: { text: string }) {
 ![An app's new-message screen suggesting the help center's "iOS widget" article for "The widget doesn't open the camera"](./images/app-suggestions.png)
 
 Each hit has the article's `title`, a `snippet` of its text and its `url` on your help site, in the reader's language where it is translated. Any other client can call `GET https://api.mocco.club/v1/help/search?q=…&locale=en&match=any` with the key as `Authorization: Bearer mk_pub_…`.
+
+## Show articles in your app
+
+The same key can open the help center inside your app instead of sending people to the browser. `getSite` lists your collections, sections and article titles, and `getArticle` gives one article's Markdown, to render with any Markdown component:
+
+```ts
+import { createHelp } from '@mocco/js'; // or '@mocco/react-native/messenger'
+
+const help = createHelp({ publishableKey: 'mk_pub_…' });
+
+const site = await help.getSite({ locale: navigator.language });
+const article = await help.getArticle(site.collections[0].sections[0].articles[0].id, { locale: 'en' });
+```
+
+Pass the device's language as it comes (`en-GB` counts as English). An article that isn't translated into it yet arrives in your own language, and `article.locale` says which language you got. Only published articles are there: a draft, or an article you unpublish, answers `null`. On the web, add your site's address to the **Web origins** of the project's web app ([Workspaces and projects](../start/workspace-and-projects.md)) so the browser may call Mocco with the key.

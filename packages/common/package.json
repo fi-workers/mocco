@@ -18,6 +18,7 @@
     "./jobs": "./src/jobs.ts",
     "./help": "./src/help.ts",
     "./help-import": "./src/help-import.ts",
+    "./help-v1": "./src/help-v1.ts",
     "./messenger": "./src/messenger.ts",
     "./mcp": "./src/mcp.ts",
     "./mocco-config": "./src/mocco-config.ts",

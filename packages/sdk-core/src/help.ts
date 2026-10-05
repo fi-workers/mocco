@@ -1,6 +1,6 @@
-// Help center search for apps (#96): suggest the project's published help articles,
-// e.g. on a contact screen while the user types. One GET per search; the key needs the
-// help:read scope (a publishable key may hold it).
+// A project's published help center for apps (#96, #216): suggest articles on a contact
+// screen while the user types, list the collections and show an article in the app. The
+// key needs the help:read scope (a publishable key may hold it).
 import { DEFAULT_BASE_URL, withoutTrailingSlashes } from './client';
 import { MoccoError, MoccoNetworkError } from './errors';
 
@@ -14,12 +14,72 @@ export interface HelpArticleHit {
   snippet: string;
 }
 
+/** What `GET /v1/help/search` answers. */
+export interface HelpSearchResult {
+  locale: string;
+  hits: HelpArticleHit[];
+}
+
+/** An article in a listing. `id` is its stable short id; the slug is cosmetic. */
+export interface HelpArticleEntry {
+  id: string;
+  slug: string;
+  title: string;
+  path: string;
+  url: string | null;
+}
+
+export interface HelpCollection {
+  slug: string;
+  title: string;
+  description: string | null;
+  sections: { title: string; articles: HelpArticleEntry[] }[];
+}
+
+/** What `GET /v1/help/site` answers: the help center and what it publishes in `locale`. */
+export interface HelpSite {
+  name: string;
+  sourceLocale: string;
+  /** The languages it is translated into (the source not included). */
+  locales: string[];
+  /** The language served: the asked one when the site offers it, else the source. */
+  locale: string;
+  url: string | null;
+  collections: HelpCollection[];
+}
+
+/** What `GET /v1/help/articles/:id` answers. */
+export interface HelpArticle {
+  id: string;
+  slug: string;
+  /** The language served: its translation where there is one, else the source. */
+  locale: string;
+  title: string;
+  /** Markdown. */
+  body: string;
+  path: string;
+  url: string | null;
+  /** The languages this article is served in, the source first. */
+  locales: string[];
+  publishedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface HelpReadOptions {
+  /** The reader's language tag (`en-KR` counts as `en`); the source language where not translated. */
+  locale?: string;
+}
+
 export interface HelpSearchOptions {
   /** The reader's language; the source language where an article isn't translated. */
   locale?: string;
   limit?: number;
   /** `all` (default): every word must appear. `any`: one word is enough. */
   match?: 'all' | 'any';
+}
+
+function localeParams(opts: HelpReadOptions): URLSearchParams {
+  return new URLSearchParams(opts.locale === undefined ? {} : { locale: opts.locale });
 }
 
 export interface HelpClientOptions {
@@ -37,6 +97,33 @@ export class HelpClient {
   constructor(private readonly options: HelpClientOptions) {
     this.baseUrl = `${withoutTrailingSlashes(options.baseUrl ?? DEFAULT_BASE_URL)}/help`;
     this.fetchImpl = options.fetch ?? fetch.bind(globalThis);
+  }
+
+  /** GET a /v1/help path; null for a 404 when `missing` allows it. */
+  private async get<T>(path: string, params: URLSearchParams, missing: 'null' | 'throw' = 'throw'): Promise<T | null> {
+    const query = params.toString();
+    const url = query === '' ? `${this.baseUrl}${path}` : `${this.baseUrl}${path}?${query}`;
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        headers: { authorization: `Bearer ${this.options.publishableKey}`, accept: 'application/json' },
+      });
+    } catch (error) {
+      throw new MoccoNetworkError(`Couldn't reach Mocco at ${this.baseUrl}`, { cause: error });
+    }
+    if (response.status === 404 && missing === 'null') {
+      return null;
+    }
+    if (!response.ok) {
+      let problem: { type?: string; title?: string; detail?: string };
+      try {
+        problem = (await response.json()) as typeof problem;
+      } catch {
+        problem = { title: `Help answered ${response.status}` };
+      }
+      throw new MoccoError(response.status, problem);
+    }
+    return (await response.json()) as T;
   }
 
   /**
@@ -61,18 +148,34 @@ export class HelpClient {
     if (opts.match !== undefined) {
       params.set('match', opts.match);
     }
-    let response: Response;
-    try {
-      response = await this.fetchImpl(`${this.baseUrl}/search?${params.toString()}`, {
-        headers: { authorization: `Bearer ${this.options.publishableKey}`, accept: 'application/json' },
-      });
-    } catch (error) {
-      throw new MoccoNetworkError(`Couldn't reach Mocco at ${this.baseUrl}`, { cause: error });
+    const answer = await this.get<HelpSearchResult>('/search', params);
+    return answer?.hits ?? [];
+  }
+
+  /** The help center's name and languages, and its published collections in `locale`. */
+  async getSite(opts: HelpReadOptions = {}): Promise<HelpSite> {
+    const site = await this.get<HelpSite>('/site', localeParams(opts));
+    if (site === null) {
+      throw new MoccoError(404, { title: 'This project has no help center' });
     }
-    if (!response.ok) {
-      throw new MoccoError(response.status, { title: `Help search answered ${response.status}` });
-    }
-    const answer = (await response.json()) as { hits: HelpArticleHit[] };
-    return answer.hits;
+    return site;
+  }
+
+  /** One published collection by its slug, or null when there is none. */
+  async getCollection(slug: string, opts: HelpReadOptions = {}): Promise<HelpCollection | null> {
+    const answer = await this.get<{ locale: string; collection: HelpCollection }>(
+      `/collections/${encodeURIComponent(slug)}`,
+      localeParams(opts),
+      'null',
+    );
+    return answer?.collection ?? null;
+  }
+
+  /**
+   * A published article by its id (or the `{id}-{slug}` ref from its path), or null when
+   * it isn't published. `locale` on the answer says which language it is in.
+   */
+  async getArticle(id: string, opts: HelpReadOptions = {}): Promise<HelpArticle | null> {
+    return await this.get<HelpArticle>(`/articles/${encodeURIComponent(id)}`, localeParams(opts), 'null');
   }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
+import { AppPlatforms } from '@mocco/common/project';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -16,53 +17,107 @@ import { users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
+import type { HelpDomain } from '@backend/domain/helpcenter/compose';
+import type { RateLimiter } from '@backend/domain/ratelimit/ports';
 import type { V1Env } from '@backend/transport/ext/v1/middleware';
 import type { ApiScope } from '@mocco/common/apikey';
 
 const BASE = 'https://www.mocco.test/api/ext/v1/help';
+/** Requests a key may make a minute in these tests (the real limit is 600). */
+const TEST_KEY_LIMIT = 40;
 
 describe('/v1/help (pglite)', () => {
   let t: TestDb;
   let app: Hono<V1Env>;
-  let keyFor: (scopes: ApiScope[]) => Promise<string>;
-  let publish: () => Promise<string>;
+  let help: HelpDomain;
+  let projects: ReturnType<typeof createProjectDomain>['projects'];
+  let workspaceId: string;
+  let userId: string;
+  let projectId: string;
+  let otherProjectId: string;
+  let keyFor: (scopes: ApiScope[], project?: string) => Promise<string>;
 
-  const search = async (key: string, query: string) => {
+  const get = async (key: string | undefined, path: string, headers: Record<string, string> = {}) => {
     const response = await app.fetch(
-      new Request(`${BASE}/search?${query}`, { headers: { authorization: `Bearer ${key}` } }),
+      new Request(`${BASE}${path}`, {
+        headers: { ...(key !== undefined && { authorization: `Bearer ${key}` }), ...headers },
+      }),
     );
-    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+    const text = await response.text();
+    return {
+      status: response.status,
+      etag: response.headers.get('etag'),
+      body: (text === '' ? undefined : JSON.parse(text)) as Record<string, unknown> | undefined,
+    };
+  };
+
+  /** A published article (and a draft-only and an unpublished one) in `project`'s help center. */
+  const publish = async (inProject = projectId, slug = 'syt') => {
+    await help.helpSites.enable(workspaceId, inProject, userId, { slug, sourceLocale: 'ko', locales: ['en', 'ja'] });
+    const collection = await help.helpAuthoring.createCollection(workspaceId, inProject, {
+      title: '시작',
+      slug: 'start',
+      description: '처음 쓰는 분께',
+    });
+    const section = await help.helpAuthoring.createSection(workspaceId, inProject, {
+      collectionId: collection.id,
+      title: '기본',
+    });
+    const write = async (title: string, articleSlug: string, body: string) => {
+      const article = await help.helpAuthoring.createArticle(workspaceId, inProject, userId, {
+        sectionId: section.id,
+        title,
+        slug: articleSlug,
+      });
+      await help.helpAuthoring.saveDraft(workspaceId, inProject, userId, { articleId: article.id, title, body });
+      return article;
+    };
+    const widget = await write('위젯 추가하기', 'widget', '홈 화면을 길게 누르세요.');
+    await help.helpAuthoring.publish(workspaceId, inProject, userId, widget.id);
+    const draft = await write('준비 중', 'draft', '아직 공개 전');
+    const pulled = await write('예전 글', 'old', '내렸어요');
+    await help.helpAuthoring.publish(workspaceId, inProject, userId, pulled.id);
+    await help.helpAuthoring.unpublish(workspaceId, inProject, userId, pulled.id);
+    return { widget, draft, pulled };
   };
 
   beforeEach(async () => {
     t = await createTestDb();
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
-    const help = createHelpDomain(t.db, { audit });
-    const { projects } = createProjectDomain(t.db);
+    help = createHelpDomain(t.db, { audit });
+    ({ projects } = createProjectDomain(t.db));
     const apiKeys = createApiKeyService(t.db, { projects, audit });
+    const memory = new MemoryRateLimiter(() => new Date('2026-10-02T10:00:30Z'));
+    // The real limiter and rules, with a key's limit scaled down so a test can use it up.
+    const limiter: RateLimiter = {
+      consume: async (bucket, rule) =>
+        // eslint-disable-next-line sonarjs/null-dereference -- the limiter always passes a bucket name
+        await memory.consume(bucket, bucket.startsWith('key:') ? { ...rule, limit: TEST_KEY_LIMIT } : rule),
+    };
     app = new Hono<V1Env>().basePath('/api/ext').route(
       '/v1',
       createV1Routes({
         apiKeys,
-        limiter: new MemoryRateLimiter(() => new Date('2026-10-02T10:00:30Z')),
+        limiter,
         help: {
           help: help.helpPublic,
           originOf: slug => helpSiteOrigin(slug, { HELP_CUSTOM_DOMAINS: 'help.showyourti.me=syt' }),
         },
       }),
     );
-    const workspaceId = expectOne(
-      await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
-    ).id;
-    const userId = expectOne(
+    workspaceId = expectOne(await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning()).id;
+    userId = expectOne(
       await t.db
         .insert(users)
         .values({ email: `${randomUUID()}@acme.test`, name: 'Ada' })
         .returning(),
     ).id;
-    const project = await projects.create(workspaceId, { name: 'ShowYourTime', handle: 'syt' });
-    keyFor = async scopes => {
-      const created = await apiKeys.create(workspaceId, project.id, userId, {
+    const syt = await projects.create(workspaceId, { name: 'ShowYourTime', handle: 'syt' });
+    const otherProject = await projects.create(workspaceId, { name: 'Other', handle: 'other' });
+    projectId = syt.id;
+    otherProjectId = otherProject.id;
+    keyFor = async (scopes, project = projectId) => {
+      const created = await apiKeys.create(workspaceId, project, userId, {
         kind: ApiKeyKinds.publishable,
         name: 'app',
         scopes,
@@ -71,82 +126,252 @@ describe('/v1/help (pglite)', () => {
       });
       return created.token;
     };
-    publish = async () => {
-      await help.helpSites.enable(workspaceId, project.id, userId, {
-        slug: 'syt',
-        sourceLocale: 'ko',
-        locales: ['en'],
-      });
-      const collection = await help.helpAuthoring.createCollection(workspaceId, project.id, {
-        title: '시작',
-        slug: 'start',
-      });
-      const section = await help.helpAuthoring.createSection(workspaceId, project.id, {
-        collectionId: collection.id,
-        title: '기본',
-      });
-      const article = await help.helpAuthoring.createArticle(workspaceId, project.id, userId, {
-        sectionId: section.id,
-        title: '위젯 추가하기',
-        slug: 'widget',
-      });
-      await help.helpAuthoring.saveDraft(workspaceId, project.id, userId, {
-        articleId: article.id,
-        title: '위젯 추가하기',
-        body: '홈 화면을 길게 누르세요.',
-      });
-      await help.helpAuthoring.publish(workspaceId, project.id, userId, article.id);
-      return article.shortId;
-    };
   });
   afterEach(async () => {
     await t.close();
   });
 
-  it('searches the key’s help center with a publishable key, with absolute article URLs', async () => {
-    const shortId = await publish();
-    const key = await keyFor([ApiScopes.helpRead]);
+  describe('search', () => {
+    it('searches the key’s help center with a publishable key, with absolute article URLs', async () => {
+      const { widget } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
 
-    // A device's language tag carries a region; its language is what counts.
-    const found = await search(key, 'q=%EC%9C%84%EC%A0%AF&locale=en-KR');
+      // A device's language tag carries a region; its language is what counts.
+      const found = await get(key, '/search?q=%EC%9C%84%EC%A0%AF&locale=en-KR');
 
-    expect(found).toEqual({
-      status: 200,
-      body: {
-        locale: 'en',
-        hits: [
-          {
-            title: '위젯 추가하기',
-            path: `/ko/articles/${shortId}-widget`,
-            url: `https://help.showyourti.me/ko/articles/${shortId}-widget`,
-            snippet: '홈 화면을 길게 누르세요.',
-          },
-        ],
-      },
+      expect([found.status, found.body]).toEqual([
+        200,
+        {
+          locale: 'en',
+          hits: [
+            {
+              title: '위젯 추가하기',
+              path: `/ko/articles/${widget.shortId}-widget`,
+              url: `https://help.showyourti.me/ko/articles/${widget.shortId}-widget`,
+              snippet: '홈 화면을 길게 누르세요.',
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('matches any word of free text with match=any', async () => {
+      await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+      const query = `q=${encodeURIComponent('위젯이 화면에 안 보여요')}`;
+
+      const every = await get(key, `/search?${query}`);
+      const any = await get(key, `/search?${query}&match=any`);
+
+      expect([every.body, any.status]).toEqual([{ locale: 'ko', hits: [] }, 200]);
+      expect((any.body as { hits: { title: string }[] }).hits.map(hit => hit.title)).toEqual(['위젯 추가하기']);
+    });
+
+    it('needs help:read, a query, and a help center', async () => {
+      const withoutScope = await keyFor([ApiScopes.messengerChat]);
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const noSite = await get(key, '/search?q=x');
+      await publish();
+      const noScope = await get(withoutScope, '/search?q=x');
+      const noQuery = await get(key, '/search?q=');
+
+      expect([noSite.status, noScope.status, noQuery.status]).toEqual([404, 403, 400]);
     });
   });
 
-  it('matches any word of free text with match=any', async () => {
-    await publish();
-    const key = await keyFor([ApiScopes.helpRead]);
-    const query = `q=${encodeURIComponent('위젯이 화면에 안 보여요')}`;
+  describe('site and collections', () => {
+    it('lists the published tree in the asked language, falling back to the source', async () => {
+      const { widget } = await publish();
+      await help.helpTranslations.saveTranslation(workspaceId, projectId, userId, {
+        articleId: widget.id,
+        locale: 'en',
+        title: 'Add a widget',
+        body: 'Long-press the home screen.',
+      });
+      const key = await keyFor([ApiScopes.helpRead]);
 
-    const every = await search(key, query);
-    const any = await search(key, `${query}&match=any`);
+      const english = await get(key, '/site?locale=en-US');
+      // French isn't offered, and Japanese has no translation yet: both serve the source text.
+      const french = await get(key, '/site?locale=fr');
+      const japanese = await get(key, '/site?locale=ja');
 
-    expect([every.body, any.status]).toEqual([{ locale: 'ko', hits: [] }, 200]);
-    expect((any.body as { hits: { title: string }[] }).hits.map(hit => hit.title)).toEqual(['위젯 추가하기']);
+      expect([english.status, english.body]).toEqual([
+        200,
+        {
+          name: 'ShowYourTime',
+          sourceLocale: 'ko',
+          locales: ['en', 'ja'],
+          locale: 'en',
+          url: 'https://help.showyourti.me/en',
+          collections: [
+            {
+              slug: 'start',
+              title: '시작',
+              description: '처음 쓰는 분께',
+              sections: [
+                {
+                  title: '기본',
+                  articles: [
+                    {
+                      id: widget.shortId,
+                      slug: 'widget',
+                      title: 'Add a widget',
+                      path: `/en/articles/${widget.shortId}-widget`,
+                      url: `https://help.showyourti.me/en/articles/${widget.shortId}-widget`,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      expect(french.body).toMatchObject({ locale: 'ko', url: 'https://help.showyourti.me/ko' });
+      expect(japanese.body).toMatchObject({
+        locale: 'ja',
+        collections: [
+          { sections: [{ articles: [{ title: '위젯 추가하기', path: `/ko/articles/${widget.shortId}-widget` }] }] },
+        ],
+      });
+    });
+
+    it('shows one collection, and 404s an unknown one', async () => {
+      await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const start = await get(key, '/collections/start?locale=ko');
+      const unknown = await get(key, '/collections/nope');
+
+      expect(start.body).toMatchObject({ locale: 'ko', collection: { slug: 'start', sections: [{ title: '기본' }] } });
+      expect(unknown.status).toBe(404);
+    });
+
+    it('answers 304 for the ETag the caller holds, and a new tag once something is published', async () => {
+      const { draft } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const first = await get(key, '/site');
+      const again = await get(key, '/site', { 'if-none-match': first.etag ?? '' });
+      await help.helpAuthoring.publish(workspaceId, projectId, userId, draft.id);
+      const changed = await get(key, '/site', { 'if-none-match': first.etag ?? '' });
+
+      expect(first.etag).toMatch(/^W\/"[\w-]+"$/u);
+      expect([again.status, again.body]).toEqual([304, undefined]);
+      expect(changed.status).toBe(200);
+      expect(changed.etag).not.toBe(first.etag);
+    });
   });
 
-  it('needs help:read, a query, and a help center', async () => {
-    const withoutScope = await keyFor([ApiScopes.messengerChat]);
-    const key = await keyFor([ApiScopes.helpRead]);
+  describe('articles', () => {
+    it('shows a published article by its id or path ref, saying which language it is in', async () => {
+      const { widget } = await publish();
+      await help.helpTranslations.saveTranslation(workspaceId, projectId, userId, {
+        articleId: widget.id,
+        locale: 'en',
+        title: 'Add a widget',
+        body: 'Long-press the home screen.',
+      });
+      const key = await keyFor([ApiScopes.helpRead]);
 
-    const noSite = await search(key, 'q=x');
-    await publish();
-    const noScope = await search(withoutScope, 'q=x');
-    const noQuery = await search(key, 'q=');
+      const english = await get(key, `/articles/${widget.shortId}?locale=en-GB`);
+      // A stale slug still finds the article; an untranslated language serves the source.
+      const japanese = await get(key, `/articles/${widget.shortId}-old-slug?locale=ja`);
 
-    expect([noSite.status, noScope.status, noQuery.status]).toEqual([404, 403, 400]);
+      expect([english.status, english.body]).toEqual([
+        200,
+        {
+          id: widget.shortId,
+          slug: 'widget',
+          locale: 'en',
+          title: 'Add a widget',
+          body: 'Long-press the home screen.',
+          path: `/en/articles/${widget.shortId}-widget`,
+          url: `https://help.showyourti.me/en/articles/${widget.shortId}-widget`,
+          locales: ['ko', 'en'],
+          publishedAt: expect.any(String) as string,
+          updatedAt: expect.any(String) as string,
+        },
+      ]);
+      expect(japanese.body).toMatchObject({
+        locale: 'ko',
+        title: '위젯 추가하기',
+        path: `/ko/articles/${widget.shortId}-widget`,
+      });
+    });
+
+    it('never shows a draft or an unpublished article, and refuses a malformed ref', async () => {
+      const { draft, pulled } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const statuses = await Promise.all(
+        [`/articles/${draft.shortId}`, `/articles/${pulled.shortId}`, '/articles/NOT_A_REF'].map(async path => {
+          const response = await get(key, path);
+          return response.status;
+        }),
+      );
+      const site = await get(key, '/site');
+
+      expect(statuses).toEqual([404, 404, 400]);
+      expect(JSON.stringify(site.body)).not.toMatch(/준비 중|예전 글/u);
+    });
+  });
+
+  describe('keys', () => {
+    it('refuses no key, a key without help:read, and another project’s key', async () => {
+      const { widget } = await publish();
+      await publish(otherProjectId, 'other');
+      const withoutScope = await keyFor([ApiScopes.messengerChat]);
+      const other = await keyFor([ApiScopes.helpRead], otherProjectId);
+      const path = `/articles/${widget.shortId}`;
+
+      const none = await get(undefined, path);
+      const noScope = await get(withoutScope, path);
+      const otherProject = await get(other, path);
+      const otherSite = await get(other, '/site');
+
+      expect([none.status, noScope.status, otherProject.status]).toEqual([401, 403, 404]);
+      // The other project's key reads its own help center, never this one's.
+      expect(otherSite.body).toMatchObject({ name: 'Other', url: null });
+    });
+
+    it('limits requests per key', async () => {
+      await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+      const other = await keyFor([ApiScopes.helpRead]);
+
+      const statuses: number[] = [];
+      for (let index = 0; index <= TEST_KEY_LIMIT; index += 1) {
+        // eslint-disable-next-line no-await-in-loop -- sequential, to count the limit exactly
+        const response = await get(key, '/site');
+        statuses.push(response.status);
+      }
+      const otherKey = await get(other, '/site');
+
+      expect(statuses.filter(status => status === 200)).toHaveLength(TEST_KEY_LIMIT);
+      expect([statuses.at(-1), otherKey.status]).toEqual([429, 200]);
+    });
+
+    it('answers a browser from one of the project’s web origins, and refuses other origins', async () => {
+      await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+      await projects.addApp(workspaceId, projectId, {
+        platform: AppPlatforms.web,
+        name: 'Web',
+        webOrigins: ['https://app.showyourti.me'],
+      });
+      const fromOrigin = async (origin: string) =>
+        await app.fetch(new Request(`${BASE}/site`, { headers: { authorization: `Bearer ${key}`, origin } }));
+
+      const allowed = await fromOrigin('https://app.showyourti.me');
+      const refused = await fromOrigin('https://evil.test');
+
+      expect([allowed.status, allowed.headers.get('access-control-allow-origin')]).toEqual([
+        200,
+        'https://app.showyourti.me',
+      ]);
+      expect(allowed.headers.get('access-control-expose-headers')).toContain('etag');
+      expect(refused.status).toBe(403);
+    });
   });
 });
