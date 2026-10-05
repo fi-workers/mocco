@@ -87,7 +87,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
     statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),
-    statusRollups: new RollupService({ db }),
+    statusRollups: new RollupService({ db, snapshots }),
   };
 }
 

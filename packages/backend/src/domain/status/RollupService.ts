@@ -16,6 +16,7 @@ import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
 import { RollupDailyRepo } from '@backend/domain/status/repos/rollup-daily.repo';
 import { RollupHourlyRepo } from '@backend/domain/status/repos/rollup-hourly.repo';
 import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
+import { uptimePercentOf } from '@backend/domain/status/snapshot/format';
 import {
   clip,
   clipAll,
@@ -35,6 +36,7 @@ import { utcDayFrom, utcDayOf } from '@backend/infra/db/day-partitions';
 import type { ComponentDayRow } from '@backend/domain/status/repos/component-day.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
+import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { Interval, StateInterval } from '@backend/domain/status/uptime';
 import type { Db } from '@backend/infra/db/types';
 import type { ComponentStatus, MonitorState, RoundVerdict } from '@mocco/common/status';
@@ -96,8 +98,23 @@ export interface RollupRun {
   days: string[];
 }
 
+/** Whether a component day changed what its bar shows: its status or its uptime percentage. */
+const isBarChanged = (
+  before: ComponentDayRow | undefined,
+  after: Pick<ComponentDayRow, 'worstStatus' | 'uptimeRatio'>,
+) =>
+  before === undefined ||
+  before.worstStatus !== after.worstStatus ||
+  uptimePercentOf(before.uptimeRatio) !== uptimePercentOf(after.uptimeRatio);
+
+export interface RollupServiceDeps {
+  db: Db;
+  /** Marks a page dirty, in the write's transaction, when the rollup changes one of its bars. */
+  snapshots: Pick<SnapshotScheduler, 'change'>;
+}
+
 export class RollupService {
-  constructor(private readonly deps: { db: Db }) {}
+  constructor(private readonly deps: RollupServiceDeps) {}
 
   /**
    * One run of the job: every hour that ended at least `settleMs` ago and isn't rolled up yet
@@ -296,8 +313,23 @@ export class RollupService {
       ];
     });
 
-    await new RollupDailyRepo(db).upsertMany(daily);
-    await new ComponentDayRepo(db).upsertMany(componentDays);
+    // A bar that changed marks its page dirty in the same transaction, and the debounced publish
+    // follows the commit; a rollup that changes nothing visible publishes nothing.
+    const before = await new ComponentDayRepo(db).listForDay(day);
+    const previous = new Map(before.map(row => [row.componentId, row]));
+    const pageOf = new Map(components.map(component => [component.id, component]));
+    await this.deps.snapshots.change(async (tx, touch) => {
+      await new RollupDailyRepo(tx).upsertMany(daily);
+      await new ComponentDayRepo(tx).upsertMany(componentDays);
+      touch(
+        ...componentDays.flatMap(row => {
+          const component = pageOf.get(row.componentId);
+          return component !== undefined && isBarChanged(previous.get(row.componentId), row)
+            ? [{ workspaceId: component.workspaceId, pageId: component.pageId }]
+            : [];
+        }),
+      );
+    });
     return componentDays;
   }
 }

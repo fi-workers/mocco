@@ -12,14 +12,34 @@ import { z } from 'zod';
 
 const time = z.iso.datetime();
 
+/** Days in a component's uptime bars, ending today. */
+export const UPTIME_BAR_DAYS = 90;
+
+/** An uptime ratio as the percentage the page shows: two decimals, rounded down, so a day with
+ * any downtime never shows 100%. Null stays null. */
+export const uptimePercentOf = (ratio: number | null): number | null =>
+  ratio === null ? null : Math.floor(ratio * 10_000) / 100;
+
+const uptimeDaySchema = z.object({
+  /** The UTC day, `YYYY-MM-DD`. */
+  day: z.iso.date(),
+  /** The worst status the component showed that day; null for a day with no data (before the
+   * component existed, or not rolled up). */
+  status: componentStatusSchema.nullable(),
+  /** That day's uptime percentage (`uptimePercentOf`); null when it isn't measured (no monitor
+   * reports on the component) or there is no data. */
+  uptime: z.number().nullable(),
+});
+
 const publicComponentSchema = z.object({
   /** The component's id: the only internal id a snapshot carries. */
   id: z.uuid(),
   name: z.string(),
   description: z.string().nullable(),
   status: componentStatusSchema,
-  /** The 90-day uptime bars. Null until daily rollups exist: the page shows "no data". */
-  uptime: z.null(),
+  /** The uptime bars: the last `UPTIME_BAR_DAYS` UTC days, oldest first, from the component days,
+   * and the mean of the days' percentages (null when no day has one). */
+  uptime: z.object({ days: z.array(uptimeDaySchema), percent: z.number().nullable() }),
 });
 
 const publicIncidentSchema = z.object({
@@ -62,6 +82,7 @@ export const publicSnapshotSchema = z.object({
 });
 export type PublicSnapshot = z.infer<typeof publicSnapshotSchema>;
 export type PublicIncident = z.infer<typeof publicIncidentSchema>;
+export type PublicUptimeDay = z.infer<typeof uptimeDaySchema>;
 
 /** What `current.json` holds: the live version and the etag of its snapshot. */
 export interface SnapshotPointer {

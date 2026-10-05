@@ -7,6 +7,7 @@ import { AuditActions } from '@mocco/common/audit';
 import { MonitorStates } from '@mocco/common/status';
 
 import { MonitorPausedError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
+import { percentilesOf } from '@backend/domain/status/latency-hist';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { IncidentMonitorRepo } from '@backend/domain/status/repos/incident-monitor.repo';
@@ -14,7 +15,11 @@ import { LocationRepo } from '@backend/domain/status/repos/location.repo';
 import { MonitorLocationRepo } from '@backend/domain/status/repos/monitor-location.repo';
 import { MonitorStateChangeRepo } from '@backend/domain/status/repos/monitor-state-change.repo';
 import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
+import { RollupDailyRepo } from '@backend/domain/status/repos/rollup-daily.repo';
+import { RollupHourlyRepo } from '@backend/domain/status/repos/rollup-hourly.repo';
 import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
+import { DAY_MS, HOUR_MS } from '@backend/domain/status/uptime';
+import { utcDayOf } from '@backend/infra/db/day-partitions';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { MonitorRow, MonitorSettings } from '@backend/domain/status/repos/monitor.repo';
@@ -30,6 +35,8 @@ export interface MonitorDeps {
 
 /** Closed rounds `get` returns, newest first. */
 const RECENT_VERDICTS = 10;
+/** The history `get` returns: the last 48 hours and the last 90 UTC days. */
+export const MonitorHistoryWindow = { hours: 48, days: 90 } as const;
 
 const subject = (monitorId: string) => ({ subjectType: 'status_monitor', subjectId: monitorId });
 
@@ -160,17 +167,45 @@ export class MonitorService {
     if (found === undefined) {
       throw new StatusEntityNotFoundError('monitor', monitorId);
     }
-    const [[monitor], stateChanges, recentVerdicts, openIncident] = await Promise.all([
+    const now = this.now().getTime();
+    const [[monitor], stateChanges, recentVerdicts, openIncident, hours, days] = await Promise.all([
       this.withLinks(scope, [found]),
       new MonitorStateChangeRepo(this.deps.db).listForMonitor(scope.workspaceId, monitorId),
       new RoundVerdictRepo(this.deps.db).listLatestForMonitor(scope.workspaceId, monitorId, RECENT_VERDICTS),
       new IncidentMonitorRepo(this.deps.db).findOpen(scope.workspaceId, monitorId),
+      new RollupHourlyRepo(this.deps.db).listForMonitor(
+        scope.workspaceId,
+        monitorId,
+        new Date(Math.floor(now / HOUR_MS) * HOUR_MS - (MonitorHistoryWindow.hours - 1) * HOUR_MS),
+      ),
+      new RollupDailyRepo(this.deps.db).listForMonitor(
+        scope.workspaceId,
+        monitorId,
+        utcDayOf(new Date(now - (MonitorHistoryWindow.days - 1) * DAY_MS)),
+      ),
     ]);
     return {
       monitor: monitor ?? { ...found, locationIds: [], components: [] },
       stateChanges,
       recentVerdicts,
       openIncident: openIncident ?? null,
+      // Uptime and latency from the rollups, oldest first; percentiles come from the merged
+      // histograms. Hours and days the rollup job hasn't written are absent.
+      history: {
+        hours: hours.map(row => ({
+          hour: row.hour,
+          rounds: row.rounds,
+          downSeconds: row.downSeconds,
+          ...percentilesOf(row.latencyHist),
+        })),
+        days: days.map(row => ({
+          day: row.day,
+          rounds: row.rounds,
+          downSeconds: row.downSeconds,
+          uptimeRatio: row.uptimeRatio,
+          ...percentilesOf(row.latencyHist),
+        })),
+      },
     };
   }
 

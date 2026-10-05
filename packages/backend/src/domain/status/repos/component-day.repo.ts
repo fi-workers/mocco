@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import { inBatches } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -35,5 +35,33 @@ export class ComponentDayRepo {
             },
           }),
     );
+  }
+
+  /** Every component's row for one day (`YYYY-MM-DD`). System-wide, for the rollup job. */
+  async listForDay(day: string): Promise<ComponentDayRow[]> {
+    return await this.db.select().from(cd).where(eq(cd.day, day));
+  }
+
+  /** The components' days in `[fromDay, toDay]`. */
+  async listForComponents(
+    workspaceId: string,
+    componentIds: readonly string[],
+    fromDay: string,
+    toDay: string,
+  ): Promise<ComponentDayRow[]> {
+    if (componentIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(cd)
+      .where(
+        and(
+          eq(cd.workspaceId, workspaceId),
+          inArray(cd.componentId, [...componentIds]),
+          gte(cd.day, fromDay),
+          lte(cd.day, toDay),
+        ),
+      );
   }
 }

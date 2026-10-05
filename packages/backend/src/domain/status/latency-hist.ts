@@ -61,3 +61,9 @@ export function percentileOf(hist: readonly number[], p: number): number | null 
   }
   return lowerBoundOf(LATENCY_BUCKETS - 1);
 }
+
+/** A histogram's median and 95th percentile, in milliseconds (null when it is empty). */
+export const percentilesOf = (hist: readonly number[]) => ({
+  p50Ms: percentileOf(hist, 0.5),
+  p95Ms: percentileOf(hist, 0.95),
+});

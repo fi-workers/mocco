@@ -16,11 +16,15 @@ import {
 import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
+import { createStatusDomain } from '@backend/domain/status/compose';
 import { CheckResultRepo } from '@backend/domain/status/repos/check-result.repo';
 import { MonitorStateChangeRepo } from '@backend/domain/status/repos/monitor-state-change.repo';
 import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
 import { RollupService } from '@backend/domain/status/RollupService';
+import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { expectOne } from '@backend/infra/db/rows';
 import {
@@ -189,6 +193,11 @@ describe('uptime rollups (pglite)', () => {
     return rows.find(row => row.day === day);
   };
 
+  const dirtyAt = async () => expectOne(await t.db.select().from(statusPages)).dirtyAt;
+  const clean = async () => {
+    await t.db.update(statusPages).set({ dirtyAt: null });
+  };
+
   /** Roll every hour of both days up, then both days. */
   const rollUpAll = async () => {
     await Array.from({ length: 48 }, (_, n) => at(n)).reduce(async (previous, hour) => {
@@ -201,7 +210,10 @@ describe('uptime rollups (pglite)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    rollups = new RollupService({ db: t.db });
+    rollups = new RollupService({
+      db: t.db,
+      snapshots: new SnapshotScheduler({ db: t.db, queue: undefined, now: () => LATER }),
+    });
     const workspaceId = expectOne(
       await t.db.insert(workspaces).values({ name: 'W', slug: randomUUID() }).returning(),
     ).id;
@@ -425,6 +437,79 @@ describe('uptime rollups (pglite)', () => {
     ]);
     // 03:00: yesterday is no longer rechecked.
     expect(await rollups.run(at(27))).toMatchObject({ days: [NEXT] });
+  });
+
+  it('marks the page dirty when a rollup changes a bar, and only then', async () => {
+    const id = await monitor();
+    const api = await component('API');
+    await link(api, id, ComponentImpacts.partialOutage);
+
+    // A new day's bar is a change.
+    await rollups.rollupDay(D, LATER);
+    expect(await dirtyAt()).toEqual(LATER);
+    await clean();
+
+    // The same day again: nothing the page shows moved.
+    await rollups.rollupDay(D, LATER);
+    expect(await dirtyAt()).toBeNull();
+
+    // An outage changes the day's status and uptime.
+    await changes(id, [
+      [MonitorStates.up, MonitorStates.down, 8],
+      [MonitorStates.down, MonitorStates.up, 9],
+    ]);
+    await rollups.rollupDay(D, LATER);
+    expect(await dirtyAt()).toEqual(LATER);
+    expect(await componentDay(api)).toMatchObject({
+      worstStatus: ComponentStatuses.partialOutage,
+      uptimeRatio: 0.958333,
+    });
+  });
+
+  it("reads a monitor's p50 and p95 latency from the rollups' histograms", async () => {
+    const id = await monitor();
+    // Hour 9: 45 rounds at 50 ms, then 15 at 900 ms; hour 10: 60 rounds at 200 ms.
+    await verdicts(
+      id,
+      9,
+      Array.from({ length: 45 }, () => RoundVerdicts.ok),
+      50,
+    );
+    await verdicts(
+      id,
+      9.75,
+      Array.from({ length: 15 }, () => RoundVerdicts.ok),
+      900,
+    );
+    await verdicts(
+      id,
+      10,
+      Array.from({ length: 60 }, () => RoundVerdicts.ok),
+      200,
+    );
+    await rollUpAll();
+    const status = createStatusDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      now: () => at(30),
+    });
+
+    const { history } = await status.statusMonitors.get(scope, id);
+    const [nine, ten] = history.hours;
+    // 50 ms is in the 32–64 bucket and 900 ms in 512–1024: p50 among the fast, p95 among the slow.
+    expect(nine).toMatchObject({ hour: at(9), rounds: 60 });
+    expect(nine?.p50Ms).toBeGreaterThanOrEqual(32);
+    expect(nine?.p50Ms).toBeLessThan(64);
+    expect(nine?.p95Ms).toBeGreaterThanOrEqual(512);
+    expect(nine?.p95Ms).toBeLessThan(1024);
+    expect(ten).toMatchObject({ hour: at(10) });
+    expect(ten?.p95Ms).toBeGreaterThanOrEqual(128);
+    expect(ten?.p95Ms).toBeLessThan(256);
+    // The day merges the hours' histograms: 120 rounds, p50 in the 200 ms bucket, p95 among the slow.
+    const [day] = history.days;
+    expect(day).toMatchObject({ day: D, rounds: 120, uptimeRatio: 1 });
+    expect(day?.p50Ms).toBeGreaterThanOrEqual(128);
+    expect(day?.p50Ms).toBeLessThan(256);
+    expect(day?.p95Ms).toBeGreaterThanOrEqual(512);
   });
 
   it('deletes hourly rollups past 90 days and keeps raw results for STATUS_RAW_RETENTION_DAYS', async () => {
