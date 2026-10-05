@@ -9,6 +9,10 @@
 // the verdict, the new state and streaks, the next round, and a state change row when the state
 // moved. The round is re-read under the lock, so two evaluators can't close it twice.
 //
+// During a deploy watch (DeployWatchService) a round that starts before `watch_until` is followed
+// by one `watch_interval_s` later; the first round at or past it clears the watch, and the
+// monitor's own interval resumes.
+//
 // After a change commits, the `onStateChange` port (bound in compose.ts to the
 // MonitorTransitionService) handles what it means for pages, incidents and alerts; the
 // evaluator knows nothing of those.
@@ -43,10 +47,18 @@ const BATCH = 500;
 export const RoundCloses = { open: 'open', closed: 'closed', changed: 'changed', skipped: 'skipped' } as const;
 type RoundClose = (typeof RoundCloses)[keyof typeof RoundCloses];
 
-/** The next round: one interval after this one, or now when that is already past or a recheck
- * is due. */
+/** Whether the monitor's current round is inside a deploy watch: it started before `watch_until`. */
+export function isWatchedRound(monitor: Pick<MonitorRow, 'nextRoundAt' | 'watchUntil'>): boolean {
+  return monitor.watchUntil !== null && monitor.nextRoundAt < monitor.watchUntil;
+}
+
+/** The next round: one interval after this one (the watch interval inside a deploy watch), or
+ * now when that is already past or a recheck is due. */
 function nextRoundOf(monitor: MonitorRow, now: Date, isRecheck: boolean): Date {
-  const scheduled = monitor.nextRoundAt.getTime() + monitor.intervalSeconds * 1000;
+  const interval = isWatchedRound(monitor)
+    ? (monitor.watchIntervalSeconds ?? monitor.intervalSeconds)
+    : monitor.intervalSeconds;
+  const scheduled = monitor.nextRoundAt.getTime() + interval * 1000;
   return isRecheck || scheduled <= now.getTime() ? now : new Date(scheduled);
 }
 
@@ -112,6 +124,8 @@ export class VerdictEvaluator {
       });
       const next = nextState(monitor, tally.verdict, monitor);
       const isMoved = next.state !== monitor.state;
+      // The first round at or past `watch_until` ends the watch: the normal interval resumes.
+      const isWatchOver = monitor.watchUntil !== null && !isWatchedRound(monitor);
       const updated = await monitors.setState(
         scope,
         monitor.id,
@@ -121,6 +135,7 @@ export class VerdictEvaluator {
           consecutiveOks: next.consecutiveOks,
           nextRoundAt: nextRoundOf(monitor, now, next.recheck),
           ...(isMoved && { stateChangedAt: now }),
+          ...(isWatchOver && { watchUntil: null, watchIntervalSeconds: null, watchRunId: null }),
         },
         now,
       );

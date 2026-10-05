@@ -30,3 +30,16 @@ export interface DeploySource {
   /** The workspace's runs among `runIds`; another workspace's ids are left out. */
   runSummaries(workspaceId: string, runIds: readonly string[]): Promise<readonly RunSummary[]>;
 }
+
+/** An event status adds to a run's timeline (`mocco_run_events`). */
+export interface RunTimelineEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+/** Where status writes on a run: only its timeline. A run's state is never changed from here
+ * (an automatic rollback on a failed post-deploy check would need its own ADR). */
+export interface RunTimeline {
+  /** Append to the run's timeline; false (and nothing written) when the run isn't the workspace's. */
+  append(workspaceId: string, runId: string, event: RunTimelineEvent): Promise<boolean>;
+}

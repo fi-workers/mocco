@@ -1,10 +1,11 @@
-// The DeploySource port over the release registry and the execution repos. Built by the
-// composition root (compose.ts); the status services only see the port.
+// The DeploySource and RunTimeline ports over the release registry and the execution repos.
+// Built by the composition root (compose.ts); the status services only see the ports.
+import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { ProjectRepoRepo } from '@backend/domain/project/repos/project-repo.repo';
 import { ReleaseRepo } from '@backend/domain/project/repos/release.repo';
 
-import type { DeploySource } from '@backend/domain/status/ports';
+import type { DeploySource, RunTimeline } from '@backend/domain/status/ports';
 import type { Db } from '@backend/infra/db/types';
 
 export function createReleaseDeploySource(db: Db): DeploySource {
@@ -33,6 +34,22 @@ export function createReleaseDeploySource(db: Db): DeploySource {
         commitSha: commit.sha,
         finishedAt: run.finishedAt,
       }));
+    },
+  };
+}
+
+/** Appends to a run's timeline through the execution domain's event repo; never touches the run. */
+export function createRunTimeline(db: Db): RunTimeline {
+  const runs = new RunRepo(db);
+  const events = new RunEventRepo(db);
+  return {
+    append: async (workspaceId, runId, event) => {
+      const [found] = await runs.listWithRepoInWorkspace(workspaceId, [runId]);
+      if (found === undefined) {
+        return false;
+      }
+      await events.append({ workspaceId, runId, type: event.type, payload: event.payload });
+      return true;
     },
   };
 }

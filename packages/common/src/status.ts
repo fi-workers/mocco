@@ -66,6 +66,14 @@ export const INCIDENT_TRANSITIONS: Record<IncidentStatus, readonly IncidentStatu
 export const IncidentVisibilities = { draft: 'draft', published: 'published' } as const;
 export type IncidentVisibility = (typeof IncidentVisibilities)[keyof typeof IncidentVisibilities];
 
+/**
+ * Who opened an incident: an operator (`manual`), a monitor going down (`monitor`), or a monitor
+ * going down during a release's deploy watch (`deploy_watch`, with `suspected_run_id` set). The DB
+ * check on `mocco_status_incidents.origin` uses this object.
+ */
+export const IncidentOrigins = { manual: 'manual', monitor: 'monitor', deployWatch: 'deploy_watch' } as const;
+export type IncidentOrigin = (typeof IncidentOrigins)[keyof typeof IncidentOrigins];
+
 export const IncidentSeverities = { minor: 'minor', major: 'major', critical: 'critical' } as const;
 export type IncidentSeverity = (typeof IncidentSeverities)[keyof typeof IncidentSeverities];
 export const incidentSeveritySchema = z.enum(
@@ -403,6 +411,21 @@ export const manualIncidentRunRelationSchema = incidentRunRelationSchema
 export const CorrelationWindow = {
   beforeMs: 2 * 60 * 60 * 1000,
   afterMs: 5 * 60 * 1000,
+} as const;
+
+/**
+ * The deploy watch (#155): after a release of a project, its monitors check every 30 seconds for
+ * 15 minutes, and a monitor that goes down meanwhile opens an incident attributed to the run.
+ */
+export const DeployWatch = {
+  durationMs: 15 * 60 * 1000,
+  intervalSeconds: 30,
+} as const;
+
+/** Run timeline events the status domain appends (`mocco_run_events.type`); they never change the run. */
+export const StatusRunEventTypes = {
+  /** A monitor of a released project went down during the run's deploy watch. */
+  postDeployCheckFailed: 'status.post_deploy_check_failed',
 } as const;
 
 /** A run linked to an incident, with what the console shows about the run. */

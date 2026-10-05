@@ -202,6 +202,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
 - Source: branch `feat/help-v1-read` (#216)
 
+## 2026-10-05 — Status: the deploy watch
+
+- The status reference gains "The deploy watch": the `status.deploy_watch` subscriber on `deploy.released` (a
+  production release, not any succeeded run), the monitor-to-project linkage, the watch columns on monitors and how the
+  evaluator schedules watched rounds and ends the watch, the `deploy_watch` incident with `suspected_run_id` (migration
+  0066, with incident `origin`), the 2x factor in correlation, and the `status.post_deploy_check_failed` run event
+  written through the `RunTimeline` port with the run left unchanged. The events and release registry references list
+  the new subscriber; the feature map's deploy watch row says what is built.
+- Docs touched: `reference/status.md`, `reference/events.md`, `reference/releases.md`, `reference/feature-map.md`,
+  `log.md`
+- Source: branch `feat/status-deploy-watch` (#155)
+
 ## 2026-10-05 — Help center: Was this helpful?
 
 - The help center reference gains "Was this helpful?": `mocco_help_feedback` (migration 0065), the two surfaces (`/v1` and

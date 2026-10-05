@@ -1,6 +1,7 @@
 // Deploy correlation (#154): the runs an incident is linked to, both ways. When an incident
 // opens, Mocco suggests the recorded releases (docs/reference/releases.md) that finished in the
-// window around its start, scored by how close they were; a person links or unlinks any run of
+// window around its start, scored by how close they were (twice as much for the run whose deploy
+// watch opened it); a person links or unlinks any run of
 // the workspace (audited). Releases and runs are read through the DeploySource port, so the
 // execution and project domains never depend on status.
 import { AuditActions } from '@mocco/common/audit';
@@ -30,6 +31,9 @@ export const MAX_SUGGESTED_RUNS = 20;
 /** A release of the incident's own project (its repos are linked) counts this much more. */
 export const LINKED_REPO_FACTOR = 1.5;
 
+/** The run whose deploy watch the incident's first failure happened in counts this much more. */
+export const DEPLOY_WATCH_FACTOR = 2;
+
 const MINUTE_MS = 60_000;
 
 /** The window releases are correlated in: `[startedAt - 2h, startedAt + 5m]`. */
@@ -43,11 +47,16 @@ export function correlationWindow(startedAt: Date): { from: Date; to: Date } {
 /**
  * How suspicious a release is: `1 / (1 + minutes / 10)`, where `minutes` is how far it finished
  * from the incident's start (either side), times 1.5 for a release of a repo the incident's
- * project links.
+ * project links, and times 2 when the incident opened during that run's deploy watch.
  */
-export function deployScore(release: { releasedAt: Date }, startedAt: Date, isLinkedRepo: boolean): number {
+export function deployScore(
+  release: { releasedAt: Date },
+  startedAt: Date,
+  isLinkedRepo: boolean,
+  isWatchedRun = false,
+): number {
   const minutes = Math.abs(startedAt.getTime() - release.releasedAt.getTime()) / MINUTE_MS;
-  return (1 / (1 + minutes / 10)) * (isLinkedRepo ? LINKED_REPO_FACTOR : 1);
+  return (1 / (1 + minutes / 10)) * (isLinkedRepo ? LINKED_REPO_FACTOR : 1) * (isWatchedRun ? DEPLOY_WATCH_FACTOR : 1);
 }
 
 /**
@@ -56,12 +65,14 @@ export function deployScore(release: { releasedAt: Date }, startedAt: Date, isLi
  */
 export function rankReleases(
   releases: readonly DeployRelease[],
-  incident: Pick<IncidentRow, 'startedAt' | 'projectId'>,
+  incident: Pick<IncidentRow, 'startedAt' | 'projectId'> & Partial<Pick<IncidentRow, 'suspectedRunId'>>,
   isScopedToProject: boolean,
 ): { runId: string; score: number; relation: IncidentRunRelation }[] {
   const best = releases.reduce((scores, release) => {
     const isLinkedRepo = isScopedToProject && release.projectId === incident.projectId;
-    const score = deployScore(release, incident.startedAt, isLinkedRepo);
+    // `suspected_run_id` is set only on an incident a deploy watch opened (#155).
+    const isWatchedRun = release.runId === (incident.suspectedRunId ?? undefined);
+    const score = deployScore(release, incident.startedAt, isLinkedRepo, isWatchedRun);
     return scores.set(release.runId, Math.max(score, scores.get(release.runId) ?? 0));
   }, new Map<string, number>());
   return [...best]
