@@ -268,6 +268,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/help/help-center.md`, `customer/help/images/editor.png`, `customer/help/images/editor-images.png`, `log.md`
 - Source: branch `feat/help-editor-images` (#208)
 
+## 2026-10-05 — Status uptime rollups
+
+- The status reference gains "Uptime rollups": `mocco_status_rollups_hourly`, `mocco_status_rollups_daily` and
+  `mocco_status_component_days` (migration 0067), downtime as time from the state changes (an outage runs from `down`
+  to the next state other than `down` or `recovering`, cut at day boundaries, never added by `unknown` rounds), the
+  uptime formula with what `observed` and `maintenance` mean, the fixed log-bucket latency histograms, the
+  ten-minute `status.rollup` schedule (a day is final from 00:10 UTC and rechecked until 02:10), and what's kept how
+  long. "Time series and their partitions" adds `STATUS_RAW_RETENTION_DAYS` and the hourly rollups' 90-day delete.
+- The env reference lists `STATUS_RAW_RETENTION_DAYS`; the feature map gains an "Uptime history and 90-day bars" row,
+  and the public page row notes that the bars come next.
+- Docs touched: `reference/status.md`, `reference/env.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-rollups` (#152)
+
 ## 2026-10-05 — Status deploy correlation
 
 - The status reference gains "Deploy correlation": `mocco_status_incident_runs`, what counts as a deploy (a recorded

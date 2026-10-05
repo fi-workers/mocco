@@ -58,6 +58,7 @@ import {
   smallint,
   integer,
   date,
+  numeric,
   real,
   jsonb,
   index,
@@ -3848,6 +3849,93 @@ export const statusRoundVerdicts = pgTable(
     check(
       'mocco_status_round_verdicts_verdict_check',
       sql`${t.verdict} IN (${sqlInList(Object.values(RoundVerdicts))})`,
+    ),
+  ],
+);
+
+// Uptime history (#152). `status.rollup` (RollupService) computes these from the round verdicts
+// and the state changes, so they outlive the raw tables they come from. A latency histogram has
+// fixed log buckets (domain/status/latency-hist.ts), so hours add up to days and a percentile
+// can be read from any sum of them.
+
+/** One monitor's hour: its rounds by verdict, the seconds it was down, and the rounds' latency.
+ * Kept 90 days: `status.retention` deletes older hours, through the hour index. */
+export const statusRollupsHourly = pgTable(
+  'mocco_status_rollups_hourly',
+  {
+    monitorId: uuid('monitor_id').notNull(),
+    hour: timestamp().notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    rounds: integer().notNull(),
+    okRounds: integer('ok_rounds').notNull(),
+    failRounds: integer('fail_rounds').notNull(),
+    unknownRounds: integer('unknown_rounds').notNull(),
+    downSeconds: integer('down_seconds').notNull(),
+    latencySumMs: bigint('latency_sum_ms', { mode: 'number' }).notNull(),
+    latencyCount: integer('latency_count').notNull(),
+    latencyHist: integer('latency_hist').array().notNull(),
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_rollups_hourly_pk', columns: [t.monitorId, t.hour] }),
+    index('mocco_status_rollups_hourly_hour_idx').on(t.hour),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_rollups_hourly_monitor_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One monitor's UTC day: uptime from its state changes, minus maintenance. Kept forever. */
+export const statusRollupsDaily = pgTable(
+  'mocco_status_rollups_daily',
+  {
+    monitorId: uuid('monitor_id').notNull(),
+    day: date({ mode: 'string' }).notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    rounds: integer().notNull(),
+    okRounds: integer('ok_rounds').notNull(),
+    downSeconds: integer('down_seconds').notNull(),
+    maintenanceSeconds: integer('maintenance_seconds').notNull(),
+    /** Null when maintenance covered all of the day the monitor existed. */
+    uptimeRatio: numeric('uptime_ratio', { precision: 7, scale: 6, mode: 'number' }),
+    latencyHist: integer('latency_hist').array().notNull(),
+    p95Ms: integer('p95_ms'),
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_rollups_daily_pk', columns: [t.monitorId, t.day] }),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_rollups_daily_monitor_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One component's UTC day, for the public page's 90-day bars: the worst status it showed (from
+ * its monitors, published incidents and maintenance), its downtime, and that day's incidents. */
+export const statusComponentDays = pgTable(
+  'mocco_status_component_days',
+  {
+    componentId: uuid('component_id').notNull(),
+    day: date({ mode: 'string' }).notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    worstStatus: text('worst_status').$type<ComponentStatus>().notNull(),
+    downSeconds: integer('down_seconds').notNull(),
+    /** Null when no monitor reports on the component, so its uptime isn't measured. */
+    uptimeRatio: numeric('uptime_ratio', { precision: 7, scale: 6, mode: 'number' }),
+    incidentIds: uuid('incident_ids').array().notNull(),
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_component_days_pk', columns: [t.componentId, t.day] }),
+    foreignKey({
+      columns: [t.componentId, t.workspaceId],
+      foreignColumns: [statusComponents.id, statusComponents.workspaceId],
+      name: 'mocco_status_component_days_component_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_component_days_worst_status_check',
+      sql`${t.worstStatus} IN (${sqlInList(Object.values(ComponentStatuses))})`,
     ),
   ],
 );

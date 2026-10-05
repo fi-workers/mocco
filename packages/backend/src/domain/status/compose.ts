@@ -9,6 +9,7 @@ import { MonitorService } from '@backend/domain/status/MonitorService';
 import { MonitorTransitionService } from '@backend/domain/status/MonitorTransitionService';
 import { ProbeService } from '@backend/domain/status/ProbeService';
 import { createReleaseDeploySource, createRunTimeline } from '@backend/domain/status/release-deploys';
+import { RollupService } from '@backend/domain/status/RollupService';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
@@ -31,6 +32,7 @@ export interface StatusDomain {
   statusProbes: ProbeService;
   statusVerdicts: VerdictEvaluator;
   statusCorrelation: CorrelationService;
+  statusRollups: RollupService;
 }
 
 export interface StatusDomainDeps {
@@ -85,6 +87,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
     statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),
+    statusRollups: new RollupService({ db }),
   };
 }
 

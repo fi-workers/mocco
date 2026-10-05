@@ -97,6 +97,8 @@ export interface JobRunnerRuntimeDeps {
   translator?: Translator;
   /** Submits changed help pages to IndexNow; undefined outside production. */
   helpIndexNow?: HelpIndexNow;
+  /** Days of raw status check results kept (`STATUS_RAW_RETENTION_DAYS`); the policy's default without it. */
+  statusRawRetentionDays?: number;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -178,8 +180,12 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createStatusHandlers({
       maintenances: status.statusMaintenances,
       snapshots: createSnapshotService(db, { store: deps.storage?.store, queue, now: deps.now }),
-      retention: new TimeSeriesRetention({ db }),
+      retention: new TimeSeriesRetention({
+        db,
+        ...(deps.statusRawRetentionDays !== undefined && { checkResultDays: deps.statusRawRetentionDays }),
+      }),
       verdicts: status.statusVerdicts,
+      rollups: status.statusRollups,
       now: deps.now,
     }),
     ...createOtaHandlers({
@@ -242,6 +248,7 @@ export function getJobRunner(): JobRunner {
       push: new ExpoPushSender({ accessToken: env.EXPO_ACCESS_TOKEN }),
       translator: translatorFromEnv(env),
       helpIndexNow: helpIndexNowFromEnv(getDb(), env),
+      statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
     });
   }
   return state.runner;
