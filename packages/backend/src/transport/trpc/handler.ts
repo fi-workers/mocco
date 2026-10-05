@@ -53,6 +53,7 @@ import type { UploadService } from '@backend/domain/ota/UploadService';
 import type { VersionPolicyService } from '@backend/domain/ota/VersionPolicyService';
 import type { ProductEnablementService } from '@backend/domain/project/ProductEnablementService';
 import type { ProjectService } from '@backend/domain/project/ProjectService';
+import type { CorrelationService } from '@backend/domain/status/CorrelationService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
 import type { LocationService } from '@backend/domain/status/LocationService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
@@ -100,6 +101,7 @@ export interface TrpcDeps extends Services {
   statusMaintenances: MaintenanceService;
   statusMonitors: MonitorService;
   statusLocations: LocationService;
+  statusCorrelation: CorrelationService;
   /** Present only when SECRETS_ENCRYPTION_KEYS is set. */
   inbound: InboundDomain | undefined;
   notifications: ChannelService | undefined;
@@ -160,6 +162,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         statusMaintenances: deps.statusMaintenances,
         statusMonitors: deps.statusMonitors,
         statusLocations: deps.statusLocations,
+        statusCorrelation: deps.statusCorrelation,
         inbound: deps.inbound,
         notifications: deps.notifications,
         notificationActivity: deps.notificationActivity,

@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -48,6 +48,10 @@ code_refs:
   - packages/backend/src/domain/status/snapshot/project.ts
   - packages/backend/src/domain/status/snapshot/render.ts
   - packages/backend/src/transport/trpc/routers/status.ts
+  - packages/backend/src/domain/status/CorrelationService.ts
+  - packages/backend/src/domain/status/ports.ts
+  - packages/backend/src/domain/status/release-deploys.ts
+  - packages/backend/src/domain/status/repos/incident-run.repo.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
   - packages/frontend/src/components/status/incidents.tsx
@@ -63,8 +67,9 @@ maintenance by hand through the `status.*` tRPC router (#148), and every change 
 (#149, [below](#public-page)). Monitors and probe locations are configured over tRPC and checked by the `@mocco/probe`
 agent run at a private location or embedded in a single-node self-hosted server (#150,
 [below](#monitors-and-the-probe-protocol)); a monitor's state drives its
-components, opens incidents and sends alerts ([below](#what-a-state-change-does)). There is no subscriber or deploy
-correlation yet.
+components, opens incidents and sends alerts ([below](#what-a-state-change-does)). Each incident lists the releases
+around its start and any run a person links to it, and a run lists its incidents (#154,
+[below](#deploy-correlation)). There are no subscribers yet.
 
 ## Console
 
@@ -108,6 +113,7 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, and the streaks `consecutive_fails` and `consecutive_oks` |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
+| `mocco_status_incident_runs` | The runs linked to an incident ([deploy correlation](#deploy-correlation)): `relation` (`suspected`, `before_window`, `fix`, `manual`), `score` (a suggestion's), `linked_by_user_id` (null for a suggestion). Keyed by (incident, run), with an index on `run_id` for the run's side; deleting the incident or the run deletes the link |
 | `mocco_status_incident_monitors` | The incident a monitor opened: `incident_id`, `monitor_id`, `closed_at` (set when the monitor recovers). A partial unique index on `monitor_id` where `closed_at` is null keeps one open incident per monitor |
 | `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
 | `mocco_status_round_verdicts` | One closed round of a monitor: `verdict` (`ok`, `degraded`, `fail`, `unknown`), `ok_count`, `fail_count`, `no_data_count`, `p50_latency_ms`, `closed_at`. Key (monitor, round); partitioned by day like the raw results and kept 30 days |
@@ -144,6 +150,39 @@ locks the incident row, so two concurrent updates can't both pass the check.
 set the first time the incident reaches `identified` and is kept after that.
 
 The affected components can be replaced at any time. The postmortem is a Markdown field that can be set or cleared.
+
+## Deploy correlation
+
+An incident lists the deploys around it, and a run lists the incidents it is linked to. `CorrelationService` owns
+both sides; it reads releases and runs through the `DeploySource` port (`domain/status/ports.ts`), which the
+composition root implements over the release registry and execution repos (`release-deploys.ts`), so neither the
+execution nor the project domain depends on status.
+
+**What counts as a deploy.** A recorded [release](./releases.md): a run that succeeded and passed at least one
+resumed gate, recorded for the projects its repo is linked to. The design's first rule (any succeeded run) predates
+the registry and named the missing production marker as an open question; the registry is that marker, so a CI
+run that never passed a gate is not suggested. Any run of the workspace can still be linked by hand.
+
+**Scope.** An incident belongs to a project through its page. When the project links repos, only its releases of
+repos it still links count, so a release of an unlinked repo (or of another project) is never suggested. When it
+links none, every release of the workspace counts. Another workspace's runs never appear: every query is
+workspace-scoped and the run's side checks the run belongs to the caller's workspace. Components have no repo links
+of their own yet, so the project's links stand in for them.
+
+**Window and score.** Releases that finished in `[started_at - 2h, started_at + 5m]` (`CorrelationWindow` in
+`@mocco/common/status`, the same for every page) are scored `1 / (1 + minutes / 10)`, where `minutes` is how far
+from the start they finished, either side; a release of the incident's project's linked repos counts 1.5 times.
+One run released for several projects keeps its best score. The best 20 are kept: the top one as `suspected`, the
+others as `before_window`. Suggestions are computed when an incident opens, by hand or by a monitor (after its
+audit entry, never failing the incident), and again on demand (`correlateIncident`), which replaces the suggestions
+and keeps every link a person made.
+
+**Links by hand.** A person links any run of the workspace as `manual` (default) or `fix` (the run that resolved
+it); linking a suggested run turns it into their link. Unlinking removes a suggestion or a person's link. Both are
+audited. A suggestion that was unlinked comes back if the suggestions are recomputed.
+
+Not built yet: the deploy watch (monitors checking every 30 seconds after a release, and its 2x factor),
+`suspected_run_id` on the incident, a per-page window, and the console panels.
 
 ## What a component shows
 
@@ -486,13 +525,14 @@ These changes are appended to the workspace's audit chain, after their transacti
 | `status.page.created`, `status.page.deleted` | `status_page` |
 | `status.component.status_changed` (from, to) | `status_component` |
 | `status.incident.created`, `status.incident.updated` (from, to), `status.incident.components_changed`, `status.incident.postmortem_changed` | `status_incident` |
+| `status.incident.run_linked`, `status.incident.run_unlinked` (`runId`, `relation`) | `status_incident` |
 | `status.incident.created`, `status.incident.updated` for a monitor's incident (no actor, `monitorId` in the payload) | `status_incident` |
 | `status.maintenance.scheduled`, `status.maintenance.canceled` | `status_maintenance` |
 | `status.maintenance.started`, `status.maintenance.completed` (by the tick, no actor) | `status_maintenance` |
 | `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed` | `status_monitor` |
 | `status.location.created`, `status.location.token_rotated`, `status.location.disabled` | `status_location` |
 
-Group and other component edits are not audited.
+Group and other component edits are not audited, and neither are the runs Mocco suggests for an incident.
 
 ## tRPC
 
@@ -509,6 +549,8 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `createGroup`, `updateGroup`, `deleteGroup` | Groups |
 | `createComponent`, `updateComponent`, `setComponentStatus`, `deleteComponent` | Components; `setComponentStatus` is audited |
 | `incidents`, `incident`, `createIncident`, `postIncidentUpdate`, `setIncidentComponents`, `setPostmortem` | Incidents; `incident` returns the timeline and affected components |
+| `incidentRuns`, `correlateIncident`, `linkRun`, `unlinkRun` | The runs linked to an incident ([deploy correlation](#deploy-correlation)); `linkRun` takes `relation` `manual` or `fix` |
+| `runIncidents` | The incidents a run is linked to (`workspaceId`, `runId`; membership and the status product, no `projectId`), for the run's page. It lives here so the execution router never depends on status; another workspace's run is `NOT_FOUND` |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
 | `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components and latest state changes |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
@@ -523,8 +565,8 @@ GHCR, heartbeat monitors, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` and a way to publish a draft incident
-(a monitor's draft is visible in the console but can't be published yet); repo and project links on components; run links
-(`suspected_run_id`, `mocco_status_incident_runs`); and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
+(a monitor's draft is visible in the console but can't be published yet); repo and project links on components; the
+deploy watch and `suspected_run_id`; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
 ## MCP

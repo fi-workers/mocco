@@ -91,6 +91,9 @@ export const AuditActions = {
   statusIncidentUpdated: 'status.incident.updated',
   statusIncidentComponentsChanged: 'status.incident.components_changed',
   statusIncidentPostmortemChanged: 'status.incident.postmortem_changed',
+  /** A person linked a run to an incident (a deploy that caused or fixed it). */
+  statusIncidentRunLinked: 'status.incident.run_linked',
+  statusIncidentRunUnlinked: 'status.incident.run_unlinked',
   statusMaintenanceScheduled: 'status.maintenance.scheduled',
   statusMaintenanceCanceled: 'status.maintenance.canceled',
   /** The maintenance tick started a window (no actor). */
@@ -200,6 +203,8 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.statusIncidentUpdated]: 'Incident updated',
   [AuditActions.statusIncidentComponentsChanged]: 'Incident components changed',
   [AuditActions.statusIncidentPostmortemChanged]: 'Incident postmortem changed',
+  [AuditActions.statusIncidentRunLinked]: 'Run linked to an incident',
+  [AuditActions.statusIncidentRunUnlinked]: 'Run unlinked from an incident',
   [AuditActions.statusMaintenanceScheduled]: 'Maintenance scheduled',
   [AuditActions.statusMaintenanceCanceled]: 'Maintenance canceled',
   [AuditActions.statusMaintenanceStarted]: 'Maintenance started',

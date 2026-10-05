@@ -53,6 +53,8 @@ export interface MonitorTransitionDeps {
   events?: EventPublisher;
   /** The app's origin, for the link in an alert. */
   appOrigin?: string;
+  /** Called after the monitor's incident is opened and audited (deploy correlation); must not throw. */
+  onIncidentOpened?: (incident: IncidentRow) => Promise<void>;
   now?: () => Date;
 }
 
@@ -358,6 +360,9 @@ export class MonitorTransitionService {
       await previous;
       await this.deps.audit.record(scope.workspaceId, entry);
     }, Promise.resolve());
+    if (reaction.opened !== undefined) {
+      await this.deps.onIncidentOpened?.(reaction.opened);
+    }
     const type = alertOf(change.fromState, change.toState);
     const { events } = this.deps;
     if (type !== undefined && events !== undefined) {

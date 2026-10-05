@@ -24,6 +24,8 @@ export interface IncidentDeps {
   pages: Pick<StatusPageService, 'requirePage'>;
   /** Marks the public page dirty with each change and requests a publish. */
   snapshots: Pick<SnapshotScheduler, 'change'>;
+  /** Called after an incident is opened and audited (deploy correlation); must not throw. */
+  onOpened?: (incident: IncidentRow) => Promise<void>;
   now?: () => Date;
 }
 
@@ -128,6 +130,7 @@ export class IncidentService {
         components: input.components,
       },
     });
+    await this.deps.onOpened?.(incident);
     return incident;
   }
 

@@ -64,7 +64,9 @@ The row outlives its run and repo, so the commit and the people who resumed it s
 after a repo is disconnected.
 
 `ReleaseService.listForProject(workspaceId, projectId, { limit, before })` reads a project's
-releases, newest first. There is no tRPC, MCP or `/v1` surface yet.
+releases, newest first. There is no tRPC, MCP or `/v1` surface yet. Status
+[deploy correlation](./status.md#deploy-correlation) reads releases around an incident's start
+(`ReleaseRepo.listReleasedBetween`) through its own port.
 
 ## How a release is recorded
 

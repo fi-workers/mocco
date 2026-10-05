@@ -5,7 +5,9 @@
 // conflicts → CONFLICT, MaintenanceWindowError → BAD_REQUEST). Entities are looked up within
 // the caller's workspace and project, so another tenant's id is NOT_FOUND. Probe locations
 // belong to the workspace: listing them needs membership, and creating, rotating or disabling
-// one (which issues or revokes a token) needs an owner or admin.
+// one (which issues or revokes a token) needs an owner or admin. The runs linked to incidents
+// (#154) are read and changed here on both sides, including a run's own incidents, so the
+// execution domain never depends on status.
 import { Products } from '@mocco/common/project';
 import {
   affectedComponentsSchema,
@@ -13,12 +15,15 @@ import {
   componentInputSchema,
   componentStatusSchema,
   incidentCreateInputSchema,
+  incidentRunSchema,
   incidentUpdateInputSchema,
   locationInputSchema,
   locationSchema,
   maintenanceInputSchema,
+  manualIncidentRunRelationSchema,
   monitorInputSchema,
   postmortemInputSchema,
+  runIncidentSchema,
   statusPageInputSchema,
 } from '@mocco/common/status';
 import { z } from 'zod';
@@ -35,6 +40,7 @@ const pageInput = projectInput.extend({ pageId: z.uuid() });
 const groupInput = projectInput.extend({ groupId: z.uuid() });
 const componentInput = projectInput.extend({ componentId: z.uuid() });
 const incidentInput = projectInput.extend({ incidentId: z.uuid() });
+const incidentRunInput = incidentInput.extend({ runId: z.uuid() });
 const maintenanceInput = projectInput.extend({ maintenanceId: z.uuid() });
 const monitorInput = projectInput.extend({ monitorId: z.uuid() });
 const workspaceInput = z.object({ workspaceId: z.uuid() });
@@ -196,6 +202,49 @@ export const statusRouter = router({
         input.incidentId,
         input.postmortem,
       ),
+    })),
+
+  /** The runs linked to the incident: Mocco's suggestions, best first, and a person's links. */
+  incidentRuns: protectedStatusProcedure
+    .input(incidentInput)
+    .output(z.object({ runs: z.array(incidentRunSchema) }))
+    .query(async ({ ctx, input }) => ({
+      runs: await ctx.statusCorrelation.list(scopeOf(input), input.incidentId),
+    })),
+
+  /** Recompute the suggested runs (releases around the incident's start); a person's links stay. */
+  correlateIncident: protectedStatusProcedure
+    .input(incidentInput)
+    .output(z.object({ suggested: z.int() }))
+    .mutation(async ({ ctx, input }) => await ctx.statusCorrelation.correlate(scopeOf(input), input.incidentId)),
+
+  /** Link a run of the workspace to the incident (audited). */
+  linkRun: protectedStatusProcedure
+    .input(incidentRunInput.extend({ relation: manualIncidentRunRelationSchema }))
+    .output(z.object({ link: incidentRunSchema.omit({ run: true }) }))
+    .mutation(async ({ ctx, input }) => ({
+      link: await ctx.statusCorrelation.link(scopeOf(input), ctx.session.user.id, {
+        incidentId: input.incidentId,
+        runId: input.runId,
+        relation: input.relation,
+      }),
+    })),
+
+  /** Remove a run's link, suggested or not (audited). */
+  unlinkRun: protectedStatusProcedure.input(incidentRunInput).mutation(async ({ ctx, input }) => {
+    await ctx.statusCorrelation.unlink(scopeOf(input), ctx.session.user.id, {
+      incidentId: input.incidentId,
+      runId: input.runId,
+    });
+    return { ok: true } as const;
+  }),
+
+  /** The incidents a run is linked to, for the run's page: workspace-scoped, like runs. */
+  runIncidents: statusWorkspaceProcedure
+    .input(workspaceInput.extend({ runId: z.uuid() }))
+    .output(z.object({ incidents: z.array(runIncidentSchema) }))
+    .query(async ({ ctx, input }) => ({
+      incidents: await ctx.statusCorrelation.incidentsForRun(input.workspaceId, input.runId),
     })),
 
   maintenances: protectedStatusProcedure.input(pageInput).query(async ({ ctx, input }) => ({
