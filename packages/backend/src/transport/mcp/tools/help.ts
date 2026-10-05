@@ -16,12 +16,15 @@ import { z } from 'zod';
 import { HelpNodeNotFoundError } from '@backend/domain/helpcenter/errors';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 
+import type { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import type { McpServer } from '@modelcontextprotocol/server';
 
 export interface HelpToolDeps {
   helpPublic: Pick<HelpPublicReadService, 'searchInProject' | 'siteInProject' | 'articleInProject'>;
+  /** "Was this helpful?" over the last 30 days: the console's read of the same answers. */
+  helpFeedback: Pick<HelpFeedbackService, 'helpfulness'>;
   projects: Pick<ProjectScope, 'resolve'>;
 }
 
@@ -82,8 +85,8 @@ const readInput = z.object({
   projectId: projectArg,
   locale: localeArg,
   responseFormat: responseFormatArg(
-    `the title, language, dates and the first ${EXCERPT_CHARS} characters of the Markdown`,
-    'the whole Markdown',
+    `the title, language, dates, the first ${EXCERPT_CHARS} characters of the Markdown and readers' yes/no answers over the last 30 days`,
+    'the whole Markdown and the newest comments readers left',
   ),
 });
 
@@ -161,6 +164,8 @@ export async function getHelpArticle(deps: HelpToolDeps, args: GetHelpArticleArg
   }
   const isDetailed = args.responseFormat === 'detailed';
   const isCut = !isDetailed && article.body.length > EXCERPT_CHARS;
+  const answers = await deps.helpFeedback.helpfulness(scope.workspaceId, scope.projectId, article.articleId);
+  const total = answers.helpful + answers.notHelpful;
   return {
     id: article.shortId,
     slug: article.slug,
@@ -172,6 +177,21 @@ export async function getHelpArticle(deps: HelpToolDeps, args: GetHelpArticleArg
     updatedAt: article.modifiedAt,
     body: isCut ? `${article.body.slice(0, EXCERPT_CHARS)}…` : article.body,
     ...(isCut && { isTruncated: true }),
+    // Counts and comment text only: who answered (the visitor hash) never leaves the service.
+    helpfulness: {
+      days: answers.days,
+      helpful: answers.helpful,
+      notHelpful: answers.notHelpful,
+      share: total === 0 ? null : Math.round((answers.helpful / total) * 100) / 100,
+      ...(isDetailed && {
+        comments: answers.comments.map(entry => ({
+          helpful: entry.helpful,
+          comment: entry.comment,
+          locale: entry.locale,
+          createdAt: entry.createdAt,
+        })),
+      }),
+    },
   };
 }
 
@@ -193,7 +213,7 @@ export function registerHelpTools(server: McpServer, deps: HelpToolDeps): void {
     {
       title: 'Read a help article',
       description:
-        'One published help center article as Markdown, in the asked language where translated (else the source language; `locale` says which), with the languages it is published in. Read-only.',
+        'One published help center article as Markdown, in the asked language where translated (else the source language; `locale` says which), with the languages it is published in and readers\' "Was this helpful?" answers over the last 30 days (yes, no, share of yes; detailed adds the newest comments). Read-only.',
       inputSchema: readInput,
       annotations: { readOnlyHint: true },
     },

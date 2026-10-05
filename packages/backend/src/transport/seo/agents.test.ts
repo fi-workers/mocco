@@ -58,6 +58,7 @@ const deps = (): AgentFileDeps => ({
       await Promise.resolve(
         ref === 'abc123-widget'
           ? {
+              articleId: '00000000-0000-4000-8000-000000000001',
               shortId: 'abc123',
               slug: 'widget',
               locale,

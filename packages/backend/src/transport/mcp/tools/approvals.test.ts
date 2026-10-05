@@ -190,6 +190,7 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+      helpFeedback: { helpfulness: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });
