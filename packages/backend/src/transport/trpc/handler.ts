@@ -31,6 +31,7 @@ import type { ApprovalService } from '@backend/domain/governance/ApprovalService
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import type { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import type { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
@@ -95,6 +96,7 @@ export interface TrpcDeps extends Services {
   helpSites: HelpSiteService;
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
+  helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
@@ -156,6 +158,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         helpSites: deps.helpSites,
         helpAuthoring: deps.helpAuthoring,
         helpImport: deps.helpImport,
+        helpImages: deps.helpImages,
         helpTranslations: deps.helpTranslations,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,
@@ -211,6 +214,7 @@ export function productionServices(): TrpcDeps {
     helpSites: getHelpDomain().helpSites,
     helpAuthoring: getHelpDomain().helpAuthoring,
     helpImport: getHelpDomain().helpImport,
+    helpImages: getHelpDomain().helpImages,
     helpTranslations: getHelpDomain().helpTranslations,
     ...getStatusDomain(),
     inbound: getInbound(),

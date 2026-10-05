@@ -143,14 +143,14 @@ export const helpRouter = router({
     .input(projectInput.extend(helpImageInputSchema.shape))
     .mutation(
       async ({ ctx, input }) =>
-        await ctx.helpImport.createImageUpload(input.workspaceId, input.projectId, ctx.session.user.id, input),
+        await ctx.helpImages.createImageUpload(input.workspaceId, input.projectId, ctx.session.user.id, input),
     ),
 
   /** The uploaded image's public URL, once storage verified it. */
   completeImage: helpProcedure
     .input(projectInput.extend({ objectId: z.uuid() }))
     .mutation(
-      async ({ ctx, input }) => await ctx.helpImport.completeImage(input.workspaceId, input.projectId, input.objectId),
+      async ({ ctx, input }) => await ctx.helpImages.completeImage(input.workspaceId, input.projectId, input.objectId),
     ),
 
   /** Import articles (from Mintlify, converted in the console); importing again updates them. */

@@ -57,16 +57,23 @@ When it's done, Mocco lists anything it couldn't bring over: images missing from
 
 ## 4. Write and publish
 
-The editor has the article's title and its text in Markdown on the left, and the article as readers will see it on the right, updated as you type. You can use headings (`##`), numbered and bulleted lists, **bold**, links, notes (lines starting with `>`) and tables. Links can go to web pages (`https://…`), email addresses (`mailto:…`) or other pages of the site (`/en/articles/…`). Images must be `https://` addresses.
+The editor has the article's title and its text in Markdown on the left, and the article as readers will see it on the right, updated as you type. You can use headings (`##`), numbered and bulleted lists, **bold**, links, notes (lines starting with `>`) and tables. Links can go to web pages (`https://…`), email addresses (`mailto:…`) or other pages of the site (`/en/articles/…`). Images must be `https://` addresses, or images you add as below.
 
-- **Save draft** keeps your changes without touching the site.
-- **Publish** puts the saved draft on the site. Save first; **Publish** is unavailable while you have unsaved changes.
+The draft saves itself a couple of seconds after you stop typing. Next to the title you see **Saving…**, then **All changes saved**. If a save fails, it says **Couldn't save** with **Try again**; your text stays in the editor. Saving never touches the site.
+
+- **Publish** saves anything unsaved and puts the draft on the site.
 - **Unpublish** takes the article off the site. Its text and history stay.
 - **Delete article** removes it and its history, after you confirm.
 
-![Editing an article: Markdown on the left, the preview on the right, and Unpublished changes after saving](./images/editor.png)
+![Editing an article: Markdown on the left, the preview on the right, and All changes saved next to the title](./images/editor.png)
 
-Every save is kept in **History** below the editor. **Restore** makes an earlier version the draft again, as a new save, so nothing in the history is lost. Publish it to put it back on the site.
+**History** below the editor keeps one entry per editing session: your saves over ten minutes land in the same entry, and publishing or restoring starts a new one. **Restore** makes an earlier version the draft again, as a new entry, so nothing in the history is lost. Publish it to put it back on the site.
+
+### Add images
+
+Paste a screenshot into the text, drop an image file on it, or pick files with **Add image**. Each image is uploaded and lands where the cursor is, as `![name](address)`, and shows in the preview at once. PNG, JPEG, WebP and GIF images up to 10 MB can be added; anything else is refused with a message saying why. Images are public once uploaded, like the published site, so don't paste anything you wouldn't publish.
+
+![Pasting a screenshot into an article: the image's Markdown in the text and the image in the preview](./images/editor-images.png)
 
 ## Translate
 

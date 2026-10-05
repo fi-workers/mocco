@@ -16,6 +16,7 @@ import type { ApprovalService } from '@backend/domain/governance/ApprovalService
 import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import type { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import type { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
@@ -108,6 +109,7 @@ export interface Context {
   helpSites: HelpSiteService;
   helpAuthoring: HelpAuthoringService;
   helpImport: HelpImportService;
+  helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;

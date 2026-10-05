@@ -2,14 +2,11 @@
 // bundle's collections, sections and articles are matched to what the site already has
 // (collections by slug, sections by title, articles by their old path), so importing
 // again updates rather than duplicates. Each old path is kept as a redirect. Images go
-// to storage first, publicly, and the bundle refers to their URLs.
+// to storage first (HelpImageService), and the bundle refers to their public URLs.
 
 import { ArticleStatuses, RevisionKinds } from '@mocco/common/help';
-import { Products } from '@mocco/common/project';
-import { Visibilities } from '@mocco/common/storage';
 
 import { contentHashOf, newShortId } from '@backend/domain/helpcenter/content';
-import { HelpStorageNotConfiguredError } from '@backend/domain/helpcenter/errors';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
@@ -18,33 +15,20 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { HelpArticleRow } from '@backend/domain/helpcenter/repos/article.repo';
-import type { StorageService } from '@backend/domain/storage/StorageService';
 import type { Db } from '@backend/infra/db/types';
-import type { HelpImageInput } from '@mocco/common/help';
 import type { ImportBundle } from '@mocco/common/help-import';
-
-export type HelpImageStorage = Pick<StorageService, 'beginUpload' | 'completeUpload' | 'downloadUrl' | 'findReady'>;
 
 export interface HelpImportDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   sites: Pick<HelpSiteService, 'require'>;
   authoring: Pick<HelpAuthoringService, 'publish'>;
-  /** Object storage for article images; without it, image uploads are refused. */
-  storage?: HelpImageStorage;
 }
 
 const SHORT_ID_ATTEMPTS = 5;
 
 export class HelpImportService {
   constructor(private readonly deps: HelpImportDeps) {}
-
-  private requireStorage(): HelpImageStorage {
-    if (this.deps.storage === undefined) {
-      throw new HelpStorageNotConfiguredError();
-    }
-    return this.deps.storage;
-  }
 
   private async insertArticle(
     row: Omit<Parameters<HelpArticleRepo['insert']>[0], 'shortId'>,
@@ -98,55 +82,6 @@ export class HelpImportService {
     });
     await repo.update(article.id, { draftRevisionId: revision.id, sectionId });
     return { article, outcome: existing === undefined ? 'created' : 'updated' };
-  }
-
-  /**
-   * Reserve a public upload for an article image: PUT the bytes, then call
-   * `completeImage`. An image the project already stored (same sha256) comes back as its
-   * `url` instead, with nothing to upload.
-   */
-  async createImageUpload(
-    workspaceId: string,
-    projectId: string,
-    actorUserId: string,
-    input: HelpImageInput,
-  ): Promise<
-    { url: string } | { objectId: string; upload: Awaited<ReturnType<HelpImageStorage['beginUpload']>>['upload'] }
-  > {
-    await this.deps.sites.require(workspaceId, projectId);
-    const storage = this.requireStorage();
-    if (input.sha256 !== undefined) {
-      const stored = await storage.findReady({
-        workspaceId,
-        projectId,
-        product: Products.helpcenter,
-        visibility: Visibilities.public,
-        sha256: input.sha256,
-      });
-      if (stored !== undefined) {
-        return { url: await storage.downloadUrl(workspaceId, stored.id) };
-      }
-    }
-    const { object, upload } = await storage.beginUpload({
-      workspaceId,
-      projectId,
-      product: Products.helpcenter,
-      filename: input.filename,
-      contentType: input.contentType,
-      sizeBytes: input.sizeBytes,
-      visibility: Visibilities.public,
-      createdByUserId: actorUserId,
-      ...(input.sha256 !== undefined && { sha256: input.sha256 }),
-    });
-    return { objectId: object.id, upload };
-  }
-
-  /** Verify an uploaded image and return its stable public URL. */
-  async completeImage(workspaceId: string, projectId: string, objectId: string): Promise<{ url: string }> {
-    await this.deps.sites.require(workspaceId, projectId);
-    const storage = this.requireStorage();
-    await storage.completeUpload(workspaceId, objectId);
-    return { url: await storage.downloadUrl(workspaceId, objectId) };
   }
 
   /**

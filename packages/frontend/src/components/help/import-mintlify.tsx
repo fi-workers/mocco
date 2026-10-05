@@ -6,11 +6,12 @@
 import { bundleFromMintlify, localImagePaths, mintlifyDocsSchema } from '@mocco/common/help-import';
 import { useState } from 'react';
 
+import { useHelpImageUpload } from '@frontend/components/help/use-help-image-upload';
 import { errorMessage, labelClass, Notice, Tones } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { HELP_IMAGE_TYPES } from '@mocco/common/help';
+import type { HelpImageType } from '@mocco/common/help';
 import type { ImportBundle } from '@mocco/common/help-import';
 
 interface Props {
@@ -18,9 +19,7 @@ interface Props {
   projectId: string;
 }
 
-type ImageType = (typeof HELP_IMAGE_TYPES)[number];
-
-const IMAGE_TYPES: Record<string, ImageType> = {
+const IMAGE_TYPES: Record<string, HelpImageType> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -64,8 +63,7 @@ function imagesOf(bundle: ImportBundle): Set<string> {
 
 export default function ImportMintlify({ workspaceId, projectId }: Props) {
   const utils = trpc.useUtils();
-  const imageUpload = trpc.help.createImageUpload.useMutation();
-  const completeImage = trpc.help.completeImage.useMutation();
+  const images = useHelpImageUpload(workspaceId, projectId);
   const importBundle = trpc.help.importBundle.useMutation();
   const [files, setFiles] = useState<FileList | null>(null);
   const [shouldPublish, setShouldPublish] = useState(true);
@@ -75,31 +73,11 @@ export default function ImportMintlify({ workspaceId, projectId }: Props) {
 
   const uploadImage = async (path: string, file: File): Promise<string | null> => {
     // eslint-disable-next-line sonarjs/null-dereference -- path is a string, never null
-    const contentType = IMAGE_TYPES[path.split('.').at(-1)?.toLowerCase() ?? ''] as ImageType | undefined;
+    const contentType = IMAGE_TYPES[path.split('.').at(-1)?.toLowerCase() ?? ''] as HelpImageType | undefined;
     if (contentType === undefined) {
       return null;
     }
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()));
-    // eslint-disable-next-line sonarjs/null-dereference -- each byte is a number, never null
-    const sha256 = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('');
-    const reserved = await imageUpload.mutateAsync({
-      workspaceId,
-      projectId,
-      contentType,
-      sizeBytes: file.size,
-      filename: file.name,
-      sha256,
-    });
-    if ('url' in reserved) {
-      return reserved.url;
-    }
-    const { objectId, upload } = reserved;
-    const response = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: file });
-    if (!response.ok) {
-      return null;
-    }
-    const { url } = await completeImage.mutateAsync({ workspaceId, projectId, objectId });
-    return url;
+    return await images.upload(file, contentType, file.name);
   };
 
   const run = async (picked: FileList) => {
@@ -169,7 +147,7 @@ export default function ImportMintlify({ workspaceId, projectId }: Props) {
     await utils.help.tree.invalidate();
   };
 
-  const error = imageUpload.error ?? completeImage.error ?? importBundle.error;
+  const error = images.error ?? importBundle.error;
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-4">
