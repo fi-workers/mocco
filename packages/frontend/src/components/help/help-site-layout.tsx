@@ -34,6 +34,8 @@ export default function HelpSiteLayout({
     type?: 'website' | 'article';
     /** The page has a Markdown version at `<path>.md` (articles). */
     hasMarkdown?: boolean;
+    /** The page's share card, an issued `/og/v1/...` path on the site's origin; none when null. */
+    card: string | null;
     jsonLd?: (origin: string) => readonly Record<string, unknown>[];
   };
   /** Keep the page out of search (the search results page: empty to a crawler). */
@@ -59,7 +61,8 @@ export default function HelpSiteLayout({
           type={seo.type ?? 'website'}
           siteName={nav.name}
           locale={nav.locale}
-          withImage={false}
+          withImage={seo.card !== null}
+          image={seo.card === null ? null : { path: seo.card, alt: fullTitle }}
           noindex={noindex}
           {...(seo.hasMarkdown === true && { markdownUrl: `${origin}${seo.path}.md` })}
           alternates={

@@ -1,11 +1,13 @@
 import HelpSiteLayout from '@frontend/components/help/help-site-layout';
 import { HELP_REVALIDATE_SECONDS, loadHelpNav } from '@frontend/lib/help-site';
+import { helpHomeCard } from '@frontend/lib/og-card';
 
 import type { HelpSiteNav } from '@frontend/lib/help-site';
 import type { GetStaticPaths, GetStaticProps } from 'next';
 
 interface Props {
   nav: HelpSiteNav;
+  card: string | null;
 }
 
 // A help center's home in one language: every collection with its articles. Statically
@@ -22,10 +24,11 @@ export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
   if (nav.locale !== locale) {
     return { redirect: { destination: `/${nav.locale}`, permanent: false }, revalidate: HELP_REVALIDATE_SECONDS };
   }
-  return { props: { nav }, revalidate: HELP_REVALIDATE_SECONDS };
+  const card = helpHomeCard({ siteName: nav.name, collections: nav.collections.map(collection => collection.title) });
+  return { props: { nav, card }, revalidate: HELP_REVALIDATE_SECONDS };
 };
 
-export default function HelpSiteHome({ nav }: Props) {
+export default function HelpSiteHome({ nav, card }: Props) {
   return (
     <HelpSiteLayout
       nav={nav}
@@ -34,6 +37,7 @@ export default function HelpSiteHome({ nav }: Props) {
         path: `/${nav.locale}`,
         description: nav.collections.map(collection => collection.title).join(' · '),
         versions: nav.locales.map(locale => ({ locale, path: `/${locale}` })),
+        card,
         jsonLd: origin => [{ '@type': 'WebSite', name: nav.name, url: `${origin}/`, inLanguage: nav.locales }],
       }}>
       <div className="flex flex-col gap-10">
