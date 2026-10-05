@@ -47,3 +47,11 @@ export class HelpStorageNotConfiguredError extends BadRequestError {
     this.name = 'HelpStorageNotConfiguredError';
   }
 }
+
+/** The uploaded file isn't the image it was declared as — BAD_REQUEST; its bytes are deleted. */
+export class HelpImageNotAnImageError extends BadRequestError {
+  constructor(declared: string, options?: ErrorOptions) {
+    super(`The file isn't a ${declared} image. Add a PNG, JPEG, WebP or GIF image.`, options);
+    this.name = 'HelpImageNotAnImageError';
+  }
+}

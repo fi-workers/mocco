@@ -48,7 +48,7 @@ Two-phase, so the bytes never pass through Mocco's functions:
 
 1. `beginUpload` checks the product's policy (`policy.ts`: allowed content types and the largest object) and the workspace quota (pending plus ready bytes, 10 GiB by default), records a `pending` row and returns a presigned PUT target valid for 15 minutes.
 2. The client uploads to that URL.
-3. `completeUpload` checks the stored object with `head`. It must exist, be exactly the declared size and have the declared content type. Otherwise its bytes are deleted, the row becomes `deleted`, and `StorageUploadMismatchError` is thrown. A match makes the row `ready` and records a `storage_bytes` usage event (a no-op until usage metering lands).
+3. `completeUpload` checks the stored object with `head`. It must exist, be exactly the declared size and have the declared content type. A caller completing an id the client sent passes the owner it expects (project, product, visibility); an object of another owner is not found, so one product can't complete or reveal another's. Otherwise its bytes are deleted, the row becomes `deleted`, and `StorageUploadMismatchError` is thrown. A match makes the row `ready` and records a `storage_bytes` usage event (a no-op until usage metering lands).
 
 `putObject` stores bytes the server already has and records them `ready` at once. A product without a policy entry can't store anything.
 

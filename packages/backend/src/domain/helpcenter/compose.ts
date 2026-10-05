@@ -1,6 +1,7 @@
 // The help center's services over a db (#96). Pure (no instance imports); instance.ts
 // binds the production deps, tests bind pglite.
 import { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
+import { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
@@ -9,7 +10,7 @@ import { submitHelpArticleToIndexNow } from '@backend/domain/helpcenter/jobs';
 import { HelpRevalidation } from '@backend/domain/helpcenter/revalidate';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
-import type { HelpImageStorage } from '@backend/domain/helpcenter/HelpImportService';
+import type { HelpImageStorage } from '@backend/domain/helpcenter/HelpImageService';
 import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
@@ -20,6 +21,7 @@ export interface HelpDomain {
   helpAuthoring: HelpAuthoringService;
   helpPublic: HelpPublicReadService;
   helpImport: HelpImportService;
+  helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
 }
 
@@ -76,7 +78,17 @@ export function createHelpDomain(
     audit: deps.audit,
     sites: helpSites,
     authoring: helpAuthoring,
+  });
+  const helpImages = new HelpImageService({
+    sites: helpSites,
     ...(deps.storage !== undefined && { storage: deps.storage }),
   });
-  return { helpSites, helpAuthoring, helpPublic: new HelpPublicReadService({ db }), helpImport, helpTranslations };
+  return {
+    helpSites,
+    helpAuthoring,
+    helpPublic: new HelpPublicReadService({ db }),
+    helpImport,
+    helpImages,
+    helpTranslations,
+  };
 }

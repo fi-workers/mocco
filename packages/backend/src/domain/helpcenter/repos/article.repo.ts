@@ -90,6 +90,21 @@ export class HelpArticleRepo {
     return expectOne(await this.db.insert(r).values(row).returning());
   }
 
+  /** Rewrite a draft revision's text (an editing session's saves land in one revision). */
+  async updateRevisionText(
+    workspaceId: string,
+    revisionId: string,
+    text: Pick<typeof r.$inferInsert, 'title' | 'bodyMd' | 'contentHash'>,
+  ): Promise<HelpRevisionRow> {
+    return expectOne(
+      await this.db
+        .update(r)
+        .set(text)
+        .where(and(eq(r.id, revisionId), eq(r.workspaceId, workspaceId)))
+        .returning(),
+    );
+  }
+
   async findRevision(workspaceId: string, revisionId: string): Promise<HelpRevisionRow | undefined> {
     const [row] = await this.db
       .select()

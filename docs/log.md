@@ -171,6 +171,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
+## 2026-10-05 — Help center editor: images and autosave
+
+- The help center reference gains "Images": `HelpImageService` (moved out of the import service), uploads completed
+  only for the project's own help center objects, the byte-signature check, and Markdown referring to the public
+  URL with `mocco_objects` as the ownership record (no per-article image table). Revisions now say how saves within
+  an editing session (same author, unpublished `source_edit`, under 10 minutes) rewrite the draft instead of adding
+  one, and the console section describes autosave. The storage reference notes `completeUpload`'s owner check.
+- The customer guide replaces Save draft with autosave, adds "Add images" with a screenshot, and retakes the editor
+  screenshot; the feature map's help center rows follow.
+- Docs touched: `reference/help-center.md`, `reference/storage.md`, `reference/feature-map.md`,
+  `customer/help/help-center.md`, `customer/help/images/editor.png`, `customer/help/images/editor-images.png`, `log.md`
+- Source: branch `feat/help-editor-images` (#208)
+
 ## 2026-10-05 — Status deploy correlation
 
 - The status reference gains "Deploy correlation": `mocco_status_incident_runs`, what counts as a deploy (a recorded
