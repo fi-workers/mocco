@@ -148,6 +148,7 @@ describe('help center translation (pglite)', () => {
     const article = await published(help);
     const before = await help.helpPublic.sitemap('syt');
     const untranslated = await help.helpPublic.article('syt', 'ko', article.shortId);
+    const beforeAgents = await help.helpPublic.forAgents('syt', 'en');
     await help.drain();
 
     const after = await help.helpPublic.sitemap('syt');
@@ -156,6 +157,17 @@ describe('help center translation (pglite)', () => {
       [{ locale: 'ko', path: `/ko/articles/${article.shortId}-widget`, lastModified: expect.any(Date) }],
     ]);
     expect(untranslated?.locales).toEqual(['ko']);
+    // Before it is translated, the English listing serves the source at the source's address.
+    expect(beforeAgents.collections[0]?.sections[0]?.articles[0]).toMatchObject({
+      title: 'Widget',
+      body: BODY,
+      path: `/ko/articles/${article.shortId}-widget`,
+    });
+    const forAgents = await help.helpPublic.forAgents('syt', 'en');
+    expect(forAgents.collections[0]?.sections[0]?.articles[0]).toMatchObject({
+      title: '[en] Widget',
+      path: `/en/articles/${article.shortId}-widget`,
+    });
     expect(after.homes.map(home => home.path)).toEqual(['/ko', '/en', '/ja']);
     expect(after.articles[0]?.map(version => version.path)).toEqual([
       `/ko/articles/${article.shortId}-widget`,

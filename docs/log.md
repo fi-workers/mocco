@@ -152,6 +152,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Every event family reaches the notification fan-out
+
+- The fan-out subscribed to a hand-kept list of families that missed `flags.*` and `messenger.*`, so `mocco` preset
+  rules for flag changesets, kill switches, the stale digest and messenger conversations never fired. The
+  notifications reference now says the subscriptions cover every catalog family, enforced by the type of
+  `NotificationSubscribers`; the events reference lists the families and tells a new catalog family to add its entry.
+- Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
+- Source: branch `fix/notification-fanout-coverage`
+
 ## 2026-10-05 — Monitor state drives components, incidents and alerts
 
 - The status reference gains "What a state change does": the evaluator's `onStateChange` port, the pages marked dirty

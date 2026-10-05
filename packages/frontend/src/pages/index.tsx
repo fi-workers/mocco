@@ -154,7 +154,7 @@ export default function Home() {
                 Products
               </a>
               <Link
-                href={Routes.guide('start', 'overview')}
+                href={Routes.docs}
                 className="hidden px-2 text-muted-foreground transition hover:text-foreground sm:inline">
                 Docs
               </Link>
@@ -193,7 +193,7 @@ export default function Home() {
                 <Link href={Routes.signUp} className={primaryButton}>
                   Get started
                 </Link>
-                <Link href={Routes.guide('start', 'overview')} className={secondaryButton}>
+                <Link href={Routes.docs} className={secondaryButton}>
                   Read the docs
                 </Link>
               </div>
@@ -343,7 +343,7 @@ export default function Home() {
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-6 text-sm text-muted-foreground sm:px-6">
             <span>Mocco</span>
             <div className="flex gap-4">
-              <Link href={Routes.guide('start', 'overview')} className="transition hover:text-foreground">
+              <Link href={Routes.docs} className="transition hover:text-foreground">
                 Docs
               </Link>
               <a href={GITHUB_URL} className="transition hover:text-foreground">

@@ -100,6 +100,8 @@ export const Routes = {
   workspaceCommit: (id: string, commitId: string) => `/workspaces/${id}/commits/${commitId}`,
   workspaceRun: (id: string, runId: string) => `/workspaces/${id}/runs/${runId}`,
   account: '/account',
+  /** Every customer guide set and its guides. */
+  docs: '/docs',
   /** A customer guide page of a set, e.g. `guide('ota', 'force-update')` → `/docs/ota/force-update`. */
   guide: (set: string, page: string) => `/docs/${set}/${page}`,
   /** A notifications guide page, e.g. `notificationsGuide('sentry')` → `/docs/notifications/sentry`. */

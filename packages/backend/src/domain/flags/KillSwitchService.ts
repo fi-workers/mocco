@@ -119,6 +119,7 @@ export class KillSwitchService {
       environment.changeGate === null
         ? null
         : await this.deps.approvals.request(workspaceId, {
+            projectId: environment.projectId,
             kind: ApprovalKinds.review,
             subjectType: FlagApprovalSubjects.kill,
             subjectId: changeset.id,
