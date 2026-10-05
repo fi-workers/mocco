@@ -37,6 +37,7 @@ import { getIntegration } from '@backend/domain/integration/instance';
 import { JobTiming } from '@backend/domain/jobs/policy';
 import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
+import { getOgImages } from '@backend/domain/og/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getRateLimiter } from '@backend/domain/ratelimit/instance';
 import { getStatusDomain } from '@backend/domain/status/instance';
@@ -49,6 +50,7 @@ import { ensureEmbeddedProbe } from '@backend/runtime/probe';
 import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
+import { createOgRoutes } from '@backend/transport/ext/og';
 import { createStorageRoutes, type StorageRouteDeps } from '@backend/transport/ext/storage';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
@@ -61,6 +63,7 @@ import type { CommitSyncService } from '@backend/domain/integration/CommitSyncSe
 import type { ConnectionService } from '@backend/domain/integration/ConnectionService';
 import type { GitHubProvider } from '@backend/domain/integration/github/provider';
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
+import type { OgImageService } from '@backend/domain/og/OgImageService';
 import type { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
 import type { V1Deps } from '@backend/transport/ext/v1/middleware';
 
@@ -104,6 +107,8 @@ export interface ExtDeps {
   discord?: DiscordInstallDeps;
   /** The filesystem storage driver's signed route; undefined with any other driver (404s). */
   storage?: StorageRouteDeps;
+  /** OG images (`/og/v1/...`, ADR 0030); undefined without AUTH_SECRET, and the route 404s. */
+  og?: Pick<OgImageService, 'image'>;
   /** The public /v1 surface's key authentication and rate limiter (ADR 0017); tests that
    * don't exercise it leave it out and /v1/ping, /v1/whoami are not mounted. */
   v1?: V1Deps;
@@ -353,6 +358,9 @@ export function createExtApp(deps: ExtDeps): Hono {
   // Signed reads and uploads for the filesystem storage driver (platform foundations §10).
   app.route('/', createStorageRoutes(deps.storage));
 
+  // Signed OG images, rendered once and kept in object storage (ADR 0030).
+  app.route('/', createOgRoutes(deps.og));
+
   // Defense-in-depth (symmetric with the tRPC maskInternalError): an unexpected
   // throw surfaces as a fixed generic 500 — never a vendor/SQL/token detail. The log
   // line names the matched route pattern (never the raw path, which can carry an
@@ -446,6 +454,7 @@ export async function extHandler(request: Request): Promise<Response> {
       help: { help: getHelpDomain().helpPublic, originOf: slug => helpSiteOrigin(slug, env) },
       probe: { probes: getStatusDomain().statusProbes },
     },
+    og: getOgImages(),
     storage:
       storageStore instanceof FilesystemObjectStore
         ? { store: storageStore, signer: storageSignerFromEnv(env) }

@@ -39,6 +39,7 @@
     "@octokit/app": "16.1.2",
     "@octokit/plugin-retry": "8.1.0",
     "@octokit/plugin-throttling": "11.0.3",
+    "@resvg/resvg-js": "2.6.2",
     "@trpc/server": "11.18.0",
     "@vercel/functions": "3.7.5",
     "better-auth": "1.7.7",
@@ -46,6 +47,7 @@
     "hono": "4.12.30",
     "jose": "6.2.3",
     "pg": "8.22.0",
+    "satori": "0.35.0",
     "superjson": "2.2.6",
     "yaml": "2.9.0",
     "zod": "4.6.5"
