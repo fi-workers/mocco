@@ -1,6 +1,6 @@
 ---
 title: Search engines and crawlers
-description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers), sitemap.xml and the metadata public pages carry.
+description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers), sitemap.xml, the metadata public pages carry, and llms.txt with each page's Markdown for agents.
 type: reference
 status: active
 created: 2026-10-05
@@ -60,3 +60,17 @@ A help site's pages render `SeoHead` through `HelpSiteLayout` on the site's cano
 - **JSON-LD:** an article has a BreadcrumbList (home → article) and an Article with `inLanguage`, `datePublished` (last publish) and `dateModified` (the later of that and its translation), published by the site; a home has a WebSite with its languages.
 - **Redirects:** an old slug redirects permanently (308) to the article's address; a language the article isn't translated into redirects temporarily (307) to the source, since a translation may come; the site root redirects temporarily to the source language.
 - **robots:** `index, follow`, and `noindex, follow` on search results.
+
+## Agents: llms.txt and Markdown
+
+Coding agents and AI assistants read Markdown far more cheaply than HTML, so every page that has a source text also answers as Markdown (#366). `next.config.ts` rewrites these, on every host and ahead of the help center rewrites, to `pages/api/seo/agents.ts`, which hands the host to `agentFileFor` (`transport/seo/agents.ts`):
+
+| URL | App host | Help center host |
+|---|---|---|
+| `/llms.txt` | Every customer guide set and its guides, each linked as `<page>.md` with its description ([llmstxt.org](https://llmstxt.org) form) | The site's collections and sections in its source language, each article linked as `.md` |
+| `/<locale>/llms.txt` | 404 | The same in that language (untranslated articles at the source's address); 404 for a language the site doesn't offer |
+| `/llms-full.txt`, `/<locale>/llms-full.txt` | Every guide's Markdown, each after a `Source:` line | Every article's Markdown in that language |
+| `/docs/<set>/<page>.md` | The guide's Markdown, frontmatter dropped | 404 |
+| `/<locale>/articles/<ref>.md` | 404 | The article's title and Markdown, as `article()` serves it |
+
+The page's own URL asked for with `Accept: text/markdown` returns the same Markdown, and `next.config.ts` sends `Vary: Accept` on guide and article pages so caches keep the two apart. HTML pages point at their Markdown with `<link rel="alternate" type="text/markdown">` (`SeoHead`'s `markdownUrl`; the `/docs` index points at `/llms.txt`). Relative links in a guide's Markdown (`./other.md`, `./images/x.png`) resolve against its `.md` URL to the same pages and images. Answers are cached by the CDN for an hour. Only published articles are reachable: everything goes through the public read (`HelpPublicReadService.forAgents` and `article`).
