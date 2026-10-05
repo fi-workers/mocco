@@ -8,6 +8,10 @@
 // close is one transaction under the monitor's advisory lock, which pause and resume take too:
 // the verdict, the new state and streaks, the next round, and a state change row when the state
 // moved. The round is re-read under the lock, so two evaluators can't close it twice.
+//
+// After a change commits, the `onStateChange` port (bound in compose.ts to the
+// MonitorTransitionService) handles what it means for pages, incidents and alerts; the
+// evaluator knows nothing of those.
 import { MonitorKinds, MonitorStates } from '@mocco/common/status';
 
 import { nextState, tallyRound } from '@backend/domain/status/consensus';
@@ -19,11 +23,17 @@ import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
 import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
 import { utcDayOf } from '@backend/infra/db/day-partitions';
 
+import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
 import type { Db } from '@backend/infra/db/types';
 
+/** What happens after a monitor's state change commits. */
+export type MonitorStateChangeHandler = (monitor: MonitorRow, change: MonitorStateChangeRow) => Promise<void>;
+
 export interface VerdictEvaluatorDeps {
   db: Db;
+  /** Called once per committed change, in order; a failure is logged and never undoes the change. */
+  onStateChange?: MonitorStateChangeHandler;
   now?: () => Date;
 }
 
@@ -44,6 +54,26 @@ export class VerdictEvaluator {
   constructor(private readonly deps: VerdictEvaluatorDeps) {}
 
   private async closeRound(candidate: MonitorRow, now: Date): Promise<RoundClose> {
+    const result = await this.decideRound(candidate, now);
+    const handler = this.deps.onStateChange;
+    if (result.change !== undefined && handler !== undefined) {
+      try {
+        await handler(result.change.monitor, result.change.row);
+      } catch (error) {
+        console.error('[status] reacting to a monitor state change failed; the change stands', {
+          monitorId: candidate.id,
+          stateChangeId: result.change.row.id,
+          error,
+        });
+      }
+    }
+    return result.outcome;
+  }
+
+  private async decideRound(
+    candidate: MonitorRow,
+    now: Date,
+  ): Promise<{ outcome: RoundClose; change?: { monitor: MonitorRow; row: MonitorStateChangeRow } }> {
     const scope = { workspaceId: candidate.workspaceId, projectId: candidate.projectId };
     const roundAt = candidate.nextRoundAt;
     const [reports, assigned] = await Promise.all([
@@ -52,7 +82,7 @@ export class VerdictEvaluator {
     ]);
     const deadline = leaseExpiry({ roundAt, spec: candidate.spec });
     if (reports.length < assigned && now <= deadline) {
-      return RoundCloses.open;
+      return { outcome: RoundCloses.open };
     }
     return await this.deps.db.transaction(async tx => {
       const monitors = new MonitorRepo(tx);
@@ -63,7 +93,7 @@ export class VerdictEvaluator {
         monitor.state === MonitorStates.paused ||
         monitor.nextRoundAt.getTime() !== roundAt.getTime()
       ) {
-        return RoundCloses.skipped;
+        return { outcome: RoundCloses.skipped };
       }
       const tally = tallyRound(
         reports.map(report => ({ outcome: report.outcome, latencyMs: report.latencyMs })),
@@ -82,7 +112,7 @@ export class VerdictEvaluator {
       });
       const next = nextState(monitor, tally.verdict, monitor);
       const isMoved = next.state !== monitor.state;
-      await monitors.setState(
+      const updated = await monitors.setState(
         scope,
         monitor.id,
         {
@@ -95,9 +125,9 @@ export class VerdictEvaluator {
         now,
       );
       if (!isMoved) {
-        return RoundCloses.closed;
+        return { outcome: RoundCloses.closed };
       }
-      await new MonitorStateChangeRepo(tx).append({
+      const row = await new MonitorStateChangeRepo(tx).append({
         workspaceId: monitor.workspaceId,
         monitorId: monitor.id,
         fromState: monitor.state,
@@ -112,7 +142,7 @@ export class VerdictEvaluator {
           noDataCount: tally.noDataCount,
         },
       });
-      return RoundCloses.changed;
+      return { outcome: RoundCloses.changed, change: { monitor: updated, row } };
     });
   }
 

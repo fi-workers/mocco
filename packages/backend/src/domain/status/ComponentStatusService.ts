@@ -1,6 +1,7 @@
-// The status each component of a page shows, from its manual status, open incidents and
-// maintenance in progress. Monitors join the derivation when they land.
+// The status each component of a page shows, from its manual status, open incidents,
+// maintenance in progress and the states of the monitors linked to it.
 import { deriveComponentStatus } from '@backend/domain/status/component-status';
+import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { MaintenanceComponentRepo } from '@backend/domain/status/repos/maintenance-component.repo';
@@ -20,10 +21,11 @@ export class ComponentStatusService {
     pageId: string,
     isPublishedOnly = false,
   ): Promise<(ComponentRow & { displayedStatus: ComponentStatus })[]> {
-    const [components, impacts, inMaintenance] = await Promise.all([
+    const [components, impacts, inMaintenance, monitors] = await Promise.all([
       new ComponentRepo(this.deps.db).listForPage(scope, pageId),
       new IncidentComponentRepo(this.deps.db).openImpactsForPage(scope, pageId, isPublishedOnly),
       new MaintenanceComponentRepo(this.deps.db).inProgressComponentIds(scope, pageId),
+      new ComponentMonitorRepo(this.deps.db).monitorStatesForPage(scope, pageId),
     ]);
     const maintained = new Set(inMaintenance);
     return components.map(component => ({
@@ -32,6 +34,7 @@ export class ComponentStatusService {
         manual: component.status,
         impacts: impacts.filter(row => row.componentId === component.id).map(row => row.impact),
         inMaintenance: maintained.has(component.id),
+        monitors: monitors.filter(row => row.componentId === component.id),
       }),
     }));
   }

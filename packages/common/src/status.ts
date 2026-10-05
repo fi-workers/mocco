@@ -61,7 +61,7 @@ export const INCIDENT_TRANSITIONS: Record<IncidentStatus, readonly IncidentStatu
 
 /**
  * Whether an incident is on the public page. Incidents an operator opens are published; a draft
- * (monitor-origin incidents, later) stays in the console and never reaches the public snapshot.
+ * (a monitor-origin incident, by default) stays in the console and never reaches the public snapshot.
  */
 export const IncidentVisibilities = { draft: 'draft', published: 'published' } as const;
 export type IncidentVisibility = (typeof IncidentVisibilities)[keyof typeof IncidentVisibilities];
@@ -230,6 +230,15 @@ export type MonitorSpec = z.infer<typeof monitorSpecSchema>;
 export const monitorComponentSchema = z.object({ componentId: z.uuid(), impactWhenDown: componentImpactSchema });
 export type MonitorComponent = z.infer<typeof monitorComponentSchema>;
 
+/**
+ * What a monitor going down does to its page: nothing, open a draft incident the operator
+ * reviews (the default), or open a published one. While a maintenance window covers the
+ * monitor's components, `publish` opens a draft too.
+ */
+export const IncidentPolicies = { none: 'none', draft: 'draft', publish: 'publish' } as const;
+export type IncidentPolicy = (typeof IncidentPolicies)[keyof typeof IncidentPolicies];
+export const incidentPolicySchema = z.enum(Object.values(IncidentPolicies) as [IncidentPolicy, ...IncidentPolicy[]]);
+
 const confirmations = z.int().min(1).max(MonitorLimits.maxConfirmations).default(MonitorLimits.defaultConfirmations);
 
 export const monitorInputSchema = z.object({
@@ -248,6 +257,7 @@ export const monitorInputSchema = z.object({
   locationIds: z.array(z.uuid()).min(1).max(MonitorLimits.maxLocations),
   /** The components this monitor reports on, and what they show while it is down. */
   components: z.array(monitorComponentSchema).max(MonitorLimits.maxComponents).default([]),
+  incidentPolicy: incidentPolicySchema.default(IncidentPolicies.draft),
 });
 export type MonitorInput = z.infer<typeof monitorInputSchema>;
 

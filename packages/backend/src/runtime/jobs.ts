@@ -140,7 +140,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     appOrigin: deps.appOrigin,
   });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
-  const status = createStatusDomain(db, { audit, queue, now: deps.now });
+  const status = createStatusDomain(db, { audit, queue, events: bus, appOrigin: deps.appOrigin, now: deps.now });
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
     ...createEventHandlers({ bus, events: new DomainEventRepo(db) }),

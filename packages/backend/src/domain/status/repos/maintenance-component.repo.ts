@@ -33,6 +33,26 @@ export class MaintenanceComponentRepo {
     }
   }
 
+  /** Whether a window in progress covers any of `componentIds`. */
+  async isAnyInProgress(workspaceId: string, componentIds: readonly string[]): Promise<boolean> {
+    if (componentIds.length === 0) {
+      return false;
+    }
+    const rows = await this.db
+      .select({ componentId: mc.componentId })
+      .from(mc)
+      .innerJoin(m, and(eq(m.id, mc.maintenanceId), eq(m.workspaceId, mc.workspaceId)))
+      .where(
+        and(
+          eq(mc.workspaceId, workspaceId),
+          inArray(mc.componentId, [...componentIds]),
+          eq(m.status, MaintenanceStatuses.inProgress),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   /** The page's components under a window in progress. */
   async inProgressComponentIds(scope: StatusScope, pageId: string): Promise<string[]> {
     const rows = await this.db

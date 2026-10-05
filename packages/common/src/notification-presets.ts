@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { FlagEventTypes, GovernanceEventTypes, MessengerEventTypes, OtaEventTypes } from './events';
+import { FlagEventTypes, GovernanceEventTypes, MessengerEventTypes, OtaEventTypes, StatusEventTypes } from './events';
 import { InboundEventTypes } from './inbound';
 
 import type { RuleFilter } from './notification';
@@ -44,6 +44,9 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: FlagEventTypes.flagStaleDigest, filter: {} },
     { eventType: MessengerEventTypes.messengerConversationCreated, filter: {} },
     { eventType: MessengerEventTypes.messengerMessageReceived, filter: {} },
+    { eventType: StatusEventTypes.statusMonitorDown, filter: {} },
+    { eventType: StatusEventTypes.statusMonitorDegraded, filter: {} },
+    { eventType: StatusEventTypes.statusMonitorRecovered, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [

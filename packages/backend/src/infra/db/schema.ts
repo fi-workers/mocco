@@ -32,6 +32,7 @@ import {
   CheckOutcomes,
   ComponentImpacts,
   ComponentStatuses,
+  IncidentPolicies,
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
@@ -126,6 +127,7 @@ import type {
   CheckOutcome,
   ComponentImpact,
   ComponentStatus,
+  IncidentPolicy,
   IncidentSeverity,
   IncidentStatus,
   IncidentVisibility,
@@ -3468,6 +3470,8 @@ export const statusMonitors = pgTable(
     /** Consecutive failing and passing verdicts, for `confirmations` and `recovery_confirmations`. */
     consecutiveFails: integer('consecutive_fails').notNull().default(0),
     consecutiveOks: integer('consecutive_oks').notNull().default(0),
+    /** What going down does to the page: no incident, a draft one, or a published one. */
+    incidentPolicy: text('incident_policy').$type<IncidentPolicy>().notNull().default(IncidentPolicies.draft),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3492,6 +3496,10 @@ export const statusMonitors = pgTable(
       sql`${t.quorumMode} IN (${sqlInList(Object.values(QuorumModes))})`,
     ),
     check('mocco_status_monitors_interval_check', sql`${t.intervalSeconds} >= 60`),
+    check(
+      'mocco_status_monitors_incident_policy_check',
+      sql`${t.incidentPolicy} IN (${sqlInList(Object.values(IncidentPolicies))})`,
+    ),
     check(
       'mocco_status_monitors_confirmations_check',
       sql`${t.confirmations} >= 1 AND ${t.recoveryConfirmations} >= 1`,
@@ -3548,6 +3556,35 @@ export const statusComponentMonitors = pgTable(
       'mocco_status_component_monitors_impact_check',
       sql`${t.impactWhenDown} IN (${sqlInList(Object.values(ComponentImpacts))})`,
     ),
+  ],
+);
+
+/** The incident a monitor opened when it went down. The link closes when the monitor recovers
+ * (or the incident was resolved by hand), so a monitor has at most one open incident. */
+export const statusIncidentMonitors = pgTable(
+  'mocco_status_incident_monitors',
+  {
+    incidentId: uuid('incident_id').notNull(),
+    monitorId: uuid('monitor_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    closedAt: timestamp('closed_at'),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_incident_monitors_pk', columns: [t.incidentId, t.monitorId] }),
+    uniqueIndex('mocco_status_incident_monitors_open_uq')
+      .on(t.monitorId)
+      .where(sql`${t.closedAt} IS NULL`),
+    foreignKey({
+      columns: [t.incidentId, t.workspaceId],
+      foreignColumns: [statusIncidents.id, statusIncidents.workspaceId],
+      name: 'mocco_status_incident_monitors_incident_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.monitorId, t.workspaceId],
+      foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
+      name: 'mocco_status_incident_monitors_monitor_fk',
+    }).onDelete('cascade'),
   ],
 );
 

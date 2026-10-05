@@ -421,6 +421,13 @@
       "when": 1791151418940,
       "tag": "0059_partition_round_verdicts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791158272944,
+      "tag": "0060_wealthy_gideon",
+      "breakpoints": true
     }
   ]
 }

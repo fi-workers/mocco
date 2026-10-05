@@ -5,6 +5,7 @@ import { IncidentService } from '@backend/domain/status/IncidentService';
 import { LocationService } from '@backend/domain/status/LocationService';
 import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import { MonitorService } from '@backend/domain/status/MonitorService';
+import { MonitorTransitionService } from '@backend/domain/status/MonitorTransitionService';
 import { ProbeService } from '@backend/domain/status/ProbeService';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
@@ -13,6 +14,7 @@ import { StatusPageService } from '@backend/domain/status/StatusPageService';
 import { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { ObjectStore } from '@backend/domain/storage/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -31,6 +33,10 @@ export interface StatusDomainDeps {
   audit: Pick<AuditService, 'record'>;
   /** Where changes request a snapshot publish; without it pages are only marked dirty. */
   queue?: JobQueue;
+  /** Where monitor alerts are published; without it there are none. */
+  events?: EventPublisher;
+  /** The app's origin, for the links in alerts. */
+  appOrigin?: string;
   now?: () => Date;
 }
 
@@ -43,7 +49,21 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     componentStatus: new ComponentStatusService({ db }),
     snapshots,
   });
-  const statusVerdicts = new VerdictEvaluator({ db, ...now });
+  const transitions = new MonitorTransitionService({
+    db,
+    audit: deps.audit,
+    snapshots,
+    ...(deps.events !== undefined && { events: deps.events }),
+    ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
+    ...now,
+  });
+  const statusVerdicts = new VerdictEvaluator({
+    db,
+    onStateChange: async (monitor, change) => {
+      await transitions.react(monitor, change);
+    },
+    ...now,
+  });
   return {
     statusPages,
     statusVerdicts,

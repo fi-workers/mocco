@@ -24,6 +24,7 @@ export const NotificationSubscribers = {
   vercel: { pattern: 'vercel.*', name: 'notification.fan-out.vercel' },
   github: { pattern: 'github.*', name: 'notification.fan-out.github' },
   ota: { pattern: 'ota.*', name: 'notification.fan-out.ota' },
+  status: { pattern: 'status.*', name: 'notification.fan-out.status' },
 } as const;
 
 export const DeliveryPolicy = {

@@ -4,7 +4,7 @@ description: The notification model (channels, rules, deliveries, Discord guilds
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, notifications, discord, events, jobs]
@@ -116,7 +116,7 @@ leaves `rule_id` null.
 
 | Preset | Rules |
 |---|---|
-| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed` (never source-bound) |
+| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed`, the OTA, flag and messenger types, and `status.monitor.down` / `.degraded` / `.recovered` (never source-bound) |
 | `sentry` | `sentry.issue.created` |
 | `vercel` | `vercel.deployment.succeeded` `{ target: production }`, `vercel.deployment.error`, `vercel.deployment.canceled` |
 | `github` | `github.push` `{ hasCommits: true }`, `github.pull_request.opened` / `.reopened` / `.merged` / `.closed`, `github.issues.opened` / `.reopened` / `.closed`, `github.release.published`, `github.workflow_run.failed` |
@@ -166,7 +166,7 @@ trace, e.g. ``rule `vercel.deployment.succeeded` needs target = "production" (th
 ## Fan-out
 
 The bus subscriptions live in `createEventBus` (`domain/events/subscriptions.ts`), registered by
-`registerNotificationSubscribers`: `gate.*`, `run.*`, `sentry.*`, `vercel.*` and `github.*`, under the
+`registerNotificationSubscribers`: `gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*` and `status.*`, under the
 permanent names in `NotificationSubscribers` (`notification.fan-out.<family>`). The inbound
 families receive nothing until their types join the catalog (#243).
 
