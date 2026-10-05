@@ -1,6 +1,7 @@
 // A project's status pages in the console (#148): create a page, pick the one shown
 // (`?page=` in the URL), rename it or change its address, delete it, and manage what it
-// reports on (PageComponents). The monitors view (#150) lists the project's monitors.
+// reports on (PageComponents). The monitors view (#150) lists the project's monitors, and the
+// locations view the workspace's probe locations.
 import { STATUS_PAGE_SLUG_PATTERN } from '@mocco/common/status';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -8,6 +9,7 @@ import { useId, useState } from 'react';
 
 import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
 import Incidents from '@frontend/components/status/incidents';
+import Locations from '@frontend/components/status/locations';
 import Maintenance from '@frontend/components/status/maintenance';
 import Monitors from '@frontend/components/status/monitors';
 import PageComponents from '@frontend/components/status/page-components';
@@ -30,6 +32,7 @@ const tabLabels: Readonly<Record<StatusTab, string>> = {
   [StatusTabs.incidents]: 'Incidents',
   [StatusTabs.maintenance]: 'Maintenance',
   [StatusTabs.monitors]: 'Monitors',
+  [StatusTabs.locations]: 'Locations',
 };
 
 /** The tab in the URL, or components. */
@@ -304,6 +307,7 @@ export default function StatusPages({ workspaceId, projectId }: Props) {
         <Maintenance workspaceId={workspaceId} projectId={projectId} pageId={page.id} />
       ) : null}
       {tab === StatusTabs.monitors ? <Monitors workspaceId={workspaceId} projectId={projectId} /> : null}
+      {tab === StatusTabs.locations ? <Locations workspaceId={workspaceId} /> : null}
       {tab === StatusTabs.components ? (
         <>
           <PageComponents workspaceId={workspaceId} projectId={projectId} pageId={page.id} />

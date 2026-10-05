@@ -35,6 +35,7 @@ export const StatusTabs = {
   incidents: 'incidents',
   maintenance: 'maintenance',
   monitors: 'monitors',
+  locations: 'locations',
 } as const;
 export type StatusTab = (typeof StatusTabs)[keyof typeof StatusTabs];
 

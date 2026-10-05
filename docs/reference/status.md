@@ -68,6 +68,7 @@ code_refs:
   - packages/frontend/src/components/status/monitors.tsx
   - packages/frontend/src/components/status/monitor-form.tsx
   - packages/frontend/src/components/status/monitor-detail.tsx
+  - packages/frontend/src/components/status/locations.tsx
 ---
 
 # Status page model
@@ -106,7 +107,7 @@ zone, with the components it covers), and cancels a scheduled or in-progress one
 deploys around it, and the run page its incidents ([deploy correlation](#deploy-correlation)). The customer guide is
 [Run a status page](../customer/status/status-page.md).
 
-One more view reads beyond the page. **Monitors** (`?tab=monitors`, `monitors.tsx`) lists the project's monitors, the
+Two more views read beyond the page. **Monitors** (`?tab=monitors`, `monitors.tsx`) lists the project's monitors, the
 same on every page: state badge, target (`monitorTargetLabel`: the method, origin and path, never URL credentials or
 query), when the state last changed and the linked components, rereading every 15 seconds. **New monitor** opens the
 form (`monitor-form.tsx`) that edit reuses: HTTP (method, URL, a POST body, expected status codes, keyword present or
@@ -117,7 +118,11 @@ parsed with `monitorInputSchema` before the call, so a bad field shows its zod i
 server's error. A monitor's route (`/status/monitors/[monitorId]`, `monitor-detail.tsx`) shows its settings, the
 open monitor incident (with a Draft badge), the latest ten rounds and 50 state changes with their reasons, **Watching
 after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. It doesn't chart
-the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). The customer guide is
+the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). **Locations**
+(`?tab=locations`, `locations.tsx`) lists the workspace's locations (kind, code, last seen, agent version, disabled)
+to every member; owners and admins (`useWorkspaceAdmin`) create a private location, rotate its token and disable it.
+A new or rotated token is shown once, kept only in component state, with the `docker run` and `npx @mocco/probe`
+commands that use it and the page's origin as `MOCCO_URL`. The customer guide is
 [Monitor your service](../customer/status/monitor-your-service.md).
 
 ## Tables
@@ -492,8 +497,8 @@ gets a second lookup. A refused target fails with `connect` and a `detail` namin
 the list: reaching private targets is their purpose. Nothing in the lease says whether a location is hosted yet, so
 the fleet sets the variable.
 
-**Running a private location.** The console can't create locations yet, so an owner or admin creates one with the
-`status.createLocation` procedure and keeps the token it returns. Then, on a machine that can reach the targets and
+**Running a private location.** An owner or admin creates one in the console's Locations view (or with the
+`status.createLocation` procedure) and keeps the token it shows once. Then, on a machine that can reach the targets and
 make outbound HTTPS calls to Mocco:
 
 ```bash

@@ -19,16 +19,21 @@ A **monitor** checks your service on a schedule, an HTTP request or a TCP connec
 
 You need a status page with components first ([Run a status page](./status-page.md)): a monitor changes what its components show.
 
-## 1. Get a probe location
+## 1. Create a private location
 
-Locations belong to the workspace, so every project can use them.
+Locations belong to the workspace, so every project can use them. On a project's **Status page** section, open **Locations**. Everyone in the workspace can see the list; owners and admins create, rotate and disable locations.
 
-- **A private location** is a probe you run yourself. Creating one in the console comes next; until then an owner or admin creates it with the `status.createLocation` call, which returns the location's **token** once. Keep it: Mocco stores only a hash of it.
-- **This server**: a self-hosted Mocco on one machine can run the probe inside the server instead (`STATUS_PROBE_EMBEDDED=true`), and every workspace on it can use that location.
+Choose **New private location**, give it a **name** ("Office network") and a **code**. Mocco suggests the code from the name; it is lowercase letters, digits and hyphens, unique in the workspace.
+
+![A new private location: its name and code](./images/new-location.png)
+
+Mocco then shows the location's **token** once, with the commands that run the probe with it. Copy it now: Mocco keeps only a hash of it, so it can't show it again.
+
+![The token shown once, with the Docker and Node commands that run the probe](./images/location-token.png)
 
 ## 2. Run the probe
 
-On a machine that can reach the services you want to check and can make outbound HTTPS calls to Mocco, run the probe with the location's token:
+On a machine that can reach the services you want to check and can make outbound HTTPS calls to Mocco, run one of the commands shown:
 
 ```bash
 docker run -d --restart unless-stopped \
@@ -37,7 +42,13 @@ docker run -d --restart unless-stopped \
 MOCCO_URL=https://www.mocco.work MOCCO_PROBE_TOKEN=mpl_... npx @mocco/probe
 ```
 
-Until the package and image are published, run it from a checkout of Mocco: `yarn workspace @mocco/probe build`, then `node packages/probe/dist/cli.js` with the same two variables. Two probes with one token share that location's work. A probe whose token is wrong, replaced or disabled exits with an error.
+Until the package and image are published, run it from a checkout of Mocco: `yarn workspace @mocco/probe build`, then `node packages/probe/dist/cli.js` with the same two variables.
+
+Once it is polling, the location shows **Seen just now** and the probe's version. Two probes with one token share that location's work.
+
+![The workspace's locations: the private one seen just now](./images/locations.png)
+
+**Rotate token** issues a new token and stops the old one at once: the probe running with it exits, so restart it with the new token. **Disable** stops the location for good; no monitor can use it after that.
 
 ## 3. Create a monitor
 
