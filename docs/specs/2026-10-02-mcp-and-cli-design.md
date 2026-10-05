@@ -175,6 +175,10 @@ has several servers loaded.
 | `mocco_status_incidents_search` | A project's incidents, open by default (status, severity, page, title text) |
 | `mocco_status_incidents_get` | One incident: its update timeline, affected components, postmortem |
 | `mocco_status_maintenances_search` | Maintenance windows, scheduled and in progress by default |
+| `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
+| `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
+| `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
+| `mocco_inbound_sources_search` | Inbound webhook sources and their latest delivery, no secrets (kind, status, name) |
 
 **Deciding** — person only, refused for a key with a message saying why:
 
@@ -319,6 +323,20 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    project has one, and the searches read every page unless one is named. Still to come:
    declaring an incident and posting its updates, which are said to customers and need
    their own design pass before an agent may do them.
+
+   The notification reads follow (*shipped*, issue #246 part 1):
+   `mocco_notifications_channels_search`, `mocco_notifications_rules_search`,
+   `mocco_notifications_activity_search` and `mocco_inbound_sources_search`, read-only.
+   Notifications and inbound sources are workspace-level, so they resolve through
+   `WorkspaceScope` alone, and each reads what the console's `notification` and `inbound`
+   routers read for a member (`ChannelService.listChannels` / `listRules`,
+   `ActivityService.list`, `SourceService.list` with `InboundService.listReceipts` for a
+   source's latest receipt). The admin-only `guildChannels` has no tool. Answers are
+   projected field by field, so no sealed secret, signing secret or bot token can reach
+   them; the inbound services are absent without `SECRETS_ENCRYPTION_KEYS`, and the tool
+   says so. Still to come (part 2): creating a source, connecting a channel and editing
+   rules, which change where a team hears about production and so go behind the
+   workspace's opt-in and the confirmation round trip, after their own design pass.
 
 ### How the vote is built (slice 6b)
 

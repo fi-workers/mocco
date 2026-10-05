@@ -8,9 +8,11 @@ import { MembershipRepo } from '@backend/domain/auth/repos/membership.repo';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getInbound } from '@backend/domain/inbound/instance';
 import { getMcpSettings } from '@backend/domain/mcp/instance';
 import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
+import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
 import { getStatusDomain } from '@backend/domain/status/instance';
@@ -45,6 +47,9 @@ export function getMcpHandler(): McpHttpHandler {
       statusPages: status.statusPages,
       statusIncidents: status.statusIncidents,
       statusMaintenances: status.statusMaintenances,
+      notifications: getNotification().channels,
+      notificationActivity: getNotification().activity,
+      inbound: getInbound(),
       scope,
       projects: new ProjectScope({ workspaces: scope, projects, products }),
       settings: getMcpSettings(),

@@ -64,3 +64,24 @@ export class StatusPageUnclearError extends BadRequestError {
     this.name = 'StatusPageUnclearError';
   }
 }
+
+/** A tool's service is not composed on this server (inbound webhooks need
+ * `SECRETS_ENCRYPTION_KEYS`). Says what is missing, so the agent stops retrying and can
+ * tell whoever runs Mocco what to set. */
+export class ToolUnavailableError extends BadRequestError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToolUnavailableError';
+  }
+}
+
+/** A cursor the tool did not hand out, or one that was changed on the way back. */
+export class InvalidCursorError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super(
+      "That cursor is not one this tool returned: pass the previous answer's `nextCursor` as it was given",
+      options,
+    );
+    this.name = 'InvalidCursorError';
+  }
+}
