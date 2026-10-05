@@ -161,6 +161,25 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Monitor alerts show only the host and port
+
+- A monitor alert's "Checks" field carried the monitor's full URL, so credentials (`user:pass@`) or a token in the
+  path or query reached every Discord channel the alert was routed to and the stored event. The status reference
+  now says the alert shows only the host and port, and lists what else keeps the spec out (incident text, audit
+  payloads, the public snapshot); the events reference says the same for the `status.monitor.*` payloads.
+- Docs touched: `reference/status.md`, `reference/events.md`, `log.md`
+- Source: branch `fix/status-alert-target-redaction`
+
+## 2026-10-05 — Agents can read monitors, locations and linked deploys
+
+- The connect guide lists `mocco_status_monitors_search`, `mocco_status_monitors_get` and
+  `mocco_status_locations_search`, says `mocco_status_incidents_get` shows the linked deploys, and that a monitor
+  shows only the host it checks and a location never its token. The MCP spec lists the new reads as shipped; the
+  status reference describes them, what a monitor's `target` keeps out, and what the console's `monitor` query now
+  returns (the latest rounds and the open monitor incident), and drops "MCP tools for monitors" from what is left.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/status.md`, `log.md`
+- Source: branch `feat/mcp-status-monitors`
+
 ## 2026-10-05 — Deploy correlation in the console
 
 - The status guide gains "Check the deploys around it" with a screenshot of the Recent deploys panel (the

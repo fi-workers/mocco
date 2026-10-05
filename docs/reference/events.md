@@ -58,7 +58,9 @@ A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not
 
 The `status.monitor.*` types carry a rendered message (`{ facts, message }`, like the OTA and flag types) with the
 facts `monitor` (its name), `state` (the new state) and `duringMaintenance` (a window in progress covers one of the
-monitor's components; the title then ends "(during maintenance)"). Each has the dedupe key
+monitor's components; the title then ends "(during maintenance)"). The message shows the monitor's target as host
+and port only, never the URL's credentials, path or query ([status](./status.md#what-a-state-change-does)). Each has
+the dedupe key
 `<type>:<state change id>`, so one change alerts once even if its reaction runs again.
 
 ### Governance payloads

@@ -49,8 +49,11 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_ota_version_policies_search` | The minimum supported, recommended and blocked versions of each iOS and Android app, and whether tightening them needs approval |
 | `mocco_status_pages_get` | What a status page says right now: each component and the status it shows, counting open incidents and maintenance in progress |
 | `mocco_status_incidents_search` | Which incidents are open (or were), newest first, by status, severity, page or title text |
-| `mocco_status_incidents_get` | One incident: every update posted to it, the components it affects and how badly, and its postmortem |
+| `mocco_status_incidents_get` | One incident: every update posted to it, the components it affects and how badly, its postmortem, and the deploys linked to it |
 | `mocco_status_maintenances_search` | Which maintenance windows are scheduled or in progress, and the components each covers |
+| `mocco_status_monitors_search` | Which HTTP and TCP monitors a project has, what each checks (the host only), its state (for example the ones down) and since when, and the components it reports on |
+| `mocco_status_monitors_get` | One monitor: its latest state changes and why, its latest rounds, and the incident it opened that is still open |
+| `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -77,8 +80,11 @@ out, pause, roll back and change a version policy in the console or with `mocco 
 The status page tools pick their project the same way and answer only where the status
 page is turned on. `mocco_status_pages_get` reads one page: leave `pageId` out when the
 project has one, or the tool names the pages to pick from. The incident and maintenance
-searches read every page of the project unless you name one. They only read; declare an
-incident, post an update and schedule maintenance in the console.
+searches read every page of the project unless you name one. A monitor shows only the
+host it checks: its full URL, request body and keyword stay on the server, since they can
+hold credentials. The location tool reads the whole workspace for any member and never
+returns a location's token. They only read; declare an incident, post an update, schedule
+maintenance, and add, pause or change a monitor or a location in the console.
 
 The notification and webhook source tools read the whole workspace, with no project to
 pick, and answer for any member, as the console does. They never return a signing

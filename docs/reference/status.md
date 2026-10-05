@@ -507,6 +507,14 @@ In one transaction under the monitor's advisory lock, so reactions to one monito
    window covering the monitor's components the title ends "(during maintenance)". Notification rules route them
    like any event; the `mocco` preset includes all three.
 
+   The target ("Checks") is only the host and port: `api.acme.test:8443` for
+   `https://user:pass@api.acme.test:8443/v1/health?token=…`, with the port left out when it is the scheme's default,
+   and `host:port` for TCP (`monitorTargetOf` in `domain/status/monitor-target.ts`). URL credentials, path, query and
+   fragment can hold secrets and everyone in a channel reads its alerts, so they never reach the message, the stored
+   event or the activity trace. The incident a monitor opens names only the monitor, the audit payloads carry its
+   name, kind and links but never its spec, and the public snapshot has no monitors. The full URL stays in the
+   monitor editor.
+
 A crash between the state change and its reaction loses the reaction (the same trade-off as other best-effort
 events); a reconcile over unreacted state changes would close that gap.
 
@@ -560,7 +568,7 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `incidentRuns`, `correlateIncident`, `linkRun`, `unlinkRun` | The runs linked to an incident ([deploy correlation](#deploy-correlation)); `linkRun` takes `relation` `manual` or `fix` |
 | `runIncidents` | The incidents a run is linked to (`workspaceId`, `runId`; membership and the status product, no `projectId`), for the run's page. It lives here so the execution router never depends on status; another workspace's run is `NOT_FOUND` |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
-| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components and latest state changes |
+| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first) and the incident it opened that is still open (`openIncident`, or null) |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
 Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)); see
@@ -571,7 +579,7 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 Hosted locations, publishing `@mocco/probe` to npm and its image to
 GHCR, heartbeat monitors, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
-lost; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
+lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` and a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components; the
 deploy watch and `suspected_run_id`; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
@@ -581,9 +589,20 @@ deploy watch and `suspected_run_id`; and gate-linked maintenance (`run_id`, `gat
 
 Agents read status pages over MCP with `mocco_status_pages_get` (each component and its `displayedStatus`),
 `mocco_status_incidents_search` (open by default; by status, severity, page or title text, newest first, paged),
-`mocco_status_incidents_get` (the timeline, affected components and postmortem) and `mocco_status_maintenances_search`
-(scheduled and in progress by default) in `transport/mcp/tools/status.ts`: thin, read-only adapters over `getPage`,
-`IncidentService.list` / `get` and `MaintenanceService.list`, behind the same checks as
-`productProcedure(Products.status)` (`ProjectScope`). A page is looked up among the project's own, so another tenant's
-page or incident reads like one that does not exist. Nothing on MCP declares or updates an incident yet. See
+`mocco_status_incidents_get` (the timeline, affected components and postmortem; detailed adds the linked deploys from
+`CorrelationService.list`: relation, score, repo, commit, when the run finished, and whether Mocco suggested it or a
+person linked it) and `mocco_status_maintenances_search` (scheduled and in progress by default) in
+`transport/mcp/tools/status.ts`: thin, read-only adapters over `getPage`, `IncidentService.list` / `get` and
+`MaintenanceService.list`, behind the same checks as `productProcedure(Products.status)` (`ProjectScope`). A page is
+looked up among the project's own, so another tenant's page or incident reads like one that does not exist.
+
+Monitors and locations are in `transport/mcp/tools/status-monitors.ts`. `mocco_status_monitors_search` reads
+`MonitorService.list` (by name, paged with `after`; filtered by `states` and name text) and
+`mocco_status_monitors_get` reads `MonitorService.get` (the latest state changes, newest first, capped by `limit`; the
+open monitor incident; detailed adds each change's `reason` and the latest closed rounds), both behind `ProjectScope`.
+A monitor's `target` is `monitorTargetOf`, the same host and port alerts show: its URL credentials, path and query, its
+request body and its keyword never leave the server, because they can hold secrets. `mocco_status_locations_search`
+reads `LocationService.list` behind the checks of the workspace-level `locations` query (membership and the status
+product, `ProjectScope.resolveWorkspace`), which any member may read; it never returns a token hash. Nothing on MCP
+declares or updates an incident, or changes a monitor or a location. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).

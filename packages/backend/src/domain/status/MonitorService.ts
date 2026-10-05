@@ -9,10 +9,12 @@ import { MonitorStates } from '@mocco/common/status';
 import { StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
+import { IncidentMonitorRepo } from '@backend/domain/status/repos/incident-monitor.repo';
 import { LocationRepo } from '@backend/domain/status/repos/location.repo';
 import { MonitorLocationRepo } from '@backend/domain/status/repos/monitor-location.repo';
 import { MonitorStateChangeRepo } from '@backend/domain/status/repos/monitor-state-change.repo';
 import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
+import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { MonitorRow, MonitorSettings } from '@backend/domain/status/repos/monitor.repo';
@@ -25,6 +27,9 @@ export interface MonitorDeps {
   audit: Pick<AuditService, 'record'>;
   now?: () => Date;
 }
+
+/** Closed rounds `get` returns, newest first. */
+const RECENT_VERDICTS = 10;
 
 const subject = (monitorId: string) => ({ subjectType: 'status_monitor', subjectId: monitorId });
 
@@ -146,15 +151,27 @@ export class MonitorService {
     return await this.withLinks(scope, await new MonitorRepo(this.deps.db).list(scope));
   }
 
-  /** The monitor with its locations, components and latest state changes. */
+  /**
+   * The monitor with its locations and components, its latest state changes and closed rounds
+   * (newest first), and the incident it opened that is still open, if any.
+   */
   async get(scope: StatusScope, monitorId: string) {
     const found = await new MonitorRepo(this.deps.db).find(scope, monitorId);
     if (found === undefined) {
       throw new StatusEntityNotFoundError('monitor', monitorId);
     }
-    const [monitor] = await this.withLinks(scope, [found]);
-    const stateChanges = await new MonitorStateChangeRepo(this.deps.db).listForMonitor(scope.workspaceId, monitorId);
-    return { monitor: monitor ?? { ...found, locationIds: [], components: [] }, stateChanges };
+    const [[monitor], stateChanges, recentVerdicts, openIncident] = await Promise.all([
+      this.withLinks(scope, [found]),
+      new MonitorStateChangeRepo(this.deps.db).listForMonitor(scope.workspaceId, monitorId),
+      new RoundVerdictRepo(this.deps.db).listLatestForMonitor(scope.workspaceId, monitorId, RECENT_VERDICTS),
+      new IncidentMonitorRepo(this.deps.db).findOpen(scope.workspaceId, monitorId),
+    ]);
+    return {
+      monitor: monitor ?? { ...found, locationIds: [], components: [] },
+      stateChanges,
+      recentVerdicts,
+      openIncident: openIncident ?? null,
+    };
   }
 
   /** Create a monitor; it is `pending` and its first round is due now. */
