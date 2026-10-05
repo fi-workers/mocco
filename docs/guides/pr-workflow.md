@@ -4,7 +4,7 @@ description: How changes land in the repo — one concern per PR, sequential lan
 type: guide
 status: active
 created: 2026-07-04
-updated: 2026-09-24
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [guide, pr, workflow, process]
@@ -31,6 +31,14 @@ tags: [guide, pr, workflow, process]
 | Vendors behind neutral wrappers (env names ours, one import site) | replaceability (see `packages/backend/src/domain/auth/`) |
 | Behavior changes update `docs/reference/` in the same PR | wiki stays truthful |
 | No session links in commits/PRs; `Co-Authored-By` attribution stays | clean public history |
+
+## Pre-push on a shared machine
+
+The husky pre-push hook runs the whole `yarn verify`, including every backend test; its scope doesn't shrink to the diff. Several agent sessions often share one machine, so the backend suite has to pass at a high load average (#420).
+
+- The suite migrates one PGlite per run: a global setup (`packages/backend/src/infra/db/testing/pglite-global-setup.ts`) applies the real migrations once and writes the data directory to a temp file. `createTestDb()` then boots each test's database from that copy. The schema is the same, and each `beforeEach` costs about a fifth of the CPU it took when every test ran all the migrations itself.
+- The per-test and per-hook timeouts stay at 30 s, and CI runs the same config in three shards. The one exception is the 1500-delivery run in `delivery-capacity.test.ts`. It runs on an injected clock, so its 20-minute timeout only catches a hang; in a full suite on a loaded machine it took 500 s.
+- If a backend test still times out locally under load, rerun `yarn verify`. Don't push with `--no-verify`. A test that fails twice is a real failure, or a test that depends on the wall clock; fix it with the injected clock the domain already takes.
 
 ## Cadence
 
