@@ -72,6 +72,8 @@ export const AuditActions = {
   messengerContactErased: 'messenger.contact.erased',
   helpSiteEnabled: 'help.site.enabled',
   helpSiteChanged: 'help.site.changed',
+  /** Whether the site's robots.txt lets AI training crawlers in (#363). */
+  helpSiteAiTrainingChanged: 'help.site.ai_training.changed',
   helpArticlePublished: 'help.article.published',
   helpArticleUnpublished: 'help.article.unpublished',
   helpArticleDeleted: 'help.article.deleted',
@@ -168,6 +170,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.messengerContactErased]: 'Messenger contact erased',
   [AuditActions.helpSiteEnabled]: 'Help center set up',
   [AuditActions.helpSiteChanged]: 'Help center settings changed',
+  [AuditActions.helpSiteAiTrainingChanged]: 'Help center AI training crawlers changed',
   [AuditActions.helpArticlePublished]: 'Help article published',
   [AuditActions.helpArticleUnpublished]: 'Help article unpublished',
   [AuditActions.helpArticleDeleted]: 'Help article deleted',

@@ -1,6 +1,6 @@
 ---
 title: What Mocco offers
-description: The Mocco products you can use today — deploy governance, OTA and force update, feature flags, notifications and messenger — plus API keys and SDKs, what each one does, and where its guides are.
+description: What Mocco offers, grouped by job — Release (deploy governance, OTA and force update, feature flags), Operate (status page, notifications, audit log) and Support (messenger, help center) — plus API keys and SDKs, and where each guide is.
 type: guide
 status: active
 created: 2026-10-02
@@ -19,41 +19,55 @@ related:
 
 # What Mocco offers
 
-Mocco brings together the tools a team uses to ship and run an app: who may deploy, which app versions must update, which users see a feature, and what your users are telling you. Every product shares the same workspace, members, roles and audit log, so the approver roles you set up once work in every product.
+Mocco is everything your product needs, except the code: the tools a team uses to ship it, run it and hear from the people who use it. Its products are grouped by that job — **Release**, **Operate** and **Support** — and the workspace's **Home** shows what's waiting for your approval in all of them. Every product shares the same workspace, members, roles and audit log, so the approver roles you set up once work in every product.
 
-Your team works in a **workspace**. Inside it, a **project** is one product you ship, with its apps and repositories. Deploy governance and notifications work across the workspace; OTA, feature flags, messenger and API keys work per project. [Set up a workspace and projects](./workspace-and-projects.md) is the place to start.
+Your team works in a **workspace**. Inside it, a **project** is one product you ship, with its apps and repositories. Deploy governance, notifications and the audit log work across the workspace; OTA, feature flags, the status page, messenger, the help center and API keys work per project. [Set up a workspace and projects](./workspace-and-projects.md) is the place to start.
 
 You turn products on and off on the workspace's **Products** page. Deploy governance is always on.
 
 ![The Products page: products grouped under Release and Support, deploy governance always on, the others with Turn on and Turn off, and the ones still to come listed under On the roadmap](./images/products.png)
 
-## Deploy governance
+## Release
+
+Ship changes to production, with the right people approving the ones that add risk.
+
+### Deploy governance
 
 Deploy governance makes "can push to GitHub" and "can deploy to production" two separate permissions. You describe a pipeline in a `.mocco.yml` file in your repository: steps that run in your CI, and gates between them. A gate pauses the run until enough people with the right roles approve it, and a step that needs a production credential gets it from Mocco only after its gate was approved. See [Deploy governance](../governance/overview.md).
 
-## OTA and force update
+### OTA and force update
 
 For mobile apps. **Force update** sets the minimum and recommended version of each store app, so an old build is told to update. **Gated OTA publishing** keeps the OTA tool you use today (EAS Update, CodePush or hot-updater) and releases its publishing token only to an approved pipeline. **Hosted OTA updates** serve your React Native app's updates from Mocco, with percentage rollouts, protected channels and instant rollback. See [OTA and force update](../ota/overview.md).
 
-## Feature flags
+### Feature flags
 
 Flags with targeting rules, segments and percentage rollouts, evaluated through [OpenFeature](https://openfeature.dev). Each project has its own environments; a protected environment sends every change for approval, and a kill switch turns a flag off at once. See the [feature flags quickstart](../flags/quickstart.md).
 
-## Notifications
+## Operate
+
+Know what's happening in production, and what happened.
+
+### Status page
+
+Tell your users whether your service works. List the parts of your service as components, declare incidents and post updates on them until they're resolved, write a postmortem, and schedule maintenance that Mocco starts and ends on time. Each component shows the worst of what you reported, its open incidents and maintenance in progress. See [Run a status page](../status/status-page.md).
+
+### Notifications
 
 Mocco posts events to Discord: its own events, such as a gate waiting for approval, and webhooks from Sentry, Vercel and GitHub. You decide which events go to which channel. See the [notifications overview](../notifications/overview.md).
 
-## Messenger
+The **Audit** page records every approval, production change and credential release, from every product, in one tamper-evident log. See [Audit log](./audit-log.md).
+
+## Support
+
+Hear from the people who use what you built.
+
+### Messenger
 
 In-app "contact us" for your users: signed in, or with an email they leave if they aren't. They write from inside your app, with screenshots if they like, and your team answers from the project's **Inbox**, with the user's app version and platform alongside each conversation. Replies reach the app as push notifications. See [In-app contact with Mocco Messenger](../messenger/contact-us.md).
 
-## Help center
+### Help center
 
 A public help site for your product. Write articles in Markdown with a live preview, or import an existing Mintlify site; publish them; and offer them in other languages, translated automatically when your Mocco has translation turned on and reviewed by your team. See [Publish a help center](../help/help-center.md).
-
-## Status page
-
-Tell your users whether your service works. List the parts of your service as components, declare incidents and post updates on them until they're resolved, write a postmortem, and schedule maintenance that Mocco starts and ends on time. Each component shows the worst of what you reported, its open incidents and maintenance in progress. See [Run a status page](../status/status-page.md).
 
 ## API keys and SDKs
 

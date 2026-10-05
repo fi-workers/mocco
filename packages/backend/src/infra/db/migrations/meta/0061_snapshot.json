@@ -1,6 +1,6 @@
 {
-  "id": "84553796-570e-44fc-96ef-832a413b4aee",
-  "prevId": "b71b007b-8b36-44fc-add1-85a70b4a1ea1",
+  "id": "aca78b35-2489-4b3a-91d2-6785e704b7b1",
+  "prevId": "84553796-570e-44fc-96ef-832a413b4aee",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -13214,6 +13214,106 @@
       },
       "isRLSEnabled": false
     },
+    "public.mocco_status_incident_monitors": {
+      "name": "mocco_status_incident_monitors",
+      "schema": "",
+      "columns": {
+        "incident_id": {
+          "name": "incident_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monitor_id": {
+          "name": "monitor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mocco_status_incident_monitors_open_uq": {
+          "name": "mocco_status_incident_monitors_open_uq",
+          "columns": [
+            {
+              "expression": "monitor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"mocco_status_incident_monitors\".\"closed_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_status_incident_monitors_incident_fk": {
+          "name": "mocco_status_incident_monitors_incident_fk",
+          "tableFrom": "mocco_status_incident_monitors",
+          "tableTo": "mocco_status_incidents",
+          "columnsFrom": [
+            "incident_id",
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id",
+            "workspace_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "mocco_status_incident_monitors_monitor_fk": {
+          "name": "mocco_status_incident_monitors_monitor_fk",
+          "tableFrom": "mocco_status_incident_monitors",
+          "tableTo": "mocco_status_monitors",
+          "columnsFrom": [
+            "monitor_id",
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id",
+            "workspace_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "mocco_status_incident_monitors_pk": {
+          "name": "mocco_status_incident_monitors_pk",
+          "columns": [
+            "incident_id",
+            "monitor_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.mocco_status_incident_updates": {
       "name": "mocco_status_incident_updates",
       "schema": "",
@@ -14283,6 +14383,13 @@
           "notNull": true,
           "default": 0
         },
+        "incident_policy": {
+          "name": "incident_policy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
         "created_by_user_id": {
           "name": "created_by_user_id",
           "type": "uuid",
@@ -14401,6 +14508,10 @@
         "mocco_status_monitors_interval_check": {
           "name": "mocco_status_monitors_interval_check",
           "value": "\"mocco_status_monitors\".\"interval_s\" >= 60"
+        },
+        "mocco_status_monitors_incident_policy_check": {
+          "name": "mocco_status_monitors_incident_policy_check",
+          "value": "\"mocco_status_monitors\".\"incident_policy\" IN ('none','draft','publish')"
         },
         "mocco_status_monitors_confirmations_check": {
           "name": "mocco_status_monitors_confirmations_check",

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import HelpCrawlers from '@frontend/components/help/help-crawlers';
 import ImportMintlify from '@frontend/components/help/import-mintlify';
 import {
   errorMessage,
@@ -326,6 +327,7 @@ export default function HelpCenter({ workspaceId, projectId }: Props) {
       </div>
       <Tree workspaceId={workspaceId} projectId={projectId} />
       <ImportMintlify workspaceId={workspaceId} projectId={projectId} />
+      <HelpCrawlers workspaceId={workspaceId} projectId={projectId} allowAiTraining={site.allowAiTraining} />
     </div>
   );
 }

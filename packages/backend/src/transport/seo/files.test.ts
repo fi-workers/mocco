@@ -17,6 +17,18 @@ const deps = (overrides: Partial<SeoFileDeps> = {}): SeoFileDeps => ({
   helpSiteForHost: host => helpSiteForHost(host, env),
   helpSiteOrigin: slug => helpSiteOrigin(slug, env),
   help: {
+    site: async slug => {
+      if (slug !== 'syt' && slug !== 'acme') {
+        throw new HelpSiteNotFoundError(slug);
+      }
+      return await Promise.resolve({
+        slug,
+        name: 'ShowYourTime',
+        sourceLocale: 'ko',
+        locales: ['en'],
+        allowAiTraining: slug === 'syt',
+      });
+    },
     sitemap: async slug => {
       if (slug !== 'syt' && slug !== 'acme') {
         throw new HelpSiteNotFoundError(slug);
@@ -80,6 +92,17 @@ describe('seoFile', () => {
     expect(file.body).toContain('Sitemap: https://help.syt.app/sitemap.xml');
   });
 
+  it('keeps AI training crawlers out of a site that says so, and lets search crawlers in', async () => {
+    const allowed = await seoFile(SeoFiles.robots, 'help.syt.app', deps());
+    const refused = await seoFile(SeoFiles.robots, 'acme.help.mocco.club', deps());
+
+    expect(allowed.body).not.toContain('GPTBot');
+    expect(refused.body).toContain('User-agent: GPTBot\nUser-agent: ClaudeBot\n');
+    expect(refused.body).toContain('User-agent: Bytespider\nDisallow: /\n');
+    expect(refused.body).not.toContain('OAI-SearchBot');
+    expect(refused.body).toContain('Sitemap: https://acme.help.mocco.club/sitemap.xml');
+  });
+
   it('lists every language version of each help page with reciprocal hreflang and x-default', async () => {
     const file = await seoFile(SeoFiles.sitemap, 'help.syt.app', deps());
     const alternates = [
@@ -100,8 +123,9 @@ describe('seoFile', () => {
   });
 
   it('answers 404 for a help host with no such site', async () => {
-    const file = await seoFile(SeoFiles.sitemap, 'gone.help.mocco.club', deps());
+    const sitemap = await seoFile(SeoFiles.sitemap, 'gone.help.mocco.club', deps());
+    const robots = await seoFile(SeoFiles.robots, 'gone.help.mocco.club', deps());
 
-    expect(file.status).toBe(404);
+    expect([sitemap.status, robots.status]).toEqual([404, 404]);
   });
 });

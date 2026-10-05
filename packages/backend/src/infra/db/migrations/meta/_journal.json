@@ -425,8 +425,15 @@
     {
       "idx": 60,
       "version": "7",
-      "when": 1791158272944,
-      "tag": "0060_wealthy_gideon",
+      "when": 1791158340780,
+      "tag": "0060_goofy_adam_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791165980918,
+      "tag": "0061_clumsy_captain_cross",
       "breakpoints": true
     }
   ]

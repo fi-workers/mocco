@@ -23,7 +23,7 @@ The [help center design](../specs/2026-09-24-help-center-design.md) (#96) so far
 
 ## Sites
 
-A project has at most one help site (`mocco_help_sites`, migration 0042): a public `slug` (unique across Mocco; the site will be served at `<slug>.help.<domain>` until a custom domain is bound), a `source_locale` the team writes in, and `locales`, the languages it is translated into (never the source). `help.enable` and `help.updateSite` are audited as `help.site.enabled` / `help.site.changed`; a taken slug is a CONFLICT.
+A project has at most one help site (`mocco_help_sites`, migration 0042): a public `slug` (unique across Mocco; the site will be served at `<slug>.help.<domain>` until a custom domain is bound), a `source_locale` the team writes in, and `locales`, the languages it is translated into (never the source). `help.enable` and `help.updateSite` are audited as `help.site.enabled` / `help.site.changed`; a taken slug is a CONFLICT. `allow_ai_training` (migration 0060, default true) decides whether its robots.txt lets AI training crawlers in; `help.setAiTraining` changes it, audited as `help.site.ai_training.changed` ([Search engines and crawlers](./seo.md)).
 
 ## Collections, sections, articles
 
