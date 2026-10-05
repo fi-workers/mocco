@@ -1,6 +1,6 @@
 ---
 title: Run a status page
-description: Create a status page for a project, list the parts of your service as components, declare incidents and post updates as they move from investigating to resolved, write a postmortem, and schedule maintenance that Mocco starts and ends on time.
+description: Create a status page for a project, list the parts of your service as components, declare incidents and post updates as they move from investigating to resolved, see the deploys around an incident, write a postmortem, and schedule maintenance that Mocco starts and ends on time.
 type: guide
 status: active
 created: 2026-10-05
@@ -80,13 +80,21 @@ If someone else moved the incident while you were writing, for example resolved 
 
 ![An update refused because the incident was resolved in the meantime](./images/update-refused.png)
 
-## 6. Write the postmortem
+## 6. Check the deploys around it
+
+**Recent deploys** on the incident lists the releases that finished from two hours before the incident started to five minutes after it. A release is a run that succeeded after passing a gate. When the project links repositories, only releases of those repositories count; otherwise every release in the workspace does. The closest is marked **Suspected**, and each shows its score: higher means it finished closer to the start. Mocco fills this in when the incident is declared, by you or by a monitor, and **Recompute** looks again, for example for a release recorded later.
+
+To add a run Mocco didn't suggest, pick it under **Run**, choose **Related** or **Fix** (the run that resolved it), and choose **Link run**. **Unlink** removes a run from the list. The run's own page lists the incidents it is linked to under **Incidents**.
+
+![Recent deploys: a suspected release with its score and a run linked by hand as the fix](./images/recent-deploys.png)
+
+## 7. Write the postmortem
 
 Once the incident is over, write what happened, why, and what you changed in **Postmortem**. It is Markdown. Leave it empty and save to remove it.
 
 ![A resolved incident with its full timeline and postmortem](./images/postmortem.png)
 
-## 7. Schedule maintenance
+## 8. Schedule maintenance
 
 Open the **Maintenance** tab and choose **Schedule maintenance**. Give the window a title, when it starts and ends (in your time zone), optional details, and the components it covers.
 
@@ -100,4 +108,4 @@ To call a window off, choose **Cancel**; a window that is already in progress en
 
 ## What gets recorded
 
-Creating and deleting pages, changing a component's reported status, declaring incidents, posting updates, changing affected components or the postmortem, and scheduling, canceling, starting and completing maintenance are all written to the workspace's [audit log](../start/audit-log.md).
+Creating and deleting pages, changing a component's reported status, declaring incidents, posting updates, changing affected components or the postmortem, linking and unlinking runs, and scheduling, canceling, starting and completing maintenance are all written to the workspace's [audit log](../start/audit-log.md).

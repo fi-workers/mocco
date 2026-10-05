@@ -161,6 +161,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Deploy correlation in the console
+
+- The status guide gains "Check the deploys around it" with a screenshot of the Recent deploys panel (the
+  postmortem and maintenance steps become 7 and 8, and run links join what gets recorded); the status reference
+  describes the incident page's Recent deploys panel and the run page's Incidents panel; the feature map row drops
+  "no console panels".
+- Docs touched: `customer/status/status-page.md`, `customer/status/images/recent-deploys.png`,
+  `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-correlation-ui` (#154)
+
 ## 2026-10-05 — Status deploy correlation
 
 - The status reference gains "Deploy correlation": `mocco_status_incident_runs`, what counts as a deploy (a recorded
