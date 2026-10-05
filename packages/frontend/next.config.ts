@@ -29,6 +29,13 @@ const config: NextConfig = {
   // The OG renderer (ADR 0030) loads from node_modules at runtime instead of being bundled: resvg is
   // a native addon, and satori reads its wasm (yoga, harfbuzz) from beside its own files.
   serverExternalPackages: ['@resvg/resvg-js', 'satori'],
+  // Bundle the Pages Router's server dependencies (auth, tRPC, SEO, help routes) the way the App Router
+  // already does, instead of loading them from node_modules at runtime. Unbundled, a cold function
+  // resolved and compiled better-auth, drizzle, zod, Sentry and the rest file by file (the tRPC route
+  // traced 2,320 files), as ESM that bytecode caching doesn't cover; bundled, it's ~400. This is
+  // most of a cold first request's time (#419, docs/reference/env.md#function-region).
+  // serverExternalPackages above, and Next's own default list (pg among it), stay external.
+  bundlePagesRouterDependencies: true,
   // Bridge Vercel's server-only VERCEL_ENV to the client so the EnvironmentRibbon
   // can mark preview/dev tabs. Empty off-Vercel (local) → the ribbon shows "development".
   // HELP_SITES_DOMAIN goes to the client too, so the console can link a help center's public site.
