@@ -3,6 +3,7 @@ import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
 import { HttpHelpRevalidator } from '@backend/domain/helpcenter/revalidate-http';
+import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { getJobQueue } from '@backend/domain/jobs/instance';
 import { getStorageDomain } from '@backend/domain/storage/instance';
@@ -40,6 +41,11 @@ export function getHelpDomain(): HelpDomain {
 export function helpRevalidateSecrets(): string[] {
   const env = getEnv();
   return [env.CRON_SECRET, env.JOBS_TICK_SECRET].filter(secret => secret !== undefined);
+}
+
+/** Where a help site is served (its custom domain, else its Mocco subdomain), or null. */
+export function helpSiteOriginFor(slug: string): string | null {
+  return helpSiteOrigin(slug, getEnv());
 }
 
 export { checkRevalidateRequest } from '@backend/domain/helpcenter/revalidate';

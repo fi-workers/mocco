@@ -1,6 +1,6 @@
 ---
 title: Search engines and crawlers
-description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers) and sitemap.xml so far.
+description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers), sitemap.xml and the metadata public pages carry.
 type: reference
 status: active
 created: 2026-10-05
@@ -47,4 +47,16 @@ JSON-LD (`lib/seo.ts`, one `@graph` per page, `<` escaped so it can't end the sc
 - **Landing:** Organization, WebSite, SoftwareApplication (`DeveloperApplication`).
 - **A customer guide:** Organization, WebSite, a BreadcrumbList (Mocco → the guide set → the guide) and a TechArticle with `dateModified` from the guide's frontmatter `updated:`.
 
-Not FAQPage or HowTo: Google restricted and retired those rich results in 2023. Help center pages set their own `robots` (`index, follow`, and `noindex, follow` on search results); their canonical, hreflang and Open Graph tags come with #365.
+Not FAQPage or HowTo: Google restricted and retired those rich results in 2023.
+
+## Help center pages
+
+A help site's pages render `SeoHead` through `HelpSiteLayout` on the site's canonical origin (`helpSiteOriginFor`: its custom domain when `HELP_CUSTOM_DOMAINS` maps one, else `<slug>.<HELP_SITES_DOMAIN>`), so the copy on the Mocco subdomain of a site with a custom domain names the custom domain as canonical. Without `HELP_SITES_DOMAIN` they carry only a title and `robots`.
+
+- **Language:** `_document.tsx` sets `<html lang>` from the page's `nav.locale`; Mocco's own pages stay `en`.
+- **hreflang:** a home lists every language the site offers; an article lists the languages it is really served in (the source and each translated one — `HelpPublicReadService.article().locales`), each plus `x-default` (the source). Pages in a single language get none.
+- **Description:** an article's is its first paragraphs as plain text, cut near 160 characters (`excerptOf`); a home's is its collection titles.
+- **Open Graph:** `og:type` `article` or `website`, `og:site_name` the site's name, `og:locale` the page's language, and a `summary` Twitter card — no share image until branded ones are generated (#372), because Mocco's card isn't the customer's.
+- **JSON-LD:** an article has a BreadcrumbList (home → article) and an Article with `inLanguage`, `datePublished` (last publish) and `dateModified` (the later of that and its translation), published by the site; a home has a WebSite with its languages.
+- **Redirects:** an old slug redirects permanently (308) to the article's address; a language the article isn't translated into redirects temporarily (307) to the source, since a translation may come; the site root redirects temporarily to the source language.
+- **robots:** `index, follow`, and `noindex, follow` on search results.

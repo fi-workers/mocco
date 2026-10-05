@@ -127,6 +127,8 @@ describe('help center translation (pglite)', () => {
       locale: 'en',
       title: '[en] Widget',
       canonicalPath: `/en/articles/${article.shortId}-widget`,
+      locales: ['ko', 'en', 'ja'],
+      modifiedAt: expect.any(Date),
     });
     expect(english?.body).toContain('[en] Tap [here](https://a.test).');
     expect(tree.collections[0]?.sections[0]?.articles[0]).toMatchObject({ title: '[ja] Widget' });
@@ -145,6 +147,7 @@ describe('help center translation (pglite)', () => {
     const help = domainWith(fakeTranslator());
     const article = await published(help);
     const before = await help.helpPublic.sitemap('syt');
+    const untranslated = await help.helpPublic.article('syt', 'ko', article.shortId);
     await help.drain();
 
     const after = await help.helpPublic.sitemap('syt');
@@ -152,6 +155,7 @@ describe('help center translation (pglite)', () => {
     expect(before.articles).toEqual([
       [{ locale: 'ko', path: `/ko/articles/${article.shortId}-widget`, lastModified: expect.any(Date) }],
     ]);
+    expect(untranslated?.locales).toEqual(['ko']);
     expect(after.homes.map(home => home.path)).toEqual(['/ko', '/en', '/ja']);
     expect(after.articles[0]?.map(version => version.path)).toEqual([
       `/ko/articles/${article.shortId}-widget`,

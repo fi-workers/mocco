@@ -4,6 +4,7 @@
 import { HELP_LOCALE_NAMES } from '@mocco/common/help';
 import Head from 'next/head';
 
+import SeoHead from '@frontend/components/seo-head';
 import { wordsFor } from '@frontend/lib/help-site-words';
 import { cn } from '@frontend/lib/utils';
 
@@ -14,22 +15,63 @@ export default function HelpSiteLayout({
   nav,
   title,
   currentPath,
+  seo,
   noindex = false,
   children,
 }: {
   nav: HelpSiteNav;
   title: string;
   currentPath?: string;
+  /**
+   * What search engines and link previews get: this page's path, a description, the page in
+   * every language it exists in, and JSON-LD. Canonical and hreflang URLs are absolute on the
+   * site's own origin (its custom domain when it has one).
+   */
+  seo?: {
+    path: string;
+    description: string;
+    versions: readonly { locale: string; path: string }[];
+    type?: 'website' | 'article';
+    jsonLd?: (origin: string) => readonly Record<string, unknown>[];
+  };
   /** Keep the page out of search (the search results page: empty to a crawler). */
   noindex?: boolean;
   children: ReactNode;
 }) {
+  const fullTitle = title === nav.name ? title : `${title} · ${nav.name}`;
+  const { origin } = nav;
+  const source = nav.locales[0];
   return (
     <>
-      <Head>
-        <title key="title">{title === nav.name ? title : `${title} · ${nav.name}`}</title>
-        <meta key="robots" name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
-      </Head>
+      {seo === undefined || origin === null ? (
+        <Head>
+          <title key="title">{fullTitle}</title>
+          <meta key="robots" name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
+        </Head>
+      ) : (
+        <SeoHead
+          title={fullTitle}
+          description={seo.description}
+          url={`${origin}${seo.path}`}
+          origin={origin}
+          type={seo.type ?? 'website'}
+          siteName={nav.name}
+          locale={nav.locale}
+          withImage={false}
+          noindex={noindex}
+          alternates={
+            seo.versions.length < 2
+              ? []
+              : [
+                  ...seo.versions.map(version => ({ hreflang: version.locale, href: `${origin}${version.path}` })),
+                  ...seo.versions
+                    .filter(version => version.locale === source)
+                    .map(version => ({ hreflang: 'x-default', href: `${origin}${version.path}` })),
+                ]
+          }
+          jsonLd={seo.jsonLd?.(origin) ?? []}
+        />
+      )}
       <div lang={nav.locale} className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="flex h-14 items-center justify-between gap-4 border-b border-border px-4 md:px-6">
           <div className="flex min-w-0 items-center gap-4">

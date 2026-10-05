@@ -210,6 +210,13 @@ export class HelpPublicReadService {
     const translation =
       wanted === site.sourceLocale ? undefined : await this.translationText(site.workspaceId, article.id, wanted);
     const served = translation === undefined ? site.sourceLocale : wanted;
+    // The languages this article is really served in: the source and each translated one.
+    const translated = await Promise.all(
+      site.locales.map(async offered => {
+        const texts = await this.translationTexts([article.id], offered);
+        return texts.size > 0 ? [offered] : [];
+      }),
+    );
     return {
       shortId: article.shortId,
       slug: article.slug,
@@ -217,6 +224,12 @@ export class HelpPublicReadService {
       title: translation?.title ?? revision.title,
       body: translation?.bodyMd ?? revision.bodyMd,
       publishedAt: article.publishedAt,
+      // When this page last changed: the last publish, or a later translation of it.
+      modifiedAt:
+        translation !== undefined && (article.publishedAt === null || translation.createdAt > article.publishedAt)
+          ? translation.createdAt
+          : article.publishedAt,
+      locales: [site.sourceLocale, ...translated.flat()],
       canonicalPath: articlePath(served, article.shortId, article.slug),
     };
   }
