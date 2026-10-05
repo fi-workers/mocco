@@ -54,6 +54,7 @@ code_refs:
   - packages/backend/src/domain/status/repos/incident-run.repo.ts
   - packages/backend/src/domain/status/DeployWatchService.ts
   - packages/backend/src/domain/status/subscribers.ts
+  - packages/backend/src/transport/ext/v1/monitors.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
   - packages/frontend/src/components/status/incidents.tsx
@@ -236,6 +237,14 @@ one at the monitor's own interval. No job ends the watch.
 
 It changes nothing about the run: no state, no rollback. An automatic rollback on a failed post-deploy check is an
 enforcement change and needs its own ADR.
+
+**Checking now.** A pipeline step can ask for a round right away with `POST /v1/monitors/{id}/check`
+([public API](./public-api.md#routes)): a secret key with `status:write` of the project that owns the monitor, limited
+to 10 a minute per key. `MonitorService.requestCheck` takes the monitor's state lock, pulls a round that isn't due yet
+to now (one already due or open stays) and answers with the round's time; it changes no state or streak, and the
+verdict follows as for any round, so inside a watch a failure is attributed like the others. Another project's monitor
+is `404`; a paused one is `MonitorPausedError` (`409`), since it has no rounds until it is resumed. It isn't audited:
+like a scheduled round, it changes nothing an operator set.
 
 The incident's `suspected_run_id` is a column rather than only the `suspected` link: suggestions are replaced on every
 recompute and a person can unlink them, while which watch opened the incident is a fact that has to last, and it is

@@ -118,6 +118,17 @@ export class MonitorRepo {
     return row;
   }
 
+  /** Move the monitor's next round (under `lockForStateChange`); the state and streaks stay. */
+  async setNextRound(scope: StatusScope, id: string, nextRoundAt: Date, at: Date): Promise<MonitorRow> {
+    return expectOne(
+      await this.db
+        .update(m)
+        .set({ nextRoundAt, updatedAt: at })
+        .where(and(scoped(scope), eq(m.id, id)))
+        .returning(),
+    );
+  }
+
   /** Set the state, streaks and schedule (under `lockForStateChange`). */
   async setState(
     scope: StatusScope,

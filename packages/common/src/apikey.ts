@@ -34,6 +34,9 @@ export const ApiScopes = {
   messengerChat: 'messenger:chat',
   /** Search the project's published help center (#96), e.g. to suggest articles in an app. */
   helpRead: 'help:read',
+  /** Ask for an ad-hoc round of one of the project's monitors (#155), e.g. from a pipeline step
+   * after a deploy. Secret keys only: it makes Mocco send requests to the monitor's target. */
+  statusWrite: 'status:write',
 } as const;
 export type ApiScope = (typeof ApiScopes)[keyof typeof ApiScopes];
 export const apiScopeSchema = z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]]);
