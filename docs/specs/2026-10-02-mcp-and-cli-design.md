@@ -190,6 +190,8 @@ has several servers loaded.
 | `mocco_notifications_channels_reenable` | Turn a disabled notification channel back on (owner or admin) |
 | `mocco_notifications_rules_add` / `_remove` | Add or remove a routing rule (owner or admin) |
 | `mocco_notifications_presets_apply` | Add a preset's rules to a channel (owner or admin) |
+| `mocco_inbound_sources_create` | Add a GitHub webhook source, never returning its secret (owner or admin) |
+| `mocco_inbound_sources_pause` / `_resume` / `_delete` | Pause, resume or delete a webhook source (owner or admin) |
 
 ### Search, not list
 
@@ -342,8 +344,10 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 
    The notification changes follow (*shipped*, issue #246 part 2; see *How the
    notification changes are built* below): connecting a channel, turning one back on,
-   adding and removing rules and applying a preset. Still to come: webhook source
-   changes (create, pause, resume, delete), in their own slice.
+   adding and removing rules and applying a preset. The webhook source changes follow
+   (*shipped*): creating a GitHub source, pausing, resuming and deleting a source. With
+   them issue #246's MCP surface is complete; what remains of it is moving the Discord
+   relay's routing onto Mocco through these tools.
 
 ### How the vote is built (slice 6b)
 
@@ -427,6 +431,27 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   bot's Discord calls; the service paces it on the same rate-limit buckets.
 - **Left in the console.** Installing the bot in a server (a browser OAuth flow) and
   deleting a channel.
+
+### How the webhook source changes are built (issue #246 part 2)
+
+- **Same locks and round trip** as the notification changes, in
+  `transport/mcp/tools/inbound-write.ts`: scope, opt-in, `WorkspaceScope.requireAdmin`
+  (the console's `adminInboundProcedure` rule), and `confirmThenApply`.
+- **No secret in the model's context.** `SourceService` has no unsigned state: the sealed
+  secret is `NOT NULL` and every delivery is verified against it. So
+  `mocco_inbound_sources_create` adds only GitHub sources, whose secret Mocco generates,
+  and drops the generated secret from its answer; the person rotates the secret in the
+  console to get one to paste into GitHub. Sentry and Vercel sources need the vendor's
+  secret pasted, so the tool refuses them with a pointer to the console rather than
+  weaken the signature check. Rotating a secret stays console-only.
+- **Once.** A confirmation is valid for five minutes, so the same answer can arrive
+  twice. Pausing, resuming and deleting are naturally once (a second pause changes
+  nothing, a second delete finds nothing); a confirmed create is refused when a source of
+  that kind and name already exists.
+- **The audit.** `SourceService` now records every write as the person who made it, from
+  the console and an agent alike: `inbound.source.created`, `.renamed`, `.paused`,
+  `.resumed`, `.secret_rotated` and `.deleted`. A pause or resume that changes nothing
+  records nothing. No entry carries a secret.
 
 ## Evaluating it
 

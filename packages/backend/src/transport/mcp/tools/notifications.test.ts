@@ -228,7 +228,7 @@ describe('mocco_notifications_* (pglite, over HTTP)', () => {
 
     // A Vercel source receives one production deploy; its delivery to `deploys` failed.
     const inbound = createInboundHarness(t.db, { now, bus });
-    const created = await inbound.sources.create(mine, {
+    const created = await inbound.sources.create(mine, ada, {
       kind: InboundKinds.vercel,
       name: 'Acme web',
       secret: VERCEL_SECRET,

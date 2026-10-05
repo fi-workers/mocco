@@ -4,8 +4,9 @@
 // one domain service with the caller's own identity, and that service's checks are the
 // only authority. Composition is `runtime/mcp.ts`, above the domains.
 //
-// Two tools decide (`mocco_approvals_vote`, `mocco_gates_resume`) and five change
-// notification settings (`tools/notifications-write.ts`); each is gated by scope, by the
+// Two tools decide (`mocco_approvals_vote`, `mocco_gates_resume`), five change
+// notification settings (`tools/notifications-write.ts`) and four change webhook sources
+// (`tools/inbound-write.ts`); each is gated by scope, by the
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
 // here, before any tool sees it.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
@@ -14,6 +15,7 @@ import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
+import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
 import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
 import {
   registerNotificationWriteTools,
@@ -33,7 +35,8 @@ export type McpToolDeps = RunToolDeps &
   StatusToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
-  InboundToolDeps;
+  InboundToolDeps &
+  InboundWriteToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
 const SERVER_INFO = { name: 'mocco', version: '0.1.0' } as const;
@@ -56,6 +59,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);
+  registerInboundWriteTools(server, deps);
   return server;
 }
 

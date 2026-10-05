@@ -90,39 +90,40 @@ const sourcesRouter = router({
     .output(sourceWithSecretOutput)
     .mutation(async ({ ctx, input }) => {
       const { workspaceId, ...source } = input;
-      return await ctx.inbound.sources.create(workspaceId, source);
+      return await ctx.inbound.sources.create(workspaceId, ctx.session.user.id, source);
     }),
 
   rename: adminInboundProcedure
     .input(sourceScopedInput.extend({ name: inboundSourceNameSchema }))
     .output(sourceOutput)
     .mutation(async ({ ctx, input }) => ({
-      source: await ctx.inbound.sources.rename(input.workspaceId, input.sourceId, input.name),
+      source: await ctx.inbound.sources.rename(input.workspaceId, ctx.session.user.id, input.sourceId, input.name),
     })),
 
   pause: adminInboundProcedure
     .input(sourceScopedInput)
     .output(sourceOutput)
     .mutation(async ({ ctx, input }) => ({
-      source: await ctx.inbound.sources.pause(input.workspaceId, input.sourceId),
+      source: await ctx.inbound.sources.pause(input.workspaceId, ctx.session.user.id, input.sourceId),
     })),
 
   resume: adminInboundProcedure
     .input(sourceScopedInput)
     .output(sourceOutput)
     .mutation(async ({ ctx, input }) => ({
-      source: await ctx.inbound.sources.resume(input.workspaceId, input.sourceId),
+      source: await ctx.inbound.sources.resume(input.workspaceId, ctx.session.user.id, input.sourceId),
     })),
 
   rotateSecret: adminInboundProcedure
     .input(sourceScopedInput.extend({ secret: inboundSecretSchema.optional() }))
     .output(sourceWithSecretOutput)
     .mutation(
-      async ({ ctx, input }) => await ctx.inbound.sources.rotateSecret(input.workspaceId, input.sourceId, input.secret),
+      async ({ ctx, input }) =>
+        await ctx.inbound.sources.rotateSecret(input.workspaceId, ctx.session.user.id, input.sourceId, input.secret),
     ),
 
   delete: adminInboundProcedure.input(sourceScopedInput).mutation(async ({ ctx, input }) => {
-    await ctx.inbound.sources.delete(input.workspaceId, input.sourceId);
+    await ctx.inbound.sources.delete(input.workspaceId, ctx.session.user.id, input.sourceId);
     return { ok: true } as const;
   }),
 });

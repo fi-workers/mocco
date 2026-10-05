@@ -8,6 +8,7 @@ import {
   ingestKeyOf,
   insertWorkspace,
   signedDelivery,
+  insertActor,
 } from '@backend/domain/inbound/testing/harness';
 import { domainEvents, inboundReceipts } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -48,9 +49,12 @@ async function post(
 
 describe('inbound ingest route (pglite)', () => {
   let t: TestDb;
+  /** Who creates and changes sources: the audit chain names them. */
+  let actor: string;
 
   beforeEach(async () => {
     t = await createTestDb();
+    actor = await insertActor(t.db);
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -60,7 +64,10 @@ describe('inbound ingest route (pglite)', () => {
   const setup = async () => {
     const h = createInboundHarness(t.db);
     const workspaceId = await insertWorkspace(t.db, 'acme');
-    const { source, generatedSecret } = await h.sources.create(workspaceId, { kind: InboundKinds.github, name: 'r' });
+    const { source, generatedSecret } = await h.sources.create(workspaceId, actor, {
+      kind: InboundKinds.github,
+      name: 'r',
+    });
     return { ...h, ingestKey: ingestKeyOf(source.ingestUrl), secret: generatedSecret ?? '' };
   };
 

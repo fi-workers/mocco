@@ -2,6 +2,7 @@
 // import. Inbound sources store sealed secrets, so the domain is available only when
 // SECRETS_ENCRYPTION_KEYS is set: `getInbound()` returns undefined otherwise, and the
 // ingest route (503) and the inbound router (PRECONDITION_FAILED) self-gate on it.
+import { getAudit } from '@backend/domain/audit/instance';
 import { getEventBus } from '@backend/domain/events/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { InboundService } from '@backend/domain/inbound/InboundService';
@@ -12,6 +13,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
@@ -24,6 +26,7 @@ export interface InboundDomain {
 export interface InboundDomainDeps {
   box: Pick<SecretBox, 'seal' | 'open'>;
   bus: EventPublisher;
+  audit: Pick<AuditService, 'record'>;
   now: () => Date;
   /** The app's own origin, for ingest URLs. */
   baseOrigin: string;
@@ -34,7 +37,7 @@ export interface InboundDomainDeps {
 export function createInboundDomain(db: Db, deps: InboundDomainDeps): InboundDomain {
   const sources = new InboundSourceRepo(db);
   return {
-    sources: new SourceService({ sources, box: deps.box, baseOrigin: deps.baseOrigin }),
+    sources: new SourceService({ sources, box: deps.box, audit: deps.audit, baseOrigin: deps.baseOrigin }),
     inbound: new InboundService({
       sources,
       receipts: new InboundReceiptRepo(db),
@@ -54,6 +57,7 @@ export function getInbound(): InboundDomain | undefined {
     state.inbound ??= createInboundDomain(getDb(), {
       box: getSecretBox(),
       bus: getEventBus(),
+      audit: getAudit().audit,
       now: () => new Date(),
       baseOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
     });

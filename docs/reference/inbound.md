@@ -4,7 +4,7 @@ description: How Sentry, Vercel and GitHub deliver to a workspace through per-so
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, inbound, webhooks, notifications, events]
@@ -24,6 +24,8 @@ code_refs:
   - packages/backend/src/domain/inbound/repos/inbound-receipt.repo.ts
   - packages/backend/src/transport/ext/inbound.ts
   - packages/backend/src/transport/trpc/routers/inbound.ts
+  - packages/backend/src/transport/mcp/tools/inbound.ts
+  - packages/backend/src/transport/mcp/tools/inbound-write.ts
   - packages/common/src/inbound.ts
 ---
 
@@ -172,6 +174,24 @@ The router is `PRECONDITION_FAILED` when `SECRETS_ENCRYPTION_KEYS` is not set.
 `seq` and the `beforeSeq` / `nextCursor` cursor are digit strings (a bigserial), like the audit log.
 `beforeSeq` must be 1 to 19 digits within the Postgres bigint range; anything else is
 `BAD_REQUEST`.
+
+Every source write is recorded in the audit chain by `SourceService`, as the person who made
+it (the router passes the session's user id; the MCP tools pass the token's):
+`inbound.source.created`, `inbound.source.renamed` (with the old name), `inbound.source.paused`,
+`inbound.source.resumed`, `inbound.source.secret_rotated` and `inbound.source.deleted`, each
+with the source's kind and name and never its secret. Pausing a paused source, or resuming an
+active one, changes nothing and records nothing.
+
+## MCP
+
+Agents read sources with `mocco_inbound_sources_search` (`transport/mcp/tools/inbound.ts`) and
+change them with `mocco_inbound_sources_create`, `_pause`, `_resume` and `_delete`
+(`transport/mcp/tools/inbound-write.ts`), behind the `approvals:write` scope, the workspace's
+`agents_may_decide` opt-in, an owner or admin check (`WorkspaceScope.requireAdmin`) and a
+confirmation round trip. A secret never reaches the model: create adds only GitHub sources and
+drops the generated secret from its answer (the person rotates it in the console to get one),
+Sentry and Vercel sources are refused with a pointer to the console, and rotating stays
+console-only. See [Connect Mocco to your agent](../customer/mcp/connect.md).
 
 ## Tables
 

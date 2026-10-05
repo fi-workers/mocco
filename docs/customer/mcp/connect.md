@@ -86,7 +86,7 @@ secret or a token: a source says whether it has a secret, and the detailed answe
 the ingest URL your vendor is configured with, which is no credential on its own because
 every delivery must also be signed. To find out why a notification did not arrive, ask
 for the activity trace with the source or channel. They only read; connect channels,
-edit rules and add sources in the console or with the notification tools below. On a self-hosted server without
+edit rules and add sources in the console or with the changing tools below. On a self-hosted server without
 `SECRETS_ENCRYPTION_KEYS`, the source tool says webhook sources are not configured.
 
 **Deciding is separate and off by default.**
@@ -100,6 +100,9 @@ edit rules and add sources in the console or with the notification tools below. 
 | `mocco_notifications_rules_add` | Sends an event type (from one source or any, optionally filtered by its facts) to a channel |
 | `mocco_notifications_rules_remove` | Removes a rule, so its events stop going to its channel |
 | `mocco_notifications_presets_apply` | Adds a ready set of rules (`mocco`, `sentry`, `vercel`, `github`) to a channel, skipping any it has |
+| `mocco_inbound_sources_create` | Adds a GitHub webhook source; its signing secret is never shown to the agent |
+| `mocco_inbound_sources_pause` / `_resume` | Pauses a webhook source (its deliveries are refused) or resumes it |
+| `mocco_inbound_sources_delete` | Deletes a webhook source and the deliveries it received |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -121,8 +124,14 @@ notification settings, as in the console: a plain member is refused before being
 To find the channel to connect, `mocco_notifications_discord_channels_search` lists the
 text channels the Mocco bot sees in your server and which are connected already; it is a
 read, but owners and admins only, because it spends the shared bot's Discord calls.
-Installing the bot in a Discord server, removing a channel and webhook sources stay in the
-console for now.
+Installing the bot in a Discord server and removing a channel stay in the console for now.
+
+Webhook source changes follow the same rules, and a signing secret never passes through
+your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the
+secret Mocco generates for it: to get one to paste into GitHub, open **Notifications →
+Sources** in the console and rotate the source's secret. A Sentry or Vercel source needs
+the secret those services show you, so the tool refuses and points you to the console,
+where you paste it. Rotating a secret and renaming a source also stay in the console.
 
 The decision is then recorded exactly as if you had clicked it in the console. The request's
 or gate's own rules still apply: you need one of the roles it asks for, you cannot approve a
@@ -252,6 +261,8 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "cannot resume a gate on a run you triggered" | The gate forbids the person who started the run from releasing it. Someone else in its roles has to |
 | "not in a role authorized to resume" | Your roles do not cover this gate. Someone in one of the roles `mocco_runs_get` lists has to |
 | "Agents may not change notification settings in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "Agents may not change webhook sources in this workspace" | The same switch, for webhook sources |
+| "a secret must never pass through an agent" | Sentry and Vercel sources are added in the console, where you paste their secret |
 | "Only an owner or admin of workspace … can do this" | Notification settings are for owners and admins, in the console and here alike |
 | The browser reports an invalid scope when you allow voting | The app was connected before voting existed, and Mocco has not yet refreshed what it may ask for. It does within the hour; try again then |
 | The browser opens Mocco's sign-in and then lands on your workspaces instead of the client | The page was opened without the client's request in its address. Start the connection again from the client |
