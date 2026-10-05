@@ -17,7 +17,14 @@ const config: NextConfig = {
   // Greenfield projects get the best ROI; our strict react-hooks lint is the prerequisite.
   reactCompiler: true,
   // The app's sitemap lists the customer guides, read from docs/customer at request time.
-  outputFileTracingIncludes: { '/api/seo/sitemap': ['../../docs/customer/**/*.md'] },
+  outputFileTracingIncludes: {
+    '/api/seo/sitemap': ['../../docs/customer/**/*.md'],
+    // OG images (ADR 0030) render with the Pretendard fonts kept beside the renderer.
+    '/api/ext/**': ['../backend/src/domain/og/fonts/*.ttf'],
+  },
+  // The OG renderer (ADR 0030) loads from node_modules at runtime instead of being bundled: resvg is
+  // a native addon, and satori reads its wasm (yoga, harfbuzz) from beside its own files.
+  serverExternalPackages: ['@resvg/resvg-js', 'satori'],
   // Bridge Vercel's server-only VERCEL_ENV to the client so the EnvironmentRibbon
   // can mark preview/dev tabs. Empty off-Vercel (local) → the ribbon shows "development".
   // HELP_SITES_DOMAIN goes to the client too, so the console can link a help center's public site.
@@ -45,6 +52,8 @@ const config: NextConfig = {
     const beforeFiles = [
       // Every host's robots.txt and sitemap.xml (#363) — the app's and each help center's —
       // come from one route that looks at the host, so they go before the help rewrites.
+      // Signed OG images (ADR 0030), on every host so a help center's cards come from its domain.
+      { source: '/og/v1/:path*', destination: '/api/ext/og/v1/:path*' },
       { source: '/robots.txt', destination: '/api/seo/robots' },
       { source: '/sitemap.xml', destination: '/api/seo/sitemap' },
       // Agents (#366): llms.txt, llms-full.txt and every page's Markdown — by a `.md` URL, or
