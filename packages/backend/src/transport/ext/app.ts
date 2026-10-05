@@ -45,6 +45,7 @@ import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesyste
 import { getStorageDomain } from '@backend/domain/storage/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { DEFAULT_TICK_MAX_JOBS, getJobRunner } from '@backend/runtime/jobs';
+import { ensureEmbeddedProbe } from '@backend/runtime/probe';
 import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/transport/ext/discord';
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
@@ -418,6 +419,9 @@ export async function extHandler(request: Request): Promise<Response> {
             // Clamped so a misconfigured budget can't outlast the function (JobTiming).
             budgetMs: Math.min(env.JOBS_TICK_BUDGET_MS, JobTiming.maxTickBudgetMs),
             maxJobs: DEFAULT_TICK_MAX_JOBS,
+            beforeTick: () => {
+              ensureEmbeddedProbe();
+            },
           }
         : undefined,
     inbound: getInbound()?.inbound,

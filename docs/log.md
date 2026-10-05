@@ -152,6 +152,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Status embedded probe
+
+- The status reference gains "The embedded probe": `STATUS_PROBE_EMBEDDED` runs `@mocco/probe`'s loop inside a
+  single-node self-hosted server as the shared `embedded` location, calling `ProbeService` directly; how the location
+  is created, that it starts once per process with the first job tick, that it never runs on Vercel, what a second
+  process does, and how it stops. "Not built yet" drops the embedded probe. The env reference gains the status probe
+  variables. The SDK packages page notes the probe's `create-agent` entry, and the feature map's monitors row lists
+  the embedded probe as built.
+- Docs touched: `reference/status.md`, `reference/env.md`, `reference/sdk.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-probe-embedded` (#150, part 5)
+
 ## 2026-10-05 — Status probe agent
 
 - The status reference gains "The probe agent": the `@mocco/probe` loop (lease, run at the round time with jitter,

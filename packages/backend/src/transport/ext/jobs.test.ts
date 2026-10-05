@@ -1,5 +1,5 @@
 import { JobStatuses } from '@mocco/common/jobs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { defineJob, handleJob, JobHandlerRegistry } from '@backend/domain/jobs/handlers';
@@ -44,6 +44,16 @@ describe('job tick route (pglite)', () => {
   it('503s when no tick secret is configured', async () => {
     expect(await call(undefined)).toMatchObject({ status: 503 });
     expect(await call(tickDeps([]), { headers: { authorization: 'Bearer ' } })).toMatchObject({ status: 503 });
+  });
+
+  it('runs beforeTick (the embedded probe start) only on an authorized tick', async () => {
+    const beforeTick = vi.fn();
+    const deps = { ...tickDeps(['cron-secret']), beforeTick };
+
+    expect(await call(deps, { headers: { authorization: 'Bearer wrong' } })).toMatchObject({ status: 401 });
+    expect(beforeTick).not.toHaveBeenCalled();
+    expect(await call(deps, { headers: { authorization: 'Bearer cron-secret' } })).toMatchObject({ status: 200 });
+    expect(beforeTick).toHaveBeenCalledTimes(1);
   });
 
   it('401s without the bearer secret, or with a wrong one, and runs nothing', async () => {

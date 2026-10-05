@@ -15,6 +15,9 @@ export interface JobTickDeps {
   secrets: readonly string[];
   budgetMs: number;
   maxJobs: number;
+  /** Runs on each authorized tick before the runner: starts the embedded probe once per
+   * process on a self-hosted server (runtime/probe.ts); a no-op once it's running. */
+  beforeTick?: () => void;
 }
 
 const BEARER_SCHEME = 'Bearer';
@@ -42,6 +45,7 @@ export function createJobTickRoutes(tick: JobTickDeps | undefined): Hono {
     if (!isAuthorized(c.req.header('authorization'), tick.secrets)) {
       return c.text('unauthorized', 401);
     }
+    tick.beforeTick?.();
     const report = await tick.runner.tick({ budgetMs: tick.budgetMs, maxJobs: tick.maxJobs });
     return c.json(report, 200);
   });

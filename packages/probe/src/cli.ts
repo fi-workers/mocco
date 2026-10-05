@@ -1,14 +1,10 @@
+#!/usr/bin/env node
 // The `mocco-probe` executable: one location's agent. Configured by the environment (see
 // config.ts), logs one JSON line per event, and stops cleanly on SIGTERM or SIGINT.
-import packageJson from '../package.json' with { type: 'json' };
-
-import { addressPolicyFor } from './address-policy';
-import { ProbeAgent, type Logger } from './agent';
 import { ProbeClient } from './client';
 import { readConfig } from './config';
+import { createAgent, PROBE_VERSION, type Logger } from './create-agent';
 import { ProbeAuthError } from './errors';
-import { systemLookup } from './resolve';
-import { createRunCheck } from './run-check';
 
 const write = (level: string, message: string, fields?: Record<string, unknown>) => {
   process.stdout.write(`${JSON.stringify({ time: new Date().toISOString(), level, message, ...fields })}\n`);
@@ -29,15 +25,12 @@ async function main(): Promise<number> {
     write('error', 'Invalid configuration', { problems });
     return 2;
   }
-  const agentVersion = packageJson.version;
-  const agent = new ProbeAgent({
+  const agentVersion = PROBE_VERSION;
+  const agent = createAgent({
     api: new ProbeClient({ baseUrl: config.MOCCO_URL, token: config.MOCCO_PROBE_TOKEN, agentVersion }),
-    runCheck: createRunCheck({
-      resolver: { lookup: systemLookup, policy: addressPolicyFor(config.MOCCO_PROBE_HOSTED) },
-      userAgent: `mocco-probe/${agentVersion} (+https://mocco.dev)`,
-      now: () => new Date(),
-    }),
+    agentVersion,
     concurrency: config.MOCCO_PROBE_CONCURRENCY,
+    isHosted: config.MOCCO_PROBE_HOSTED,
     log,
   });
 

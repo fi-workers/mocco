@@ -34,6 +34,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@mocco/common": "workspace:*",
     "@mocco/flags-core": "workspace:*",
+    "@mocco/probe": "workspace:*",
     "@modelcontextprotocol/server": "2.2.0",
     "@octokit/app": "16.1.2",
     "@octokit/plugin-retry": "8.1.0",
