@@ -600,7 +600,7 @@ Monitors and locations are in `transport/mcp/tools/status-monitors.ts`. `mocco_s
 `MonitorService.list` (by name, paged with `after`; filtered by `states` and name text) and
 `mocco_status_monitors_get` reads `MonitorService.get` (the latest state changes, newest first, capped by `limit`; the
 open monitor incident; detailed adds each change's `reason` and the latest closed rounds), both behind `ProjectScope`.
-A monitor's `target` is the URL's host and port, or the TCP host and port: its URL credentials, path and query, its
+A monitor's `target` is `monitorTargetOf`, the same host and port alerts show: its URL credentials, path and query, its
 request body and its keyword never leave the server, because they can hold secrets. `mocco_status_locations_search`
 reads `LocationService.list` behind the checks of the workspace-level `locations` query (membership and the status
 product, `ProjectScope.resolveWorkspace`), which any member may read; it never returns a token hash. Nothing on MCP

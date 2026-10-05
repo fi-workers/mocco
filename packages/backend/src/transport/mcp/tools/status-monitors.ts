@@ -17,6 +17,7 @@ import { Products } from '@mocco/common/project';
 import { LocationKinds, MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { z } from 'zod';
 
+import { monitorTargetOf } from '@backend/domain/status/monitor-target';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 import {
   componentsOf,
@@ -104,15 +105,6 @@ export type SearchStatusMonitorsArgs = z.infer<typeof monitorsInput>;
 export type GetStatusMonitorArgs = z.infer<typeof monitorInput>;
 export type SearchStatusLocationsArgs = z.infer<typeof locationsInput>;
 
-/** What a monitor checks, without anything that could be a secret: an HTTP URL's host (and
- * port), never its credentials, path or query; a TCP host and port. */
-function targetOf(spec: MonitorSpec): string | null {
-  if (spec.kind === MonitorKinds.tcp) {
-    return `${spec.host}:${spec.port}`;
-  }
-  return URL.canParse(spec.url) ? new URL(spec.url).host : null;
-}
-
 /** The settings an agent may see: the HTTP method and the timeouts, never the URL, body or keyword. */
 const checkOf = (spec: MonitorSpec) =>
   spec.kind === MonitorKinds.http
@@ -154,7 +146,8 @@ function monitorOf(
     id: monitor.id,
     name: monitor.name,
     kind: monitor.kind,
-    target: targetOf(monitor.spec),
+    // Only the host and port: the URL can carry credentials or a token.
+    target: monitorTargetOf(monitor.spec),
     state: monitor.state,
     stateChangedAt: monitor.stateChangedAt,
     components: monitor.components.map(component => ({
@@ -239,8 +232,11 @@ export async function searchStatusMonitors(
 export async function getStatusMonitor(deps: StatusMonitorToolDeps, args: GetStatusMonitorArgs, userId: string) {
   const scope = await resolveStatusProject(deps, userId, args);
   const isDetailed = args.responseFormat === 'detailed';
-  const [{ monitor, stateChanges, recentVerdicts, openIncident }, components, locations] = await Promise.all([
-    deps.statusMonitors.get(scope, args.monitorId),
+  // The monitor first: it is the read that refuses a monitor outside the project. Started
+  // alongside the name lookups, a refusal would return while their queries were still running,
+  // and they would outlive the request.
+  const { monitor, stateChanges, recentVerdicts, openIncident } = await deps.statusMonitors.get(scope, args.monitorId);
+  const [components, locations] = await Promise.all([
     projectComponents(deps, scope),
     isDetailed ? locationsById(deps, scope.workspaceId) : undefined,
   ]);
