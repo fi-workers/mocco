@@ -40,6 +40,15 @@ export interface ObjectStore {
   ): Promise<UploadTarget>;
   /** The stable URL of a public object (behind the CDN). */
   publicUrl(key: string): string;
-  /** A URL that reads a private object until it expires. */
-  signedDownloadUrl(key: string, expiresInSeconds: number): Promise<string>;
+  /** A URL that reads a private object until it expires. With `downloadAs`, the read
+   * answers `Content-Disposition: attachment` with that filename (a safe one, see
+   * `safeFilename`), so a browser saves the file instead of rendering it. */
+  signedDownloadUrl(key: string, expiresInSeconds: number, opts?: DownloadOptions): Promise<string>;
 }
+
+export interface DownloadOptions {
+  downloadAs?: string;
+}
+
+/** The Content-Disposition of a download named `filename` (already a safe filename). */
+export const attachmentDisposition = (filename: string) => `attachment; filename="${filename}"`;

@@ -121,7 +121,7 @@ export interface MessengerMessage {
   author: 'contact' | 'operator' | 'system';
   authorName: string | null;
   body: string;
-  /** Screenshots, with download links that work for a few minutes. */
+  /** Screenshots and PDFs, with links that work for a few minutes. */
   attachments: MessengerAttachment[];
   createdAt: string;
 }
@@ -130,10 +130,13 @@ export interface MessengerAttachment {
   id: string;
   contentType: string;
   sizeBytes: number;
+  /** The name it was stored under (lowercased, spaces as dashes): `invoice-march.pdf`. */
+  filename: string;
+  /** For an image, a link to show; for a PDF, a download link (it never opens in a browser tab). */
   url: string;
 }
 
-export type MessengerAttachmentType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+export type MessengerAttachmentType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'application/pdf';
 
 /** `POST /v1/messenger/attachments`. */
 export interface MessengerAttachmentRequest {

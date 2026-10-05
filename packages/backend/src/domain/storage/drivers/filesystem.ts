@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import { StorageOperations, type StorageUrlSigner } from '@backend/domain/storage/signing';
 
-import type { ObjectHead, ObjectStore, UploadTarget } from '@backend/domain/storage/ports';
+import type { DownloadOptions, ObjectHead, ObjectStore, UploadTarget } from '@backend/domain/storage/ports';
 import type { Visibility } from '@mocco/common/storage';
 
 const META_SUFFIX = '.meta.json';
@@ -167,10 +167,20 @@ export class FilesystemObjectStore implements ObjectStore {
     return this.urlOf(key, {});
   }
 
-  async signedDownloadUrl(key: string, expiresInSeconds: number): Promise<string> {
-    const claims = { op: StorageOperations.get, key, expires: this.expiresAt(expiresInSeconds) };
+  async signedDownloadUrl(key: string, expiresInSeconds: number, opts: DownloadOptions = {}): Promise<string> {
+    const claims = {
+      op: StorageOperations.get,
+      key,
+      expires: this.expiresAt(expiresInSeconds),
+      ...(opts.downloadAs !== undefined && { downloadAs: opts.downloadAs }),
+    };
     return await Promise.resolve(
-      this.urlOf(key, { op: claims.op, exp: String(claims.expires), sig: this.options.signer.sign(claims) }),
+      this.urlOf(key, {
+        op: claims.op,
+        exp: String(claims.expires),
+        ...(claims.downloadAs !== undefined && { dl: claims.downloadAs }),
+        sig: this.options.signer.sign(claims),
+      }),
     );
   }
 }

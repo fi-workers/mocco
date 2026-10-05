@@ -4,7 +4,7 @@ description: Let your app's signed-in users contact your team from inside the ap
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [customer, messenger, support, guide]
@@ -115,7 +115,7 @@ function Thread({ id }: { id: string }) {
 
 When a user deletes their account in your app, call `useMessenger().deleteMyData()`: it erases their conversations, messages and screenshots in Mocco and forgets them on the device. When someone signs in to your app, call `useMessenger().reidentify()` so the messenger opens their session. When the user signs out of your app, call `useMessenger().signOut()` so the next user starts fresh.
 
-To attach a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB; up to 3 per message), upload it first and send its id:
+To attach a screenshot (PNG, JPEG, WebP or GIF) or a PDF, up to 10 MB each and up to 3 per message, upload it first and send its id:
 
 ```tsx
 const messenger = useMessenger();
@@ -133,7 +133,9 @@ if (asset !== undefined) {
 }
 ```
 
-Messages come back with `attachments`, each with a `url` that works for a few minutes; show it with `<Image source={{ uri: attachment.url }} />`.
+A PDF works the same way with `contentType: 'application/pdf'` (from a document picker, for example). Declare the file's real type: Mocco reads the start of the file, and a message whose file isn't what it claims to be is refused and the file deleted.
+
+Messages come back with `attachments`, each with a `filename`, a `sizeBytes` and a `url` that works for a few minutes. Show an image with `<Image source={{ uri: attachment.url }} />`. A PDF's `url` is a download, so offer it as a file (its name and size) and open it with `Linking.openURL(attachment.url)` or save it, rather than showing it inline.
 
 To get a notification when your team replies while the app is closed, register the device's Expo push token after sign-in, and open the conversation when the user taps the notification:
 
@@ -183,7 +185,7 @@ The answer has a `sessionToken` (`mms_…`, valid 30 days) and the project's `ca
 | `POST /conversations/{id}/read` | `{ "seq": 5 }` once the user has seen up to that message |
 | `POST /push-tokens` | `{ "provider": "expo", "token": "ExponentPushToken[…]", "platform": "ios" }` so replies are pushed to the device; `DELETE /push-tokens` `{ "token": … }` on sign out |
 | `DELETE /me` | Erase the user and everything they wrote, for your app's "delete my account" |
-| `POST /attachments` | `{ "contentType": "image/png", "sizeBytes": 48213 }` → an `attachmentId` and an `upload` URL to `PUT` the bytes to; then list the id in `attachmentIds` when you start or reply |
+| `POST /attachments` | `{ "contentType": "image/png", "sizeBytes": 48213 }` (or `application/pdf`) → an `attachmentId` and an `upload` URL to `PUT` the bytes to; then list the id in `attachmentIds` when you start or reply |
 
 Generate a new `clientMessageId` for each message and reuse it if you retry: Mocco stores the message once, however many times the request arrives. A user can send 20 messages a minute and start 5 conversations an hour.
 
@@ -225,7 +227,11 @@ Screenshots the user attached show in the thread; select one to open it full siz
 
 ![A message with an attached screenshot in the conversation view](./images/messenger-attachment.png)
 
-When someone asks you to delete their data, choose **Erase user's data** in the side panel and confirm. Mocco deletes the user with every conversation, message and screenshot; it can't be undone, and the audit log records only that it happened.
+A PDF shows as a file with its name and size. Select it to download it; Mocco never opens a user's PDF in the browser, because a PDF can carry script.
+
+![A message with an attached PDF: the file's name and size, ready to download](./images/messenger-attachment-pdf.png)
+
+When someone asks you to delete their data, choose **Erase user's data** in the side panel and confirm. Mocco deletes the user with every conversation, message and attachment; it can't be undone, and the audit log records only that it happened.
 
 ![Erasing a user's data: the confirmation in the side panel](./images/messenger-erase.png)
 

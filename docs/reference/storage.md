@@ -19,6 +19,7 @@ code_refs:
   - packages/backend/src/domain/storage/drivers/filesystem.ts
   - packages/backend/src/domain/storage/config.ts
   - packages/backend/src/transport/ext/storage.ts
+  - packages/backend/src/domain/storage/content-bytes.ts
 ---
 
 # Object storage
@@ -52,13 +53,19 @@ Two-phase, so the bytes never pass through Mocco's functions:
 
 `putObject` stores bytes the server already has and records them `ready` at once. A product without a policy entry can't store anything.
 
+`completeUpload` trusts the declared content type once the store agrees with it, and the store only knows what the uploader sent. A product that serves uploads to other people also checks the bytes: `sniffContentType` (`content-bytes.ts`) reads the signature at the start of the file (PNG, JPEG, GIF, WebP, PDF) and the product deletes an object whose signature isn't its declared type. The help center does this for article images, the messenger for attachments.
+
+## Downloads
+
+`downloadUrl` answers a public object's stable URL or a private object's expiring signed one. `download(…, { asAttachment: true })` also answers the object's filename and signs the link to answer `Content-Disposition: attachment; filename="<name>"`, so a browser saves the file instead of rendering it. The messenger serves PDFs this way, because a PDF can carry script. On `s3` this is the presigned `response-content-disposition` override; on `filesystem` it is a signed `dl` parameter. Either way the disposition is part of the signature, so a link can't be stripped of it. A public object's stable URL can't carry it, so `asAttachment` refuses public objects.
+
 ## The filesystem route
 
-`GET /api/ext/internal/storage/<key>` serves a public object without a signature, and a private one only with a valid `op=get` signature that hasn't expired. A refused read is a 404, the same as a missing object, so keys can't be probed. `PUT` needs a valid `op=put` signature. The signature covers the key, the expiry, the content type, the size limit and the visibility, so a URL can't be reused for another key or changed to make the object public. The request's `content-type` must equal the signed one, and the body must fit the limit (`413` otherwise). Keys with `..` or other unsafe segments are refused. The HMAC key is `STORAGE_SIGNING_SECRET`, or one derived from `AUTH_SECRET`; a Vercel deploy without either can't build the filesystem driver.
+`GET /api/ext/internal/storage/<key>` serves a public object without a signature, and a private one only with a valid `op=get` signature that hasn't expired. A refused read is a 404, the same as a missing object, so keys can't be probed. `PUT` needs a valid `op=put` signature. The signature covers the key, the expiry, the content type, the size limit and the visibility, so a URL can't be reused for another key or changed to make the object public. The request's `content-type` must equal the signed one, and the body must fit the limit (`413` otherwise). Keys with `..` or other unsafe segments are refused. Every read answers `X-Content-Type-Options: nosniff`, and a signed `dl` adds the attachment disposition. The HMAC key is `STORAGE_SIGNING_SECRET`, or one derived from `AUTH_SECRET`; a Vercel deploy without either can't build the filesystem driver.
 
 ## Garbage collection
 
-`storage.gc` runs daily (registered only when a store is configured). It deletes the bytes of pending uploads older than 24 hours and marks them `deleted`, then drops the rows of objects deleted more than 7 days ago. It works in batches of 500, so a backlog drains over several runs.
+`storage.gc` runs daily (registered only when a store is configured). It deletes the bytes of pending uploads older than 24 hours and marks them `deleted`, then drops the rows of objects deleted more than 7 days ago. It works in batches of 500, so a backlog drains over several runs. It is product-agnostic: a messenger attachment that was reserved but never sent goes with it, and sending it later is refused.
 
 ## Errors
 

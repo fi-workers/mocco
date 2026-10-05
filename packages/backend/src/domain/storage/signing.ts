@@ -22,6 +22,8 @@ export interface SignedStorageClaims {
   maxBytes?: number;
   /** For `put`: the visibility the stored object gets. */
   visibility?: string;
+  /** For `get`: serve as a download with this filename. */
+  downloadAs?: string;
 }
 
 const canonical = (claims: SignedStorageClaims) =>
@@ -32,6 +34,8 @@ const canonical = (claims: SignedStorageClaims) =>
     claims.contentType ?? '',
     String(claims.maxBytes ?? ''),
     claims.visibility ?? '',
+    // Only when present, so a link signed without it keeps its signature.
+    ...(claims.downloadAs === undefined ? [] : [`dl:${claims.downloadAs}`]),
   ].join('\n');
 
 /** HMAC-SHA256 signer and verifier for storage URLs. */

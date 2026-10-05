@@ -190,6 +190,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
+## 2026-10-05 — Messenger PDF attachments and content sniffing
+
+- The messenger reference's Attachments section covers PDFs (served only as downloads), the bytes' signature check
+  on send, the `filename` on served attachments, that an attachment can't move across conversations or users,
+  and that unsent uploads go with `storage.gc` after 24 hours. The storage reference gains "Downloads"
+  (`download(…, { asAttachment })` and the signed disposition) and the shared `sniffContentType` check; the
+  feature map row lists PDFs and the signature check.
+- The customer guide says how to attach a PDF and that the inbox shows it as a file to download, with a
+  screenshot of the file chip.
+- Docs touched: `reference/messenger.md`, `reference/storage.md`, `reference/feature-map.md`,
+  `customer/messenger/contact-us.md`, `customer/messenger/images/messenger-attachment-pdf.png`, `log.md`
+- Source: branch `feat/messenger-pdf-attachments` (#200)
+
 ## 2026-10-05 — Help center /v1 reads and the SDK
 
 - The public API reference lists `GET /v1/help/site`, `/collections/{slug}` and `/articles/{id}` with their

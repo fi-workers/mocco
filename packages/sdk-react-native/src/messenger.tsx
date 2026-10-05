@@ -69,7 +69,7 @@ export function MessengerProvider({ client, children }: { client: MessengerClien
   return <MessengerContext.Provider value={client}>{children}</MessengerContext.Provider>;
 }
 
-/** The client, for actions the hooks don't cover: `attach` a screenshot, `registerPushToken`, `signOut` after the user signs out. */
+/** The client, for actions the hooks don't cover: `attach` a screenshot or PDF, `registerPushToken`, `signOut` after the user signs out. */
 export function useMessenger(): MessengerClient {
   const client = useContext(MessengerContext);
   if (client === null) {

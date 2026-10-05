@@ -9,7 +9,7 @@ import { Products } from '@mocco/common/project';
 import { Visibilities } from '@mocco/common/storage';
 
 import { HelpImageNotAnImageError, HelpStorageNotConfiguredError } from '@backend/domain/helpcenter/errors';
-import { sniffImageType } from '@backend/domain/helpcenter/image-bytes';
+import { sniffContentType } from '@backend/domain/storage/content-bytes';
 
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { ObjectOwner, StorageService } from '@backend/domain/storage/StorageService';
@@ -87,7 +87,7 @@ export class HelpImageService {
     const storage = this.requireStorage();
     const object = await storage.completeUpload(workspaceId, objectId, ownerOf(projectId));
     const bytes = await storage.read(workspaceId, objectId);
-    if (bytes === null || sniffImageType(bytes) !== object.contentType) {
+    if (bytes === null || sniffContentType(bytes) !== object.contentType) {
       await storage.delete(workspaceId, objectId);
       throw new HelpImageNotAnImageError(object.contentType);
     }

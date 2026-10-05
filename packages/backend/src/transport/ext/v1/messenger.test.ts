@@ -35,6 +35,7 @@ import {
   workspaces,
 } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+import { createStorageRoutes } from '@backend/transport/ext/storage';
 import { MessengerRateLimits } from '@backend/transport/ext/v1/messenger';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
@@ -42,10 +43,16 @@ import type { PublishInput } from '@backend/domain/events/EventBus';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { MessengerDomain } from '@backend/domain/messenger/compose';
 import type { V1Env } from '@backend/transport/ext/v1/middleware';
+import type { AttachmentDto } from '@mocco/common/messenger';
 
 const BASE = 'https://www.mocco.test/api/ext/v1/messenger';
 
 const jsonOf = async (response: Response) => (await response.json()) as Record<string, string>;
+
+const conversationOf = (answer: { body?: Record<string, never> }) =>
+  (answer.body as unknown as { conversation: { id: string } }).conversation.id;
+
+const PNG_DECLARED = { contentType: 'image/png', filename: 'Screen Shot.png' };
 
 describe('/v1/messenger (pglite)', () => {
   let t: TestDb;
@@ -58,6 +65,7 @@ describe('/v1/messenger (pglite)', () => {
   let key: string;
   let secret: string;
   let store: FilesystemObjectStore;
+  const signer = new StorageUrlSigner('test-signing-key');
 
   const call = async (method: string, path: string, opts: { token?: string; body?: unknown } = {}) => {
     const response = await app.fetch(
@@ -97,6 +105,15 @@ describe('/v1/messenger (pglite)', () => {
       }),
     );
 
+  const sendWith = async (token: string, conversationId: string, attachmentIds: string[]) =>
+    await call('POST', `/conversations/${conversationId}/messages`, {
+      token,
+      body: { body: 'x', clientMessageId: randomUUID(), attachmentIds },
+    });
+  /** Follow a served link through the filesystem driver's route. */
+  const fetchStored = async (url: string) =>
+    await new Hono().basePath('/api/ext').route('/', createStorageRoutes({ store, signer })).fetch(new Request(url));
+
   /** The storage key of an attachment's bytes. */
   const keyOf = async (attachmentId: string) => {
     const [row] = await t.db.select().from(messengerAttachments).where(eq(messengerAttachments.id, attachmentId));
@@ -121,7 +138,7 @@ describe('/v1/messenger (pglite)', () => {
     store = new FilesystemObjectStore({
       root: await mkdtemp(nodePath.join(tmpdir(), 'mocco-messenger-')),
       baseUrl: 'https://mocco.test/api/ext/internal/storage',
-      signer: new StorageUrlSigner('test-signing-key'),
+      signer,
     });
     const storage = new StorageService({ objects: new ObjectRepo(t.db), store });
     messenger = createMessengerDomain(t.db, {
@@ -534,15 +551,17 @@ describe('/v1/messenger (pglite)', () => {
     });
   });
 
-  describe('screenshots', () => {
+  describe('attachments', () => {
     const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const PDF = new TextEncoder().encode('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
     /** Reserve an attachment and upload `bytes` the way the client would PUT them. */
-    const attach = async (token: string, bytes = PNG) => {
-      const declared = { contentType: 'image/png', sizeBytes: PNG.length };
-      const reserved = await call('POST', '/attachments', {
-        token,
-        body: { ...declared, filename: 'Screen Shot.png' },
-      });
+    const attach = async (
+      token: string,
+      bytes = PNG,
+      declared: { contentType: string; filename: string } = PNG_DECLARED,
+      sizeBytes = bytes.length,
+    ) => {
+      const reserved = await call('POST', '/attachments', { token, body: { ...declared, sizeBytes } });
       expect(reserved.status).toBe(201);
       const { attachmentId, upload } = reserved.body as unknown as {
         attachmentId: string;
@@ -556,6 +575,8 @@ describe('/v1/messenger (pglite)', () => {
       await store.put(object?.key ?? '', bytes, { contentType: declared.contentType, visibility: 'private' });
       return { attachmentId, upload };
     };
+    const attachPdf = async (token: string, bytes = PDF) =>
+      await attach(token, bytes, { contentType: 'application/pdf', filename: 'Invoice March.pdf' });
 
     it('uploads a screenshot and serves it with the message that carries it', async () => {
       const token = await sessionFor('u1');
@@ -587,7 +608,15 @@ describe('/v1/messenger (pglite)', () => {
         messages: [
           {
             seq: 1,
-            attachments: [{ id: first.attachmentId, contentType: 'image/png', sizeBytes: 8, url: expect.any(String) }],
+            attachments: [
+              {
+                id: first.attachmentId,
+                contentType: 'image/png',
+                sizeBytes: 8,
+                filename: 'screen-shot.png',
+                url: expect.any(String),
+              },
+            ],
           },
           { seq: 2, attachments: [{ id: second.attachmentId }] },
         ],
@@ -644,7 +673,7 @@ describe('/v1/messenger (pglite)', () => {
       expect(afterwards.status).toBe(401);
     });
 
-    it("refuses another user's, an already used, a mis-uploaded or a non-image attachment", async () => {
+    it("refuses another user's, an already used, a mis-uploaded or a disallowed attachment", async () => {
       const minji = await sessionFor('minji');
       const jun = await sessionFor('jun');
       const { body } = await start(minji);
@@ -655,7 +684,7 @@ describe('/v1/messenger (pglite)', () => {
         token: minji,
         body: { body: 'one', clientMessageId: randomUUID(), attachmentIds: [used.attachmentId] },
       });
-      const short = await attach(minji, PNG.slice(0, 4));
+      const short = await attach(minji, PNG.slice(0, 4), undefined, PNG.length);
       const send = async (attachmentId: string) =>
         await call('POST', `/conversations/${conversationId}/messages`, {
           token: minji,
@@ -663,18 +692,157 @@ describe('/v1/messenger (pglite)', () => {
         });
 
       const answers = await Promise.all([send(juns.attachmentId), send(used.attachmentId), send(short.attachmentId)]);
-      const pdf = await call('POST', '/attachments', {
-        token: minji,
-        body: { contentType: 'application/pdf', sizeBytes: 10 },
-      });
-      const huge = await call('POST', '/attachments', {
-        token: minji,
-        body: { contentType: 'image/png', sizeBytes: 11 * 1024 * 1024 },
-      });
+      const reserve = async (contentType: string, sizeBytes = 10) =>
+        await call('POST', '/attachments', { token: minji, body: { contentType, sizeBytes } });
+      const refused = await Promise.all([
+        reserve('image/svg+xml'),
+        reserve('text/html'),
+        reserve('image/png', 11 * 1024 * 1024),
+        reserve('application/pdf', 10 * 1024 * 1024 + 1),
+      ]);
+      const allowed = await reserve('application/pdf', 10 * 1024 * 1024);
 
       expect(answers.map(answer => answer.status)).toEqual([400, 400, 400]);
       expect(answers[2]?.body).toMatchObject({ detail: expect.stringContaining('expected 8 bytes, got 4') });
-      expect([pdf.status, huge.status]).toEqual([400, 400]);
+      expect(refused.map(answer => answer.status)).toEqual([400, 400, 400, 400]);
+      expect(allowed.status).toBe(201);
+    });
+
+    it('takes a PDF and serves it only as a download, while a screenshot stays inline', async () => {
+      const token = await sessionFor('u1');
+      const pdf = await attachPdf(token);
+      const png = await attach(token);
+      const started = await call('POST', '/conversations', {
+        token,
+        body: {
+          body: 'My invoice',
+          clientMessageId: randomUUID(),
+          attachmentIds: [pdf.attachmentId, png.attachmentId],
+        },
+      });
+      const listed = await call('GET', `/conversations/${conversationOf(started)}/messages`, { token });
+      const [message] = (listed.body as unknown as { messages: { attachments: AttachmentDto[] }[] }).messages;
+      const served = new Map(message?.attachments.map(attachment => [attachment.contentType, attachment]));
+      const team = await messenger.inbox.get(workspaceId, projectId, conversationOf(started));
+      const pdfLink = served.get('application/pdf')?.url ?? '';
+      const [pdfRead, pngRead, stripped] = await Promise.all([
+        fetchStored(pdfLink),
+        fetchStored(served.get('image/png')?.url ?? ''),
+        fetchStored(pdfLink.replace(/&dl=[^&]*/u, '')),
+      ]);
+
+      expect(started.status).toBe(201);
+      expect(served.get('application/pdf')).toMatchObject({
+        id: pdf.attachmentId,
+        sizeBytes: PDF.length,
+        filename: 'invoice-march.pdf',
+      });
+      expect(pdfRead.status).toBe(200);
+      expect(pdfRead.headers.get('content-type')).toBe('application/pdf');
+      expect(pdfRead.headers.get('content-disposition')).toBe('attachment; filename="invoice-march.pdf"');
+      expect(pdfRead.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(new Uint8Array(await pdfRead.arrayBuffer())).toEqual(PDF);
+      expect(pngRead.status).toBe(200);
+      expect(pngRead.headers.get('content-disposition')).toBeNull();
+      // The download is part of the signature: a link stripped of it is refused.
+      expect(stripped.status).toBe(404);
+      expect(
+        team.messages[0]?.attachments.find(attachment => attachment.contentType === 'application/pdf'),
+      ).toMatchObject({ filename: 'invoice-march.pdf', url: expect.stringContaining('dl=invoice-march.pdf') });
+    });
+
+    it('refuses bytes that are not the declared type, and deletes them', async () => {
+      const token = await sessionFor('u1');
+      const conversationId = conversationOf(await start(token));
+      const html = new TextEncoder().encode('<html><script>alert(1)</script></html>');
+      const cases = [
+        await attach(token, PDF), // a PDF declared as a PNG
+        await attach(token, html), // HTML declared as a PNG
+        await attachPdf(token, PNG), // a PNG declared as a PDF
+        await attachPdf(token, html), // HTML declared as a PDF
+      ];
+      const keys = await Promise.all(cases.map(async ({ attachmentId }) => await keyOf(attachmentId)));
+
+      const answers = await Promise.all(
+        cases.map(async ({ attachmentId }) => await sendWith(token, conversationId, [attachmentId])),
+      );
+      const listed = await call('GET', `/conversations/${conversationId}/messages`, { token });
+
+      expect(answers.map(answer => answer.status)).toEqual([400, 400, 400, 400]);
+      expect(answers[0]?.body).toMatchObject({ detail: 'The uploaded file is not image/png' });
+      expect(answers[2]?.body).toMatchObject({ detail: 'The uploaded file is not application/pdf' });
+      expect(await Promise.all(keys.map(async objectKey => await store.get(objectKey)))).toEqual([
+        null,
+        null,
+        null,
+        null,
+      ]);
+      expect(await t.db.select().from(messengerAttachments)).toEqual([]);
+      // Nothing was sent: only the opening message is there.
+      expect((listed.body as unknown as { messages: unknown[] }).messages).toHaveLength(1);
+    });
+
+    it('never attaches one across conversations or users', async () => {
+      const minji = await sessionFor('minji');
+      const jun = await sessionFor('jun');
+      const first = conversationOf(await start(minji));
+      const second = conversationOf(await start(minji));
+      const junsConversation = conversationOf(await start(jun));
+      const used = await attachPdf(minji);
+      const unclaimed = await attachPdf(minji);
+
+      const inFirst = await sendWith(minji, first, [used.attachmentId]);
+      const answers = await Promise.all([
+        // Already in a message of the first conversation.
+        sendWith(minji, second, [used.attachmentId]),
+        sendWith(minji, first, [used.attachmentId]),
+        // Another user's, claimed or not, even in their own conversation.
+        sendWith(jun, junsConversation, [used.attachmentId]),
+        sendWith(jun, junsConversation, [unclaimed.attachmentId]),
+        // Nor into another user's conversation, whoever's attachment it is.
+        sendWith(minji, junsConversation, [unclaimed.attachmentId]),
+      ]);
+      const [stored] = await t.db
+        .select()
+        .from(messengerAttachments)
+        .where(eq(messengerAttachments.id, used.attachmentId));
+      const [message] = await t.db
+        .select()
+        .from(messengerMessages)
+        .where(eq(messengerMessages.id, stored?.messageId ?? ''));
+
+      expect(inFirst.status).toBe(201);
+      expect(answers.map(answer => answer.status)).toEqual([400, 400, 400, 400, 404]);
+      expect(message?.conversationId).toBe(first);
+      // The unclaimed one is still minji's to send.
+      const later = await sendWith(minji, second, [unclaimed.attachmentId]);
+      expect(later.status).toBe(201);
+    });
+
+    it('lets storage collect an upload nobody sent after 24 hours', async () => {
+      const token = await sessionFor('u1');
+      const conversationId = conversationOf(await start(token));
+      const reserved = await call('POST', '/attachments', {
+        token,
+        body: { contentType: 'application/pdf', sizeBytes: PDF.length, filename: 'never-sent.pdf' },
+      });
+      const { attachmentId } = reserved.body as unknown as { attachmentId: string };
+      const objectKey = await keyOf(attachmentId);
+      const ledger = new ObjectRepo(t.db);
+      const hoursLater = (hours: number) =>
+        new StorageService({ objects: ledger, store, now: () => new Date(Date.now() + hours * 60 * 60 * 1000) });
+      // The client uploads the bytes but never sends the message.
+      await store.put(objectKey, PDF, { contentType: 'application/pdf', visibility: 'private' });
+
+      const early = await hoursLater(23).collectGarbage();
+      const late = await hoursLater(25).collectGarbage();
+      const [object] = await t.db.select().from(objects).where(eq(objects.key, objectKey));
+      const sent = await sendWith(token, conversationId, [attachmentId]);
+
+      expect([early.abandoned, late.abandoned]).toEqual([0, 1]);
+      expect(object?.status).toBe('deleted');
+      expect(await store.get(objectKey)).toBeNull();
+      expect(sent.status).toBe(400);
     });
   });
 

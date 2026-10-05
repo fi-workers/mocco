@@ -12,7 +12,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-import type { ObjectHead, ObjectStore, UploadTarget } from '@backend/domain/storage/ports';
+import { attachmentDisposition } from '@backend/domain/storage/ports';
+
+import type { DownloadOptions, ObjectHead, ObjectStore, UploadTarget } from '@backend/domain/storage/ports';
 
 export interface S3ObjectStoreOptions {
   bucket: string;
@@ -122,9 +124,13 @@ export class S3ObjectStore implements ObjectStore {
     return `${this.options.publicBaseUrl}/${key}`;
   }
 
-  async signedDownloadUrl(key: string, expiresInSeconds: number): Promise<string> {
-    return await getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.options.bucket, Key: key }), {
-      expiresIn: expiresInSeconds,
+  async signedDownloadUrl(key: string, expiresInSeconds: number, opts: DownloadOptions = {}): Promise<string> {
+    // The response override is part of the signed query, so the link can't be stripped of it.
+    const command = new GetObjectCommand({
+      Bucket: this.options.bucket,
+      Key: key,
+      ...(opts.downloadAs !== undefined && { ResponseContentDisposition: attachmentDisposition(opts.downloadAs) }),
     });
+    return await getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
   }
 }

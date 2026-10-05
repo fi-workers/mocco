@@ -100,6 +100,12 @@ function mismatchOf(object: StoredObjectRow, head: ObjectHead | null): string | 
   return null;
 }
 
+/** The safe filename a key ends with (`keyOf` puts it last). */
+function filenameOfKey(key: string): string {
+  // eslint-disable-next-line sonarjs/null-dereference -- key is a string, never null
+  return key.split('/').at(-1) ?? 'file';
+}
+
 /** `pub/…` or `prv/…`, so a CDN or bucket policy can expose only the public prefix. */
 function keyOf(id: string, input: ObjectInput): string {
   const prefix = input.visibility === Visibilities.public ? 'pub' : 'prv';
@@ -270,13 +276,36 @@ export class StorageService {
   /** A URL to read a ready object: the stable CDN URL for public objects, an expiring
    * signed one for private objects. */
   async downloadUrl(workspaceId: string, objectId: string, expiresInSeconds = 300): Promise<string> {
+    const { url } = await this.download(workspaceId, objectId, { expiresInSeconds });
+    return url;
+  }
+
+  /**
+   * How to serve a ready object: its URL (as `downloadUrl`) and the safe filename it was
+   * stored under. With `asAttachment`, a private object's signed link answers
+   * `Content-Disposition: attachment`, so a browser saves the file instead of rendering
+   * it (a PDF can carry script); a public object's stable URL can't, so it is refused.
+   */
+  async download(
+    workspaceId: string,
+    objectId: string,
+    opts: { expiresInSeconds?: number; asAttachment?: boolean } = {},
+  ): Promise<{ url: string; filename: string }> {
     const object = await this.requireObject(workspaceId, objectId);
     if (object.status !== ObjectStatuses.ready) {
       throw new StoredObjectNotFoundError(objectId);
     }
-    return object.visibility === Visibilities.public
-      ? this.deps.store.publicUrl(object.key)
-      : await this.deps.store.signedDownloadUrl(object.key, expiresInSeconds);
+    const filename = filenameOfKey(object.key);
+    if (object.visibility === Visibilities.public) {
+      if (opts.asAttachment === true) {
+        throw new Error("A public object's stable URL can't be served as a download");
+      }
+      return { url: this.deps.store.publicUrl(object.key), filename };
+    }
+    const url = await this.deps.store.signedDownloadUrl(object.key, opts.expiresInSeconds ?? 300, {
+      ...(opts.asAttachment === true && { downloadAs: filename }),
+    });
+    return { url, filename };
   }
 
   /** The bytes of a ready object (bounded by its product's maxBytes), or null when the

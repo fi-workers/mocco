@@ -30,6 +30,7 @@ import { useSession } from '@frontend/lib/auth-client';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
+import { formatBytes } from '@frontend/lib/utils';
 
 import type {
   OtaAppDto,
@@ -418,9 +419,6 @@ export function HeadControls({
     </div>
   );
 }
-
-export const formatBytes = (bytes: number) =>
-  bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /** The pinned action of a promotion request (what the handler will apply). */
 const pinnedPromotionSchema = z.object({

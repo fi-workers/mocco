@@ -406,10 +406,12 @@ export class MessengerClient {
   }
 
   /**
-   * Upload a screenshot (PNG, JPEG, WebP or GIF, up to 10 MB) and return its id, to pass
-   * as `attachmentIds` when starting or continuing a conversation. In React Native, pass
-   * bytes (`new Uint8Array(await (await fetch(uri)).arrayBuffer())`): with a Blob, RN
-   * replaces the upload's Content-Type and the upload is refused.
+   * Upload a screenshot (PNG, JPEG, WebP or GIF) or a PDF, up to 10 MB, and return its
+   * id, to pass as `attachmentIds` when starting or continuing a conversation. The bytes
+   * must be the declared type: a file that only claims to be one is refused when the
+   * message is sent. In React Native, pass bytes
+   * (`new Uint8Array(await (await fetch(uri)).arrayBuffer())`): with a Blob, RN replaces
+   * the upload's Content-Type and the upload is refused.
    */
   async attach(input: {
     body: Blob | ArrayBuffer | Uint8Array<ArrayBuffer>;
