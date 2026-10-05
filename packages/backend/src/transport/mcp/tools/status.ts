@@ -1,5 +1,6 @@
 // `mocco_status_*` — what a project's status pages say now, which incidents are open (or
-// were), each incident's timeline, and the maintenance windows ahead. Read-only: opening
+// were), each incident's timeline and the deploys linked to it, and the maintenance windows
+// ahead (monitors and probe locations are in `status-monitors.ts`). Read-only: opening
 // an incident, posting an update, setting a component's status and scheduling
 // maintenance are things a person says to their customers, and a tool that does them
 // needs its own design pass.
@@ -20,11 +21,12 @@ import { StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 
 import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectScope';
+import type { CorrelationService } from '@backend/domain/status/CorrelationService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
-import type { IncidentSeverity, IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
+import type { IncidentRunDto, IncidentSeverity, IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
 import type { McpServer } from '@modelcontextprotocol/server';
 
 export interface StatusToolDeps {
@@ -32,22 +34,27 @@ export interface StatusToolDeps {
   statusPages: Pick<StatusPageService, 'listPages' | 'getPage'>;
   statusIncidents: Pick<IncidentService, 'list' | 'get'>;
   statusMaintenances: Pick<MaintenanceService, 'list'>;
+  /** The runs linked to an incident, for the detailed incident read. */
+  statusCorrelation: Pick<CorrelationService, 'list'>;
   projects: Pick<ProjectScope, 'resolve'>;
 }
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 50;
+export const MAX_LIMIT = 50;
 
-const projectArg = z
+export const projectArg = z
   .uuid()
   .optional()
   .describe('The project the status page belongs to. Omit it when the workspace has exactly one.');
 
-const responseFormatArg = (concise: string, detailed: string) =>
+export const responseFormatArg = (concise: string, detailed: string) =>
   z.enum(['concise', 'detailed']).default('concise').describe(`\`concise\` is ${concise}; \`detailed\` ${detailed}.`);
 
-const limitArg = z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT);
+export const limitArg = z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT);
 const beforeArg = z.string().optional().describe("Cursor: the previous answer's `nextBefore`, as it was given.");
+
+/** Who linked a run to an incident: Mocco's suggestion, or a person. */
+const LinkedBy = { mocco: 'mocco', person: 'person' } as const;
 
 /** Incidents still open, every incident, or those in one lifecycle status. */
 const IncidentFilters = { open: 'open', all: 'all', ...IncidentStatuses } as const;
@@ -96,7 +103,7 @@ const incidentInput = z.object({
   projectId: projectArg,
   responseFormat: responseFormatArg(
     'the incident, its affected components and every update, oldest first',
-    'adds the postmortem, who posted each update and what each affected component shows now',
+    "adds the postmortem, who posted each update, what each affected component shows now, and the deploys linked to it (Mocco's suggestions and a person's links)",
   ),
 });
 
@@ -123,8 +130,11 @@ export type SearchStatusIncidentsArgs = z.infer<typeof incidentsInput>;
 export type GetStatusIncidentArgs = z.infer<typeof incidentInput>;
 export type SearchStatusMaintenancesArgs = z.infer<typeof maintenancesInput>;
 
-const resolveStatusProject = async (deps: StatusToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
-  await deps.projects.resolve(userId, asked, Products.status);
+export const resolveStatusProject = async (
+  deps: Pick<StatusToolDeps, 'projects'>,
+  userId: string,
+  asked: Partial<ProjectInScope>,
+) => await deps.projects.resolve(userId, asked, Products.status);
 
 const pageSummary = (page: StatusPageRow) => ({ id: page.id, slug: page.slug, title: page.title });
 
@@ -158,7 +168,11 @@ async function onePage(deps: StatusToolDeps, scope: ProjectInScope, pageId: stri
 }
 
 /** Every component of these pages by id, with its name and the status it shows now. */
-async function componentsOf(deps: StatusToolDeps, scope: ProjectInScope, pageIds: readonly string[]) {
+export async function componentsOf(
+  deps: Pick<StatusToolDeps, 'statusPages'>,
+  scope: ProjectInScope,
+  pageIds: readonly string[],
+) {
   const read = await Promise.all([...new Set(pageIds)].map(async id => await deps.statusPages.getPage(scope, id)));
   return new Map(read.flatMap(({ components }) => components.map(component => [component.id, component] as const)));
 }
@@ -275,11 +289,34 @@ export async function searchStatusIncidents(deps: StatusToolDeps, args: SearchSt
   };
 }
 
+/** A run linked to an incident: why, how suspicious, who linked it, and the deploy it was. */
+const deployOf = (link: IncidentRunDto) => ({
+  runId: link.runId,
+  relation: link.relation,
+  score: link.score,
+  // Mocco suggests a link from the releases around the start; a person links any run.
+  linkedBy: link.linkedByUserId === null ? LinkedBy.mocco : LinkedBy.person,
+  linkedByUserId: link.linkedByUserId,
+  linkedAt: link.linkedAt,
+  run:
+    link.run === null
+      ? null
+      : {
+          state: link.run.state,
+          repo: link.run.repoFullName,
+          commitSha: link.run.commitSha,
+          finishedAt: link.run.finishedAt,
+        },
+});
+
 export async function getStatusIncident(deps: StatusToolDeps, args: GetStatusIncidentArgs, userId: string) {
   const scope = await resolveStatusProject(deps, userId, args);
   const { incident, updates, components: affected } = await deps.statusIncidents.get(scope, args.incidentId);
-  const { page, components } = await deps.statusPages.getPage(scope, incident.pageId);
   const isDetailed = args.responseFormat === 'detailed';
+  const [{ page, components }, deploys] = await Promise.all([
+    deps.statusPages.getPage(scope, incident.pageId),
+    isDetailed ? deps.statusCorrelation.list(scope, incident.id) : [],
+  ]);
   return {
     incident: {
       id: incident.id,
@@ -308,6 +345,7 @@ export async function getStatusIncident(deps: StatusToolDeps, args: GetStatusInc
       createdAt: update.createdAt,
       ...(isDetailed && { id: update.id, authorUserId: update.authorUserId }),
     })),
+    ...(isDetailed && { deploys: deploys.map(link => deployOf(link)) }),
   };
 }
 
@@ -386,7 +424,7 @@ export function registerStatusTools(server: McpServer, deps: StatusToolDeps): vo
     {
       title: 'Read a status incident',
       description:
-        'One status page incident: every update posted to it, oldest first, the components it affects and how badly, and whether it has a postmortem. Read-only.',
+        'One status page incident: every update posted to it, oldest first, the components it affects and how badly, and whether it has a postmortem; detailed adds the deploys linked to it, best suggestion first. Read-only.',
       inputSchema: incidentInput,
       annotations: { readOnlyHint: true },
     },

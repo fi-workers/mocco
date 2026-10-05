@@ -71,6 +71,9 @@ const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'inbound'> => ({
   statusPages: { listPages: refuse, getPage: refuse },
   statusIncidents: { list: refuse, get: refuse },
   statusMaintenances: { list: refuse },
+  statusMonitors: { list: refuse, get: refuse },
+  statusLocations: { list: refuse },
+  statusCorrelation: { list: refuse },
   notifications: {
     listGuilds: refuse,
     listGuildChannels: refuse,
@@ -84,7 +87,7 @@ const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'inbound'> => ({
   },
   notificationActivity: { list: refuse },
   scope,
-  projects: { resolve: refuse },
+  projects: { resolve: refuse, resolveWorkspace: refuse },
   settings: { agentsMayDecide: refuse },
   confirmations: undefined,
 });

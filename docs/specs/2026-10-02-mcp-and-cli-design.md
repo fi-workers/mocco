@@ -173,8 +173,11 @@ has several servers loaded.
 | `mocco_ota_version_policies_search` | Each store app's minimum, recommended and blocked versions |
 | `mocco_status_pages_get` | A status page's components and the status each shows now (derived) |
 | `mocco_status_incidents_search` | A project's incidents, open by default (status, severity, page, title text) |
-| `mocco_status_incidents_get` | One incident: its update timeline, affected components, postmortem |
+| `mocco_status_incidents_get` | One incident: its update timeline, affected components, postmortem, linked deploys |
 | `mocco_status_maintenances_search` | Maintenance windows, scheduled and in progress by default |
+| `mocco_status_monitors_search` | A project's monitors: target host, state, components (state, name text) |
+| `mocco_status_monitors_get` | One monitor: latest state changes, open monitor incident, latest rounds |
+| `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -326,9 +329,19 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    `MaintenanceService.list`), so a component's status is the one the service derives
    from the status set by hand, open incidents and maintenance in progress. A page is
    found among the project's own (`listPages`); the page read may leave it out when the
-   project has one, and the searches read every page unless one is named. Still to come:
-   declaring an incident and posting its updates, which are said to customers and need
-   their own design pass before an agent may do them.
+   project has one, and the searches read every page unless one is named.
+
+   The status reads then followed monitors, locations and deploy correlation
+   (*shipped*): `mocco_status_monitors_search` and `mocco_status_monitors_get` over
+   `MonitorService.list` / `get` behind `ProjectScope`, `mocco_status_locations_search`
+   over `LocationService.list` behind `ProjectScope.resolveWorkspace` (membership and the
+   status product, as the console's workspace-level `locations` query, which is not
+   admin-only), and the detailed `mocco_status_incidents_get` adds
+   `CorrelationService.list`. A monitor's spec can carry credentials in its URL or body,
+   so the tools show only its host and port, the method and the timeouts; a location's
+   token hash is never read out. Still to come: declaring an incident and posting its
+   updates, which are said to customers and need their own design pass before an agent
+   may do them, and any tool that changes a monitor or a location.
 
    The notification reads follow (*shipped*, issue #246 part 1):
    `mocco_notifications_channels_search`, `mocco_notifications_rules_search`,

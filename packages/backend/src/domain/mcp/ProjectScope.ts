@@ -31,6 +31,17 @@ export class ProjectScope {
   constructor(private readonly deps: ProjectScopeDeps) {}
 
   /**
+   * The workspace this call acts in, for a product's workspace-level reads (the console's
+   * workspace procedures that also require the product): membership as `WorkspaceScope`
+   * checks it, then `ProductNotEnabledError` when the product is off there.
+   */
+  async resolveWorkspace(userId: string, asked: string | undefined, product: Product): Promise<string> {
+    const workspaceId = await this.deps.workspaces.resolve(userId, asked);
+    await this.deps.products.assertEnabled(workspaceId, product);
+    return workspaceId;
+  }
+
+  /**
    * The workspace and project this call acts in, for `product`. Throws
    * `WorkspaceNotAllowedError` / `WorkspaceUnclearError` for the workspace,
    * `ProductNotEnabledError` when the product is off there, `ProjectNotFoundError` for a
