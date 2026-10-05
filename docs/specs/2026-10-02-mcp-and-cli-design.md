@@ -178,6 +178,8 @@ has several servers loaded.
 | `mocco_status_monitors_search` | A project's monitors: target host, state, components (state, name text) |
 | `mocco_status_monitors_get` | One monitor: latest state changes, open monitor incident, latest rounds |
 | `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
+| `mocco_help_articles_search` | A project's published help articles matching text (all or any word), or all in order; in a language where translated |
+| `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |

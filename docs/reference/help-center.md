@@ -96,6 +96,10 @@ Each article has a translation per offered language in `mocco_help_translations`
 
 Ranking: matched terms ×100, title matches ×10, text matches ×1. Each hit has a 140-character plain-text snippet around the first match in the text. Served at `/api/help/search` (public site, frontend) and `GET /v1/help/search` (`help:read`, publishable keys allowed; `q` up to 500 characters, `match=all|any`, `limit` up to 20); the SDK wraps the latter as `HelpClient.search` and `useHelpSearch` (`@mocco/react-native/messenger`).
 
+## MCP tools
+
+`transport/mcp/tools/help.ts` ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)) reads the same published content as `/v1/help`, behind `ProjectScope` with `Products.helpcenter` (membership, the product on, the project in that workspace, as `productProcedure` checks them). `mocco_help_articles_search` runs `searchInProject` with a query (`match` all or any, up to 20 hits; detailed adds the collection, section and snippet), or lists the published tree in order without one (paged with `after`). `mocco_help_articles_get` reads `articleInProject` by the short id or `{id}-{slug}`: concise is the first 600 characters of the Markdown (`isTruncated`), detailed the whole text. Drafts and unpublished articles read like ids that were never used, and another workspace's project like one that does not exist. Both are read-only; writing, publishing and translating stay in the console.
+
 ## Operator API
 
 The `help` tRPC router (`productProcedure(Products.helpcenter)`): `site`, `enable`, `updateSite`, `tree`, `createCollection`, `deleteCollection`, `createSection`, `deleteSection`, `createArticle`, `article`, `saveDraft`, `publish`, `unpublish`, `deleteArticle`, `history`, `restore`, `createImageUpload`, `completeImage`, `importBundle`, `translations`, `saveTranslation`, `retranslate`.

@@ -190,6 +190,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
+## 2026-10-05 — Agents can read the help center
+
+- The connect guide and the MCP spec list `mocco_help_articles_search` and `mocco_help_articles_get`; the help center
+  reference gains "MCP tools" (published content only, `ProjectScope` with the help center product, concise excerpt
+  vs detailed Markdown).
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/help-center.md`,
+  `log.md`
+- Source: branch `feat/mcp-help` (#216)
+
 ## 2026-10-05 — Help center /v1 reads and the SDK
 
 - The public API reference lists `GET /v1/help/site`, `/collections/{slug}` and `/articles/{id}` with their
