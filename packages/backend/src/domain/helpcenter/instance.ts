@@ -2,6 +2,8 @@
 import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { indexNowKey } from '@backend/domain/helpcenter/indexnow';
+import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { HttpHelpRevalidator } from '@backend/domain/helpcenter/revalidate-http';
 import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
@@ -30,6 +32,7 @@ export function getHelpDomain(): HelpDomain {
   state.help ??= createHelpDomain(getDb(), {
     audit: getAudit().audit,
     queue: getJobQueue(),
+    indexNow: helpIndexNowFromEnv(getDb(), env) !== undefined,
     ...(storage !== undefined && { storage }),
     ...(translator !== undefined && { translator }),
     ...(revalidator !== undefined && { revalidator }),
@@ -41,6 +44,12 @@ export function getHelpDomain(): HelpDomain {
 export function helpRevalidateSecrets(): string[] {
   const env = getEnv();
   return [env.CRON_SECRET, env.JOBS_TICK_SECRET].filter(secret => secret !== undefined);
+}
+
+/** A help site's IndexNow key (#367), or null without AUTH_SECRET. */
+export function helpIndexNowKeyFor(slug: string): string | null {
+  const secret = getEnv().AUTH_SECRET;
+  return secret === undefined ? null : indexNowKey(secret, slug);
 }
 
 /** Where a help site is served (its custom domain, else its Mocco subdomain), or null. */

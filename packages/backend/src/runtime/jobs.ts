@@ -23,6 +23,7 @@ import { ApprovalVoteRepo } from '@backend/domain/governance/repos/approval-vote
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
+import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { createHelpHandlers } from '@backend/domain/helpcenter/jobs';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { InboundService } from '@backend/domain/inbound/InboundService';
@@ -69,6 +70,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
@@ -93,6 +95,8 @@ export interface JobRunnerRuntimeDeps {
   push?: PushSender;
   /** Translates help center articles; undefined without an LLM configured. */
   translator?: Translator;
+  /** Submits changed help pages to IndexNow; undefined outside production. */
+  helpIndexNow?: HelpIndexNow;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -167,6 +171,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         queue,
         ...(deps.translator !== undefined && { translator: deps.translator }),
       }),
+      ...(deps.helpIndexNow !== undefined && { indexNow: deps.helpIndexNow }),
     }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
     ...createReleaseHandlers({ releases: createReleaseService(db, { bus }) }),
@@ -236,6 +241,7 @@ export function getJobRunner(): JobRunner {
       storage: storageFromEnv(env),
       push: new ExpoPushSender({ accessToken: env.EXPO_ACCESS_TOKEN }),
       translator: translatorFromEnv(env),
+      helpIndexNow: helpIndexNowFromEnv(getDb(), env),
     });
   }
   return state.runner;

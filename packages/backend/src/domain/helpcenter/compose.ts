@@ -5,6 +5,7 @@ import { HelpImportService } from '@backend/domain/helpcenter/HelpImportService'
 import { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
+import { submitHelpArticleToIndexNow } from '@backend/domain/helpcenter/jobs';
 import { HelpRevalidation } from '@backend/domain/helpcenter/revalidate';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
@@ -31,6 +32,8 @@ export function createHelpDomain(
     translator?: Translator;
     /** Rebuilds public pages right after a change; without one they refresh within a minute. */
     revalidator?: HelpPageRevalidator;
+    /** Queue an IndexNow submission after each public change (production only, #367). */
+    indexNow?: boolean;
     now?: () => Date;
   },
 ): HelpDomain {
@@ -41,6 +44,15 @@ export function createHelpDomain(
   });
   const refresh = async (workspaceId: string, projectId: string, article: { shortId: string; slug: string }) => {
     await revalidation.article(workspaceId, projectId, article);
+    if (deps.indexNow === true && deps.queue !== undefined) {
+      // A background job: a failed or slow submission never holds up the change itself.
+      // One queued submission per article: changes in quick succession ride the same job.
+      await deps.queue.enqueue(
+        submitHelpArticleToIndexNow,
+        { workspaceId, projectId, shortId: article.shortId, slug: article.slug },
+        { dedupeKey: `${projectId}:${article.shortId}`, workspaceId, kick: true },
+      );
+    }
   };
   const helpTranslations = new HelpTranslationService({
     db,

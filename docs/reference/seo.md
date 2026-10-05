@@ -1,6 +1,6 @@
 ---
 title: Search engines and crawlers
-description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers), sitemap.xml, the metadata public pages carry, and llms.txt with each page's Markdown for agents.
+description: What Mocco serves to search engines, AI search and other crawlers on the app's host and on every help center's host — robots.txt (with a per-site switch for AI training crawlers), sitemap.xml, the metadata public pages carry, llms.txt with each page's Markdown for agents, and IndexNow submissions when a help article changes.
 type: reference
 status: active
 created: 2026-10-05
@@ -74,3 +74,11 @@ Coding agents and AI assistants read Markdown far more cheaply than HTML, so eve
 | `/<locale>/articles/<ref>.md` | 404 | The article's title and Markdown, as `article()` serves it |
 
 The page's own URL asked for with `Accept: text/markdown` returns the same Markdown, and `next.config.ts` sends `Vary: Accept` on guide and article pages so caches keep the two apart. HTML pages point at their Markdown with `<link rel="alternate" type="text/markdown">` (`SeoHead`'s `markdownUrl`; the `/docs` index points at `/llms.txt`). Relative links in a guide's Markdown (`./other.md`, `./images/x.png`) resolve against its `.md` URL to the same pages and images. Answers are cached by the CDN for an hour. Only published articles are reachable: everything goes through the public read (`HelpPublicReadService.forAgents` and `article`).
+
+## IndexNow
+
+When a help article changes publicly — published, changed, unpublished, deleted or newly translated — the same hook that rebuilds its pages also queues a `help.indexnow` job (one per article at a time, `dedupeKey` `<project>:<shortId>`). The job (`HelpIndexNow`, `domain/helpcenter/indexnow.ts`) submits the pages that change shows on — each language's home and the article in each language — on the site's canonical origin to `https://api.indexnow.org/indexnow` (`HttpIndexNowSender`), which forwards them to Bing (and through it ChatGPT search and Copilot), Naver, Yandex and Seznam. Google doesn't take part; the sitemap's `lastmod` is its signal. A refused submission throws and the job retries.
+
+Each site proves it owns its host with a key served at `/indexnow.txt` (rewritten to `pages/api/seo/indexnow.ts`; the app's host answers 404). The key is the first 32 hex characters of HMAC-SHA256(`AUTH_SECRET`, `mocco-indexnow:<slug>`), so nothing is stored and it stays the same across deploys.
+
+Submissions run only in production (`VERCEL_ENV=production`) with `AUTH_SECRET` and `HELP_SITES_DOMAIN` set (`helpIndexNowFromEnv`); anywhere else the job is never queued, so a preview or local deployment never advertises hosts that aren't the site's.

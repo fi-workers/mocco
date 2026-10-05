@@ -2,7 +2,7 @@
 // Markdown (#366): binds seoFile and agentFile to the env and the help center's public read.
 // The frontend's API routes call these with the request host.
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
-import { getHelpDomain } from '@backend/domain/helpcenter/instance';
+import { getHelpDomain, helpIndexNowKeyFor } from '@backend/domain/helpcenter/instance';
 import { helpSiteForHost, helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { getEnv } from '@backend/infra/config/env';
 import { agentFile } from '@backend/transport/seo/agents';
@@ -28,6 +28,7 @@ export async function seoFileFor(
     helpSiteForHost: requestHost => helpSiteForHost(requestHost, env),
     helpSiteOrigin: slug => helpSiteOrigin(slug, env),
     help: getHelpDomain().helpPublic,
+    indexNowKeyOf: helpIndexNowKeyFor,
   });
 }
 
