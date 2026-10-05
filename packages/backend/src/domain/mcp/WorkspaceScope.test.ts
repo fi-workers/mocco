@@ -70,4 +70,35 @@ describe('WorkspaceScope', () => {
     // Same shape either way: existence is not leaked through the difference.
     expect(real.replace('w1', 'X')).toBe(invented.replace('w9', 'X'));
   });
+
+  describe('requireAdmin', () => {
+    const ROLES = [
+      { workspaceId: 'w1', name: 'Acme', role: 'owner' },
+      { workspaceId: 'w2', name: 'Beta', role: 'member' },
+      { workspaceId: 'w3', name: 'Gamma', role: 'member, admin' },
+    ];
+
+    it('lets an owner, or an admin whose roles are stored comma-joined, through', async () => {
+      const scope = new WorkspaceScope({ memberships: memberships(ROLES) });
+
+      await expect(scope.requireAdmin('ada', 'w1')).resolves.toBeUndefined();
+      await expect(scope.requireAdmin('ada', 'w3')).resolves.toBeUndefined();
+    });
+
+    it('refuses a plain member, as the console does', async () => {
+      const scope = new WorkspaceScope({ memberships: memberships(ROLES) });
+
+      await expect(scope.requireAdmin('ada', 'w2')).rejects.toThrow(/Only an owner or admin of workspace w2/u);
+    });
+
+    it('refuses a non-member exactly like a workspace that does not exist', async () => {
+      const scope = new WorkspaceScope({ memberships: memberships(ROLES) });
+
+      const real = await messageOf(scope.requireAdmin('stranger', 'w1'));
+      const invented = await messageOf(scope.requireAdmin('stranger', 'w9'));
+
+      expect(real).toContain('No workspace w1');
+      expect(real.replace('w1', 'X')).toBe(invented.replace('w9', 'X'));
+    });
+  });
 });

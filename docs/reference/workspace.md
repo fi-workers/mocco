@@ -43,7 +43,7 @@ workspace, and a missing row means the defaults.
 
 | Setting | Default | Who changes it | Effect |
 |---|---|---|---|
-| `agents_may_decide` | `false` | owners and admins (`mcp.setAgentsMayDecide`, FORBIDDEN for a plain member) | Allows the deciding tools: voting on an approval and resuming a gate |
+| `agents_may_decide` | `false` | owners and admins (`mcp.setAgentsMayDecide`, FORBIDDEN for a plain member) | Allows the deciding tools: voting on an approval, resuming a gate, and changing notification channels and rules |
 
 - Any member can read the setting with `mcp.settings`. A non-member gets NOT_FOUND, as with
   every other workspace-scoped procedure.

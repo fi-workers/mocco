@@ -106,6 +106,14 @@ export const AuditActions = {
   statusLocationCreated: 'status.location.created',
   statusLocationTokenRotated: 'status.location.token_rotated',
   statusLocationDisabled: 'status.location.disabled',
+  /** A Discord channel was connected as a notification channel; the test message's result is in the payload. */
+  notificationChannelConnected: 'notification.channel.connected',
+  notificationChannelDeleted: 'notification.channel.deleted',
+  notificationChannelReenabled: 'notification.channel.reenabled',
+  notificationRuleAdded: 'notification.rule.added',
+  notificationRuleRemoved: 'notification.rule.removed',
+  /** A preset's rules were added to a channel (only when it added any). */
+  notificationPresetApplied: 'notification.preset.applied',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);
@@ -197,6 +205,12 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.statusLocationCreated]: 'Probe location created',
   [AuditActions.statusLocationTokenRotated]: 'Probe location token rotated',
   [AuditActions.statusLocationDisabled]: 'Probe location disabled',
+  [AuditActions.notificationChannelConnected]: 'Notification channel connected',
+  [AuditActions.notificationChannelDeleted]: 'Notification channel removed',
+  [AuditActions.notificationChannelReenabled]: 'Notification channel turned back on',
+  [AuditActions.notificationRuleAdded]: 'Notification rule added',
+  [AuditActions.notificationRuleRemoved]: 'Notification rule removed',
+  [AuditActions.notificationPresetApplied]: 'Notification rules added from a preset',
 };
 
 /**

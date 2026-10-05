@@ -186,6 +186,10 @@ has several servers loaded.
 |---|---|
 | `mocco_approvals_vote` | Approve or reject with a reason |
 | `mocco_gates_resume` | Resume a paused run, when the caller's role allows it |
+| `mocco_notifications_channels_connect` | Connect a Discord channel as a notification channel (owner or admin) |
+| `mocco_notifications_channels_reenable` | Turn a disabled notification channel back on (owner or admin) |
+| `mocco_notifications_rules_add` / `_remove` | Add or remove a routing rule (owner or admin) |
+| `mocco_notifications_presets_apply` | Add a preset's rules to a channel (owner or admin) |
 
 ### Search, not list
 
@@ -334,9 +338,12 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    source's latest receipt). The admin-only `guildChannels` has no tool. Answers are
    projected field by field, so no sealed secret, signing secret or bot token can reach
    them; the inbound services are absent without `SECRETS_ENCRYPTION_KEYS`, and the tool
-   says so. Still to come (part 2): creating a source, connecting a channel and editing
-   rules, which change where a team hears about production and so go behind the
-   workspace's opt-in and the confirmation round trip, after their own design pass.
+   says so.
+
+   The notification changes follow (*shipped*, issue #246 part 2; see *How the
+   notification changes are built* below): connecting a channel, turning one back on,
+   adding and removing rules and applying a preset. Still to come: webhook source
+   changes (create, pause, resume, delete), in their own slice.
 
 ### How the vote is built (slice 6b)
 
@@ -389,6 +396,37 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   next. A gate settled between the question and the answer is refused as not current.
 - **Finding the gate.** `mocco_runs_get` now puts the gate's `itemIndex` in `waitingOn`,
   so a concise read is enough to name the gate to resume.
+
+### How the notification changes are built (issue #246 part 2)
+
+- **Same locks.** `mocco_notifications_channels_connect`, `_channels_reenable`,
+  `_rules_add`, `_rules_remove` and `_presets_apply` go through `openDecision`: the
+  `approvals:write` scope (challenged per tool), the workspace's `agents_may_decide` opt-in
+  and a server able to sign. Reusing the scope keeps one consent line for "change things as
+  you"; roles stay the authority, and a separate scope can be split off later without
+  breaking a client, because the challenge names whatever the tool needs.
+- **Owners and admins.** The console's `adminNotificationProcedure` checks the session's
+  roles (`WorkspaceService.assertAdmin`). MCP has a token, not a session, so
+  `WorkspaceScope.requireAdmin` reads the same membership rows by user id with the same
+  rule (`domain/auth/roles.ts`, shared by both). A plain member is refused before being
+  asked anything.
+- **Confirmation.** `confirmThenApply` (`tools/deciding.ts`) is the round trip every
+  change shares. The first call reads what the change is about (the Discord server and
+  channel as the bot lists them, the channel and why it is off, the rule, the preset's
+  rules) and shows exactly what would change; the state records the tool and every
+  argument after defaults. The retry must echo the same change from the same tool, so a
+  confirmation cannot be replayed into another tool or another change.
+- **The call and the audit.** Only an accepted yes reaches `ChannelService`, with the
+  caller's id. The service now records every write in the audit chain, from the console
+  and an agent alike (`notification.channel.connected`, `.deleted`, `.reenabled`,
+  `notification.rule.added`, `.removed`, `notification.preset.applied`), so a change made
+  through an agent reads like one made in the console.
+- **Finding the Discord channel.** `mocco_notifications_discord_channels_search` lists the
+  server's text channels as the bot sees them and which are connected. It is a read for
+  owners and admins only, like the console's `guildChannels`, because it spends the shared
+  bot's Discord calls; the service paces it on the same rate-limit buckets.
+- **Left in the console.** Installing the bot in a server (a browser OAuth flow) and
+  deleting a channel.
 
 ## Evaluating it
 

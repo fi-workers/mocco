@@ -25,8 +25,8 @@ You sign in once in the browser and the client holds the token.
 https://www.mocco.club/api/mcp
 ```
 
-> The read tools are in, and so are the deciding tools: voting on an approval request and
-> resuming or rejecting a paused run. The plan is in the
+> The read tools are in, and so are the deciding tools: voting on an approval request,
+> resuming or rejecting a paused run, and changing where notifications go. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -86,7 +86,7 @@ secret or a token: a source says whether it has a secret, and the detailed answe
 the ingest URL your vendor is configured with, which is no credential on its own because
 every delivery must also be signed. To find out why a notification did not arrive, ask
 for the activity trace with the source or channel. They only read; connect channels,
-edit rules and add sources in the console. On a self-hosted server without
+edit rules and add sources in the console or with the notification tools below. On a self-hosted server without
 `SECRETS_ENCRYPTION_KEYS`, the source tool says webhook sources are not configured.
 
 **Deciding is separate and off by default.**
@@ -95,6 +95,11 @@ edit rules and add sources in the console. On a self-hosted server without
 |---|---|
 | `mocco_approvals_vote` | Approves or rejects a pending request as you, with an optional reason |
 | `mocco_gates_resume` | Resumes or rejects the gate a run is paused at, as you, with an optional reason |
+| `mocco_notifications_channels_connect` | Connects a Discord channel of your workspace's server as a notification channel; Mocco posts a test message |
+| `mocco_notifications_channels_reenable` | Turns a disabled notification channel back on, once the bot can reach it again |
+| `mocco_notifications_rules_add` | Sends an event type (from one source or any, optionally filtered by its facts) to a channel |
+| `mocco_notifications_rules_remove` | Removes a rule, so its events stop going to its channel |
+| `mocco_notifications_presets_apply` | Adds a ready set of rules (`mocco`, `sentry`, `vercel`, `github`) to a channel, skipping any it has |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -109,6 +114,16 @@ is what stops a page of text your agent read somewhere from turning into a produ
 deploy. A confirmation is good for five minutes and only for the decision it showed: change
 the decision or the reason and you are asked again.
 
+A notification change shows exactly what would change: the server and channel to connect,
+the channel to turn back on and why it is off, the event type, source, filter and channel
+of a rule to add or remove, or every rule of a preset. Only an owner or admin may change
+notification settings, as in the console: a plain member is refused before being asked.
+To find the channel to connect, `mocco_notifications_discord_channels_search` lists the
+text channels the Mocco bot sees in your server and which are connected already; it is a
+read, but owners and admins only, because it spends the shared bot's Discord calls.
+Installing the bot in a Discord server, removing a channel and webhook sources stay in the
+console for now.
+
 The decision is then recorded exactly as if you had clicked it in the console. The request's
 or gate's own rules still apply: you need one of the roles it asks for, you cannot approve a
 change you requested, or resume a run you triggered, when it forbids that, and you get one
@@ -121,8 +136,8 @@ where it stands.
   with your identity. An agent cannot approve what you could not approve.
 - **Accept an API key for a decision.** A key is a project, not a person, and an approval
   has to name someone who could have been asked. Keys get the read tools.
-- **Hide anything from the audit trail.** A vote or resume made through an agent appears in
-  the chain exactly like one made in the console, naming you.
+- **Hide anything from the audit trail.** A vote, a resume or a notification change made
+  through an agent appears in the chain exactly like one made in the console, naming you.
 
 ## Add it
 
@@ -236,6 +251,8 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |
 | "cannot resume a gate on a run you triggered" | The gate forbids the person who started the run from releasing it. Someone else in its roles has to |
 | "not in a role authorized to resume" | Your roles do not cover this gate. Someone in one of the roles `mocco_runs_get` lists has to |
+| "Agents may not change notification settings in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "Only an owner or admin of workspace … can do this" | Notification settings are for owners and admins, in the console and here alike |
 | The browser reports an invalid scope when you allow voting | The app was connected before voting existed, and Mocco has not yet refreshed what it may ask for. It does within the hour; try again then |
 | The browser opens Mocco's sign-in and then lands on your workspaces instead of the client | The page was opened without the client's request in its address. Start the connection again from the client |
 | Tools from the wrong workspace | You belong to several. Ask the agent to switch workspace, or pin one in the client config |

@@ -65,6 +65,19 @@ export class StatusPageUnclearError extends BadRequestError {
   }
 }
 
+/** No Discord server was named and the workspace has the bot in none, or in more than
+ * one. Names the choices, like `ProjectUnclearError`. */
+export class DiscordServerUnclearError extends BadRequestError {
+  constructor(readonly choices: readonly { id: string; name: string }[]) {
+    super(
+      choices.length === 0
+        ? 'No Discord server is connected to this workspace: an owner or admin adds the Mocco bot in the console, under Notifications'
+        : `Say which Discord server with guildId: ${namesOf(choices)}`,
+    );
+    this.name = 'DiscordServerUnclearError';
+  }
+}
+
 /** A tool's service is not composed on this server (inbound webhooks need
  * `SECRETS_ENCRYPTION_KEYS`). Says what is missing, so the agent stops retrying and can
  * tell whoever runs Mocco what to set. */

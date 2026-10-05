@@ -4,19 +4,17 @@
 // router are the egress filter and wire boundary (in-process consumers trusted).
 import { randomUUID } from 'node:crypto';
 
-import { WorkspaceMemberRoles, type WorkspaceCreateInput } from '@mocco/common/workspace';
 import { z } from 'zod';
 
 import { WorkspaceAdminRequiredError, WorkspaceNotFoundError } from '@backend/domain/auth/errors';
 import { isAPIError } from '@backend/domain/auth/provider';
+import { hasAdminRole, splitRoles } from '@backend/domain/auth/roles';
 
 import type { Provider } from '@backend/domain/auth/provider';
+import type { WorkspaceCreateInput } from '@mocco/common/workspace';
 
 /** The org plugin's active-member answer: a comma-separated role list. */
 const activeMemberRoleSchema = z.object({ role: z.string() });
-
-/** Workspace roles that may change workspace-level settings (the org plugin's owner/admin). */
-const ADMIN_ROLES: ReadonlySet<string> = new Set([WorkspaceMemberRoles.owner, WorkspaceMemberRoles.admin]);
 
 export class WorkspaceService {
   constructor(private readonly provider: Provider) {}
@@ -115,13 +113,7 @@ export class WorkspaceService {
       // Parsing at the boundary is what the conventions ask for anyway, and it does not
       // quietly degrade when the vendor's inference does.
       const { role } = activeMemberRoleSchema.parse(answer);
-      // sonarjs/null-dereference is a false positive: `role` and each part are non-nullable strings.
-      /* eslint-disable sonarjs/null-dereference */
-      return role
-        .split(',')
-        .map(part => part.trim())
-        .filter(part => part !== '');
-      /* eslint-enable sonarjs/null-dereference */
+      return splitRoles(role);
     } catch (error) {
       if (isAPIError(error)) {
         throw new WorkspaceNotFoundError(workspaceId, { cause: error });
@@ -137,7 +129,7 @@ export class WorkspaceService {
    */
   async assertAdmin(headers: Headers, workspaceId: string): Promise<void> {
     const roles = await this.callerRoles(headers, workspaceId);
-    if (roles.every(role => !ADMIN_ROLES.has(role))) {
+    if (!hasAdminRole(roles)) {
       throw new WorkspaceAdminRequiredError(workspaceId);
     }
   }

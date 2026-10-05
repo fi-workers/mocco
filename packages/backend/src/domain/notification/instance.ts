@@ -2,6 +2,7 @@
 // (the tRPC router and the Discord install routes). Lazy so builds don't need env at
 // import. The fan-out and the delivery job are composed elsewhere: the fan-out in
 // createEventBus (domain/events/subscriptions.ts), the job in runtime/jobs.ts.
+import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
 import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
@@ -47,6 +48,7 @@ export function getNotification(): Notification {
         rules,
         deliveries,
         rateLimits: new DiscordRateLimitRepo(db),
+        audit: getAudit().audit,
         discord: createDiscordApiFromEnv(env, { fetch, now }),
         installAvailable: oauth !== undefined,
         now,

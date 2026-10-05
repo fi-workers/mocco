@@ -21,6 +21,7 @@ code_refs:
   - packages/backend/src/transport/ext/discord.ts
   - packages/backend/src/transport/trpc/routers/notification.ts
   - packages/backend/src/transport/mcp/tools/notifications.ts
+  - packages/backend/src/transport/mcp/tools/notifications-write.ts
   - packages/backend/src/domain/notification/DeliveryService.ts
   - packages/backend/src/domain/notification/rules.ts
   - packages/backend/src/domain/notification/templates.ts
@@ -149,6 +150,14 @@ workspace's guild, channel or rule is `NOT_FOUND`. Outputs never carry `secret_s
 Errors: not found → `NOT_FOUND`; duplicate channel or rule → `CONFLICT`; unknown event type,
 Discord refusing a request, Discord not configured, or a stale install → `BAD_REQUEST`.
 
+Every write is recorded in the audit chain by `ChannelService`, as the person who made it
+(the router passes the session's user id; the MCP tools pass the token's):
+`notification.channel.connected` (with the server, the Discord channel and whether the test
+message went out), `notification.channel.deleted`, `notification.channel.reenabled`,
+`notification.rule.added` (with the event type, source and filter), `notification.rule.removed`
+and `notification.preset.applied` (only when the preset added a rule; applying it again adds
+nothing and records nothing).
+
 ### MCP
 
 Agents read notifications over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)) with
@@ -160,8 +169,18 @@ in `transport/mcp/tools/notifications.ts`. They are read-only, concise unless as
 caller's membership is checked through `WorkspaceScope`, which is all the console's member reads need; there is no
 tool for the admin-only `guildChannels`. Answers are built field by field, so `secret_sealed`, `external_id`,
 workspace ids and rendered messages never appear. A server that does not compose the services answers with a
-message saying so. Connecting a channel and editing rules are not on MCP yet: they will need the workspace's
-opt-in and the confirmation round trip that the deciding tools use. See
+message saying so.
+
+Agents change notification settings with `mocco_notifications_channels_connect` (`createChannel`),
+`mocco_notifications_channels_reenable` (`reenableChannel`), `mocco_notifications_rules_add` (`addRule`),
+`mocco_notifications_rules_remove` (`removeRule`) and `mocco_notifications_presets_apply` (`applyDefaultRules`) in
+`transport/mcp/tools/notifications-write.ts`. Each takes the deciding tools' locks: the `approvals:write` scope, the
+workspace's `agents_may_decide` opt-in, and a confirmation round trip (`confirmThenApply`) that shows exactly what
+would change and applies only that change, from that tool. Then the console's own rule: only an owner or admin,
+checked by `WorkspaceScope.requireAdmin` (the same membership rows and role rule as `assertAdmin`, read by user id
+because MCP has no session). `mocco_notifications_discord_channels_search` (`listGuilds` and `listGuildChannels`)
+lists the text channels to connect and which are connected; like `guildChannels` it is for owners and admins and
+spends the shared bot's rate-limited Discord calls. Installing the bot and deleting a channel stay in the console. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).
 
 ## Rules and filters

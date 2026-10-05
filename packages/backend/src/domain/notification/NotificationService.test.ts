@@ -18,7 +18,8 @@ import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
 import { NotificationJobKinds, NotificationSubscribers } from '@backend/domain/notification/constants';
 import { createTestChannelService } from '@backend/domain/notification/testing/channel-service';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
-import { domainEventDeliveries, jobs, notificationDeliveries } from '@backend/infra/db/schema';
+import { expectOne } from '@backend/infra/db/rows';
+import { domainEventDeliveries, jobs, notificationDeliveries, users } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 const T0 = new Date('2026-09-25T00:00:00.000Z');
@@ -105,7 +106,13 @@ describe('NotificationService fan-out (pglite)', () => {
     const workspaceId = await seedWorkspace(t.db);
     const channel = await seedChannel(t.db, workspaceId);
     const { service } = createTestChannelService(t.db);
-    await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco);
+    const admin = expectOne(
+      await t.db
+        .insert(users)
+        .values({ email: `${randomUUID()}@example.com` })
+        .returning(),
+    ).id;
+    await service.applyDefaultRules(workspaceId, admin, channel.id, RulePresets.mocco);
     // Governance events are covered above; these carry their message rendered when they happened.
     const renderedTypes = rulePresetRules.mocco
       .map(rule => rule.eventType)

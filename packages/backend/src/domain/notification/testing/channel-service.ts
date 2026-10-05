@@ -2,6 +2,8 @@
 // imported by production code). Shared by the service and router tests.
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { ChannelService } from '@backend/domain/notification/ChannelService';
 import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
@@ -37,6 +39,7 @@ export function createTestChannelService(db: Db, ...script: FakeReply[]) {
     rules: new RuleRepo(db),
     deliveries: new DeliveryRepo(db),
     rateLimits: new DiscordRateLimitRepo(db),
+    audit: new AuditService({ audit: new AuditRepo(db) }),
     discord,
     now: () => TEST_NOW,
   });
