@@ -157,7 +157,7 @@ export function renderEventMessage(event: DeliveredEvent, context: TemplateConte
       return runFailedMessage(context, event.payload);
     }
     default: {
-      // Inbound events (`sentry.*`, `vercel.*`, `github.*`), OTA and status events: the
+      // Inbound events (`sentry.*`, `vercel.*`, `github.*`) and product events (OTA, flags, messenger, status): the
       // message was rendered when the event was recorded. Parsed here as well, so this function never trusts a caller.
       const inbound: { payload: unknown } = event;
       return inboundMessagePayloadSchema.parse(inbound.payload).message;

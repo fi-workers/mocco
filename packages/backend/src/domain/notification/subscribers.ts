@@ -30,33 +30,15 @@ export function createNotificationService(deps: NotificationSubscriberDeps): Not
 }
 
 /**
- * Subscribe the fan-out to every event family a rule can name: governance (`gate.*`,
- * `run.*`), the inbound sources (`sentry.*`, `vercel.*`, `github.*`), OTA (`ota.*`) and status
- * monitors (`status.*`). A prefix with no catalog types yet simply receives nothing until its
- * types join the catalog.
+ * Subscribe the fan-out to every event family a rule can name — one subscriber per
+ * catalog family (`NotificationSubscribers`, whose type requires an entry for each).
  */
 export function registerNotificationSubscribers(bus: EventBus, deps: NotificationSubscriberDeps): void {
   const notifications = createNotificationService(deps);
-  const { gate, run, sentry, vercel, github, ota, status } = NotificationSubscribers;
-  bus.subscribe(gate.pattern, gate.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(run.pattern, run.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(sentry.pattern, sentry.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(vercel.pattern, vercel.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(github.pattern, github.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(ota.pattern, ota.name, async event => {
-    await notifications.handle(event);
-  });
-  bus.subscribe(status.pattern, status.name, async event => {
-    await notifications.handle(event);
-  });
+  // eslint-disable-next-line no-restricted-syntax -- registration is a side effect per entry, not a mapping
+  for (const { pattern, name } of Object.values(NotificationSubscribers)) {
+    bus.subscribe(pattern, name, async event => {
+      await notifications.handle(event);
+    });
+  }
 }
