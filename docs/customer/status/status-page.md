@@ -1,10 +1,10 @@
 ---
 title: Run a status page
-description: Create a status page for a project, list the parts of your service as components, declare incidents and post updates as they move from investigating to resolved, see the deploys around an incident, write a postmortem, and schedule maintenance that Mocco starts and ends on time.
+description: Create a status page for a project, list the parts of your service as components, declare incidents and post updates as they move from investigating to resolved, see the deploys around an incident, write a postmortem, schedule maintenance that Mocco starts and ends on time, and let a resumed deploy gate announce maintenance until its run finishes.
 type: guide
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, status, incidents, maintenance, guide]
@@ -106,6 +106,16 @@ Mocco starts each window at its start time and completes it at its end, checking
 
 To call a window off, choose **Cancel**; a window that is already in progress ends at once. Windows can't be edited: cancel the window and schedule a new one.
 
+## 9. Announce maintenance from a deploy gate
+
+A risky deploy can announce itself. Under **Gates that announce maintenance** on the **Maintenance** tab, choose **Add a gate** and give the name of a gate in your pipeline (for example `production`), the title the window shows, how many minutes the deploy usually takes, and the components it affects.
+
+From then on, when someone resumes a gate with that name on a run of a repository linked to this project, Mocco starts a window on the page right away. When the run finishes, the window completes. That happens however the run ends: if it fails, is canceled, or a later gate rejects it, the window still closes and says why. If the run is still going after the expected minutes, the window is marked **Overran** and Mocco sends a "Maintenance overran" alert to your notification rules (the Mocco preset includes it). The window stays open until the run finishes.
+
+![A deploy's window that overran, one that ended when its run failed, and the gate that announces them](./images/maintenance-from-runs.png)
+
+Each run's window links to the run. While it is in progress, the components show "Under maintenance" like any other window: a monitor that goes down on them opens its incident as a draft instead of publishing it, its alerts say "(during maintenance)", and the time doesn't count against uptime. Choose **Edit** to change a gate's title, minutes or components, or **Remove** to stop it announcing; windows it already started carry on.
+
 ## What gets recorded
 
-Creating and deleting pages, changing a component's reported status, declaring incidents, posting updates, changing affected components or the postmortem, linking and unlinking runs, and scheduling, canceling, starting and completing maintenance are all written to the workspace's [audit log](../start/audit-log.md).
+Creating and deleting pages, changing a component's reported status, declaring incidents, posting updates, changing affected components or the postmortem, linking and unlinking runs, scheduling, canceling, starting, completing and overrunning maintenance, and adding, changing and removing the gates that announce it are all written to the workspace's [audit log](../start/audit-log.md).

@@ -218,6 +218,9 @@ const maintenanceOf = (maintenance: MaintenanceRow & { componentIds: string[] })
   actualStart: isoOrNull(maintenance.actualStart),
   actualEnd: isoOrNull(maintenance.actualEnd),
   componentIds: maintenance.componentIds,
+  runId: maintenance.runId,
+  overranAt: isoOrNull(maintenance.overranAt),
+  endNote: maintenance.endNote,
   createdAt: iso(maintenance.createdAt),
   updatedAt: iso(maintenance.updatedAt),
 });

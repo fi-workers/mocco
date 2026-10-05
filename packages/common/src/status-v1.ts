@@ -204,6 +204,12 @@ export const statusV1MaintenanceSchema = z.object({
   actualStart: timestamp.nullable(),
   actualEnd: timestamp.nullable(),
   componentIds: z.array(z.uuid()),
+  /** The run whose resumed gate started the window, or null for one an operator scheduled. */
+  runId: z.uuid().nullable(),
+  /** When a run's window was still in progress past its expected end. */
+  overranAt: timestamp.nullable(),
+  /** Why a run's window ended early: the run failed, was canceled or was rejected. */
+  endNote: z.string().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
