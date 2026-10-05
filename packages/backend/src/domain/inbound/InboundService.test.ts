@@ -23,6 +23,7 @@ import {
   ingestKeyOf,
   insertWorkspace,
   signedDelivery,
+  insertActor,
 } from '@backend/domain/inbound/testing/harness';
 import { domainEvents, inboundReceipts, inboundSources, jobs } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -62,11 +63,14 @@ async function fillReceipts(
 
 describe('InboundService.ingest on pglite', () => {
   let t: TestDb;
+  /** Who creates and changes sources: the audit chain names them. */
+  let actor: string;
   let clock: Date;
   const now = () => clock;
 
   beforeEach(async () => {
     t = await createTestDb();
+    actor = await insertActor(t.db);
     clock = T0;
   });
   afterEach(async () => {
@@ -81,7 +85,7 @@ describe('InboundService.ingest on pglite', () => {
     const h = harness(options.bus);
     const workspaceId = options.workspace ?? (await insertWorkspace(t.db, `ws-${randomUUID()}`));
     const pasted = kind === InboundKinds.github ? undefined : `${kind}-secret-${randomUUID()}`;
-    const { source, generatedSecret } = await h.sources.create(workspaceId, {
+    const { source, generatedSecret } = await h.sources.create(workspaceId, actor, {
       kind,
       name: `${kind} source`,
       secret: pasted,
@@ -184,11 +188,11 @@ describe('InboundService.ingest on pglite', () => {
     expect(await inbound.ingest({ ingestKey: 'no-such-key', ...delivery })).toEqual({
       status: IngestStatuses.notFound,
     });
-    await sources.pause(workspaceId, source.id);
+    await sources.pause(workspaceId, actor, source.id);
     expect(await inbound.ingest({ ingestKey, ...delivery })).toEqual({ status: IngestStatuses.notFound });
     expect(await counts()).toEqual({ receipts: 0, events: 0, jobs: 0 });
 
-    await sources.resume(workspaceId, source.id);
+    await sources.resume(workspaceId, actor, source.id);
     expect(await inbound.ingest({ ingestKey, ...delivery })).toMatchObject({ status: IngestStatuses.accepted });
   });
 

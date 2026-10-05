@@ -251,6 +251,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/storage.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-static-snapshot` (#149)
 
+## 2026-10-05 — Agents can change webhook sources
+
+- The connect guide lists `mocco_inbound_sources_create`, `_pause`, `_resume` and `_delete` with the deciding tools
+  and says a signing secret never passes through the agent: GitHub sources are created without returning their
+  secret (rotate it in the console to get one), Sentry and Vercel sources are refused with a pointer to the console.
+  The MCP spec gains "How the webhook source changes are built" and marks issue #246's MCP surface complete. The
+  inbound reference gains the audit actions and an MCP section; the workspace reference says the opt-in covers
+  webhook sources too.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/inbound.md`,
+  `reference/workspace.md`, `log.md`
+- Source: branch `feat/mcp-inbound-sources-write`
+
 ## 2026-10-05 — Agents can change where notifications go
 
 - The connect guide lists `mocco_notifications_channels_connect`, `_channels_reenable`, `_rules_add`, `_rules_remove`

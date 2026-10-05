@@ -147,21 +147,21 @@ describe('mocco_inbound_sources_search (pglite, over HTTP)', () => {
 
     // GitHub (Mocco generated its secret), Sentry (a pasted one) and a paused Vercel.
     const inbound = createInboundHarness(t.db);
-    const createdGithub = await inbound.sources.create(mine, { kind: InboundKinds.github, name: 'Acme repo' });
+    const createdGithub = await inbound.sources.create(mine, bob, { kind: InboundKinds.github, name: 'Acme repo' });
     generatedSecret = createdGithub.generatedSecret ?? '';
     github = createdGithub.source;
-    ({ source: sentry } = await inbound.sources.create(mine, {
+    ({ source: sentry } = await inbound.sources.create(mine, bob, {
       kind: InboundKinds.sentry,
       name: 'Acme errors',
       secret: SENTRY_SECRET,
     }));
-    ({ source: vercel } = await inbound.sources.create(mine, {
+    ({ source: vercel } = await inbound.sources.create(mine, bob, {
       kind: InboundKinds.vercel,
       name: 'Acme web',
       secret: 'vercel-secret-do-not-leak',
     }));
-    await inbound.sources.pause(mine, vercel.id);
-    await inbound.sources.create(theirs, { kind: InboundKinds.sentry, name: 'Their secret source', secret: 'x' });
+    await inbound.sources.pause(mine, bob, vercel.id);
+    await inbound.sources.create(theirs, bob, { kind: InboundKinds.sentry, name: 'Their secret source', secret: 'x' });
     // Sources made in the same instant tie on created_at; space them out.
     await Promise.all(
       [github.id, sentry.id, vercel.id].map(async (id, index) => {

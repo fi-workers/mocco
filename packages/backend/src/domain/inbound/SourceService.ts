@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { InboundKinds, InboundSourceStatuses } from '@mocco/common/inbound';
 
 import { inboundSecretAad, INBOUND_INGEST_PATH } from '@backend/domain/inbound/constants';
@@ -10,8 +11,10 @@ import {
 } from '@backend/domain/inbound/errors';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { InboundSourceRepo, InboundSourceRow } from '@backend/domain/inbound/repos/inbound-source.repo';
 import type { SecretBox } from '@backend/infra/crypto/secret-box';
+import type { AuditAction } from '@mocco/common/audit';
 import type {
   InboundKind,
   InboundSourceCreateInput,
@@ -22,6 +25,8 @@ import type {
 export interface SourceServiceDeps {
   sources: InboundSourceRepo;
   box: Pick<SecretBox, 'seal'>;
+  /** Every change is recorded as the person who made it, from the console or an agent. */
+  audit: Pick<AuditService, 'record'>;
   /** The app's own origin (`https://www.mocco.club`); ingest URLs are built on it. */
   baseOrigin: string;
 }
@@ -32,6 +37,9 @@ export interface SourceWithSecret {
   /** The generated secret, shown once; null when the customer pasted theirs. */
   generatedSecret: string | null;
 }
+
+/** The audit subject of this service's entries. */
+const AUDIT_SUBJECT = 'inbound_source';
 
 /** 32 random bytes, base64url. */
 function randomToken(): string {
@@ -95,12 +103,29 @@ export class SourceService {
     };
   }
 
+  /** Record a change to a source, as the person who made it. Never carries a secret. */
+  private async record(
+    workspaceId: string,
+    actorUserId: string,
+    action: AuditAction,
+    source: Pick<InboundSourceRow, 'id' | 'kind' | 'name'>,
+    payload: Record<string, unknown> = {},
+  ): Promise<void> {
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action,
+      subjectType: AUDIT_SUBJECT,
+      subjectId: source.id,
+      payload: { kind: source.kind, name: source.name, ...payload },
+    });
+  }
+
   /** The URL a vendor delivers to. */
   ingestUrl(ingestKey: string): string {
     return `${this.deps.baseOrigin}${INBOUND_INGEST_PATH}/${ingestKey}`;
   }
 
-  async create(workspaceId: string, input: InboundSourceCreateInput): Promise<SourceWithSecret> {
+  async create(workspaceId: string, actorUserId: string, input: InboundSourceCreateInput): Promise<SourceWithSecret> {
     const { secret, generated } = resolveSecret(input.kind, input.secret);
     // The id is generated here so the AAD binding the sealed secret to its row is
     // known before the insert.
@@ -113,6 +138,7 @@ export class SourceService {
       ingestKey: randomToken(),
       secretSealed: this.deps.box.seal(secret, inboundSecretAad(id)),
     });
+    await this.record(workspaceId, actorUserId, AuditActions.inboundSourceCreated, row);
     return { source: this.toDto(row), generatedSecret: generated ? secret : null };
   }
 
@@ -130,36 +156,64 @@ export class SourceService {
     return this.toDto(row);
   }
 
-  async rename(workspaceId: string, sourceId: string, name: string): Promise<InboundSourceDto> {
+  async rename(workspaceId: string, actorUserId: string, sourceId: string, name: string): Promise<InboundSourceDto> {
+    const before = await mapNotFound(
+      sourceId,
+      async () => await this.deps.sources.getByIdInWorkspace(workspaceId, sourceId),
+    );
     const row = await mapNotFound(
       sourceId,
       // sonarjs/null-dereference is a false positive: `name` is a required string.
       // eslint-disable-next-line sonarjs/null-dereference
       async () => await this.deps.sources.update(workspaceId, sourceId, { name: name.trim() }),
     );
+    await this.record(workspaceId, actorUserId, AuditActions.inboundSourceRenamed, row, { from: before.name });
     return this.toDto(row);
   }
 
-  /** Pause (deliveries answer 404 and write nothing) or resume a source. */
-  async setStatus(workspaceId: string, sourceId: string, status: InboundSourceStatus): Promise<InboundSourceDto> {
+  /**
+   * Pause (deliveries answer 404 and write nothing) or resume a source. Setting the status
+   * it already has changes nothing, and nothing is recorded.
+   */
+  async setStatus(
+    workspaceId: string,
+    actorUserId: string,
+    sourceId: string,
+    status: InboundSourceStatus,
+  ): Promise<InboundSourceDto> {
+    const current = await mapNotFound(
+      sourceId,
+      async () => await this.deps.sources.getByIdInWorkspace(workspaceId, sourceId),
+    );
+    if (current.status === status) {
+      return this.toDto(current);
+    }
     const row = await mapNotFound(
       sourceId,
       async () => await this.deps.sources.update(workspaceId, sourceId, { status }),
     );
+    const action =
+      status === InboundSourceStatuses.paused ? AuditActions.inboundSourcePaused : AuditActions.inboundSourceResumed;
+    await this.record(workspaceId, actorUserId, action, row);
     return this.toDto(row);
   }
 
-  async pause(workspaceId: string, sourceId: string): Promise<InboundSourceDto> {
-    return await this.setStatus(workspaceId, sourceId, InboundSourceStatuses.paused);
+  async pause(workspaceId: string, actorUserId: string, sourceId: string): Promise<InboundSourceDto> {
+    return await this.setStatus(workspaceId, actorUserId, sourceId, InboundSourceStatuses.paused);
   }
 
-  async resume(workspaceId: string, sourceId: string): Promise<InboundSourceDto> {
-    return await this.setStatus(workspaceId, sourceId, InboundSourceStatuses.active);
+  async resume(workspaceId: string, actorUserId: string, sourceId: string): Promise<InboundSourceDto> {
+    return await this.setStatus(workspaceId, actorUserId, sourceId, InboundSourceStatuses.active);
   }
 
   /** Replace the secret: a new generated one for GitHub (returned once), the newly
    * pasted one otherwise. The ingest key stays, so the vendor URL does not change. */
-  async rotateSecret(workspaceId: string, sourceId: string, pasted: string | undefined): Promise<SourceWithSecret> {
+  async rotateSecret(
+    workspaceId: string,
+    actorUserId: string,
+    sourceId: string,
+    pasted: string | undefined,
+  ): Promise<SourceWithSecret> {
     const current = await mapNotFound(
       sourceId,
       async () => await this.deps.sources.getByIdInWorkspace(workspaceId, sourceId),
@@ -172,13 +226,19 @@ export class SourceService {
           secretSealed: this.deps.box.seal(secret, inboundSecretAad(sourceId)),
         }),
     );
+    await this.record(workspaceId, actorUserId, AuditActions.inboundSourceSecretRotated, row);
     return { source: this.toDto(row), generatedSecret: generated ? secret : null };
   }
 
   /** Delete a source and its receipts. Its ingest URL answers 404 from then on. */
-  async delete(workspaceId: string, sourceId: string): Promise<void> {
+  async delete(workspaceId: string, actorUserId: string, sourceId: string): Promise<void> {
+    const current = await mapNotFound(
+      sourceId,
+      async () => await this.deps.sources.getByIdInWorkspace(workspaceId, sourceId),
+    );
     if (!(await this.deps.sources.delete(workspaceId, sourceId))) {
       throw new InboundSourceNotFoundError(sourceId);
     }
+    await this.record(workspaceId, actorUserId, AuditActions.inboundSourceDeleted, current);
   }
 }

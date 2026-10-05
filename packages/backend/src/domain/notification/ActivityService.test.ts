@@ -10,7 +10,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
 import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
-import { createInboundHarness, ingestKeyOf, signedDelivery } from '@backend/domain/inbound/testing/harness';
+import {
+  createInboundHarness,
+  ingestKeyOf,
+  signedDelivery,
+  insertActor,
+} from '@backend/domain/inbound/testing/harness';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
 import { ActivityService } from '@backend/domain/notification/ActivityService';
@@ -38,6 +43,8 @@ const query = (overrides: Partial<Parameters<ActivityService['list']>[1]> = {}) 
 
 describe('ActivityService (pglite)', () => {
   let t: TestDb;
+  /** Who creates and changes sources: the audit chain names them. */
+  let actor: string;
   let bus: EventBus;
   let clock: number;
   // Every call is a second later, starting a day after the real clock: events are
@@ -50,6 +57,7 @@ describe('ActivityService (pglite)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
+    actor = await insertActor(t.db);
     clock = Date.now() + 86_400_000;
     const queue = new PostgresJobQueue({
       jobs: new JobRepo(t.db),
@@ -76,7 +84,7 @@ describe('ActivityService (pglite)', () => {
   const source = async (workspaceId: string, kind: InboundKind) => {
     const h = createInboundHarness(t.db, { now, bus });
     const pasted = kind === InboundKinds.github ? undefined : `${kind}-secret`;
-    const created = await h.sources.create(workspaceId, { kind, name: `${kind} source`, secret: pasted });
+    const created = await h.sources.create(workspaceId, actor, { kind, name: `${kind} source`, secret: pasted });
     const secret = created.generatedSecret ?? pasted ?? '';
     const ingest = async (patch?: (delivery: ReturnType<typeof signedDelivery>) => void) => {
       const delivery = signedDelivery(kind, secret);

@@ -114,6 +114,13 @@ export const AuditActions = {
   notificationRuleRemoved: 'notification.rule.removed',
   /** A preset's rules were added to a channel (only when it added any). */
   notificationPresetApplied: 'notification.preset.applied',
+  inboundSourceCreated: 'inbound.source.created',
+  inboundSourceRenamed: 'inbound.source.renamed',
+  inboundSourcePaused: 'inbound.source.paused',
+  inboundSourceResumed: 'inbound.source.resumed',
+  /** A source's signing secret was replaced; the secret itself is never recorded. */
+  inboundSourceSecretRotated: 'inbound.source.secret_rotated',
+  inboundSourceDeleted: 'inbound.source.deleted',
 } as const;
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 export const auditActionSchema = z.enum(Object.values(AuditActions) as [AuditAction, ...AuditAction[]]);
@@ -211,6 +218,12 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.notificationRuleAdded]: 'Notification rule added',
   [AuditActions.notificationRuleRemoved]: 'Notification rule removed',
   [AuditActions.notificationPresetApplied]: 'Notification rules added from a preset',
+  [AuditActions.inboundSourceCreated]: 'Webhook source added',
+  [AuditActions.inboundSourceRenamed]: 'Webhook source renamed',
+  [AuditActions.inboundSourcePaused]: 'Webhook source paused',
+  [AuditActions.inboundSourceResumed]: 'Webhook source resumed',
+  [AuditActions.inboundSourceSecretRotated]: 'Webhook source secret rotated',
+  [AuditActions.inboundSourceDeleted]: 'Webhook source removed',
 };
 
 /**

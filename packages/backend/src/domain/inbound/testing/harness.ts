@@ -5,11 +5,13 @@ import { randomBytes } from 'node:crypto';
 
 import { InboundKinds } from '@mocco/common/inbound';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { createInboundDomain } from '@backend/domain/inbound/instance';
 import { encode, hmacHex, patchFixture, readFixture } from '@backend/domain/inbound/testing/fixtures';
 import { SecretBox } from '@backend/infra/crypto/secret-box';
-import { workspaces } from '@backend/infra/db/schema';
+import { users, workspaces } from '@backend/infra/db/schema';
 
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -31,7 +33,20 @@ export function createInboundHarness(db: Db, options: InboundHarnessOptions = {}
   const now = options.now ?? (() => new Date());
   const box = createTestSecretBox();
   const bus = options.bus ?? createTestEventBus(db, now);
-  return { box, ...createInboundDomain(db, { box, bus, now, baseOrigin: TEST_ORIGIN }) };
+  const audit = new AuditService({ audit: new AuditRepo(db) });
+  return { box, audit, ...createInboundDomain(db, { box, bus, audit, now, baseOrigin: TEST_ORIGIN }) };
+}
+
+/** A person to make changes as: the audit chain names them, so they must exist. */
+export async function insertActor(db: Db): Promise<string> {
+  const [row] = await db
+    .insert(users)
+    .values({ email: `${randomBytes(6).toString('hex')}@example.com` })
+    .returning();
+  if (row === undefined) {
+    throw new Error('user insert returned nothing');
+  }
+  return row.id;
 }
 
 /** A bare workspace row (inbound tests need no members). */
