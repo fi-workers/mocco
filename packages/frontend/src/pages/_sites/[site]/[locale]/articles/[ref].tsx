@@ -67,6 +67,7 @@ export default function HelpArticlePage({ nav, article }: Props) {
         description: article.description,
         versions: article.versions,
         type: 'article',
+        hasMarkdown: true,
         jsonLd: origin => [
           breadcrumbLd(origin, [
             { name: nav.name, path: `/${nav.locale}` },

@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request and
 > resuming or rejecting a paused run. The plan is in the
-> [design spec](../../specs/2026-10-02-mcp-and-cli-design.md).
+> [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
 

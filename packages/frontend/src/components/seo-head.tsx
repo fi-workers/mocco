@@ -21,6 +21,8 @@ interface Props {
   /** False leaves out the share image (a customer's help site doesn't share Mocco's). */
   withImage?: boolean;
   noindex?: boolean;
+  /** Absolute URL of this page's Markdown, for agents (#366). */
+  markdownUrl?: string;
   jsonLd?: readonly Record<string, unknown>[];
 }
 
@@ -35,6 +37,7 @@ export default function SeoHead({
   alternates = [],
   withImage = true,
   noindex = false,
+  markdownUrl,
   jsonLd = [],
 }: Props) {
   const image = `${origin}${DEFAULT_SHARE_IMAGE.path}`;
@@ -54,6 +57,9 @@ export default function SeoHead({
           href={alternate.href}
         />
       ))}
+      {markdownUrl === undefined ? null : (
+        <link key="alternate:markdown" rel="alternate" type="text/markdown" href={markdownUrl} />
+      )}
       <meta key="og:type" property="og:type" content={type} />
       <meta key="og:site_name" property="og:site_name" content={siteName} />
       <meta key="og:title" property="og:title" content={title} />

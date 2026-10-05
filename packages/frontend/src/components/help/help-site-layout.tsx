@@ -32,6 +32,8 @@ export default function HelpSiteLayout({
     description: string;
     versions: readonly { locale: string; path: string }[];
     type?: 'website' | 'article';
+    /** The page has a Markdown version at `<path>.md` (articles). */
+    hasMarkdown?: boolean;
     jsonLd?: (origin: string) => readonly Record<string, unknown>[];
   };
   /** Keep the page out of search (the search results page: empty to a crawler). */
@@ -59,6 +61,7 @@ export default function HelpSiteLayout({
           locale={nav.locale}
           withImage={false}
           noindex={noindex}
+          {...(seo.hasMarkdown === true && { markdownUrl: `${origin}${seo.path}.md` })}
           alternates={
             seo.versions.length < 2
               ? []
