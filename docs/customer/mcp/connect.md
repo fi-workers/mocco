@@ -51,6 +51,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_status_incidents_search` | Which incidents are open (or were), newest first, by status, severity, page or title text |
 | `mocco_status_incidents_get` | One incident: every update posted to it, the components it affects and how badly, and its postmortem |
 | `mocco_status_maintenances_search` | Which maintenance windows are scheduled or in progress, and the components each covers |
+| `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
+| `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
+| `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
+| `mocco_inbound_sources_search` | Which Sentry, Vercel and GitHub webhook sources the workspace has, whether each accepts deliveries, and what became of the latest |
 
 Reads take a `responseFormat`: `concise` by default, `detailed` when the agent wants the
 commit and the gate requirements too. That keeps a search from spending your context on
@@ -75,6 +79,15 @@ page is turned on. `mocco_status_pages_get` reads one page: leave `pageId` out w
 project has one, or the tool names the pages to pick from. The incident and maintenance
 searches read every page of the project unless you name one. They only read; declare an
 incident, post an update and schedule maintenance in the console.
+
+The notification and webhook source tools read the whole workspace, with no project to
+pick, and answer for any member, as the console does. They never return a signing
+secret or a token: a source says whether it has a secret, and the detailed answer gives
+the ingest URL your vendor is configured with, which is no credential on its own because
+every delivery must also be signed. To find out why a notification did not arrive, ask
+for the activity trace with the source or channel. They only read; connect channels,
+edit rules and add sources in the console. On a self-hosted server without
+`SECRETS_ENCRYPTION_KEYS`, the source tool says webhook sources are not configured.
 
 **Deciding is separate and off by default.**
 

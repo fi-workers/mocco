@@ -12,13 +12,22 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
+import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
+import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
 import { registerOtaTools, type OtaToolDeps } from '@backend/transport/mcp/tools/ota';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
 
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
-export type McpToolDeps = RunToolDeps & ApprovalToolDeps & GateToolDeps & FlagToolDeps & OtaToolDeps & StatusToolDeps;
+export type McpToolDeps = RunToolDeps &
+  ApprovalToolDeps &
+  GateToolDeps &
+  FlagToolDeps &
+  OtaToolDeps &
+  StatusToolDeps &
+  NotificationToolDeps &
+  InboundToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
 const SERVER_INFO = { name: 'mocco', version: '0.1.0' } as const;
@@ -38,6 +47,8 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerFlagTools(server, deps);
   registerOtaTools(server, deps);
   registerStatusTools(server, deps);
+  registerNotificationTools(server, deps);
+  registerInboundTools(server, deps);
   return server;
 }
 

@@ -217,6 +217,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/storage.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-static-snapshot` (#149)
 
+## 2026-10-05 — Agents can read notifications
+
+- The connect guide lists `mocco_notifications_channels_search`, `mocco_notifications_rules_search`,
+  `mocco_notifications_activity_search` and `mocco_inbound_sources_search`, and says they read the whole workspace,
+  never return a secret, and that the source tool explains a server without `SECRETS_ENCRYPTION_KEYS`. The MCP spec
+  lists them as shipped (issue #246 part 1) with what is left: creating sources, connecting channels and editing
+  rules, behind the opt-in and the confirmation. The notifications reference gains an MCP section.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/notifications.md`,
+  `log.md`
+- Source: branch `feat/mcp-notifications-read`
+
 ## 2026-10-05 — Agents can read the status page
 
 - The connect guide lists `mocco_status_pages_get`, `mocco_status_incidents_search`, `mocco_status_incidents_get` and

@@ -4,7 +4,7 @@ description: The notification model (channels, rules, deliveries, Discord guilds
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-05
 confidence: medium
 owner: andrea
 tags: [reference, notifications, discord, events, jobs]
@@ -20,6 +20,7 @@ code_refs:
   - packages/backend/src/domain/notification/instance.ts
   - packages/backend/src/transport/ext/discord.ts
   - packages/backend/src/transport/trpc/routers/notification.ts
+  - packages/backend/src/transport/mcp/tools/notifications.ts
   - packages/backend/src/domain/notification/DeliveryService.ts
   - packages/backend/src/domain/notification/rules.ts
   - packages/backend/src/domain/notification/templates.ts
@@ -147,6 +148,21 @@ workspace's guild, channel or rule is `NOT_FOUND`. Outputs never carry `secret_s
 
 Errors: not found → `NOT_FOUND`; duplicate channel or rule → `CONFLICT`; unknown event type,
 Discord refusing a request, Discord not configured, or a stale install → `BAD_REQUEST`.
+
+### MCP
+
+Agents read notifications over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)) with
+`mocco_notifications_channels_search` (`listChannels`; by status or name), `mocco_notifications_rules_search`
+(`listRules`, every channel's unless one is named; by event type text or source) and
+`mocco_notifications_activity_search` (`ActivityService.list`: what each channel got from each event, or why
+nothing; by source, channel or receipt outcome, with the trace's two-stream cursor passed back as one opaque string)
+in `transport/mcp/tools/notifications.ts`. They are read-only, concise unless asked for `detailed`, and paged. The
+caller's membership is checked through `WorkspaceScope`, which is all the console's member reads need; there is no
+tool for the admin-only `guildChannels`. Answers are built field by field, so `secret_sealed`, `external_id`,
+workspace ids and rendered messages never appear. A server that does not compose the services answers with a
+message saying so. Connecting a channel and editing rules are not on MCP yet: they will need the workspace's
+opt-in and the confirmation round trip that the deciding tools use. See
+[Connect Mocco to your agent](../customer/mcp/connect.md).
 
 ## Rules and filters
 
