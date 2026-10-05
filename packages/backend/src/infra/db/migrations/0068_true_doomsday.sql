@@ -1,0 +1,10 @@
+ALTER TABLE "mocco_status_monitors" DROP CONSTRAINT "mocco_status_monitors_kind_check";--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "heartbeat_token_hash" text;--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "heartbeat_period_s" integer;--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "heartbeat_grace_s" integer;--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "last_ping_at" timestamp;--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "last_start_at" timestamp;--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD COLUMN "last_duration_ms" integer;--> statement-breakpoint
+CREATE UNIQUE INDEX "mocco_status_monitors_heartbeat_token_uq" ON "mocco_status_monitors" USING btree ("heartbeat_token_hash");--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD CONSTRAINT "mocco_status_monitors_heartbeat_check" CHECK (CASE WHEN "mocco_status_monitors"."kind" IN ('heartbeat') THEN "mocco_status_monitors"."heartbeat_token_hash" IS NOT NULL AND "mocco_status_monitors"."heartbeat_period_s" IS NOT NULL AND "mocco_status_monitors"."heartbeat_grace_s" IS NOT NULL AND "mocco_status_monitors"."heartbeat_period_s" >= 60 AND "mocco_status_monitors"."heartbeat_grace_s" >= 60 AND "mocco_status_monitors"."confirmations" = 1 AND "mocco_status_monitors"."recovery_confirmations" = 1 ELSE "mocco_status_monitors"."heartbeat_token_hash" IS NULL AND "mocco_status_monitors"."heartbeat_period_s" IS NULL AND "mocco_status_monitors"."heartbeat_grace_s" IS NULL AND "mocco_status_monitors"."last_ping_at" IS NULL AND "mocco_status_monitors"."last_start_at" IS NULL END);--> statement-breakpoint
+ALTER TABLE "mocco_status_monitors" ADD CONSTRAINT "mocco_status_monitors_kind_check" CHECK ("mocco_status_monitors"."kind" IN ('http','tcp','heartbeat'));

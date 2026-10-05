@@ -458,6 +458,7 @@ export async function extHandler(request: Request): Promise<Response> {
       },
       probe: { probes: getStatusDomain().statusProbes },
       monitors: { monitors: getStatusDomain().statusMonitors },
+      heartbeats: { heartbeats: getStatusDomain().statusHeartbeats },
     },
     og: getOgImages(),
     storage:

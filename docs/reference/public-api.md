@@ -4,7 +4,7 @@ description: The versioned public API on the ext app — publishable and secret 
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, platform, api, api-keys, rate-limiting]
@@ -58,7 +58,7 @@ Origins are compared normalised (`https://APP.acme.test:443` equals `https://app
 
 ## Rate limits
 
-Per key: 600 requests a minute for publishable keys and 1,200 for secret keys. Per client IP (hashed) and route, for routes without a key: 120 a minute. Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds). Over the limit, the answer is `429 rate_limited` with `Retry-After`.
+Per key: 600 requests a minute for publishable keys and 1,200 for secret keys. Per client IP (hashed) and route, for routes without a key: 120 a minute. Heartbeat pings have their own limits (per token and per client address, [below](#routes)). Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds). Over the limit, the answer is `429 rate_limited` with `Retry-After`.
 
 The default driver is Postgres (`mocco_rate_limit_counters`, one upsert per request, fixed windows, pruned hourly by `ratelimit.prune`). Hot cacheable reads (flag rulesets, OTA manifests, version checks) are served from the CDN and limited at the edge instead.
 
@@ -89,6 +89,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/flags/ruleset` | secret, `flags:read` | The key's environment as a flagd v0 document, with a strong `ETag` and `Cache-Control: private, no-cache`; `If-None-Match` with the current tag → `304` (the document isn't loaded); see [Feature flags](./flags.md#serving-server-sdks) |
 | `GET /v1/runs` | secret, `runs:read` | The runs of the repositories this key's project links, newest first, with the commit that produced each. Filters: `state`, `repoId`, `limit` (≤ 100), `before` (the previous page's last `createdAt`); the answer carries `nextBefore` when the page was full. `Cache-Control: private, no-cache` |
 | `POST /v1/monitors/{id}/check` | secret, `status:write` | An ad-hoc round of one of the key's project's monitors, e.g. from a pipeline step after a deploy: a round that isn't due yet is pulled to now, one already due stays. `202 { monitorId, roundAt }`; the verdict follows when the probes report, like any round. `404` for an unknown id or another project's monitor, `409 conflict` for a paused one; 10 a minute per key on top of the key's limit; see [Status: the deploy watch](./status.md#the-deploy-watch) |
+| `GET` or `POST /v1/ping/{token}` · `…/{token}/start` · `…/{token}/fail` · `…/{token}/{exitCode}` | none: the heartbeat's `mhb_` token in the path is the credential | A [heartbeat monitor](./status.md#heartbeat-monitors)'s job reports that it finished, started, failed, or exited with a code (0 to 255; 0 is a success). `200 OK` (text). A token of the wrong shape, one that matches no heartbeat (unknown, rotated, or its monitor deleted) and an exit code over 255 get the same `404` as a route that doesn't exist (plain text, not problem+json), so a ping can't tell them apart. A body is ignored. 5 every 5 seconds per token (counted before the token is looked up) and 600 a minute per client address; over either, `429 rate_limited` |
 | `GET /v1/runs/{id}` | secret, `runs:read` | One run with its steps and gates — enough to say why it is paused and on what. `404` for a run the project does not link, including one in the same workspace |
 | `GET /v1/ota/apps/{otaAppId}/manifest` | none (devices) | Expo Updates protocol v1; see [Mocco-hosted OTA](./ota-hosting.md#serving-devices) |
 | `GET /v1/ota/apps/{otaAppId}/assets/{hash}` | none (devices) | `302` to the verified asset bytes |

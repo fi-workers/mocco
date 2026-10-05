@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 
 import { createFlagServingRoutes } from '@backend/transport/ext/v1/flags';
+import { createHeartbeatPingRoutes } from '@backend/transport/ext/v1/heartbeat-ping';
 import { createHelpRoutes } from '@backend/transport/ext/v1/help';
 import { createMessengerRoutes } from '@backend/transport/ext/v1/messenger';
 import { cors, limitAnonymous, requireKey, type V1Deps, type V1Env } from '@backend/transport/ext/v1/middleware';
@@ -51,6 +52,11 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
 
   if (deps.monitors !== undefined) {
     app.route('/monitors', createMonitorCheckRoutes(deps, deps.monitors));
+  }
+
+  // Heartbeat pings (#153): the path's token is the credential, no key.
+  if (deps.heartbeats !== undefined) {
+    app.route('/ping', createHeartbeatPingRoutes(deps, deps.heartbeats));
   }
 
   if (deps.probe !== undefined) {

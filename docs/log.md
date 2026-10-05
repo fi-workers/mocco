@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -290,6 +290,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   The customer Home guide says so.
 - Docs touched: `reference/approvals.md`, `customer/start/workspace-and-projects.md`, `log.md`
 - Source: branch `feat/home-approval-subject-label` (#421)
+
+## 2026-10-06 — Heartbeat monitors
+
+- The status reference gains "Heartbeat monitors": the `heartbeat` kind and its columns (migration 0068, with the DB
+  check tying the token, period, grace and single confirmations to the kind), the `mhb_` token returned once and stored
+  as SHA-256, the `/v1/ping/{token}` routes with their 404 and limits, silence as the `next_round_at` deadline, why
+  confirmations are 1, what a paused heartbeat does with pings, what doesn't apply (leases, deploy watch, ad-hoc
+  checks, kind changes), and that rollups count its downtime from the state changes. Tables, State, Audit, tRPC, MCP
+  and "Not built yet" follow.
+- The public API reference lists the ping routes and their limits; the feature map's "Heartbeat monitors" row is
+  Prototype.
+- Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-heartbeat-monitors` (#153)
 
 ## 2026-10-05 — Status 90-day bars and monitor latency
 

@@ -12,6 +12,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
 import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
+import type { HeartbeatPingDeps } from '@backend/transport/ext/v1/heartbeat-ping';
 import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
 import type { MonitorCheckDeps } from '@backend/transport/ext/v1/monitors';
@@ -38,6 +39,8 @@ export interface V1Deps {
   probe?: ProbeProtocolDeps;
   /** Ad-hoc monitor checks (`status:write`); undefined leaves /v1/monitors unmounted. */
   monitors?: MonitorCheckDeps;
+  /** Heartbeat pings (the token in the path, no key); undefined leaves /v1/ping/:token unmounted. */
+  heartbeats?: HeartbeatPingDeps;
 }
 
 export interface V1Env {
