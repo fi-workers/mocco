@@ -4,6 +4,7 @@
 // the shared workspace procedure (it maps by the shared error bases).
 import {
   approvalKindSchema,
+  approvalListItemSchema,
   approvalRequestSchema,
   approvalStateSchema,
   approvalVoteInputSchema,
@@ -28,10 +29,10 @@ export const approvalRouter = router({
         subjectId: z.string().min(1).optional(),
       }),
     )
-    .output(z.object({ requests: z.array(approvalRequestSchema) }))
+    .output(z.object({ requests: z.array(approvalListItemSchema) }))
     .query(async ({ ctx, input }) => {
       const { workspaceId, ...filter } = input;
-      return { requests: await ctx.approvals.list(workspaceId, filter) };
+      return { requests: await ctx.approvals.listLabeled(workspaceId, filter) };
     }),
 
   get: protectedWorkspaceProcedure

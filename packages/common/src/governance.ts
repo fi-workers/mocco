@@ -175,6 +175,11 @@ export const approvalRequestSchema = z.object({
 });
 export type ApprovalRequestDto = z.infer<typeof approvalRequestSchema>;
 
+/** A request as the queue lists it: with a short label of its subject, named by the
+ * owning product (an environment's name, "production channel"); null when none names it. */
+export const approvalListItemSchema = approvalRequestSchema.extend({ subjectLabel: z.string().nullable() });
+export type ApprovalListItemDto = z.infer<typeof approvalListItemSchema>;
+
 /** A vote on an approval request — one per (request, user) by DB constraint. */
 export const approvalVoteSchema = z.object({
   id: z.uuid(),

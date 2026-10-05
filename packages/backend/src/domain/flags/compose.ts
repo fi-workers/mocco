@@ -57,6 +57,10 @@ export function createFlagsDomain(
   deps.approvals.registerHandler(FlagApprovalSubjects.changeGate, async request => {
     await flagGovernance.applyApprovedGate(request);
   });
+  deps.approvals.registerLabeler(
+    Object.values(FlagApprovalSubjects),
+    async (workspaceId, requests) => await flagGovernance.labelApprovalSubjects(workspaceId, requests),
+  );
   const flagTelemetry = new FlagTelemetryService({ db });
   const staleFlags = new StaleFlagDetector({ db, ...deps });
   return { flags, flagGovernance, flagKillSwitch, flagTelemetry, staleFlags };

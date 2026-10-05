@@ -42,6 +42,12 @@ const loadTemplate = async () => {
   return new Blob([await readFile(path)]);
 };
 
+export interface TestDbOptions {
+  /** Called with every statement the db runs, for tests that pin how many queries a read
+   * takes. The db boots already migrated, so no migration statements reach it. */
+  onQuery?: (query: string) => void;
+}
+
 /**
  * Docker-free in-memory Postgres (WASM, PGlite) + Drizzle. Test-only.
  * Each instance is a fresh isolated DB, so creating a new one per test keeps state from mixing.
@@ -49,10 +55,20 @@ const loadTemplate = async () => {
  * (the template is built from the real migrations every run) for about a fifth of the CPU,
  * which keeps beforeEach hooks well inside their timeout on a loaded machine.
  */
-export async function createTestDb() {
+export async function createTestDb(options: TestDbOptions = {}) {
   cache.template ??= loadTemplate();
   const client = await PGlite.create({ loadDataDir: await cache.template });
-  const db = drizzle(client, { schema });
+  const { onQuery } = options;
+  const db = drizzle(client, {
+    schema,
+    ...(onQuery !== undefined && {
+      logger: {
+        logQuery: (query: string) => {
+          onQuery(query);
+        },
+      },
+    }),
+  });
   return {
     db,
     schema,

@@ -31,6 +31,16 @@ export type ApprovalRequestRow = Awaited<ReturnType<ApprovalRequestRepo['getById
  * request, but a failed apply may be retried by the owning domain. */
 export type ApprovalHandler = (request: ApprovalRequestRow) => Promise<void>;
 
+/** Names the subjects of a batch of requests for people reading the queue (an
+ * environment, a channel): request id → label, leaving out any it can't name. It reads
+ * the whole batch in one query, never one per request, so a listing stays at a fixed
+ * number of queries however many requests it holds. Bound by the owning product's
+ * composition root, like a handler. */
+export type SubjectLabeler = (
+  workspaceId: string,
+  requests: readonly ApprovalRequestRow[],
+) => Promise<ReadonlyMap<string, string>>;
+
 export interface ApprovalServiceDeps {
   requests: ApprovalRequestRepo;
   votes: ApprovalVoteRepo;
@@ -79,6 +89,8 @@ export class ApprovalService {
   private readonly handlers: Map<string, ApprovalHandler>;
 
   private readonly rejectionListeners = new Map<string, ApprovalHandler>();
+
+  private labelers = new Map<string, SubjectLabeler>();
 
   constructor(private readonly deps: ApprovalServiceDeps) {
     this.handlers = new Map(deps.handlers);
@@ -149,6 +161,16 @@ export class ApprovalService {
     this.rejectionListeners.set(subjectType, listener);
   }
 
+  /** Bind the labeler that names the subjects of these subject types. One labeler may
+   * cover several types (they share its one query); each type gets at most one. */
+  registerLabeler(subjectTypes: readonly string[], labeler: SubjectLabeler): void {
+    const taken = subjectTypes.find(subjectType => this.labelers.has(subjectType));
+    if (taken !== undefined) {
+      throw new Error(`A subject labeler for ${taken} is already registered`);
+    }
+    this.labelers = new Map([...this.labelers, ...subjectTypes.map(subjectType => [subjectType, labeler] as const)]);
+  }
+
   /** Open a request. Requirements are pinned here; a later policy edit never rewrites it. */
   async request(workspaceId: string, input: ApprovalRequestInput) {
     const created = await this.deps.requests.create({
@@ -183,6 +205,25 @@ export class ApprovalService {
   /** The workspace's requests, newest first. */
   async list(workspaceId: string, filter: ApprovalRequestFilter = {}) {
     return await this.deps.requests.list(workspaceId, filter);
+  }
+
+  /** The workspace's requests, newest first, each with its subject's label (null when no
+   * labeler names it). One query for the requests, then one per labeler with requests
+   * to name, in parallel — never one per request. */
+  async listLabeled(workspaceId: string, filter: ApprovalRequestFilter = {}) {
+    const requests = await this.deps.requests.list(workspaceId, filter);
+    const labelerOf = (request: ApprovalRequestRow) => this.labelers.get(request.subjectType);
+    const labelers = [...new Set(requests.map(request => labelerOf(request)))].filter(labeler => labeler !== undefined);
+    const labelled = await Promise.all(
+      labelers.map(async labeler => [
+        ...(await labeler(
+          workspaceId,
+          requests.filter(request => labelerOf(request) === labeler),
+        )),
+      ]),
+    );
+    const labels = new Map(labelled.flat());
+    return requests.map(request => ({ ...request, subjectLabel: labels.get(request.id) ?? null }));
   }
 
   /**

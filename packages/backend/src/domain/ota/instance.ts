@@ -137,6 +137,10 @@ export function createOtaDomain(
   deps.approvals.registerHandler(OtaHostingApprovalSubjects.channelPolicy, async request => {
     await hosting.applyApprovedPolicy(request);
   });
+  deps.approvals.registerLabeler(
+    [OtaHostingApprovalSubjects.channelPolicy, OtaHostingApprovalSubjects.channelChange],
+    async (workspaceId, requests) => await hosting.labelApprovalSubjects(workspaceId, requests),
+  );
   const signing = new SigningService({ certificates: new SigningCertificateRepo(db), audit: services.audit });
   // One cache per domain instance: promotions here invalidate what the manifest endpoint serves.
   const cache = new ChannelStateCache();
