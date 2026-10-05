@@ -304,6 +304,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/feature-map.md`, `reference/releases.md`, `log.md`
 - Source: branch `feat/status-incident-correlation` (#154)
 
+## 2026-10-05 — Status probe locations in the console
+
+- The status console gains a Locations view (`?tab=locations`): the workspace's locations for every member; owners
+  and admins create a private location with the token shown once and the `docker run` / `npx @mocco/probe` commands
+  that use it, rotate its token and disable it. No backend change. The status reference's console section and
+  private-location recipe, the feature map and the "Monitor your service" guide (creating a location, running the
+  probe, rotating and disabling) follow.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `customer/status/monitor-your-service.md`,
+  `customer/status/images/{new-location,location-token,locations}.png`, `log.md`
+- Source: branch `feat/status-locations-console` (#150)
+
 ## 2026-10-05 — Status monitors in the console
 
 - The status console gains a Monitors view (`?tab=monitors`: list, create and edit form, a monitor's route with its

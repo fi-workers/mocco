@@ -57,7 +57,7 @@ export function Notice({ tone, title, children }: { tone: Tone; title: string; c
 }
 
 /** Copies `value` to the clipboard and confirms for a moment. */
-function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
+export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async (): Promise<void> => {
