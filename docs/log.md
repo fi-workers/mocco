@@ -669,3 +669,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   the status reference's "Not built yet".
 - Docs touched: `reference/sdk.md`, `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-sdk-namespace` (issue #159)
+
+## 2026-10-06 — Function region: what a cold start costs
+
+- Traced the slow first console request after idle (#419) and wrote it up under
+  [Function region → Cold starts](./reference/env.md#cold-starts): Fluid compute and bytecode caching are on, the Pages
+  Router API routes share one function that the job tick doesn't keep warm, and about 97% of a cold `get-session` (2.9 of
+  3.0 s) passes before the pooler connection, so function init dominates, not Postgres. `next.config.ts` now bundles
+  the Pages Router's dependencies (`bundlePagesRouterDependencies`), which cuts the auth route's traced files from 1,222
+  to 223 and a local cold tRPC batch from 625 to 283 ms. The page records the larger server chunks as the trade-off and
+  the options not taken.
+- Docs touched: `reference/env.md`, `log.md`
+- Source: branch `perf/cold-start` (issue #419)

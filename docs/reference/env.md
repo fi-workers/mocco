@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -93,6 +93,37 @@ If `tailscale` isn't installed or isn't up, the generator fails loudly with a cl
 ## Function region
 
 On Vercel, `packages/frontend/vercel.json` pins the functions to `icn1` (Seoul), next to the production database (Supabase `ap-northeast-2`). A console tRPC call makes several sequential queries, so the function belongs where the database is: from the default `iad1` each round trip crossed the Pacific, and the batched tRPC call behind a console page took about 10 s (0.3 s from `icn1`). Public `/v1` handlers read the same database, so they benefit the same way; CORS preflights answer without it. A deployment with its database elsewhere sets `regions` to that database's region. Self-hosting ignores the file.
+
+### Cold starts
+
+The region fixed the warm path; the first request after the API function has gone idle was still slow (#419). Traced on 2026-10-06 against production:
+
+- **The project**: Fluid compute is on (`resourceConfig.fluid: true`), Node 24, standard 2 GB functions. Vercel's bytecode caching therefore applies (Node 20+, production only), but it caches CommonJS only.
+- **The functions**: the deployment has three. The Pages Router API routes (`/api/auth`, `/api/trpc`, `/api/seo`, `/api/help`) share one, together with `/api/mcp` and the `.well-known` OAuth metadata. `/api/ext` is a second, and the pages a third. The per-minute job tick keeps `/api/ext` warm but not the API function, so the console's first call after a quiet spell, or after any deploy, lands on a fresh instance.
+- **The cold request**: an unauthenticated `GET /api/auth/get-session` took 2.9–3.0 s cold and 0.08–0.36 s warm. Vercel's request log and the Supabase pooler's log put the pooler accepting that request's database login 2.90 s after the request reached Vercel, about 0.1 s before the response finished. Connecting to the pooler is cheap: TCP, the Postgres SSL request and TLS take 27–37 ms even from a Seoul home connection, and less from `icn1`. So about 97% of the cold time passes before the database is touched. That time is function init: booting the instance and loading the route's code.
+- **What init was loading**: Next doesn't bundle the Pages Router's dependencies by default (`bundlePagesRouterDependencies: false`), so each route `require`d or `import`ed its packages from `node_modules` at runtime. The trace lists 1,222 files for the auth route and 2,320 for tRPC, which also pulls in Sentry and OpenTelemetry (about 600 modules). Resolving `package.json`s and compiling those files dominates a local CPU profile. better-auth, drizzle and zod load as ESM, which bytecode caching skips.
+- **The database's share**: each new instance opens one pooler connection, and better-auth's first request seeds the MCP OAuth resource row, which takes one `SELECT`. Together that is tens of milliseconds, in-region. It isn't the bottleneck, so it stays as it is.
+
+The fix is `bundlePagesRouterDependencies: true` in `next.config.ts`, so the Pages Router bundles its dependencies the way the App Router already does. Traced files drop from 1,222 to 223 (auth) and from 2,320 to 412 (tRPC). Locally (Apple silicon, a fresh `next` production server per sample, entries loaded on first request as on Vercel, a local Postgres), the cold first request dropped as follows. Warm requests are unchanged.
+
+| Cold first request                       | Before | After  |
+| ---------------------------------------- | ------ | ------ |
+| `get-session`, signed out                | 400 ms | 130 ms |
+| `get-session`, signed in                 | 450 ms | 150 ms |
+| tRPC batch (`workspace.list` ×2), signed in | 625 ms | 283 ms |
+| `/api/seo/robots`                        | 256 ms | 100 ms |
+
+Production runs this work several times slower than a laptop: the same unauthenticated cold `get-session` is 0.4 s locally and 3.0 s in production. Expect a similar ratio for the gain, which is confirmed only after deploy.
+
+The trade-off: the server chunks grow (the `.next/server/chunks` directory went from 59 MB to 82 MB, since the dependencies now live in the chunks instead of `node_modules`), and a package that can't be bundled has to be listed in `serverExternalPackages`. That covers a native addon, or a package that reads files from beside its own source. resvg and satori are already listed for the OG renderer, and Next's built-in list keeps `pg` external.
+
+What was weighed and not done:
+
+- **A warm-up ping**, a cron hitting the API function, would hide the cold start only for the instance it keeps, and costs an invocation a minute.
+- **Splitting `/api/auth` out of the shared function** doesn't help, because the console needs both auth and tRPC on its first screen.
+- **Opening the database connection at import time** would move a cheap step earlier without removing the expensive one.
+
+To watch cold starts per route over time you need Observability Plus. Without it the observability query API returns 402, so this trace used request logs, the pooler's logs and timed `curl` requests instead.
 
 ## Storage vars
 
