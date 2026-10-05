@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
@@ -65,6 +65,17 @@ export class FlagEnvironmentRepo {
       .from(schema.flagEnvironments)
       .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), eq(schema.flagEnvironments.id, environmentId)));
     return row;
+  }
+
+  /** The workspace's environments among `ids`, in one query (ids it doesn't own are left out). */
+  async listByIds(workspaceId: string, ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(schema.flagEnvironments)
+      .where(and(eq(schema.flagEnvironments.workspaceId, workspaceId), inArray(schema.flagEnvironments.id, [...ids])));
   }
 
   async setChangeGate(workspaceId: string, environmentId: string, changeGate: GateRequirements | null) {

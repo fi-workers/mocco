@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
@@ -52,6 +52,17 @@ export class OtaChannelRepo {
       .from(schema.otaChannels)
       .where(and(eq(schema.otaChannels.appId, appId), eq(schema.otaChannels.name, name)));
     return row;
+  }
+
+  /** The workspace's channels among `ids`, in one query (ids it doesn't own are left out). */
+  async listByIds(workspaceId: string, ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(schema.otaChannels)
+      .where(and(eq(schema.otaChannels.workspaceId, workspaceId), inArray(schema.otaChannels.id, [...ids])));
   }
 
   async getInWorkspace(workspaceId: string, id: string) {

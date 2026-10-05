@@ -71,6 +71,9 @@ const changeGateActionSchema = z.object({
   gate: z.custom<GateRequirements | null>(),
 });
 
+/** What every flags approval pins, whatever its subject: the environment it is about. */
+const environmentActionSchema = z.object({ environmentId: z.uuid() });
+
 /** How many expired changesets one sweep resolves. */
 const EXPIRY_BATCH = 100;
 
@@ -479,5 +482,29 @@ export class FlagGovernanceService {
     const action = changeGateActionSchema.parse(request.action);
     const environment = await this.environmentOf(request.workspaceId, action.environmentId);
     await this.writeGate(environment, action.gate, request.requestedByUserId, request.id);
+  }
+
+  /** The approval labeler for every flags subject (#421): the name of the environment each
+   * request is about, read for the whole batch in one query. */
+  async labelApprovalSubjects(
+    workspaceId: string,
+    requests: readonly ApprovalRequestRow[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const environmentIds = new Map(
+      requests.flatMap(request => {
+        const parsed = environmentActionSchema.safeParse(request.action);
+        return parsed.success ? [[request.id, parsed.data.environmentId] as const] : [];
+      }),
+    );
+    const environments = await new FlagEnvironmentRepo(this.deps.db).listByIds(workspaceId, [
+      ...new Set(environmentIds.values()),
+    ]);
+    const names = new Map(environments.map(environment => [environment.id, environment.name]));
+    return new Map(
+      [...environmentIds].flatMap(([requestId, environmentId]) => {
+        const name = names.get(environmentId);
+        return name === undefined ? [] : [[requestId, name] as const];
+      }),
+    );
   }
 }

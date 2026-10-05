@@ -281,6 +281,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/help/help-center.md`, `customer/help/images/editor.png`, `customer/help/images/editor-images.png`, `log.md`
 - Source: branch `feat/help-editor-images` (#208)
 
+## 2026-10-06 — Home names the environment or channel of a waiting approval
+
+- The approvals reference gains "Subject labels": products bind a labeler with `registerLabeler`, which names a
+  batch of requests' subjects in one query; `approval.list` returns `subjectLabel` (flags: the environment's name;
+  OTA channel rules and releases: "<name> channel"; the version policy has none yet), so Home shows
+  "QA App · Production" at a fixed number of queries.
+  The customer Home guide says so.
+- Docs touched: `reference/approvals.md`, `customer/start/workspace-and-projects.md`, `log.md`
+- Source: branch `feat/home-approval-subject-label` (#421)
+
 ## 2026-10-05 — Status 90-day bars and monitor latency
 
 - The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its

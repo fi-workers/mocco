@@ -268,4 +268,22 @@ export class OtaHostingService {
       });
     }
   }
+
+  /** The approval labeler for channel subjects (#421): "<name> channel" for the channel each
+   * request is about, read for the whole batch in one query. */
+  async labelApprovalSubjects(
+    workspaceId: string,
+    requests: readonly ApprovalRequestRow[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const channels = await this.deps.channels.listByIds(workspaceId, [
+      ...new Set(requests.map(request => request.subjectId)),
+    ]);
+    const names = new Map(channels.map(channel => [channel.id, channel.name]));
+    return new Map(
+      requests.flatMap(request => {
+        const name = names.get(request.subjectId);
+        return name === undefined ? [] : [[request.id, `${name} channel`] as const];
+      }),
+    );
+  }
 }
