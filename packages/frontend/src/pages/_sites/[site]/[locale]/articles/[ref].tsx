@@ -1,6 +1,7 @@
 import DocContent from '@frontend/components/doc-content';
 import HelpSiteLayout from '@frontend/components/help/help-site-layout';
 import { HELP_REVALIDATE_SECONDS, loadHelpArticle, loadHelpNav } from '@frontend/lib/help-site';
+import { helpArticleCard } from '@frontend/lib/og-card';
 import { breadcrumbLd, helpArticleLd } from '@frontend/lib/seo';
 
 import type { DocBlock } from '@frontend/lib/doc-ast';
@@ -18,10 +19,13 @@ interface Props {
     modifiedAt: string | null;
     blocks: DocBlock[];
   };
+  /** The article's share card, or null when cards can't be issued. */
+  card: string | null;
 }
 
 // One help article. A stale slug redirects permanently to the article's canonical path; a
-// language the article isn't translated into redirects there for now (a translation may come). Statically generated on first request (ISR, ADR 0015).
+// language the article isn't translated into redirects there for now (a translation may
+// come). Statically generated on first request (ISR, ADR 0015).
 export const getStaticPaths: GetStaticPaths = () => ({ paths: [], fallback: 'blocking' });
 
 export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
@@ -39,8 +43,18 @@ export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
       revalidate: HELP_REVALIDATE_SECONDS,
     };
   }
+  const collection = nav.collections.find(entry =>
+    entry.sections.some(section => section.articles.some(item => item.path === article.canonicalPath)),
+  );
+  const card = helpArticleCard({
+    siteName: nav.name,
+    eyebrow: collection?.title ?? null,
+    title: article.title,
+    description: article.description,
+  });
   return {
     props: {
+      card,
       nav,
       article: {
         title: article.title,
@@ -56,7 +70,7 @@ export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
   };
 };
 
-export default function HelpArticlePage({ nav, article }: Props) {
+export default function HelpArticlePage({ nav, article, card }: Props) {
   return (
     <HelpSiteLayout
       nav={nav}
@@ -68,6 +82,7 @@ export default function HelpArticlePage({ nav, article }: Props) {
         versions: article.versions,
         type: 'article',
         hasMarkdown: true,
+        card,
         jsonLd: origin => [
           breadcrumbLd(origin, [
             { name: nav.name, path: `/${nav.locale}` },

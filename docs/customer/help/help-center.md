@@ -94,6 +94,8 @@ Your help center is at `<address>.help.mocco.club` from the start. To serve it o
 
 Your help center tells search engines where every article is, in every language it's offered in, at `/sitemap.xml` on its address (your own domain, once you have one). Search engines and AI search — Google, Bing, ChatGPT search, Claude, Perplexity — can always read it, so people asking them find your answers.
 
+A link to an article shared in Slack, Discord, KakaoTalk or X shows a card with your help center's name, the article's collection, its title and its opening line; a changed article gets a new card.
+
 AI assistants and coding agents can read it as Markdown too: `/llms.txt` on your help center's address lists every article (`/<language>/llms.txt` in another language), and adding `.md` to an article's address gives its text.
 
 AI companies also send crawlers that collect text to train their models. They're allowed by default. To keep them out, clear **Allow AI training crawlers** at the bottom of the **Help center** page. Your site's `/robots.txt` then turns away GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot, meta-externalagent and Bytespider, while search keeps working. Crawlers honor robots.txt on their next visit; it doesn't remove what they collected before.

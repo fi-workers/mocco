@@ -56,7 +56,7 @@ A help site's pages render `SeoHead` through `HelpSiteLayout` on the site's cano
 - **Language:** `_document.tsx` sets `<html lang>` from the page's `nav.locale`; Mocco's own pages stay `en`.
 - **hreflang:** a home lists every language the site offers; an article lists the languages it is really served in (the source and each translated one — `HelpPublicReadService.article().locales`), each plus `x-default` (the source). Pages in a single language get none.
 - **Description:** an article's is its first paragraphs as plain text, cut near 160 characters (`excerptOf`); a home's is its collection titles.
-- **Open Graph:** `og:type` `article` or `website`, `og:site_name` the site's name, `og:locale` the page's language, and a `summary` Twitter card — no share image until branded ones are generated (#372), because Mocco's card isn't the customer's.
+- **Open Graph:** `og:type` `article` or `website`, `og:site_name` the site's name, `og:locale` the page's language, and the page's own card under the site's name ([OG images](./og-images.md)) with a `summary_large_image` Twitter card; never Mocco's card. Without `AUTH_SECRET` there is no card and the Twitter card is `summary`.
 - **JSON-LD:** an article has a BreadcrumbList (home → article) and an Article with `inLanguage`, `datePublished` (last publish) and `dateModified` (the later of that and its translation), published by the site; a home has a WebSite with its languages.
 - **Redirects:** an old slug redirects permanently (308) to the article's address; a language the article isn't translated into redirects temporarily (307) to the source, since a translation may come; the site root redirects temporarily to the source language.
 - **robots:** `index, follow`, and `noindex, follow` on search results.

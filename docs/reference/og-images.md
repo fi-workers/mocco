@@ -21,7 +21,7 @@ code_refs:
 
 # OG images
 
-The renderer foundation of the OG images epic (#368, slice #370), per [ADR 0030](../adr/0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md). Every customer guide and the `/docs` index carry their own card (#371); the landing keeps its designed static card (`public/og/mocco.png`); help center articles come with #372.
+The renderer foundation of the OG images epic (#368, slice #370), per [ADR 0030](../adr/0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md). Every customer guide and the `/docs` index carry their own card (#371); the landing keeps its designed static card (`public/og/mocco.png`). A help center's articles and homes carry cards under the site's name (#372): an article's shows its collection, title and opening text, a home's the site's name and its collections, issued when ISR builds the page and served from the help center's own domain.
 
 ## Issuing an image
 

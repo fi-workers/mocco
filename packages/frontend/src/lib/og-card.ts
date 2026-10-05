@@ -1,4 +1,4 @@
-// A page's own share card (#371): the path of a signed OG image (ADR 0030) for these fields,
+// A page's own share card (#371, #372): the path of a signed OG image (ADR 0030) for these fields,
 // issued in getStaticProps at build time. Null when cards can't be issued (no AUTH_SECRET in
 // the build), and the page falls back to Mocco's static card. Server-only: getStaticProps is
 // the only caller, so the backend never reaches the browser bundle.
@@ -38,6 +38,34 @@ export function moccoSimpleCard(fields: { title: string; subtitle: string }): st
       brand: MOCCO_BRAND,
       title: clip(fields.title, 120),
       subtitle: clip(fields.subtitle, 160),
+    }) ?? null
+  );
+}
+
+/** A help center article's card, under the customer's site name (#372). */
+export function helpArticleCard(fields: {
+  siteName: string;
+  eyebrow: string | null;
+  title: string;
+  description: string;
+}): string | null {
+  return (
+    getOgImages()?.issue('article', {
+      brand: { name: clip(fields.siteName, 60) },
+      ...(fields.eyebrow !== null && { eyebrow: clip(fields.eyebrow, 60) }),
+      title: clip(fields.title, 120),
+      ...(fields.description !== '' && { description: clip(fields.description, 200) }),
+    }) ?? null
+  );
+}
+
+/** A help center home's card: the site's name and its collections. */
+export function helpHomeCard(fields: { siteName: string; collections: readonly string[] }): string | null {
+  return (
+    getOgImages()?.issue('simple', {
+      brand: { name: clip(fields.siteName, 60) },
+      title: clip(fields.siteName, 120),
+      ...(fields.collections.length > 0 && { subtitle: clip(fields.collections.join(' · '), 160) }),
     }) ?? null
   );
 }
