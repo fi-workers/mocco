@@ -17,6 +17,7 @@ import {
   LocationKinds,
   MonitorKinds,
   MonitorStates,
+  httpMonitorSpecSchema,
   monitorInputSchema,
 } from '@mocco/common/status';
 import { eq } from 'drizzle-orm';
@@ -24,7 +25,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createEventBus } from '@backend/domain/events/subscriptions';
 import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
+import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
+import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
+import { NotificationSubscribers } from '@backend/domain/notification/constants';
+import { renderEmbed } from '@backend/domain/notification/senders/discord';
+import { seedChannel, seedRule } from '@backend/domain/notification/testing/seed';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { deriveComponentStatus } from '@backend/domain/status/component-status';
 import { createSnapshotService, createStatusDomain } from '@backend/domain/status/compose';
@@ -40,6 +47,7 @@ import { expectOne } from '@backend/infra/db/rows';
 import {
   auditLog,
   domainEvents,
+  notificationDeliveries,
   statusIncidentMonitors,
   statusIncidents,
   statusIncidentUpdates,
@@ -168,6 +176,24 @@ describe('monitor state changes: component status, incidents and alerts (pglite)
   };
 
   const incidents = async () => await t.db.select().from(statusIncidents).orderBy(statusIncidents.startedAt);
+
+  /** The public snapshot the page would publish now. */
+  const publicSnapshot = async (pageId: string) => {
+    const root = await mkdtemp(path.join(tmpdir(), 'mocco-status-'));
+    const snapshots = createSnapshotService(t.db, {
+      store: new FilesystemObjectStore({
+        root,
+        baseUrl: 'https://mocco.test/api/ext/internal/storage',
+        signer: new StorageUrlSigner('test-signing-key'),
+      }),
+      queue: { enqueue: async () => await Promise.reject(new Error('unused')), kick: () => {} },
+      now: () => clock,
+    });
+    const row = expectOne(await t.db.select().from(statusPages).where(eq(statusPages.id, pageId)));
+    const snapshot = await snapshots?.build(row, 1, clock);
+    await rm(root, { recursive: true, force: true });
+    return snapshot;
+  };
 
   beforeEach(async () => {
     t = await createTestDb();
@@ -323,6 +349,60 @@ describe('monitor state changes: component status, incidents and alerts (pglite)
     });
   });
 
+  it('keeps URL credentials, path and query out of alerts, events, audit, incidents and the public page', async () => {
+    // A bus with the real fan-out, so the alert goes through the notification template to a Discord embed.
+    const queue = new PostgresJobQueue({
+      jobs: new JobRepo(t.db),
+      now: () => clock,
+      runOne: async () => await Promise.resolve(null),
+      waitUntil: () => {},
+    });
+    bus = createEventBus({ db: t.db, queue, now: () => clock, appOrigin: APP_ORIGIN });
+    status = createStatusDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      events: bus,
+      appOrigin: APP_ORIGIN,
+      now: () => clock,
+    });
+    const channel = await seedChannel(t.db, scope.workspaceId);
+    await seedRule(t.db, channel, { eventType: 'status.*' });
+    const secrets = ['probe-user', 'hunter2', '/v1/health', 's3cret-token', 'api_key', 'k3y-value', 'frag'];
+    const { page, monitor } = await setUp({
+      incidentPolicy: IncidentPolicies.publish,
+      spec: httpMonitorSpecSchema.parse({
+        kind: MonitorKinds.http,
+        url: 'https://probe-user:hunter2@api.acme.test:8443/v1/health?token=s3cret-token&api_key=k3y-value#frag',
+      }),
+    });
+    await round(monitor.id, CheckOutcomes.fail);
+    expect(await round(monitor.id, CheckOutcomes.fail)).toBe(MonitorStates.down);
+    const down = expectOne(
+      await t.db.select().from(domainEvents).where(eq(domainEvents.type, StatusEventTypes.statusMonitorDown)),
+    );
+    await bus.deliver(down.id, NotificationSubscribers.status.name);
+
+    const delivery = expectOne(
+      await t.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.eventId, down.id)),
+    );
+    const embed = renderEmbed(delivery.message, clock);
+    expect(embed.fields).toContainEqual({ name: 'Checks', value: 'api.acme.test:8443', inline: false });
+    const events = await t.db.select().from(domainEvents);
+    const audits = await t.db.select().from(auditLog);
+    const opened = await incidents();
+    const updates = await t.db.select().from(statusIncidentUpdates);
+    const outbound = {
+      embed,
+      events: events.map(event => event.payload),
+      audits: audits.map(entry => entry.payload),
+      incidents: opened.map(incident => incident.title),
+      updates: updates.map(update => update.bodyMd),
+      snapshot: await publicSnapshot(page.id),
+    };
+    expect(outbound.snapshot?.incidents).toHaveLength(1);
+    const text = JSON.stringify(outbound);
+    expect(secrets.filter(secret => text.includes(secret))).toEqual([]);
+  });
+
   it('opens one draft incident on down, follows the recovery, and opens a new one next time', async () => {
     const { page, api, web, monitor } = await setUp();
 
@@ -413,19 +493,7 @@ describe('monitor state changes: component status, incidents and alerts (pglite)
     await round(monitor.id, CheckOutcomes.fail);
     expect(expectOne(await incidents()).visibility).toBe(IncidentVisibilities.draft);
 
-    const root = await mkdtemp(path.join(tmpdir(), 'mocco-status-'));
-    const snapshots = createSnapshotService(t.db, {
-      store: new FilesystemObjectStore({
-        root,
-        baseUrl: 'https://mocco.test/api/ext/internal/storage',
-        signer: new StorageUrlSigner('test-signing-key'),
-      }),
-      queue: { enqueue: async () => await Promise.reject(new Error('unused')), kick: () => {} },
-      now: () => clock,
-    });
-    const row = expectOne(await t.db.select().from(statusPages).where(eq(statusPages.id, page.id)));
-    const snapshot = await snapshots?.build(row, 1, clock);
-    await rm(root, { recursive: true, force: true });
+    const snapshot = await publicSnapshot(page.id);
 
     expect(snapshot).toMatchObject({ incidents: [], history: [] });
     expect(JSON.stringify(snapshot)).not.toContain('API health is down');

@@ -507,6 +507,14 @@ In one transaction under the monitor's advisory lock, so reactions to one monito
    window covering the monitor's components the title ends "(during maintenance)". Notification rules route them
    like any event; the `mocco` preset includes all three.
 
+   The target ("Checks") is only the host and port: `api.acme.test:8443` for
+   `https://user:pass@api.acme.test:8443/v1/health?token=…`, with the port left out when it is the scheme's default,
+   and `host:port` for TCP (`monitorTargetOf` in `domain/status/monitor-target.ts`). URL credentials, path, query and
+   fragment can hold secrets and everyone in a channel reads its alerts, so they never reach the message, the stored
+   event or the activity trace. The incident a monitor opens names only the monitor, the audit payloads carry its
+   name, kind and links but never its spec, and the public snapshot has no monitors. The full URL stays in the
+   monitor editor.
+
 A crash between the state change and its reaction loses the reaction (the same trade-off as other best-effort
 events); a reconcile over unreacted state changes would close that gap.
 
