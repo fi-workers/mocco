@@ -80,3 +80,28 @@ export class MaintenanceWindowError extends BadRequestError {
     this.name = 'MaintenanceWindowError';
   }
 }
+
+/** A confirm or unsubscribe link that is forged, expired, for another purpose or page, or for a
+ * subscriber that is gone — BAD_REQUEST. */
+export class SubscriberTokenError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super("This link isn't valid any more", options);
+    this.name = 'SubscriberTokenError';
+  }
+}
+
+/** A sign-up asked for a component that isn't on the page — BAD_REQUEST. */
+export class SubscriberComponentError extends BadRequestError {
+  constructor(componentId: string, options?: ErrorOptions) {
+    super(`Component ${componentId} isn't on this status page`, options);
+    this.name = 'SubscriberComponentError';
+  }
+}
+
+/** A subscriber mail the email relay didn't take for now; the delivery job tries again. */
+export class SubscriberDeliveryRetryError extends Error {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`subscriber mail not sent yet: ${reason}`, options);
+    this.name = 'SubscriberDeliveryRetryError';
+  }
+}

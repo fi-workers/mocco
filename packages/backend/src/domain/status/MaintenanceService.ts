@@ -11,7 +11,7 @@ import { AuditActions } from '@mocco/common/audit';
 import { StatusEventTypes } from '@mocco/common/events';
 import { FINISHED_RUN_STATES, RunStates } from '@mocco/common/execution';
 import { Severities } from '@mocco/common/notification';
-import { MaintenanceStatuses } from '@mocco/common/status';
+import { MaintenanceStatuses, SubscriberMailKinds } from '@mocco/common/status';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
 import {
@@ -28,15 +28,17 @@ import { actorOf } from '@backend/domain/status/scope';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { PublishInput } from '@backend/domain/events/EventBus';
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { SubscriberNotice } from '@backend/domain/status/jobs';
 import type { RunSource } from '@backend/domain/status/ports';
 import type { MaintenanceRow } from '@backend/domain/status/repos/maintenance.repo';
 import type { StatusActor, StatusScope } from '@backend/domain/status/scope';
 import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
+import type { SubscriberNotices } from '@backend/domain/status/SubscriberNotices';
 import type { Db } from '@backend/infra/db/types';
 import type { AuditAction } from '@mocco/common/audit';
 import type { RunState } from '@mocco/common/execution';
-import type { GateMaintenanceInput, MaintenanceInput } from '@mocco/common/status';
+import type { GateMaintenanceInput, MaintenanceInput, MaintenanceStatus } from '@mocco/common/status';
 
 export interface MaintenanceDeps {
   db: Db;
@@ -50,6 +52,8 @@ export interface MaintenanceDeps {
   events?: EventPublisher;
   /** The app's origin, for the link in an overrun alert. */
   appOrigin?: string;
+  /** Asks for the subscriber fan-out of each window change, in its transaction. */
+  notices?: Pick<SubscriberNotices, 'request'>;
   now?: () => Date;
 }
 
@@ -71,6 +75,15 @@ export const MAINTENANCE_END_NOTES: Partial<Record<RunState, string>> = {
 };
 
 const subject = (maintenanceId: string) => ({ subjectType: 'status_maintenance', subjectId: maintenanceId });
+
+/** The subscriber notice of a window moving to `status`. */
+const noticeOf = (row: MaintenanceRow, status: MaintenanceStatus): SubscriberNotice => ({
+  kind: SubscriberMailKinds.maintenance,
+  workspaceId: row.workspaceId,
+  projectId: row.projectId,
+  maintenanceId: row.id,
+  status,
+});
 
 const minutesOf = (row: MaintenanceRow) =>
   Math.round((row.scheduledEnd.getTime() - row.scheduledStart.getTime()) / MINUTE_MS);
@@ -191,6 +204,7 @@ export class MaintenanceService {
         createdByUserId: userId,
       });
       await new MaintenanceComponentRepo(tx).insertMany(scope.workspaceId, created.id, input.componentIds);
+      await this.deps.notices?.request(tx, [noticeOf(created, MaintenanceStatuses.scheduled)]);
       return created;
     });
     await this.deps.audit.record(scope.workspaceId, {
@@ -227,6 +241,7 @@ export class MaintenanceService {
         status: MaintenanceStatuses.canceled,
         ...(current.status === MaintenanceStatuses.inProgress && { actualEnd: now }),
       });
+      await this.deps.notices?.request(tx, [noticeOf(current, MaintenanceStatuses.canceled)]);
       return { maintenance: canceled, from: current.status };
     });
     await this.deps.audit.record(scope.workspaceId, {
@@ -333,6 +348,7 @@ export class MaintenanceService {
           // Components deleted since the gate was set up are skipped.
           const componentIds = await new ComponentRepo(tx).idsOnPage(scope, rule.pageId, rule.componentIds);
           await new MaintenanceComponentRepo(tx).insertMany(scope.workspaceId, created.id, componentIds);
+          await this.deps.notices?.request(tx, [noticeOf(created, MaintenanceStatuses.inProgress)]);
           touch({ workspaceId: scope.workspaceId, pageId: rule.pageId });
           return [...rows, created];
         }, Promise.resolve([])),
@@ -358,6 +374,10 @@ export class MaintenanceService {
     const completed = await this.deps.snapshots.change(async (tx, touch) => {
       const rows = await new MaintenanceRepo(tx).completeForRun(run.workspaceId, run.runId, { now, endNote });
       touch(...rows.map(row => ({ workspaceId: row.workspaceId, pageId: row.pageId })));
+      await this.deps.notices?.request(
+        tx,
+        rows.map(row => noticeOf(row, MaintenanceStatuses.completed)),
+      );
       return rows;
     });
     await this.recordSystem(completed, AuditActions.statusMaintenanceCompleted, () => ({
@@ -387,6 +407,10 @@ export class MaintenanceService {
       touch(
         ...[...moved.completed, ...moved.started].map(row => ({ workspaceId: row.workspaceId, pageId: row.pageId })),
       );
+      await this.deps.notices?.request(tx, [
+        ...moved.completed.map(row => noticeOf(row, MaintenanceStatuses.completed)),
+        ...moved.started.map(row => noticeOf(row, MaintenanceStatuses.inProgress)),
+      ]);
       return moved;
     });
     await this.recordSystem(completed, AuditActions.statusMaintenanceCompleted);

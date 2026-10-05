@@ -22,6 +22,7 @@ export const ProblemCodes = {
   contactBlocked: 'contact_blocked',
   guestsNotAllowed: 'guests_not_allowed',
   invalidLocationToken: 'invalid_location_token',
+  subscriptionsUnavailable: 'subscriptions_unavailable',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

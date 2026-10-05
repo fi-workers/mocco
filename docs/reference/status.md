@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance, including windows that resuming a gate starts and the run's end completes — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, the /v1 management API for CI and scripts with its OpenAPI description, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance, including windows that resuming a gate starts and the run's end completes — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, the /v1 management API for CI and scripts with its OpenAPI description, visitors who subscribe by email (double opt-in, signed links, the deduplicated fan-out of incident updates and maintenance), what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -62,6 +62,14 @@ code_refs:
   - packages/backend/src/domain/status/repos/incident-run.repo.ts
   - packages/backend/src/domain/status/DeployWatchService.ts
   - packages/backend/src/domain/status/subscribers.ts
+  - packages/backend/src/domain/status/SubscriberService.ts
+  - packages/backend/src/domain/status/SubscriberNotices.ts
+  - packages/backend/src/domain/status/subscriber-mail.ts
+  - packages/backend/src/domain/status/subscriber-token.ts
+  - packages/backend/src/domain/status/subscriber-config.ts
+  - packages/backend/src/domain/status/repos/subscriber.repo.ts
+  - packages/backend/src/domain/status/repos/subscriber-delivery.repo.ts
+  - packages/backend/src/transport/ext/v1/status-subscribers.ts
   - packages/backend/src/transport/ext/v1/monitors.ts
   - packages/backend/src/transport/ext/v1/status.ts
   - packages/backend/src/transport/ext/v1/status-openapi.ts
@@ -95,7 +103,8 @@ around its start and any run a person links to it, and a run lists its incidents
 [below](#deploy-correlation)); after a release its monitors check every 30 seconds for 15 minutes, and a failure then
 opens an incident naming the run (#155, [the deploy watch](#the-deploy-watch)). A heartbeat monitor takes pings from a
 customer's job instead of probing, and goes down when the job falls silent or reports a failure (#153,
-[heartbeat monitors](#heartbeat-monitors)). There are no subscribers yet.
+[heartbeat monitors](#heartbeat-monitors)). Visitors subscribe by email and are sent each published incident update and
+maintenance change, at most once each (#156, [subscribers](#subscribers)).
 
 ## Console
 
@@ -178,6 +187,8 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_rollups_daily` | One monitor's UTC day: `rounds`, `ok_rounds`, `down_seconds`, `maintenance_seconds`, `uptime_ratio` (numeric(7,6), null when nothing could be measured), `latency_hist` and `p95_ms`. Key (monitor, day); kept forever |
 | `mocco_status_component_days` | One component's UTC day, for the 90-day bars: `worst_status`, `down_seconds`, `uptime_ratio` (null when no monitor reports on it) and `incident_ids`. Key (component, day); kept forever |
 | `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
+| `mocco_status_subscribers` | A visitor following a page ([subscribers](#subscribers)): `channel` (`email`; `webhook` comes next, with `webhook_url` and `webhook_secret_sealed`, DB-checked to exclude each other), `email` (lowercased, DB-checked), `component_ids` (null for the whole page), `locale` (`en`, `ko`), `confirmed_at`, `unsubscribed_at` and `confirmation_sent_at`. Unique on (page, email) and (page, webhook URL); a partial index on the page's active subscribers. References its page like the other page rows (migration 0071) |
+| `mocco_status_subscriber_deliveries` | One mail to one subscriber: `kind` (`confirmation`, `incident_update`, `maintenance`), `dedupe_key` (the notice), the `content` captured at fan-out, `status` (the notification `queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts`, `error`, `sending_at`, `sent_at`. Unique on (subscriber, dedupe key); deleted with its subscriber |
 | `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#time-series-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
 
 Pages reference `mocco_projects(id, workspace_id)`. Groups, components, incidents and maintenance windows
@@ -432,6 +443,82 @@ also stored in each file's `.meta.json` sidecar, which a server should not expos
 `Updated …` at its foot, and the script keeps polling `current.json` and simply finds no new version. Nothing is
 published until the app (and its job tick) runs again; on start the next tick's safety run publishes every page that
 changed in the meantime. Posting an incident while the app is down needs the break-glass path, which isn't built yet.
+
+## Subscribers
+
+A visitor of a public page follows it by email (#156): the address signs up, confirms from the mail it is sent (double
+opt-in), and from then on gets each published incident update and each maintenance change of the page, in English or
+Korean. Signed webhooks, the sign-up form on the public page and its customer guide come in the next slice.
+
+**Signing up.** `POST /v1/status-pages/{slug}/subscribers` ([public API](./public-api.md#routes)) takes
+`{ email, componentIds?, locale?, website? }` as JSON or as a plain form post (repeated `componentIds` fields), parsed by
+`statusSubscribeInputSchema` in `@mocco/common/status`. No key: the slug is public. `SubscriberService.subscribe`:
+
+- an unknown page is `404`, and a component that isn't on the page `400` (`SubscriberComponentError`);
+- a new address is stored pending (`confirmed_at` null) with its components (none means the whole page) and language
+  (`en` unless `ko` is asked for); a pending or unsubscribed address starts over with the new choices; an address already
+  following the page is left as it is, so nobody can change another person's choices;
+- a confirmation mail is queued unless one was queued in the last 10 minutes (`confirmation_sent_at`, claimed with a
+  conditional `UPDATE` in the delivery's transaction).
+
+The route answers `202 { status: "pending_confirmation" }` in every one of these cases, so it can't be used to learn who
+follows a page. `website` is a honeypot the form hides from people: when it is filled the answer is the same and nothing
+is stored. Sign-ups are limited to 10 per 10 minutes per client address and 3 an hour per page and address (hashed);
+over either, `429`. Without an email sender (`EMAIL_DRIVER` unset) the route answers `503 subscriptions_unavailable`; the
+links in mail already sent keep working.
+
+**Links.** Every mail's links are signed tokens (`subscriber-token.ts`): `<subscriber id>.<expiry>.<HMAC-SHA256>` under
+a key derived from `AUTH_SECRET` (`subscriber-config.ts`), with the purpose (`confirm` or `unsubscribe`) inside the MAC.
+Nothing is stored for them, a token for one purpose never passes for the other, a changed id or expiry fails the
+signature, and the subscriber must be on the page the URL names. A confirmation link works for 7 days; an unsubscribe
+link has no expiry. The routes, under `/api/ext/v1/status-pages/{slug}/subscribers/`:
+
+| Route | Does |
+|---|---|
+| `GET confirm?token=` | Confirms (once; the first time is kept) and shows "You're subscribed". An unsubscribed address can't be confirmed again by an old link |
+| `GET unsubscribe?token=` | Shows a page asking first, with a form that POSTs back: a mail scanner opening the link unsubscribes no one |
+| `POST unsubscribe?token=` | Unsubscribes. Also the one-click target of `List-Unsubscribe-Post` (RFC 8058) |
+
+An invalid link gets a `400` page saying so, in the visitor's language (`Accept-Language`). The pages are `no-store`,
+`no-referrer` and `noindex` with a CSP that allows no script, and every link route is limited to 30 a minute per client.
+
+**Fan-out.** An incident update (opening an incident, posting an update, and the system updates of a
+[monitor's incident](#what-a-state-change-does)) and a window that is scheduled, starts, completes or is canceled (by
+hand, by the tick, or by its run) ask for a notice in the change's own transaction (`SubscriberNotices.request`): a
+`status.subscribers.fanout` job with the notice as its payload, deduplicated on the notice's key
+(`incident_update:<update id>` or `maintenance:<id>:<status>`). The job (`SubscriberService.fanOut`):
+
+1. reads the notice's incident or window; a draft incident sends nothing, and neither does one deleted since;
+2. picks the page's confirmed, not unsubscribed email subscribers who want it: no component filter, a notice about no
+   component in particular, or one of the notice's components among theirs;
+3. per batch of 200, in one transaction, inserts a delivery each with `ON CONFLICT (subscriber_id, dedupe_key) DO
+   NOTHING` and enqueues a `status.subscribers.deliver` job for each delivery inserted, kicked after the commit.
+
+The mail's content (titles, status, body, component names, times) is captured in the delivery, so a later edit doesn't
+change a queued mail; the page title and the links are read and signed when it is sent.
+
+**At most once.** A subscriber gets an incident update once however often its fan-out runs (a redelivered job, a
+replay): the unique `(subscriber_id, dedupe_key)` pair makes a second fan-out insert nothing and enqueue nothing. The
+delivery job (`SubscriberService.deliver`) claims the delivery (`queued` → `sending`, counting the attempt) with one
+conditional `UPDATE` before calling the sender, so two runs never both send it. Mail can't be recalled, so a claim left
+by a run that died is given up after 2 minutes (`failed`, "interrupted while sending; not sent again") rather than sent
+a second time; while the claim is fresh another run waits for it. At send time:
+
+- an unsubscribed subscriber, a subscriber that hasn't confirmed (for anything but the confirmation), and a confirmation
+  to an address already confirmed are `suppressed`;
+- a deployment without an email sender fails the delivery;
+- the relay's answer settles it: `sent`; `failed` for a permanent refusal (an SMTP 5xx) or on the job's final attempt;
+  otherwise back to `queued` and the job backs off (8 attempts).
+
+**Mail.** `subscriber-mail.ts` renders text and HTML (every customer string escaped; times in UTC) in English or Korean:
+the confirmation ("Confirm your subscription to Acme status", its link and nothing else), an incident update
+("[Acme status] Identified: Elevated errors", the body and the affected components) and a maintenance change
+("[Acme status] Scheduled maintenance: DB upgrade", its window and components). Every mail but the confirmation ends
+with the unsubscribe link and carries it in `List-Unsubscribe`, with `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
+Mail goes through the notifications foundation's email sender ([notifications](./notifications.md#email)).
+
+**Prune.** `status.subscribers.prune` runs daily: it deletes sign-ups never confirmed whose confirmation went out more
+than 7 days ago (their link has expired), and settled deliveries older than 90 days, the window the dedupe holds for.
 
 ## Monitors and the probe protocol
 
@@ -934,7 +1021,8 @@ GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in th
 `/start` isn't followed by a finish within a time limit, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
-(`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
+(`<slug>.status.mocco.club`) and custom domains; subscriber webhooks, the sign-up form on the public page, and the
+console's subscriber list with its MCP tool; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
 `origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
 latency chart in the console's monitor view (the series is `history` on `status.monitor`); and a per-window

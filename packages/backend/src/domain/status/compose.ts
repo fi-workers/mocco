@@ -15,12 +15,16 @@ import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
 import { StatusPageService } from '@backend/domain/status/StatusPageService';
+import { SubscriberNotices } from '@backend/domain/status/SubscriberNotices';
+import { SubscriberService } from '@backend/domain/status/SubscriberService';
 import { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { JobQueue } from '@backend/domain/jobs/ports';
+import type { EmailSender } from '@backend/domain/notification/senders/email';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
+import type { SubscriberTokens } from '@backend/domain/status/subscriber-token';
 import type { ObjectStore } from '@backend/domain/storage/ports';
 import type { Db } from '@backend/infra/db/types';
 
@@ -35,6 +39,8 @@ export interface StatusDomain {
   statusHeartbeats: HeartbeatService;
   statusCorrelation: CorrelationService;
   statusRollups: RollupService;
+  /** Undefined without a queue or the subscriber deps (signing key, email). */
+  statusSubscribers: SubscriberService | undefined;
 }
 
 export interface StatusDomainDeps {
@@ -43,14 +49,19 @@ export interface StatusDomainDeps {
   queue?: JobQueue;
   /** Where monitor alerts are published; without it there are none. */
   events?: EventPublisher;
-  /** The app's origin, for the links in alerts. */
+  /** The app's origin, for the links in alerts and subscriber mail. */
   appOrigin?: string;
+  /** What subscribers need beyond the queue: the key their links are signed with, and the email
+   * sender (undefined when none is configured: deliveries then fail). */
+  subscribers?: { tokens: SubscriberTokens; email: EmailSender | undefined };
   now?: () => Date;
 }
 
 export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain {
   const now = deps.now === undefined ? {} : { now: deps.now };
   const snapshots = new SnapshotScheduler({ db, queue: deps.queue, now: deps.now ?? (() => new Date()) });
+  // Incident updates and window changes ask for a subscriber fan-out in their own transaction.
+  const notices = deps.queue === undefined ? {} : { notices: new SubscriberNotices(deps.queue) };
   // Deploy correlation reads releases and runs through its port, implemented here over their repos.
   const statusCorrelation = new CorrelationService({ db, deploys: createReleaseDeploySource(db), audit: deps.audit });
   const onOpened = async (incident: IncidentRow) => {
@@ -71,6 +82,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     onIncidentOpened: onOpened,
     // A failure during a deploy watch goes on the run's timeline, through the execution repos.
     runTimeline: createRunTimeline(db),
+    ...notices,
     ...now,
   });
   const onStateChange = async (...args: Parameters<MonitorTransitionService['react']>) => {
@@ -82,7 +94,15 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusVerdicts,
     statusHeartbeats: new HeartbeatService({ db, onStateChange, ...now }),
     statusCorrelation,
-    statusIncidents: new IncidentService({ db, audit: deps.audit, pages: statusPages, snapshots, onOpened, ...now }),
+    statusIncidents: new IncidentService({
+      db,
+      audit: deps.audit,
+      pages: statusPages,
+      snapshots,
+      onOpened,
+      ...notices,
+      ...now,
+    }),
     statusMaintenances: new MaintenanceService({
       db,
       audit: deps.audit,
@@ -92,12 +112,24 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
       runs: createRunSource(db),
       ...(deps.events !== undefined && { events: deps.events }),
       ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
+      ...notices,
       ...now,
     }),
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
     statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),
     statusRollups: new RollupService({ db, snapshots }),
+    statusSubscribers:
+      deps.queue === undefined || deps.subscribers === undefined || deps.appOrigin === undefined
+        ? undefined
+        : new SubscriberService({
+            db,
+            queue: deps.queue,
+            tokens: deps.subscribers.tokens,
+            email: deps.subscribers.email,
+            appOrigin: deps.appOrigin,
+            ...now,
+          }),
   };
 }
 

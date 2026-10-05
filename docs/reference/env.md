@@ -159,6 +159,15 @@ configured by its own `MOCCO_*` variables, not by the server's env.
 included; the `status.retention` job drops older days' partitions. Uptime history doesn't depend on it: rollups come
 from the round verdicts and the state changes. See [time series](./status.md#time-series-and-their-partitions).
 
+## Email vars
+
+`EMAIL_DRIVER` picks the email sender (`domain/notification/email-config.ts`): `smtp` sends through `EMAIL_SMTP_URL`
+(`smtp://user:pass@host:587`, STARTTLS when the relay offers it, or `smtps://…:465`) from `EMAIL_FROM`
+(`Acme Status <status@acme.example>`); both are required with it. `log` is the development sink: each mail, links
+included, is written to the server log and nothing is sent, so never use it in production. Unset, nothing is sent and
+status page sign-ups answer `503`. For a real SMTP round trip in development, point `smtp` at a local catcher such as
+Mailpit (`smtp://localhost:1025`). Status subscriber links are signed with a key derived from `AUTH_SECRET`.
+
 ## Messenger vars
 
 `EXPO_ACCESS_TOKEN` (optional) is sent to Expo's push service with messenger reply notifications, for Expo projects that require an access token ("enhanced push security"). Without it, pushes go out unauthenticated, which Expo accepts unless the project requires one. Attachments use [object storage](./storage.md). See [Messenger](./messenger.md#push).

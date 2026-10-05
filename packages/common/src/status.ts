@@ -1,6 +1,7 @@
 // Status page (#103): a project's status pages, their components, incidents and scheduled
 // maintenance (#148), its monitors and probe locations (#150), and the runs correlated with
-// its incidents (#154). Subscribers come in a later slice (docs/specs/2026-09-24-status-page-design.md).
+// its incidents (#154), and the visitors who subscribe to a page (#156)
+// (docs/specs/2026-09-24-status-page-design.md).
 import { z } from 'zod';
 
 /** What a component shows. The DB checks on `mocco_status_components.status` use this object. */
@@ -532,3 +533,43 @@ export const runIncidentSchema = z.object({
   score: z.number().nullable(),
 });
 export type RunIncidentDto = z.infer<typeof runIncidentSchema>;
+
+/** How a visitor follows a page. Email first (#156); signed webhooks share the table. */
+export const SubscriberChannels = { email: 'email', webhook: 'webhook' } as const;
+export type SubscriberChannel = (typeof SubscriberChannels)[keyof typeof SubscriberChannels];
+
+/** The languages subscriber mail is written in. */
+export const SubscriberLocales = { en: 'en', ko: 'ko' } as const;
+export type SubscriberLocale = (typeof SubscriberLocales)[keyof typeof SubscriberLocales];
+export const subscriberLocaleSchema = z.enum(
+  Object.values(SubscriberLocales) as [SubscriberLocale, ...SubscriberLocale[]],
+);
+
+/** What a subscriber is sent: the double opt-in mail, an incident update or a maintenance change. */
+export const SubscriberMailKinds = {
+  confirmation: 'confirmation',
+  incidentUpdate: 'incident_update',
+  maintenance: 'maintenance',
+} as const;
+export type SubscriberMailKind = (typeof SubscriberMailKinds)[keyof typeof SubscriberMailKinds];
+
+export const SubscriberLimits = { emailMax: 254, componentsMax: 100, honeypotMax: 500 } as const;
+
+/**
+ * `POST /v1/status-pages/{slug}/subscribers`. `website` is the form's honeypot: hidden from
+ * people, so a filled one is a bot, answered like a person and otherwise ignored.
+ */
+export const statusSubscribeInputSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .max(SubscriberLimits.emailMax)
+    .pipe(z.email())
+    // eslint-disable-next-line sonarjs/null-dereference -- the piped schema yields a string
+    .transform(email => email.toLowerCase()),
+  /** The components to hear about; leave it out for the whole page. */
+  componentIds: z.array(z.uuid()).min(1).max(SubscriberLimits.componentsMax).optional(),
+  locale: subscriberLocaleSchema.optional(),
+  website: z.string().max(SubscriberLimits.honeypotMax).optional(),
+});
+export type StatusSubscribeInput = z.infer<typeof statusSubscribeInputSchema>;

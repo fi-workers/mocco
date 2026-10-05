@@ -4,6 +4,7 @@ import { getEventBus } from '@backend/domain/events/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { getJobQueue } from '@backend/domain/jobs/instance';
 import { createStatusDomain } from '@backend/domain/status/compose';
+import { subscriberDepsFromEnv } from '@backend/domain/status/subscriber-config';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
@@ -14,11 +15,13 @@ const state: { status?: StatusDomain } = {};
 export function getStatusDomain(): StatusDomain {
   if (!state.status) {
     const env = getEnv();
+    const subscribers = subscriberDepsFromEnv(env);
     state.status = createStatusDomain(getDb(), {
       audit: getAudit().audit,
       queue: getJobQueue(),
       events: getEventBus(),
       appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
+      ...(subscribers !== undefined && { subscribers }),
     });
   }
   return state.status;
