@@ -121,7 +121,7 @@ describe('help router on pglite', () => {
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
     const ctx = {
       ...contextServices(t.db),
-      ...createHelpDomain(t.db, { audit: makeAudit(), storage }),
+      ...createHelpDomain(t.db, { audit: makeAudit(), storage, feedbackSecret: () => 'test-feedback-secret' }),
       auth,
       workspace,
       runs,
@@ -166,6 +166,45 @@ describe('help router on pglite', () => {
     }
     return reserved;
   };
+
+  describe('helpfulness', () => {
+    it('shows an article’s answers from the last 30 days to the project, and to no one else', async () => {
+      const owner = await setup('owner@example.com', 'acme');
+      const collection = await owner.api.help.createCollection({ ...owner.scope, title: 'Start', slug: 'start' });
+      const section = await owner.api.help.createSection({
+        ...owner.scope,
+        collectionId: collection.id,
+        title: 'Basics',
+      });
+      const article = await owner.api.help.createArticle({ ...owner.scope, sectionId: section.id, title: 'Widgets' });
+      await owner.api.help.saveDraft({ ...owner.scope, articleId: article.id, title: 'Widgets', body: 'Long-press.' });
+      await owner.api.help.publish({ ...owner.scope, articleId: article.id });
+      const vote = async (isHelpful: boolean, visitorId: string, comment?: string) =>
+        await owner.ctx.helpFeedback.recordInProject(
+          owner.scope.workspaceId,
+          owner.scope.projectId,
+          article.shortId,
+          { helpful: isHelpful, ...(comment !== undefined && { comment }) },
+          { visitorId },
+        );
+      await vote(true, 'visitor-aaaa');
+      await vote(true, 'visitor-bbbb', 'Thanks!');
+      await vote(false, 'visitor-cccc', 'Missing Android steps');
+      const intruder = await setup('intruder@example.com', 'intruder');
+
+      const seen = await owner.api.help.helpfulness({ ...owner.scope, articleId: article.id });
+
+      expect(seen).toMatchObject({ days: 30, helpful: 2, notHelpful: 1 });
+      expect(new Set(seen.comments.map(entry => entry.comment))).toEqual(new Set(['Missing Android steps', 'Thanks!']));
+      // Another workspace's member, with the owner's ids or their own project's.
+      await expect(intruder.api.help.helpfulness({ ...owner.scope, articleId: article.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(intruder.api.help.helpfulness({ ...intruder.scope, articleId: article.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+    });
+  });
 
   describe('article images', () => {
     it('uploads a pasted PNG as a public help center object and returns its public URL', async () => {

@@ -203,6 +203,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/messenger/contact-us.md`, `customer/messenger/images/messenger-attachment-pdf.png`, `log.md`
 - Source: branch `feat/messenger-pdf-attachments` (#200)
 
+## 2026-10-05 — Agents can read the help center
+
+- The connect guide and the MCP spec list `mocco_help_articles_search` and `mocco_help_articles_get`; the help center
+  reference gains "MCP tools" (published content only, `ProjectScope` with the help center product, concise excerpt
+  vs detailed Markdown).
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/help-center.md`,
+  `log.md`
+- Source: branch `feat/mcp-help` (#216)
+
 ## 2026-10-05 — Help center /v1 reads and the SDK
 
 - The public API reference lists `GET /v1/help/site`, `/collections/{slug}` and `/articles/{id}` with their
@@ -214,6 +223,32 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/public-api.md`, `reference/help-center.md`, `reference/sdk.md`,
   `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
 - Source: branch `feat/help-v1-read` (#216)
+
+## 2026-10-05 — Status: the deploy watch
+
+- The status reference gains "The deploy watch": the `status.deploy_watch` subscriber on `deploy.released` (a
+  production release, not any succeeded run), the monitor-to-project linkage, the watch columns on monitors and how the
+  evaluator schedules watched rounds and ends the watch, the `deploy_watch` incident with `suspected_run_id` (migration
+  0066, with incident `origin`), the 2x factor in correlation, and the `status.post_deploy_check_failed` run event
+  written through the `RunTimeline` port with the run left unchanged. The events and release registry references list
+  the new subscriber; the feature map's deploy watch row says what is built.
+- Docs touched: `reference/status.md`, `reference/events.md`, `reference/releases.md`, `reference/feature-map.md`,
+  `log.md`
+- Source: branch `feat/status-deploy-watch` (#155)
+
+## 2026-10-05 — Help center: Was this helpful?
+
+- The help center reference gains "Was this helpful?": `mocco_help_feedback` (migration 0065), the two surfaces (`/v1` and
+  the public site's `/api/help/feedback`), one answer per visitor, article and day, the keyed visitor hash with its
+  network fallback, the per-address limit, no audit, and the editor's 30-day section; `helpfulness` joins the operator
+  API. The public API lists `POST /v1/help/articles/{id}/feedback`, the SDK reference `sendFeedback`, and the feature
+  map gains a row.
+- The customer guide shows the widget under articles and the editor's section, with two screenshots, and how to send
+  feedback from an app.
+- Docs touched: `reference/help-center.md`, `reference/public-api.md`, `reference/sdk.md`, `reference/feature-map.md`,
+  `customer/help/help-center.md`, `customer/help/images/helpful-widget.png`, `customer/help/images/helpfulness.png`,
+  `log.md`
+- Source: branch `feat/help-feedback` (#216)
 
 ## 2026-10-05 — Help center editor: images and autosave
 

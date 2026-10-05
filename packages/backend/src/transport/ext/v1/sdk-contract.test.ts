@@ -4,6 +4,8 @@ import { type whoamiResponseSchema } from '@mocco/common/apikey';
 import {
   type helpV1ArticleSchema,
   type helpV1CollectionResultSchema,
+  type helpV1FeedbackInputSchema,
+  type helpV1FeedbackResultSchema,
   type helpV1SearchResultSchema,
   type helpV1SiteSchema,
 } from '@mocco/common/help-v1';
@@ -29,6 +31,8 @@ import { describe, expectTypeOf, it } from 'vitest';
 import type {
   HelpArticle,
   HelpCollection,
+  HelpFeedbackRequest,
+  HelpFeedbackResult,
   HelpSearchResult,
   HelpSite,
   MessengerAttachmentRequest,
@@ -69,6 +73,11 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof helpV1SiteSchema>>().toExtend<HelpSite>();
     expectTypeOf<z.output<typeof helpV1CollectionResultSchema>>().toExtend<{ collection: HelpCollection }>();
     expectTypeOf<z.output<typeof helpV1ArticleSchema>>().toExtend<HelpArticle>();
+  });
+
+  it('help feedback: what the SDK sends is accepted, and it reads what the route answers', () => {
+    expectTypeOf<HelpFeedbackRequest>().toExtend<z.input<typeof helpV1FeedbackInputSchema>>();
+    expectTypeOf<z.output<typeof helpV1FeedbackResultSchema>>().toExtend<HelpFeedbackResult>();
   });
 
   it('messenger: what the SDK sends is accepted, and what the routes answer is what it types', () => {

@@ -451,7 +451,11 @@ export async function extHandler(request: Request): Promise<Response> {
       },
       messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
       runs: { runs: execution.runs },
-      help: { help: getHelpDomain().helpPublic, originOf: slug => helpSiteOrigin(slug, env) },
+      help: {
+        help: getHelpDomain().helpPublic,
+        feedback: getHelpDomain().helpFeedback,
+        originOf: slug => helpSiteOrigin(slug, env),
+      },
       probe: { probes: getStatusDomain().statusProbes },
     },
     og: getOgImages(),

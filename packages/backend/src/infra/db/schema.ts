@@ -32,6 +32,7 @@ import {
   CheckOutcomes,
   ComponentImpacts,
   ComponentStatuses,
+  IncidentOrigins,
   IncidentPolicies,
   IncidentRunRelations,
   IncidentSeverities,
@@ -132,6 +133,7 @@ import type {
   ComponentStatus,
   IncidentPolicy,
   IncidentRunRelation,
+  IncidentOrigin,
   IncidentSeverity,
   IncidentStatus,
   IncidentVisibility,
@@ -3157,6 +3159,38 @@ export const helpRedirects = pgTable(
   ],
 );
 
+/**
+ * "Was this helpful?" answers (#216): one per visitor, article and day (UTC), the latest
+ * answer winning. `visitor_hash` is a keyed hash, never a raw address or client id.
+ */
+export const helpFeedback = pgTable(
+  'mocco_help_feedback',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    articleId: uuid('article_id').notNull(),
+    /** The language the visitor read the article in. */
+    locale: text().notNull(),
+    helpful: boolean().notNull(),
+    comment: text(),
+    visitorHash: text('visitor_hash').notNull(),
+    day: date({ mode: 'string' }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_feedback_visitor_day_uq').on(t.articleId, t.visitorHash, t.day),
+    index('mocco_help_feedback_project_article_day_idx').on(t.projectId, t.articleId, t.day),
+    foreignKey({
+      columns: [t.articleId, t.workspaceId],
+      foreignColumns: [helpArticles.id, helpArticles.workspaceId],
+      name: 'mocco_help_feedback_article_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_feedback_comment_check', sql`char_length(${t.comment}) <= 500`),
+  ],
+);
+
 // ─────────────────────────────────────────────────────────────
 // MCP (ADR 0025): per-workspace settings for the agent surface. The tokens and clients
 // themselves are the authorization server's tables above; this is what a workspace
@@ -3288,6 +3322,9 @@ export const statusIncidents = pgTable(
     identifiedAt: timestamp('identified_at'),
     resolvedAt: timestamp('resolved_at'),
     postmortemMd: text('postmortem_md'),
+    origin: text().$type<IncidentOrigin>().notNull().default(IncidentOrigins.manual),
+    // The run whose deploy watch opened it (origin `deploy_watch`). SET NULL: the incident outlives the run.
+    suspectedRunId: uuid('suspected_run_id').references(() => runs.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3310,6 +3347,7 @@ export const statusIncidents = pgTable(
       'mocco_status_incidents_visibility_check',
       sql`${t.visibility} IN (${sqlInList(Object.values(IncidentVisibilities))})`,
     ),
+    check('mocco_status_incidents_origin_check', sql`${t.origin} IN (${sqlInList(Object.values(IncidentOrigins))})`),
     check(
       'mocco_status_incidents_resolved_check',
       sql`(${t.status} IN (${sqlInList([IncidentStatuses.resolved])})) = (${t.resolvedAt} IS NOT NULL)`,
@@ -3528,6 +3566,11 @@ export const statusMonitors = pgTable(
     consecutiveOks: integer('consecutive_oks').notNull().default(0),
     /** What going down does to the page: no incident, a draft one, or a published one. */
     incidentPolicy: text('incident_policy').$type<IncidentPolicy>().notNull().default(IncidentPolicies.draft),
+    /** The deploy watch (#155): rounds before `watch_until` run every `watch_interval_s` seconds, for
+     * the release of `watch_run_id`. The evaluator clears all three once a round reaches `watch_until`. */
+    watchUntil: timestamp('watch_until'),
+    watchIntervalSeconds: integer('watch_interval_s'),
+    watchRunId: uuid('watch_run_id').references(() => runs.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3552,6 +3595,10 @@ export const statusMonitors = pgTable(
       sql`${t.quorumMode} IN (${sqlInList(Object.values(QuorumModes))})`,
     ),
     check('mocco_status_monitors_interval_check', sql`${t.intervalSeconds} >= 60`),
+    check(
+      'mocco_status_monitors_watch_check',
+      sql`(${t.watchUntil} IS NULL) = (${t.watchIntervalSeconds} IS NULL) AND (${t.watchIntervalSeconds} IS NULL OR ${t.watchIntervalSeconds} >= 30)`,
+    ),
     check(
       'mocco_status_monitors_incident_policy_check',
       sql`${t.incidentPolicy} IN (${sqlInList(Object.values(IncidentPolicies))})`,

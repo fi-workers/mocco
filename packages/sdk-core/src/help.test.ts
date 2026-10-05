@@ -92,4 +92,25 @@ describe('HelpClient reads', () => {
     expect(await help.getCollection('start')).toBeNull();
     await expect(help.getSite()).rejects.toMatchObject({ status: 404, code: 'not_found' });
   });
+
+  it('sends feedback with the client’s visitor id', async () => {
+    const fetchSpy = vi.fn(
+      async (_url: RequestInfo | URL, _init?: RequestInit) =>
+        await Promise.resolve(Response.json({ counted: true }, { status: 201 })),
+    );
+    const help = new HelpClient({
+      publishableKey: 'mk_pub_x',
+      baseUrl: 'https://mocco.test/v1',
+      fetch: fetchSpy,
+      visitorId: 'install-1234',
+    });
+
+    expect(await help.sendFeedback('abc123', { helpful: true, locale: 'en' })).toEqual({ counted: true });
+    const [url, init] = fetchSpy.mock.calls[0] ?? [];
+    expect([url, init?.method, JSON.parse(String(init?.body))]).toEqual([
+      'https://mocco.test/v1/help/articles/abc123/feedback',
+      'POST',
+      { helpful: true, locale: 'en', visitorId: 'install-1234' },
+    ]);
+  });
 });

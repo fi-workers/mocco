@@ -99,6 +99,9 @@ governance event carries (`workspaceId`, `runId`, `repoFullName`, `pipelineName`
 `occurredAt` is the run's finish time, so a release published late by the reconcile job still
 sorts and prunes by when it happened.
 
+The status [deploy watch](./status.md#the-deploy-watch) subscribes to it (`status.deploy_watch`) and checks the
+released projects' monitors every 30 seconds for 15 minutes.
+
 The notification fan-out subscribes to `deploy.*`, so a channel rule on `deploy.released` posts a
 "Released: owner/name" message ([notifications: templates](./notifications.md#templates)). It is
 not in the `mocco` preset; add the rule to a channel to get it.

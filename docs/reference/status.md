@@ -52,6 +52,8 @@ code_refs:
   - packages/backend/src/domain/status/ports.ts
   - packages/backend/src/domain/status/release-deploys.ts
   - packages/backend/src/domain/status/repos/incident-run.repo.ts
+  - packages/backend/src/domain/status/DeployWatchService.ts
+  - packages/backend/src/domain/status/subscribers.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
   - packages/frontend/src/components/status/incidents.tsx
@@ -71,7 +73,8 @@ agent run at a private location or embedded in a single-node self-hosted server 
 [below](#monitors-and-the-probe-protocol)); a monitor's state drives its
 components, opens incidents and sends alerts ([below](#what-a-state-change-does)). Each incident lists the releases
 around its start and any run a person links to it, and a run lists its incidents (#154,
-[below](#deploy-correlation)). There are no subscribers yet.
+[below](#deploy-correlation)); after a release its monitors check every 30 seconds for 15 minutes, and a failure then
+opens an incident naming the run (#155, [the deploy watch](#the-deploy-watch)). There are no subscribers yet.
 
 ## Console
 
@@ -106,14 +109,14 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_pages` | A page: `slug` and `title`. The slug is unique across all workspaces, because it becomes the public host label; it follows the project handle pattern (lowercase letters, digits and inner hyphens, 1 to 40 characters), checked in zod and in the DB. `dirty_at` (a change is waiting to be published), `published_version` and `published_at` track the [public page](#public-page) |
 | `mocco_status_component_groups` | A heading on a page ("API", "Dashboard"), with `position` |
 | `mocco_status_components` | A part of the service: `name`, `description`, optional `group_id`, `position`, and `status`, the one an operator sets by hand |
-| `mocco_status_incidents` | `title`, `status`, `severity` (`minor`, `major`, `critical`), `visibility` (`published`, or `draft`, which never reaches the public page), `started_at`, `identified_at`, `resolved_at`, `postmortem_md`, `created_by_user_id` |
+| `mocco_status_incidents` | `title`, `status`, `severity` (`minor`, `major`, `critical`), `visibility` (`published`, or `draft`, which never reaches the public page), `started_at`, `identified_at`, `resolved_at`, `postmortem_md`, `origin` (`manual`, `monitor`, `deploy_watch`), `suspected_run_id` (the run whose [deploy watch](#the-deploy-watch) opened it; `SET NULL` when the run is deleted), `created_by_user_id` |
 | `mocco_status_incident_updates` | The incident's timeline: `status` and `body_md` per update, append-only |
 | `mocco_status_incident_components` | The components an incident affects, with `impact` (`degraded`, `partial_outage`, `major_outage`) |
 | `mocco_status_maintenances` | A window: `title`, `body_md`, `scheduled_start`/`scheduled_end` (end after start, DB-checked), `status`, `actual_start`/`actual_end` |
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, and the streaks `consecutive_fails` and `consecutive_oks` |
+| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id` |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_incident_runs` | The runs linked to an incident ([deploy correlation](#deploy-correlation)): `relation` (`suspected`, `before_window`, `fix`, `manual`), `score` (a suggestion's), `linked_by_user_id` (null for a suggestion). Keyed by (incident, run), with an index on `run_id` for the run's side; deleting the incident or the run deletes the link |
@@ -189,8 +192,54 @@ relation, score (or "linked by a person"), repo and commit, a link to the run, a
 the workspace's 50 latest runs (`run.list`) as related (`manual`) or `fix`; and **Recompute**. The run page gets an
 **Incidents** panel (`run-incidents.tsx`) through `runIncidents`, shown only when the status product is on.
 
-Not built yet: the deploy watch (monitors checking every 30 seconds after a release, and its 2x factor),
-`suspected_run_id` on the incident, and a per-page window.
+An incident a [deploy watch](#the-deploy-watch) opened has `suspected_run_id`, and that run's score counts 2 times
+(with the 1.5 for a linked repo, 3 times). The factor comes from the incident, so recomputing keeps it. Not built yet:
+a per-page window.
+
+### The deploy watch
+
+Right after a release, the released project's monitors check every 30 seconds for 15 minutes (`DeployWatch` in
+`@mocco/common/status`), so a deploy that breaks a check is seen within a minute and the incident it opens names the
+run.
+
+**Trigger.** The `status.deploy_watch` subscriber on `deploy.released` (`domain/status/subscribers.ts`), not
+`run.succeeded`. A release is a run that succeeded and passed a resumed gate ([release registry](./releases.md)), so a
+CI run that never reached a production gate starts no watch, and the event already names every project the run's repo
+is linked to. The spec's `CorrelationService.onRunFinished` predates the registry.
+
+**Linkage.** A monitor belongs to a project, and the release names projects, so the watch covers every monitor of the
+released projects (`projectIds`) that isn't paused. Components have no repo links yet; when they do, the watch can
+narrow to the monitors on the affected components.
+
+**Starting.** `DeployWatchService.startWatch` sets `watch_until` to 15 minutes after the run finished
+(`releasedAt`), `watch_interval_s` to 30 and `watch_run_id`, and pulls a round that isn't due yet to now; a round
+already due or open stays as it is. Each monitor is changed under its state lock. The window counts from the release
+rather than from delivery, so a redelivered event keeps the same window and a release delivered more than 15 minutes
+late (by the reconcile job) starts nothing. A monitor already watching a later release keeps that watch.
+
+**Rounds.** A round is watched when it starts before `watch_until`. The evaluator schedules the round after a watched
+one at `watch_interval_s`, and the first round at or past `watch_until` clears all three columns and schedules the next
+one at the monitor's own interval. No job ends the watch.
+
+**A failure.** A `down` change in a watched round:
+
+- with no open monitor incident, opens one ([what a state change does](#what-a-state-change-does)) with
+  `origin = 'deploy_watch'`, `suspected_run_id` set to the watched run, and the first update "The monitor "API health"
+  started failing within N min of a deploy." (the body can be public, so it never names the repo or the run). The
+  correlation that follows links the run as `suspected` in `mocco_status_incident_runs`, with the 2x factor;
+- with an open incident (an outage that began before the deploy), keeps that incident as it is;
+- in both cases, and when `incident_policy` is `none`, appends `status.post_deploy_check_failed` to the run's timeline
+  (`mocco_run_events`) with `monitorId`, `monitorName`, `projectId`, `incidentId` and `incidentTitle` (or null),
+  `incidentOpened`, `minutesAfterRelease` and the console `linkPath`. Status writes it through the `RunTimeline` port
+  (`createRunTimeline` in `release-deploys.ts`), so execution never depends on status. A failed append is logged and
+  never undoes the change.
+
+It changes nothing about the run: no state, no rollback. An automatic rollback on a failed post-deploy check is an
+enforcement change and needs its own ADR.
+
+The incident's `suspected_run_id` is a column rather than only the `suspected` link: suggestions are replaced on every
+recompute and a person can unlink them, while which watch opened the incident is a fact that has to last, and it is
+what the 2x factor reads. Incidents a monitor opened before migration 0066 read `origin = 'manual'`.
 
 ## What a component shows
 
@@ -474,8 +523,9 @@ paused monitor has no rounds.
 
 Each close is one transaction under the monitor's advisory lock (the same one pause and resume take). It re-reads
 the monitor and skips the round if another evaluator closed it meanwhile. It inserts the verdict, sets the state and
-streaks, and moves `next_round_at` to one interval after the round, or to now when that is already past or when the
-monitor just became `suspect` (the recheck). When the state moved, it appends a state change with the round and a
+streaks, and moves `next_round_at` to one interval after the round (`watch_interval_s` during a
+[deploy watch](#the-deploy-watch)), or to now when that is already past or when the monitor just became `suspect` (the
+recheck). When the state moved, it appends a state change with the round and a
 `reason` carrying the verdict and counts. Probes then lease the next round as usual.
 
 ### What a state change does
@@ -490,6 +540,7 @@ In one transaction under the monitor's advisory lock, so reactions to one monito
    don't) is marked dirty, and a [publish](#public-page) is requested.
 2. **Incidents.** On `down`, a monitor without an open incident and with `incident_policy` other than `none` opens one
    on the page holding most of its components (first in page order on a tie): "<monitor> is down", `investigating`,
+   `origin` `monitor` (`deploy_watch` during a [deploy watch](#the-deploy-watch)),
    severity `major` when a component goes to `major_outage` and `minor` otherwise, those components with their
    `impact_when_down`, and a link in `mocco_status_incident_monitors`. It is a `draft` unless the policy is `publish`
    and no maintenance window in progress covers one of the monitor's components; a draft never reaches the public
@@ -580,9 +631,9 @@ Hosted locations, publishing `@mocco/probe` to npm and its image to
 GHCR, heartbeat monitors, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
-(`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` and a way to publish a draft incident
-(a monitor's draft is visible in the console but can't be published yet); repo and project links on components; the
-deploy watch and `suspected_run_id`; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
+(`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
+(a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
+`origin` and `suspected_run_id` in the console and the incident DTO; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
 ## MCP

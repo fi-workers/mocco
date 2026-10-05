@@ -186,6 +186,9 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
 - The release registry (`registerReleaseSubscribers`, `domain/project/subscribers.ts`) as
   `release.record` on `run.succeeded`: it records the run's releases and publishes
   `deploy.released` ([release registry](./releases.md)).
+- The status deploy watch (`registerStatusSubscribers`, `domain/status/subscribers.ts`) as
+  `status.deploy_watch` on `deploy.released`: it watches the released projects' monitors for 15
+  minutes ([status: the deploy watch](./status.md#the-deploy-watch)).
 
 ## Delivery
 

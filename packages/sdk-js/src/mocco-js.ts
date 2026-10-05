@@ -42,6 +42,8 @@ export type {
   HelpArticleHit,
   HelpClientOptions,
   HelpCollection,
+  HelpFeedback,
+  HelpFeedbackResult,
   HelpReadOptions,
   HelpSearchOptions,
   HelpSite,

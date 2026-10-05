@@ -190,6 +190,7 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
       statusMonitors: { list: refuse, get: refuse },
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
+      helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

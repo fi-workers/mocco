@@ -12,6 +12,7 @@ import {
   translationInputSchema,
 } from '@mocco/common/help';
 import { importBundleSchema } from '@mocco/common/help-import';
+import { helpfulnessSchema } from '@mocco/common/help-v1';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
 
@@ -52,6 +53,14 @@ export const helpRouter = router({
           ctx.session.user.id,
           input.allowAiTraining,
         ),
+    ),
+
+  /** "Was this helpful?" over the last 30 days, with the newest comments. */
+  helpfulness: helpProcedure
+    .input(articleInput)
+    .output(helpfulnessSchema)
+    .query(
+      async ({ ctx, input }) => await ctx.helpFeedback.helpfulness(input.workspaceId, input.projectId, input.articleId),
     ),
 
   tree: helpProcedure.input(projectInput).query(async ({ ctx, input }) => ({

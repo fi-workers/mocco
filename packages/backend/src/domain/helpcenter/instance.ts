@@ -1,13 +1,17 @@
 // Production composition root for the help center. Lazy so builds don't need env at import.
+import { createHash } from 'node:crypto';
+
 import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { HELP_FEEDBACK_RATE_LIMIT, helpFeedbackSecret } from '@backend/domain/helpcenter/HelpFeedbackService';
 import { indexNowKey } from '@backend/domain/helpcenter/indexnow';
 import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { HttpHelpRevalidator } from '@backend/domain/helpcenter/revalidate-http';
 import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { getJobQueue } from '@backend/domain/jobs/instance';
+import { getRateLimiter } from '@backend/domain/ratelimit/instance';
 import { getStorageDomain } from '@backend/domain/storage/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
@@ -33,6 +37,7 @@ export function getHelpDomain(): HelpDomain {
     audit: getAudit().audit,
     queue: getJobQueue(),
     indexNow: helpIndexNowFromEnv(getDb(), env) !== undefined,
+    feedbackSecret: () => helpFeedbackSecret(getEnv().AUTH_SECRET),
     ...(storage !== undefined && { storage }),
     ...(translator !== undefined && { translator }),
     ...(revalidator !== undefined && { revalidator }),
@@ -55,6 +60,13 @@ export function helpIndexNowKeyFor(slug: string): string | null {
 /** Where a help site is served (its custom domain, else its Mocco subdomain), or null. */
 export function helpSiteOriginFor(slug: string): string | null {
   return helpSiteOrigin(slug, getEnv());
+}
+
+/** Whether the public site may take another "Was this helpful?" answer from `address` now. */
+export async function allowHelpFeedbackFrom(address: string): Promise<boolean> {
+  const bucket = `help-feedback:${createHash('sha256').update(address).digest('hex').slice(0, 16)}`;
+  const result = await getRateLimiter().consume(bucket, HELP_FEEDBACK_RATE_LIMIT);
+  return result.allowed;
 }
 
 export { checkRevalidateRequest } from '@backend/domain/helpcenter/revalidate';

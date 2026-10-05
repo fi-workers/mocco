@@ -8,7 +8,7 @@ import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import { MonitorService } from '@backend/domain/status/MonitorService';
 import { MonitorTransitionService } from '@backend/domain/status/MonitorTransitionService';
 import { ProbeService } from '@backend/domain/status/ProbeService';
-import { createReleaseDeploySource } from '@backend/domain/status/release-deploys';
+import { createReleaseDeploySource, createRunTimeline } from '@backend/domain/status/release-deploys';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
 import { StaticPublisher } from '@backend/domain/status/StaticPublisher';
@@ -65,6 +65,8 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     ...(deps.events !== undefined && { events: deps.events }),
     ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
     onIncidentOpened: onOpened,
+    // A failure during a deploy watch goes on the run's timeline, through the execution repos.
+    runTimeline: createRunTimeline(db),
     ...now,
   });
   const statusVerdicts = new VerdictEvaluator({
