@@ -164,6 +164,7 @@ export class VersionPolicyService {
     if (direction === PolicyDirections.tighten && gate !== null) {
       await this.deps.approvals.supersedePending(workspaceId, OtaApprovalSubjects.versionPolicy, appId, actorUserId);
       const request = await this.deps.approvals.request(workspaceId, {
+        projectId,
         kind: ApprovalKinds.preApproval,
         subjectType: OtaApprovalSubjects.versionPolicy,
         subjectId: appId,
@@ -180,6 +181,7 @@ export class VersionPolicyService {
     }
     if (direction === PolicyDirections.relax && gate !== null) {
       const review = await this.deps.approvals.request(workspaceId, {
+        projectId,
         kind: ApprovalKinds.review,
         subjectType: OtaApprovalSubjects.versionPolicy,
         subjectId: appId,

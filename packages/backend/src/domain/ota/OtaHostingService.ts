@@ -238,6 +238,7 @@ export class OtaHostingService {
     const subjectType = OtaHostingApprovalSubjects.channelPolicy;
     await this.deps.approvals.supersedePending(app.workspaceId, subjectType, channel.id, actorUserId);
     const request = await this.deps.approvals.request(app.workspaceId, {
+      projectId: app.projectId,
       kind: ApprovalKinds.preApproval,
       subjectType,
       subjectId: channel.id,

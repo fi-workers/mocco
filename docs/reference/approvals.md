@@ -4,7 +4,7 @@ description: How any domain asks for an N-of-M approval of a pinned change (or r
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-27
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, governance, approvals, audit]
@@ -27,7 +27,7 @@ code_refs:
 
 | Table | Notes |
 |---|---|
-| `mocco_approval_requests` | `kind` (`pre_approval` \| `review`), `subject_type` + `subject_id` (opaque to governance), `action` (the pinned change, jsonb), `requirements` (a `GateRequirements` snapshot), `requested_by_user_id` (SET NULL), `state`, `expires_at`, `resolved_at`. |
+| `mocco_approval_requests` | `kind` (`pre_approval` \| `review`), `project_id` (the subject's project, set by the product that opens the request so Home and MCP can say where it's decided; null for workspace-wide requests; composite FK to `mocco_projects(id, workspace_id)`), `subject_type` + `subject_id` (opaque to governance), `action` (the pinned change, jsonb), `requirements` (a `GateRequirements` snapshot), `requested_by_user_id` (SET NULL), `state`, `expires_at`, `resolved_at`. |
 | `mocco_approval_votes` | One per `(request_id, user_id)`. `role_id` is the required role the vote counted under (SET NULL), `decision` (`approve` \| `reject`), `reason`. `user_id` is RESTRICT, like `mocco_resumes`. |
 
 States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All transitions go through one conditional update (`WHERE state = 'pending'`), so under concurrent votes exactly one writer resolves a request.
