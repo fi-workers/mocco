@@ -61,6 +61,23 @@ export class LocationRepo {
     return rows.map(row => row.id);
   }
 
+  /**
+   * The shared location with `row.code`, inserted from `row` when there is none yet. Two
+   * callers racing both get the one row: the insert does nothing on the code's unique index.
+   */
+  async ensureShared(row: Omit<typeof l.$inferInsert, 'workspaceId'>): Promise<LocationRow> {
+    await this.db
+      .insert(l)
+      .values({ ...row, workspaceId: null })
+      .onConflictDoNothing();
+    return expectOne(
+      await this.db
+        .select()
+        .from(l)
+        .where(and(isNull(l.workspaceId), eq(l.code, row.code))),
+    );
+  }
+
   async insert(row: typeof l.$inferInsert): Promise<LocationRow> {
     try {
       return expectOne(await this.db.insert(l).values(row).returning());

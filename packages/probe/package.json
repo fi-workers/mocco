@@ -6,6 +6,13 @@
   "bin": {
     "mocco-probe": "./dist/cli.js"
   },
+  "exports": {
+    "./create-agent": {
+      "@mocco/source": "./src/create-agent.ts",
+      "types": "./dist/create-agent.d.ts",
+      "import": "./dist/create-agent.js"
+    }
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli.ts",

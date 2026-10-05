@@ -107,6 +107,14 @@ On Vercel, `packages/frontend/vercel.json` pins the functions to `icn1` (Seoul),
 `DISCORD_CLIENT_SECRET` (the bot install OAuth pair) configure notifications. All are optional;
 without the token, deliveries wait instead of sending. See [Notifications](./notifications.md#env).
 
+## Status probe vars
+
+`STATUS_PROBE_EMBEDDED=true` makes a single-node self-hosted server run the status page's probe loop in-process as
+the shared `embedded` location, starting with the first job tick after boot (so it needs `JOBS_TICK_SECRET` and the
+per-minute tick). `STATUS_PROBE_CONCURRENCY` (1 to 200, default 20) is how many of its checks run at once. Both are
+ignored on Vercel. See [the embedded probe](./status.md#the-embedded-probe). A probe that runs elsewhere is
+configured by its own `MOCCO_*` variables, not by the server's env.
+
 ## Messenger vars
 
 `EXPO_ACCESS_TOKEN` (optional) is sent to Expo's push service with messenger reply notifications, for Expo projects that require an access token ("enhanced push security"). Without it, pushes go out unauthenticated, which Expo accepts unless the project requires one. Attachments use [object storage](./storage.md). See [Messenger](./messenger.md#push).

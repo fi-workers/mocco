@@ -100,6 +100,14 @@ const schema = z.object({
   STORAGE_FS_ROOT: z.string().min(1).optional(),
   /** Filesystem driver: the HMAC key of its signed URLs (default: derived from AUTH_SECRET). */
   STORAGE_SIGNING_SECRET: z.string().min(1).optional(),
+  // Status page (#150, ADR 0027 §6): a single-node self-hosted server runs the probe loop
+  // in-process as the shared `embedded` location. Never on Vercel: the runtime refuses there.
+  STATUS_PROBE_EMBEDDED: z
+    .enum(['true', 'false', '1', '0', ''])
+    .optional()
+    .transform(value => value === 'true' || value === '1'),
+  /** How many checks the embedded probe runs at once. */
+  STATUS_PROBE_CONCURRENCY: z.coerce.number().int().min(1).max(200).default(20),
 });
 
 export type Env = z.infer<typeof schema>;
