@@ -37,6 +37,15 @@ export class ProjectRepoRepo {
       );
   }
 
+  /** The projects a repo is linked to, oldest link first (a release is recorded for each). */
+  async listByRepo(workspaceId: string, repoId: string) {
+    return await this.db
+      .select()
+      .from(schema.projectRepos)
+      .where(and(eq(schema.projectRepos.workspaceId, workspaceId), eq(schema.projectRepos.repoId, repoId)))
+      .orderBy(asc(schema.projectRepos.createdAt));
+  }
+
   /** A project's repo links, oldest first. */
   async listByProject(workspaceId: string, projectId: string) {
     return await this.db

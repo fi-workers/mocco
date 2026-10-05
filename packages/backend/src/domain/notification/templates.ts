@@ -104,6 +104,24 @@ function runFailedMessage(
   });
 }
 
+function deployReleasedMessage(
+  context: TemplateContext,
+  payload: DomainEventPayload<typeof DomainEventTypes.deployReleased>,
+): NeutralMessage {
+  const previous = payload.previousReleaseSha?.slice(0, SHORT_SHA_LENGTH);
+  const resumers = payload.resumedBy.map(({ role }) => ({ role: role ?? 'deleted role' }));
+  return governanceMessage(context, payload, {
+    title: `Released: ${payload.repoFullName}`,
+    severity: Severities.success,
+    description: previous === undefined ? 'First release of this repository.' : `Since ${previous}.`,
+    fields: [
+      ...runFields(payload),
+      field('Gates', payload.gates.map(gate => gate.name).join(', ')),
+      ...(resumers.length === 0 ? [] : [field('Resumed by', describeRoleCounts(countByRole(resumers)))]),
+    ],
+  });
+}
+
 /**
  * The message for `event`. Throws when the result does not fit a NeutralMessage,
  * which would be a template bug (every governance input is bounded or truncated
@@ -155,6 +173,9 @@ export function renderEventMessage(event: DeliveredEvent, context: TemplateConte
     }
     case DomainEventTypes.runFailed: {
       return runFailedMessage(context, event.payload);
+    }
+    case DomainEventTypes.deployReleased: {
+      return deployReleasedMessage(context, event.payload);
     }
     default: {
       // Inbound events (`sentry.*`, `vercel.*`, `github.*`) and product events (OTA, flags, messenger, status): the

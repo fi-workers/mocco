@@ -21,6 +21,7 @@ import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { createFakeDiscordFetch, jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
 import { OtaJobKinds } from '@backend/domain/ota/jobs';
+import { ReleaseJobKinds } from '@backend/domain/project/jobs';
 import { RateLimitJobKinds } from '@backend/domain/ratelimit/jobs';
 import { StatusJobKinds } from '@backend/domain/status/jobs';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
@@ -65,7 +66,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 20 });
 
-    expect(report).toMatchObject({ ran: 18, errors: [], outcomes: { succeeded: 18 } });
+    expect(report).toMatchObject({ ran: 19, errors: [], outcomes: { succeeded: 19 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -77,6 +78,7 @@ describe('job runtime composition (pglite)', () => {
         InboundJobKinds.prune,
         StorageJobKinds.gc,
         RateLimitJobKinds.prune,
+        ReleaseJobKinds.reconcile,
         OtaJobKinds.pruneUploadSessions,
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,
@@ -153,5 +155,66 @@ describe('job runtime composition (pglite)', () => {
     ]);
     const deliverJob = await t.db.select().from(jobs).where(eq(jobs.kind, NotificationJobKinds.deliver));
     expect(deliverJob.map(job => job.status)).toEqual([JobStatuses.succeeded]);
+  });
+
+  it('delivers deploy.released to a channel with a rule on it', async () => {
+    const workspaceId = await seedWorkspace(t.db);
+    const channel = await seedChannel(t.db, workspaceId);
+    await seedRule(t.db, channel, { eventType: DomainEventTypes.deployReleased });
+    const fake = createFakeDiscordFetch(jsonResponse(200, { id: '4343' }));
+    const kicked: Promise<unknown>[] = [];
+    const runner = createJobRunner(t.db, {
+      now: () => T0,
+      random: () => 0,
+      workerId: 'test',
+      waitUntil: promise => {
+        kicked.push(promise);
+      },
+      appOrigin: 'https://mocco.test',
+      discord: new DiscordApi({ fetch: fake.fetch, botToken: 'bot', now: () => T0 }),
+      storage: undefined,
+    });
+    const publisher = createEventBus({
+      db: t.db,
+      queue: new PostgresJobQueue({
+        jobs: new JobRepo(t.db),
+        now: () => T0,
+        runOne: async () => await Promise.resolve(null),
+        waitUntil: () => {},
+      }),
+      now: () => T0,
+      appOrigin: 'https://mocco.test',
+    });
+    const runId = randomUUID();
+    await publisher.publish({
+      type: DomainEventTypes.deployReleased,
+      workspaceId,
+      subject: { type: 'run', id: runId },
+      payload: {
+        workspaceId,
+        runId,
+        repoFullName: 'fi-workers/api',
+        pipelineName: 'deploy',
+        commitSha: 'def5678abc',
+        linkPath: `/workspaces/${workspaceId}/runs/${runId}`,
+        facts: { repo: 'fi-workers/api', pipeline: 'deploy' },
+        repoId: randomUUID(),
+        projectIds: [randomUUID()],
+        previousReleaseSha: 'abc1234def',
+        gates: [{ gateId: randomUUID(), name: 'production', resumedBy: [{ userId: randomUUID(), role: 'deployer' }] }],
+        resumedBy: [{ userId: randomUUID(), role: 'deployer' }],
+        releasedAt: T0.toISOString(),
+      },
+    });
+
+    // The tick hands the event to the fan-out, which queues and kicks the delivery.
+    await runner.tick({ budgetMs: 10_000, maxJobs: 10 });
+    await Promise.all(kicked);
+
+    const [delivery] = await t.db.select().from(notificationDeliveries);
+    expect(delivery).toMatchObject({ status: DeliveryStatuses.sent, externalMessageId: '4343' });
+    const [request] = fake.requests;
+    expect(request?.body).toContain('Released: fi-workers/api');
+    expect(request?.body).toContain('Since abc1234.');
   });
 });

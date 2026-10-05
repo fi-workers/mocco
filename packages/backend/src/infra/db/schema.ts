@@ -67,6 +67,7 @@ import {
 
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
+import type { ReleaseGate } from '@mocco/common/events';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type {
   AttributeClause,
@@ -1088,6 +1089,46 @@ export const workspaceProducts = pgTable(
       'mocco_workspace_products_product_check',
       sql`${t.product} IN (${sqlInList(Object.values(Products).filter(product => product !== Products.governance))})`,
     ),
+  ],
+);
+
+/**
+ * The release registry (platform foundations §4): one row per (project, released run).
+ * A run is released when it succeeded and passed at least one resumed gate (ADR 0003);
+ * the `deploy.released` subscriber writes a row for every project linked to the run's
+ * repo, and `releases.reconcile` fills rows it missed. See docs/reference/releases.md.
+ */
+export const releases = pgTable(
+  'mocco_releases',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    // SET NULL: the release outlives the run and repo it came from (their history can be
+    // deleted with a disconnected repo); the commit sha and gates stay on the row.
+    runId: uuid('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    commitSha: text('commit_sha').notNull(),
+    // The resumed gates the run passed and whose votes resumed them, as of the release.
+    gates: jsonb().$type<ReleaseGate[]>().notNull(),
+    // When the run finished.
+    releasedAt: timestamp('released_at').notNull(),
+    createdAt,
+  },
+  t => [
+    // One release per project per run: the subscriber and the reconcile job both insert
+    // with ON CONFLICT DO NOTHING on it. NULL run ids (a deleted run) never conflict.
+    uniqueIndex('mocco_releases_project_run_uq').on(t.projectId, t.runId),
+    index('mocco_releases_project_released_at_idx').on(t.projectId, t.releasedAt.desc()),
+    // The previous release of a repo (`previousReleaseSha`).
+    index('mocco_releases_repo_released_at_idx').on(t.repoId, t.releasedAt.desc()),
+    index('mocco_releases_run_idx').on(t.runId),
+    // Composite FK guards the denormalized workspace_id against drift.
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_releases_project_workspace_fk',
+    }).onDelete('cascade'),
   ],
 );
 

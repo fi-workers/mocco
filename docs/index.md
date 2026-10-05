@@ -95,6 +95,7 @@ related:
 - [Object storage](./reference/storage.md) — the store port and its S3/R2 and filesystem drivers, two-phase uploads, quotas, signed URLs, storage.gc
 - [Background jobs and schedules](./reference/jobs.md) — adding a handler, retries and RetryAt, dedupe, schedules, the tick route and its env
 - [Domain events](./reference/events.md) — the event catalog, publishing and subscribing, at-least-once delivery, retention
+- [Release registry](./reference/releases.md) — what counts as a production release, `mocco_releases`, `deploy.released`, the reconcile job
 - [Inbound webhook sources](./reference/inbound.md) — per-source ingest URLs, vendor secrets, receipts and outcomes, quota, retention
 - [Notifications](./reference/notifications.md) — channels, rules and filters, the delivery lifecycle, the Discord failure policy
 - [Search engines and crawlers](./reference/seo.md) — robots.txt and sitemap.xml on the app's host and every help center's host

@@ -183,7 +183,7 @@ trace, e.g. ``rule `vercel.deployment.succeeded` needs target = "production" (th
 
 The bus subscriptions live in `createEventBus` (`domain/events/subscriptions.ts`), registered by
 `registerNotificationSubscribers`, one `<family>.*` subscription per event family of the catalog:
-`gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`,
+`gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`,
 under the permanent names in `NotificationSubscribers` (`notification.fan-out.<family>`). A rule can
 name any catalog type, so every family must reach the fan-out: `NotificationSubscribers` satisfies
 a type keyed by every family in `DomainEventTypes`, so a family added to the catalog without its
@@ -215,6 +215,9 @@ before the ledger write), and the unique pair makes that a no-op.
   `gate.pending`; the resuming roles on `gate.resumed`; the reason on `gate.rejected`; the failed
   step and an http(s) logs link on `run.failed`). The link is `appOrigin + payload.linkPath`, where
   `appOrigin` comes from `SERVICE_DOMAIN` (`resolveBaseOrigin`).
+- `deploy.released`: "Released: owner/name" with the run fields, "Since <short sha>" (or "First
+  release of this repository"), the gates passed and the resuming roles, linking to the run
+  ([release registry](./releases.md)).
 
 ## Delivery lifecycle
 

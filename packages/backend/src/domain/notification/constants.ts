@@ -37,6 +37,7 @@ type FanOutSubscribers = {
 export const NotificationSubscribers = {
   gate: { pattern: 'gate.*', name: 'notification.fan-out.gate' },
   run: { pattern: 'run.*', name: 'notification.fan-out.run' },
+  deploy: { pattern: 'deploy.*', name: 'notification.fan-out.deploy' },
   sentry: { pattern: 'sentry.*', name: 'notification.fan-out.sentry' },
   vercel: { pattern: 'vercel.*', name: 'notification.fan-out.vercel' },
   github: { pattern: 'github.*', name: 'notification.fan-out.github' },

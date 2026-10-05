@@ -14,7 +14,7 @@ import type { InboundEventType } from './inbound';
  * Every type has exactly one zod payload schema here; `EventBus.publish` parses the
  * payload with it, so a subscriber can trust the shape it is handed.
  *
- * The catalog is built from per-area parts (governance, inbound). A new area (products
+ * The catalog is built from per-area parts (governance, releases, inbound). A new area (products
  * later) adds its own `*EventTypes` + `*EventPayloadSchemas` pair and spreads
  * both into `DomainEventTypes` and `domainEventPayloadSchemas` below.
  */
@@ -99,6 +99,45 @@ export const governanceEventPayloadSchemas = {
   [GovernanceEventTypes.gatePending]: gatePendingPayloadSchema,
   [GovernanceEventTypes.gateResumed]: gateResumedPayloadSchema,
   [GovernanceEventTypes.gateRejected]: gateRejectedPayloadSchema,
+} as const;
+
+/** Release event types: a deploy that reached production (ADR 0003: a run that succeeded
+ * and passed at least one resumed gate). Published by the release registry. */
+export const ReleaseEventTypes = {
+  deployReleased: 'deploy.released',
+} as const;
+
+/** A person whose resume vote counted on a gate, with the role it counted under (null once
+ * that role is deleted). */
+export const releaseResumerSchema = z.object({ userId: z.uuid(), role: z.string().nullable() });
+
+/** One resumed gate a released run passed, as recorded on the release. */
+export const releaseGateSchema = z.object({
+  gateId: z.uuid(),
+  name: z.string().min(1),
+  resumedBy: z.array(releaseResumerSchema),
+});
+export type ReleaseGate = z.infer<typeof releaseGateSchema>;
+
+/**
+ * `deploy.released`: one event per released run, naming every project the release was
+ * recorded for (the projects linked to the run's repo when it finished).
+ */
+export const deployReleasedPayloadSchema = runEventPayloadSchema.extend({
+  repoId: z.uuid(),
+  projectIds: z.array(z.uuid()).min(1),
+  /** The commit of the repo's release before this one, or null for its first. */
+  previousReleaseSha: z.string().nullable(),
+  /** The resumed gates the run passed, in pipeline order. */
+  gates: z.array(releaseGateSchema).min(1),
+  /** Everyone whose resume vote counted, across those gates (one entry per person and role). */
+  resumedBy: z.array(releaseResumerSchema),
+  /** When the run finished. */
+  releasedAt: z.iso.datetime(),
+});
+
+export const releaseEventPayloadSchemas = {
+  [ReleaseEventTypes.deployReleased]: deployReleasedPayloadSchema,
 } as const;
 
 /**
@@ -204,6 +243,7 @@ export const statusEventPayloadSchemas = {
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
+  ...ReleaseEventTypes,
   ...InboundEventTypes,
   ...OtaEventTypes,
   ...FlagEventTypes,
@@ -215,6 +255,7 @@ export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEvent
 /** The payload schema of every type. Extension point: spread each area's schemas here. */
 export const domainEventPayloadSchemas = {
   ...governanceEventPayloadSchemas,
+  ...releaseEventPayloadSchemas,
   ...inboundEventPayloadSchemas,
   ...otaEventPayloadSchemas,
   ...flagEventPayloadSchemas,

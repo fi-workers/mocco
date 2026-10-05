@@ -161,6 +161,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Release registry and `deploy.released`
+
+- Added the release registry reference: a release is a run that succeeded and passed at least one resumed gate
+  (ADR 0003), recorded once per project linked to the run's repo in `mocco_releases`, announced once as
+  `deploy.released`, and filled in by the hourly `releases.reconcile` job when the event path loses one. The events
+  reference lists the type, its payload and the `release.record` subscriber; the project reference drops the
+  "lands later" note; the index links the new page. The notifications reference adds `deploy.*` to the fan-out and
+  the `deploy.released` message.
+- Docs touched: `reference/releases.md`, `reference/events.md`, `reference/project.md`, `reference/notifications.md`,
+  `index.md`, `log.md`
+- Source: branch `feat/release-registry` (#112)
+
 ## 2026-10-05 — Monitor state drives components, incidents and alerts
 
 - The status reference gains "What a state change does": the evaluator's `onStateChange` port, the pages marked dirty
