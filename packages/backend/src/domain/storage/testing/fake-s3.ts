@@ -1,5 +1,5 @@
 // A minimal in-process S3 over HTTP (path-style), enough for the S3 driver's contract
-// tests: PutObject, GetObject, HeadObject, DeleteObjects and presigned GET/PUT. It does
+// tests: PutObject, GetObject, HeadObject, DeleteObjects and presigned GET/PUT (with the response-content-disposition override). It does
 // not verify signatures; presigned requests are recognised by their X-Amz-Signature.
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -66,10 +66,13 @@ export async function startFakeS3(bucket = 'test-bucket'): Promise<FakeS3> {
       notFound(response, request.method === 'HEAD');
       return;
     }
+    // S3's presigned response overrides.
+    const disposition = url.searchParams.get('response-content-disposition');
     response.writeHead(200, {
       'content-type': object.contentType,
       'content-length': String(object.body.byteLength),
       etag: object.etag,
+      ...(disposition !== null && { 'content-disposition': disposition }),
     });
     response.end(request.method === 'HEAD' ? undefined : object.body);
   };

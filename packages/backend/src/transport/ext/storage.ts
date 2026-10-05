@@ -1,12 +1,13 @@
 // The filesystem storage driver's internal route, mounted on the ext app under /api/ext.
 // It has no session: a GET is served with a valid signed `op=get` URL, or without one
-// only for an object whose sidecar says it is public; a PUT needs a signed `op=put` URL
+// only for an object whose sidecar says it is public (a signed `dl` makes it a download); a PUT needs a signed `op=put` URL
 // and must match the signed content type, size limit and visibility. With the s3 driver
 // clients talk to the bucket directly and this route answers 404.
 import { visibilitySchema } from '@mocco/common/storage';
 import { Hono } from 'hono';
 
 import { isPublic, isSafeKey } from '@backend/domain/storage/drivers/filesystem';
+import { attachmentDisposition } from '@backend/domain/storage/ports';
 import { StorageOperations } from '@backend/domain/storage/signing';
 
 import type { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
@@ -51,12 +52,18 @@ export function createStorageRoutes(deps: StorageRouteDeps | undefined): Hono {
       return c.text('not found', 404);
     }
     const signature = c.req.query('sig');
+    const downloadAs = c.req.query('dl');
     const meta = await deps.store.meta(key);
     const isAllowed =
       signature === undefined
         ? isPublic(meta)
         : deps.signer.isValid(
-            { op: StorageOperations.get, key, expires: Number(c.req.query('exp')) },
+            {
+              op: StorageOperations.get,
+              key,
+              expires: Number(c.req.query('exp')),
+              ...(downloadAs !== undefined && { downloadAs }),
+            },
             signature,
             nowSeconds(),
           );
@@ -72,6 +79,10 @@ export function createStorageRoutes(deps: StorageRouteDeps | undefined): Hono {
         'content-length': String(meta.size),
         etag: `"${meta.etag}"`,
         'cache-control': meta.cacheControl ?? (signature === undefined ? 'public, max-age=300' : 'private, no-store'),
+        'x-content-type-options': 'nosniff',
+        // Signed, so it is only ever a filename the service chose.
+        ...(signature !== undefined &&
+          downloadAs !== undefined && { 'content-disposition': attachmentDisposition(downloadAs) }),
       },
     });
   });

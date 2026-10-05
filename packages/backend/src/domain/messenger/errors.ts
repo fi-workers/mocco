@@ -64,6 +64,15 @@ export class AttachmentsUnavailableError extends BadRequestError {
   }
 }
 
+/** An uploaded file's bytes aren't the type it was declared as — BAD_REQUEST. Its
+ * bytes and the attachment are deleted. */
+export class AttachmentContentMismatchError extends BadRequestError {
+  constructor(declared: string, options?: ErrorOptions) {
+    super(`The uploaded file is not ${declared}`, options);
+    this.name = 'AttachmentContentMismatchError';
+  }
+}
+
 /** An attachment id that isn't the user's, or is already in a message — BAD_REQUEST. */
 export class AttachmentNotFoundError extends BadRequestError {
   constructor(options?: ErrorOptions) {

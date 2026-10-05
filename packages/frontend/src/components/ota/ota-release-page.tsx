@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 import { Ago, Notice, Spinner, StatusBadge, Tones } from '@frontend/components/notifications/notification-ui';
-import { AdoptionLine, formatBytes, PromoteControl } from '@frontend/components/ota/ota-hosting';
+import { AdoptionLine, PromoteControl } from '@frontend/components/ota/ota-hosting';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 import { useWorkspaceAdmin } from '@frontend/lib/use-workspace-admin';
+import { formatBytes } from '@frontend/lib/utils';
 
 import type { OtaAppDto } from '@mocco/common/ota-hosting';
 

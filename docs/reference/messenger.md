@@ -4,7 +4,7 @@ description: How Mocco's messenger stores conversations between a project's sign
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, messenger, support]
@@ -78,20 +78,24 @@ Guest sessions need no signature, so they are also limited to 20 an hour per cli
 | `GET /conversations/{id}/messages?afterSeq=` | Public messages after a seq, oldest first, with the team member's name on replies |
 | `POST /conversations/{id}/messages` | `{ body, clientMessageId, context? }` → `201 { message }` |
 | `POST /conversations/{id}/read` | `{ seq }` → `204`; never moves back or past the last message |
-| `POST /attachments` | Reserve a screenshot upload; see [Attachments](#attachments) |
+| `POST /attachments` | Reserve a screenshot or PDF upload; see [Attachments](#attachments) |
 | `DELETE /me` | Erase the contact and everything they wrote → `204`; the session stops working (see Erasing above) |
 
 Another contact's conversation is a 404. Limits per contact, on top of the key's own: 20 messages a minute, 5 new conversations an hour; `POST /sessions` 300 a minute per key.
 
 ## Attachments
 
-A contact can attach up to 3 screenshots to a message or to the start of a conversation: PNG, JPEG, WebP or GIF, up to 10 MB each (the `messenger` storage policy; 10 reservations an hour per contact).
+A contact can attach up to 3 files to a message or to the start of a conversation: screenshots (PNG, JPEG, WebP or GIF) or PDFs, up to 10 MB each (the `messenger` storage policy; 10 reservations an hour per contact). Anything else, SVG included, is refused when it's reserved.
 
 1. `POST /v1/messenger/attachments` `{ contentType, sizeBytes, filename? }` reserves a private object (`StorageService.beginUpload`, product `messenger`) and a `mocco_messenger_attachments` row owned by the contact, and answers `201 { attachmentId, upload: { url, method: 'PUT', headers } }`.
 2. The client PUTs the bytes straight to the store.
-3. The message (or start) names it in `attachmentIds`. The service checks each is the contact's own and unclaimed, has storage verify the bytes (`completeUpload`: exact size and type, or the object is deleted and the send refused with 400), and claims them in the message's transaction. A retried send returns the stored message before any of this.
+3. The message (or start) names it in `attachmentIds`. The service checks each is the contact's own and unclaimed, has storage verify the upload (`completeUpload` with the messenger's owner: exact size and declared type, or the object is deleted and the send refused with 400), then reads the bytes and checks their signature is the declared type (`sniffContentType`). A PDF declared as a PNG, or HTML declared as either, deletes the bytes and the attachment row and answers 400. It claims them in the message's transaction; if a concurrent send claimed one first, the message rolls back with 400. A retried send returns the stored message before any of this.
 
-Messages carry `attachments: [{ id, contentType, sizeBytes, url }]`, where `url` is a signed download link valid for 10 minutes. Without object storage configured, reserving an attachment answers 400. Abandoned uploads go with storage's own garbage collection; deleting the object deletes the attachment row.
+An attachment belongs to its contact until a message claims it, and then to that message's conversation only. Another contact's attachment, or one already in a message, is a 400 in any conversation, and another contact's conversation is a 404.
+
+Messages carry `attachments: [{ id, contentType, sizeBytes, filename, url }]`. `filename` is the safe name the object was stored under (`Invoice March.pdf` becomes `invoice-march.pdf`). `url` is a signed link valid for 10 minutes: an image's can be shown inline, but a PDF's answers `Content-Disposition: attachment`, so it downloads and never renders on Mocco's or the bucket's origin (see [storage downloads](./storage.md#downloads)). The inbox shows images as thumbnails and PDFs as a file chip with the name and size. Without object storage configured, reserving an attachment answers 400. An upload reserved but never sent is collected by `storage.gc` after 24 hours, and sending it after that answers 400. Deleting the object deletes the attachment row.
+
+Only contacts attach files for now. The team's replies are text.
 
 ## Push
 

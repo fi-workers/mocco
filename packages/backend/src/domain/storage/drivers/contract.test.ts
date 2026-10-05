@@ -125,6 +125,26 @@ describe.each(drivers)('ObjectStore contract: %s', (_name, makeHarness) => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('{"a":1}');
   });
+
+  it('serves a signed download as an attachment when asked to', async () => {
+    await harness.store.put('prv/w/a/messenger/8/invoice.pdf', bytes('%PDF-1.7'), {
+      contentType: 'application/pdf',
+      visibility: Visibilities.private,
+    });
+
+    const [download, inline] = await Promise.all([
+      harness.fetch(
+        await harness.store.signedDownloadUrl('prv/w/a/messenger/8/invoice.pdf', 60, { downloadAs: 'invoice.pdf' }),
+      ),
+      harness.fetch(await harness.store.signedDownloadUrl('prv/w/a/messenger/8/invoice.pdf', 60)),
+    ]);
+
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-type')).toBe('application/pdf');
+    expect(download.headers.get('content-disposition')).toBe('attachment; filename="invoice.pdf"');
+    expect(await download.text()).toBe('%PDF-1.7');
+    expect(inline.headers.get('content-disposition')).toBeNull();
+  });
 });
 
 describe('filesystem driver route', () => {

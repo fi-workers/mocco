@@ -31,11 +31,21 @@ export const MessengerLimits = {
   attachmentMaxBytes: 10 * 1024 * 1024,
 } as const;
 
-/** What a user may attach: screenshots and photos. */
-export const ATTACHMENT_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+/** What a user may attach: screenshots and photos, and PDFs (served only as downloads). */
+export const ATTACHMENT_CONTENT_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+] as const;
 export type AttachmentContentType = (typeof ATTACHMENT_CONTENT_TYPES)[number];
 
-/** `POST /v1/messenger/attachments`: reserve an upload for a screenshot. */
+/** Whether an attachment shows as an image; anything else (a PDF) is a file to download. */
+// eslint-disable-next-line sonarjs/null-dereference -- contentType is a string, never null
+export const isImageAttachment = (contentType: string) => contentType.startsWith('image/');
+
+/** `POST /v1/messenger/attachments`: reserve an upload for a screenshot or a PDF. */
 export const attachmentCreateInputSchema = z.object({
   contentType: z.enum(ATTACHMENT_CONTENT_TYPES),
   sizeBytes: z.int().min(1).max(MessengerLimits.attachmentMaxBytes),
@@ -45,11 +55,13 @@ export type AttachmentCreateInput = z.infer<typeof attachmentCreateInputSchema>;
 
 const attachmentIdsSchema = z.array(z.uuid()).max(MessengerLimits.attachmentsPerMessage).optional();
 
-/** An attachment as served: a short-lived download link. */
+/** An attachment as served: a short-lived link (a download, for a PDF) and the safe
+ * filename it was stored under. */
 export const attachmentSchema = z.object({
   id: z.uuid(),
   contentType: z.string(),
   sizeBytes: z.int(),
+  filename: z.string(),
   url: z.string(),
 });
 export type AttachmentDto = z.infer<typeof attachmentSchema>;

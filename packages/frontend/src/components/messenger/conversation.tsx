@@ -1,7 +1,8 @@
 // One messenger conversation (#95): the thread with internal notes marked, a composer
 // that replies or adds a note, open/closed, and a side panel with who the user is and
 // what they were running when they wrote.
-import { MessageVisibilities } from '@mocco/common/messenger';
+import { isImageAttachment, MessageVisibilities } from '@mocco/common/messenger';
+import { DownloadIcon, FileTextIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
@@ -18,7 +19,7 @@ import {
 import { Button } from '@frontend/components/ui/button';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
-import { cn } from '@frontend/lib/utils';
+import { cn, formatBytes } from '@frontend/lib/utils';
 
 import type { MessengerContext } from '@mocco/common/messenger';
 
@@ -226,22 +227,41 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
                     {message.body}
                     {message.attachments.length === 0 ? null : (
                       <span className="mt-2 flex flex-wrap gap-2">
-                        {message.attachments.map((attachment, index) => (
-                          <a
-                            key={attachment.id}
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block overflow-hidden rounded-lg border border-border bg-background">
-                            {/* A short-lived signed link to the user's screenshot; next/image can't proxy it. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={attachment.url}
-                              alt={`Attachment ${index + 1} from ${who}`}
-                              className="h-32 w-auto max-w-full object-contain"
-                            />
-                          </a>
-                        ))}
+                        {message.attachments.map((attachment, index) =>
+                          isImageAttachment(attachment.contentType) ? (
+                            <a
+                              key={attachment.id}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-lg border border-border bg-background">
+                              {/* A short-lived signed link to the user's screenshot; next/image can't proxy it. */}
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={attachment.url}
+                                alt={`Attachment ${index + 1} from ${who}`}
+                                className="h-32 w-auto max-w-full object-contain"
+                              />
+                            </a>
+                          ) : (
+                            // A PDF: the signed link answers as a download, so it never renders here.
+                            <a
+                              key={attachment.id}
+                              href={attachment.url}
+                              download={attachment.filename}
+                              aria-label={`Download ${attachment.filename} from ${who}`}
+                              className="flex max-w-64 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-foreground hover:bg-muted">
+                              <FileTextIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
+                              <span className="flex min-w-0 flex-col">
+                                <span className="truncate text-sm font-medium">{attachment.filename}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  PDF · {formatBytes(attachment.sizeBytes)}
+                                </span>
+                              </span>
+                              <DownloadIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                            </a>
+                          ),
+                        )}
                       </span>
                     )}
                   </div>

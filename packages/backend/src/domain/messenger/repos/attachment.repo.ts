@@ -30,13 +30,23 @@ export class MessengerAttachmentRepo {
       );
   }
 
-  /** Attach them to a message. Call in the message's transaction. */
-  async claim(ids: readonly string[], messageId: string): Promise<void> {
+  /** Attach them to a message; answers how many were still unclaimed (a concurrent
+   * send may have taken one). Call in the message's transaction. */
+  async claim(ids: readonly string[], messageId: string): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const claimed = await this.db
+      .update(a)
+      .set({ messageId })
+      .where(and(inArray(a.id, [...ids]), isNull(a.messageId)))
+      .returning({ id: a.id });
+    return claimed.length;
+  }
+
+  async delete(workspaceId: string, ids: readonly string[]): Promise<void> {
     if (ids.length > 0) {
-      await this.db
-        .update(a)
-        .set({ messageId })
-        .where(and(inArray(a.id, [...ids]), isNull(a.messageId)));
+      await this.db.delete(a).where(and(eq(a.workspaceId, workspaceId), inArray(a.id, [...ids])));
     }
   }
 

@@ -32,10 +32,11 @@ export const storagePolicies: Partial<Record<Product, StoragePolicy>> = {
     maxBytes: 10 * MiB,
     contentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
   },
-  // Screenshots users attach to messenger conversations.
+  // Screenshots and PDFs users attach to messenger conversations. Private; PDFs are
+  // only ever served as downloads.
   [Products.messenger]: {
     maxBytes: 10 * MiB,
-    contentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+    contentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'],
   },
 };
 
