@@ -471,6 +471,10 @@ describe('/v1 status management API (pglite)', () => {
       status: MaintenanceStatuses.scheduled,
       scheduledStart: start,
       componentIds: [componentId],
+      // An operator's window has no run.
+      runId: null,
+      overranAt: null,
+      endNote: null,
     });
 
     expect(await bodyOf('POST', `/maintenances/${window.id}/cancel`, token)).toMatchObject({

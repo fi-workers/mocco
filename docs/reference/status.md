@@ -72,6 +72,7 @@ code_refs:
   - packages/frontend/src/components/status/incidents.tsx
   - packages/frontend/src/components/status/incident-detail.tsx
   - packages/frontend/src/components/status/maintenance.tsx
+  - packages/frontend/src/components/status/gate-maintenances.tsx
   - packages/frontend/src/components/status/recent-deploys.tsx
   - packages/frontend/src/components/status/run-incidents.tsx
   - packages/frontend/src/components/status/monitors.tsx
@@ -115,7 +116,11 @@ only the current status and `INCIDENT_TRANSITIONS` from it; an update refused by
 on in another tab) shows the `IncidentTransitionError` text and reloads the incident. It also shows the timeline
 (newest first), replaces the affected components, and sets or clears the postmortem. The maintenance view groups
 windows into in progress, scheduled and past, schedules a window (`datetime-local` inputs in the viewer's time
-zone, with the components it covers), and cancels a scheduled or in-progress one. An incident's route also lists the
+zone, with the components it covers), and cancels a scheduled or in-progress one. A window a resumed gate started
+links to its run (`Routes.workspaceRun`), shows an **Overran** badge once `overran_at` is set, and shows its
+`end_note`. Below the windows, **Gates that announce maintenance** (`components/status/gate-maintenances.tsx`) lists
+the page's gate maintenances and adds, edits (the gate name is fixed; the minutes, title and components change) or
+removes one ([maintenance from gated runs](#maintenance-from-gated-runs)). An incident's route also lists the
 deploys around it, and the run page its incidents ([deploy correlation](#deploy-correlation)). The customer guide is
 [Run a status page](../customer/status/status-page.md).
 
@@ -863,7 +868,7 @@ workspace id.
 | `POST /v1/incidents` | `status:write` | Body `incidentCreateInputSchema` (`pageId`, `title`, `severity`, `status`, `body`, `components`); `201` with the incident as `GET` reads it. A published incident with `origin: manual` |
 | `POST /v1/incidents/{id}/updates` | `status:write` | Body `{ status, body }`; `201 { incident, update }`; `409` for a step the lifecycle doesn't allow |
 | `PUT /v1/incidents/{id}/components` | `status:write` | Body `{ components }`, replacing them; the incident as `GET` reads it |
-| `GET /v1/maintenances?pageId=` | `status:read` | `{ maintenances: [{ id, pageId, title, body, status, scheduledStart, scheduledEnd, actualStart, actualEnd, componentIds, createdAt, updatedAt }] }` |
+| `GET /v1/maintenances?pageId=` | `status:read` | `{ maintenances: [{ id, pageId, title, body, status, scheduledStart, scheduledEnd, actualStart, actualEnd, componentIds, runId, overranAt, endNote, createdAt, updatedAt }] }` (`runId`, `overranAt` and `endNote` are null for a window an operator scheduled) |
 | `POST /v1/maintenances` · `POST /v1/maintenances/{id}/cancel` | `status:write` | Body as `maintenanceInputSchema` with ISO 8601 times; `201` · the window, `409` once it completed or was canceled |
 | `GET /v1/status/openapi.json` | none | The OpenAPI 3.1 description |
 
@@ -932,9 +937,8 @@ lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
 `origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
-latency chart in the console's monitor view (the series is `history` on `status.monitor`); and gate-linked maintenance
-in the console (the gate maintenance form, and a window's run, overrun and end note), in the `/v1` maintenance answers and on
-MCP, plus a per-window `suppress_alerts` switch. Each arrives with its slice as an additive column or table.
+latency chart in the console's monitor view (the series is `history` on `status.monitor`); and a per-window
+`suppress_alerts` switch for gate-linked maintenance. Each arrives with its slice as an additive column or table.
 
 ## MCP
 
@@ -942,7 +946,8 @@ Agents read status pages over MCP with `mocco_status_pages_get` (each component 
 `mocco_status_incidents_search` (open by default; by status, severity, page or title text, newest first, paged),
 `mocco_status_incidents_get` (the timeline, affected components and postmortem; detailed adds the linked deploys from
 `CorrelationService.list`: relation, score, repo, commit, when the run finished, and whether Mocco suggested it or a
-person linked it) and `mocco_status_maintenances_search` (scheduled and in progress by default) in
+person linked it) and `mocco_status_maintenances_search` (scheduled and in progress by default; detailed adds a gated run's `runId`,
+`overranAt` and `endNote`) in
 `transport/mcp/tools/status.ts`: thin, read-only adapters over `getPage`, `IncidentService.list` / `get` and
 `MaintenanceService.list`, behind the same checks as `productProcedure(Products.status)` (`ProjectScope`). A page is
 looked up among the project's own, so another tenant's page or incident reads like one that does not exist.

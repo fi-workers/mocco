@@ -190,6 +190,12 @@ export interface StatusMaintenance {
   actualStart: string | null;
   actualEnd: string | null;
   componentIds: string[];
+  /** The run whose resumed gate started the window, or null for one an operator scheduled. */
+  runId: string | null;
+  /** When a run's window was still in progress past its expected end. */
+  overranAt: string | null;
+  /** Why a run's window ended early: the run failed, was canceled or was rejected. */
+  endNote: string | null;
   createdAt: string;
   updatedAt: string;
 }

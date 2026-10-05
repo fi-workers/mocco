@@ -551,6 +551,9 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
           body: 'Read-only for a while',
           actualStart: minutes(30).toISOString(),
           actualEnd: null,
+          runId: null,
+          overranAt: null,
+          endNote: null,
           components: [{ componentId: dashboard, name: 'Dashboard' }],
         }),
       ]);

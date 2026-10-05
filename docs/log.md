@@ -339,6 +339,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/events.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-maintenance-from-runs` (#158)
 
+## 2026-10-06 — Maintenance from gated runs in the console
+
+- The customer guide "Run a status page" gains "9. Announce maintenance from a deploy gate" with a screenshot: adding,
+  editing and removing a gate that announces maintenance, how the window ends with its run (with a note when the run
+  didn't succeed), the **Overran** badge and alert, and the link to the run.
+- The status reference's Console section describes the gate maintenance list and form and a run's window (run link,
+  overrun badge, end note); the `/v1` table and MCP section list `runId`, `overranAt` and `endNote`; "Not built yet"
+  keeps only a per-window `suppress_alerts` switch. The feature map's status row says what is built.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `customer/status/status-page.md`,
+  `customer/status/images/maintenance-from-runs.png`, `log.md`
+- Source: branch `feat/status-maintenance-from-runs-ui` (#158)
+
 ## 2026-10-05 — Status 90-day bars and monitor latency
 
 - The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its

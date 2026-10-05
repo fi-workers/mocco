@@ -384,6 +384,9 @@ export async function searchStatusMaintenances(
         body: window.bodyMd,
         actualStart: window.actualStart,
         actualEnd: window.actualEnd,
+        runId: window.runId,
+        overranAt: window.overranAt,
+        endNote: window.endNote,
         components: window.componentIds.map(componentId => ({
           componentId,
           name: components.get(componentId)?.name ?? null,

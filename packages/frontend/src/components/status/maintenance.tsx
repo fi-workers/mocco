@@ -1,12 +1,23 @@
 // A status page's maintenance windows (#148): what is in progress now, what is scheduled, and
 // what is past; scheduling a window with the components it covers, and canceling one. Mocco
-// starts and completes windows on their own every minute.
+// starts and completes windows on their own every minute. A window a resumed gate started (#158)
+// links to its run, says when it overran its expected minutes, and why it ended early.
 import { MaintenanceStatuses } from '@mocco/common/status';
+import Link from 'next/link';
 import { useState } from 'react';
 
-import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
+import {
+  errorMessage,
+  inputClass,
+  labelClass,
+  Spinner,
+  StatusBadge,
+  Tones,
+} from '@frontend/components/notifications/notification-ui';
+import GateMaintenances from '@frontend/components/status/gate-maintenances';
 import { formatWhen, MaintenanceStatusBadge } from '@frontend/components/status/status-ui';
 import { Button } from '@frontend/components/ui/button';
+import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { StatusOutputs } from '@frontend/components/status/status-ui';
@@ -156,6 +167,27 @@ function ScheduleMaintenance({
   );
 }
 
+/** For a window a resumed gate started: its run, and when it overran. */
+function RunLine({ workspaceId, maintenance }: { workspaceId: string; maintenance: Window }) {
+  if (maintenance.runId === null) {
+    return null;
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      Started when a gate was resumed on{' '}
+      <Link
+        href={Routes.workspaceRun(workspaceId, maintenance.runId)}
+        className="font-medium text-foreground underline-offset-2 hover:underline">
+        this run
+      </Link>
+      {maintenance.overranAt === null ? '' : ` · ran past its expected end at ${formatWhen(maintenance.overranAt)}`}
+      {maintenance.overranAt !== null && maintenance.status === MaintenanceStatuses.inProgress
+        ? ', so it stays open until the run finishes'
+        : ''}
+    </p>
+  );
+}
+
 function WindowRow({
   workspaceId,
   projectId,
@@ -180,6 +212,7 @@ function WindowRow({
     <li className="flex flex-col gap-1.5 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="min-w-0 flex-1 text-sm font-medium">{maintenance.title}</span>
+        {maintenance.overranAt === null ? null : <StatusBadge tone={Tones.warn}>Overran</StatusBadge>}
         <MaintenanceStatusBadge status={maintenance.status} />
         {isCancelable && isConfirming ? (
           <span className="flex gap-1">
@@ -220,6 +253,8 @@ function WindowRow({
         {maintenance.actualEnd === null ? '' : ` · ended ${formatWhen(maintenance.actualEnd)}`}
       </p>
       {names.length === 0 ? null : <p className="text-xs text-muted-foreground">Covers {names.join(', ')}</p>}
+      <RunLine workspaceId={workspaceId} maintenance={maintenance} />
+      {maintenance.endNote === null ? null : <p className="text-xs text-muted-foreground">{maintenance.endNote}</p>}
       {maintenance.bodyMd === '' ? null : <p className="text-sm whitespace-pre-wrap">{maintenance.bodyMd}</p>}
       {cancel.error ? <p className="text-sm text-destructive">{errorMessage(cancel.error)}</p> : null}
     </li>
@@ -283,7 +318,7 @@ export default function Maintenance({ workspaceId, projectId, pageId }: Props) {
         <p className="max-w-prose text-sm text-muted-foreground">
           Mocco starts a window at its start time and completes it at its end, checking every minute. While a window is
           in progress, the components it covers show as under maintenance. To change a window, cancel it and schedule a
-          new one.
+          new one. Gates that announce maintenance, below, start a window when a run resumes them.
         </p>
         {isScheduling ? null : (
           <Button
@@ -324,6 +359,7 @@ export default function Maintenance({ workspaceId, projectId, pageId }: Props) {
         windows={inStatus(MaintenanceStatuses.completed, MaintenanceStatuses.canceled)}
         {...listProps}
       />
+      <GateMaintenances workspaceId={workspaceId} projectId={projectId} pageId={pageId} components={components} />
     </section>
   );
 }
