@@ -31,6 +31,7 @@ import { z } from 'zod';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
 import { monitorImpact } from '@backend/domain/status/component-status';
+import { heartbeatAlertDescription } from '@backend/domain/status/heartbeat';
 import { transitionIncident } from '@backend/domain/status/IncidentService';
 import { monitorTargetOf } from '@backend/domain/status/monitor-target';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
@@ -341,6 +342,10 @@ function alertInput(
   // eslint-disable-next-line sonarjs/null-dereference -- target is narrowed to a string on this branch
   const checksField = target === null ? [] : [{ name: 'Checks', value: target.slice(0, 1024), inline: false }];
   const tally = tallySchema.safeParse(change.reason);
+  const isRecovery = type === StatusEventTypes.statusMonitorRecovered;
+  const description = tally.success
+    ? `${tally.data.failCount} failing, ${tally.data.okCount} passing, ${tally.data.noDataCount} without data in the last round.`
+    : heartbeatAlertDescription(monitor, change.reason);
   const base = `/workspaces/${monitor.workspaceId}/p/${monitor.projectId}/status`;
   const path = opts.opened === undefined ? base : `${base}/incidents/${opts.opened.id}`;
   const incidentField =
@@ -365,10 +370,7 @@ function alertInput(
       message: {
         title: `${verb}: ${monitor.name}${opts.isDuringMaintenance ? ' (during maintenance)' : ''}`.slice(0, 256),
         ...(opts.appOrigin !== undefined && { url: `${opts.appOrigin}${path}` }),
-        ...(tally.success &&
-          type !== StatusEventTypes.statusMonitorRecovered && {
-            description: `${tally.data.failCount} failing, ${tally.data.okCount} passing, ${tally.data.noDataCount} without data in the last round.`,
-          }),
+        ...(description !== undefined && !isRecovery && { description }),
         severity,
         fields: [...checksField, { name: 'Was', value: change.fromState, inline: true }, ...incidentField],
         footer: 'Mocco status',

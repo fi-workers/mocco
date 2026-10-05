@@ -150,11 +150,13 @@ export type MaintenanceInput = z.infer<typeof maintenanceInputSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // Monitors and probe locations (#150). A monitor is an HTTP or TCP check of a project, run
-// by `@mocco/probe` agents at the locations it is assigned to (ADR 0027). A location is a
-// hosted region (no workspace) or a workspace's private location, authenticated by its token.
+// by `@mocco/probe` agents at the locations it is assigned to (ADR 0027), or a heartbeat (#153)
+// that a customer's job pings and that goes down when it falls silent. A location is a hosted
+// region (no workspace) or a workspace's private location, authenticated by its token.
 // ─────────────────────────────────────────────────────────────
 
-export const MonitorKinds = { http: 'http', tcp: 'tcp' } as const;
+/** `http` and `tcp` are run by probes; a `heartbeat` has no probes and no locations: its job pings Mocco. */
+export const MonitorKinds = { http: 'http', tcp: 'tcp', heartbeat: 'heartbeat' } as const;
 export type MonitorKind = (typeof MonitorKinds)[keyof typeof MonitorKinds];
 
 /**
@@ -235,6 +237,48 @@ export const tcpMonitorSpecSchema = z.object({
 export const monitorSpecSchema = z.discriminatedUnion('kind', [httpMonitorSpecSchema, tcpMonitorSpecSchema]);
 export type MonitorSpec = z.infer<typeof monitorSpecSchema>;
 
+export const HeartbeatLimits = {
+  minPeriodSeconds: 60,
+  /** A monthly job: 31 days. */
+  maxPeriodSeconds: 31 * 86_400,
+  defaultPeriodSeconds: 3600,
+  minGraceSeconds: 60,
+  maxGraceSeconds: 7 * 86_400,
+  defaultGraceSeconds: 300,
+  /** Pings one token may send: 5 per 5 seconds (one a second, with room for a start and its finish). */
+  pingsPerWindow: 5,
+  pingWindowSeconds: 5,
+} as const;
+
+/**
+ * A heartbeat: the job pings at least every `periodSeconds`, and the monitor goes down once
+ * `periodSeconds + graceSeconds` pass without a ping. The two are stored as the monitor's
+ * `heartbeat_period_s` and `heartbeat_grace_s`; its `spec` keeps only the kind.
+ */
+export const heartbeatMonitorSpecSchema = z.object({
+  kind: z.literal(MonitorKinds.heartbeat),
+  periodSeconds: z
+    .int()
+    .min(HeartbeatLimits.minPeriodSeconds)
+    .max(HeartbeatLimits.maxPeriodSeconds)
+    .default(HeartbeatLimits.defaultPeriodSeconds),
+  graceSeconds: z
+    .int()
+    .min(HeartbeatLimits.minGraceSeconds)
+    .max(HeartbeatLimits.maxGraceSeconds)
+    .default(HeartbeatLimits.defaultGraceSeconds),
+});
+export type HeartbeatMonitorSpec = z.infer<typeof heartbeatMonitorSpecSchema>;
+
+/** What a monitor stores in `spec`: a probe's check, or for a heartbeat only its kind. */
+export type StoredMonitorSpec = MonitorSpec | { kind: typeof MonitorKinds.heartbeat };
+
+/** Whether a stored spec is one probes run (not a heartbeat's). */
+export const isProbeSpec = (spec: StoredMonitorSpec): spec is MonitorSpec => spec.kind !== MonitorKinds.heartbeat;
+
+/** Heartbeat tokens: `mhb_` and 43 base64url characters. The ping routes refuse any other shape unread. */
+export const HEARTBEAT_TOKEN_PATTERN = /^mhb_[\w-]{43}$/;
+
 export const monitorComponentSchema = z.object({ componentId: z.uuid(), impactWhenDown: componentImpactSchema });
 export type MonitorComponent = z.infer<typeof monitorComponentSchema>;
 
@@ -249,24 +293,33 @@ export const incidentPolicySchema = z.enum(Object.values(IncidentPolicies) as [I
 
 const confirmations = z.int().min(1).max(MonitorLimits.maxConfirmations).default(MonitorLimits.defaultConfirmations);
 
-export const monitorInputSchema = z.object({
-  name,
-  spec: monitorSpecSchema,
-  intervalSeconds: z
-    .int()
-    .min(MonitorLimits.minIntervalSeconds)
-    .max(MonitorLimits.maxIntervalSeconds)
-    .default(MonitorLimits.minIntervalSeconds),
-  /** Consecutive failing rounds before `down`. */
-  confirmations,
-  /** Consecutive passing rounds before `recovering` is `up` again. */
-  recoveryConfirmations: confirmations,
-  quorumMode: quorumModeSchema.default(QuorumModes.majority),
-  locationIds: z.array(z.uuid()).min(1).max(MonitorLimits.maxLocations),
-  /** The components this monitor reports on, and what they show while it is down. */
-  components: z.array(monitorComponentSchema).max(MonitorLimits.maxComponents).default([]),
-  incidentPolicy: incidentPolicySchema.default(IncidentPolicies.draft),
-});
+export const monitorInputSchema = z
+  .object({
+    name,
+    /** A probe check, or a heartbeat's period and grace. */
+    spec: z.discriminatedUnion('kind', [httpMonitorSpecSchema, tcpMonitorSpecSchema, heartbeatMonitorSpecSchema]),
+    /** Probe kinds only: a heartbeat's job pings it, so the interval, confirmations, quorum and
+     * locations below don't apply to it (it goes down on the first failure or silence). */
+    intervalSeconds: z
+      .int()
+      .min(MonitorLimits.minIntervalSeconds)
+      .max(MonitorLimits.maxIntervalSeconds)
+      .default(MonitorLimits.minIntervalSeconds),
+    /** Consecutive failing rounds before `down`. */
+    confirmations,
+    /** Consecutive passing rounds before `recovering` is `up` again. */
+    recoveryConfirmations: confirmations,
+    quorumMode: quorumModeSchema.default(QuorumModes.majority),
+    /** One or more for a probe kind; none for a heartbeat. */
+    locationIds: z.array(z.uuid()).max(MonitorLimits.maxLocations).default([]),
+    /** The components this monitor reports on, and what they show while it is down. */
+    components: z.array(monitorComponentSchema).max(MonitorLimits.maxComponents).default([]),
+    incidentPolicy: incidentPolicySchema.default(IncidentPolicies.draft),
+  })
+  .refine(input => (input.spec.kind === MonitorKinds.heartbeat) === (input.locationIds.length === 0), {
+    message: 'A probe monitor needs at least one location, and a heartbeat has none',
+    path: ['locationIds'],
+  });
 export type MonitorInput = z.infer<typeof monitorInputSchema>;
 
 /** A location code: lowercase letters, digits and inner hyphens ("fra", "office-vpn"). */

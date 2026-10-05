@@ -1,12 +1,15 @@
 // A project's monitors (#150): HTTP and TCP checks run by `@mocco/probe` agents at the
-// locations they are assigned to (ADR 0027). This service owns their settings and the
-// operator's pause and resume; the verdict evaluator owns every other state change. Both
-// write `state` under the monitor's advisory lock and record each change in
+// locations they are assigned to (ADR 0027), and heartbeats (#153) that a job pings. This
+// service owns their settings, a heartbeat's token and the operator's pause and resume; the
+// verdict evaluator and the heartbeat pings own every other state change. All of them write
+// `state` under the monitor's advisory lock and record each change in
 // mocco_status_monitor_state_changes, the source of truth for downtime.
 import { AuditActions } from '@mocco/common/audit';
-import { MonitorStates } from '@mocco/common/status';
+import { MonitorKinds, MonitorStates } from '@mocco/common/status';
 
-import { MonitorPausedError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
+import { MonitorKindError, MonitorPausedError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
+import { silenceDeadline, silenceWindowMs } from '@backend/domain/status/heartbeat';
+import { generateHeartbeatToken, hashHeartbeatToken } from '@backend/domain/status/heartbeat-token';
 import { percentilesOf } from '@backend/domain/status/latency-hist';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
@@ -40,16 +43,43 @@ export const MonitorHistoryWindow = { hours: 48, days: 90 } as const;
 
 const subject = (monitorId: string) => ({ subjectType: 'status_monitor', subjectId: monitorId });
 
-const settingsOf = (input: MonitorInput): MonitorSettings => ({
-  name: input.name,
-  kind: input.spec.kind,
-  spec: input.spec,
-  intervalSeconds: input.intervalSeconds,
-  confirmations: input.confirmations,
-  recoveryConfirmations: input.recoveryConfirmations,
-  quorumMode: input.quorumMode,
-  incidentPolicy: input.incidentPolicy,
-});
+/** A monitor as callers see it: never its heartbeat token's hash. */
+export type MonitorView = Omit<MonitorRow, 'heartbeatTokenHash'>;
+export const viewOf = ({ heartbeatTokenHash: _hash, ...view }: MonitorRow): MonitorView => view;
+
+const isHeartbeat = (kind: MonitorRow['kind']) => kind === MonitorKinds.heartbeat;
+
+/**
+ * The stored settings. A heartbeat keeps only its kind in `spec`; its period and grace are
+ * columns, `interval_s` mirrors the period, and it goes down on its first failure or silence, so
+ * both confirmations are 1 (the DB checks it).
+ */
+function settingsOf(input: MonitorInput): MonitorSettings {
+  const common = { name: input.name, quorumMode: input.quorumMode, incidentPolicy: input.incidentPolicy };
+  const { spec } = input;
+  if (spec.kind === MonitorKinds.heartbeat) {
+    return {
+      ...common,
+      kind: spec.kind,
+      spec: { kind: spec.kind },
+      intervalSeconds: spec.periodSeconds,
+      confirmations: 1,
+      recoveryConfirmations: 1,
+      heartbeatPeriodSeconds: spec.periodSeconds,
+      heartbeatGraceSeconds: spec.graceSeconds,
+    };
+  }
+  return {
+    ...common,
+    kind: spec.kind,
+    spec,
+    intervalSeconds: input.intervalSeconds,
+    confirmations: input.confirmations,
+    recoveryConfirmations: input.recoveryConfirmations,
+    heartbeatPeriodSeconds: null,
+    heartbeatGraceSeconds: null,
+  };
+}
 
 /** Each location once, and each component once (the last impact given wins). */
 function linksOf(input: MonitorInput): { locationIds: string[]; components: MonitorComponent[] } {
@@ -91,7 +121,7 @@ export class MonitorService {
       new ComponentMonitorRepo(this.deps.db).listFor(scope.workspaceId, ids),
     ]);
     return monitors.map(monitor => ({
-      ...monitor,
+      ...viewOf(monitor),
       locationIds: locations.filter(link => link.monitorId === monitor.id).map(link => link.locationId),
       components: components
         .filter(link => link.monitorId === monitor.id)
@@ -108,7 +138,7 @@ export class MonitorService {
       to: MonitorState;
       action: typeof AuditActions.statusMonitorPaused | typeof AuditActions.statusMonitorResumed;
     },
-  ): Promise<MonitorRow> {
+  ): Promise<MonitorView> {
     const now = this.now();
     const result = await this.deps.db.transaction(async tx => {
       const monitors = new MonitorRepo(tx);
@@ -125,7 +155,10 @@ export class MonitorService {
         {
           state: change.to,
           stateChangedAt: now,
-          ...(change.to === MonitorStates.pending && { nextRoundAt: now }),
+          // A probe monitor's round is due now; a heartbeat's silence deadline starts over.
+          ...(change.to === MonitorStates.pending && {
+            nextRoundAt: isHeartbeat(current.kind) ? silenceDeadline(current, now) : now,
+          }),
           // Pausing or resuming starts over: earlier rounds don't count toward confirmations.
           consecutiveFails: 0,
           consecutiveOks: 0,
@@ -150,7 +183,7 @@ export class MonitorService {
         payload: { from: result.from, to: change.to },
       });
     }
-    return result.monitor;
+    return viewOf(result.monitor);
   }
 
   /** The project's monitors, each with its locations and components. */
@@ -185,7 +218,7 @@ export class MonitorService {
       ),
     ]);
     return {
-      monitor: monitor ?? { ...found, locationIds: [], components: [] },
+      monitor: monitor ?? { ...viewOf(found), locationIds: [], components: [] },
       stateChanges,
       recentVerdicts,
       openIncident: openIncident ?? null,
@@ -209,18 +242,29 @@ export class MonitorService {
     };
   }
 
-  /** Create a monitor; it is `pending` and its first round is due now. */
-  async create(scope: StatusScope, actorUserId: string, input: MonitorInput): Promise<MonitorRow> {
+  /**
+   * Create a monitor; it is `pending` and its first round is due now. A heartbeat's first
+   * deadline is one period and grace away, and `heartbeatToken`, its ping token, is in this
+   * answer only (null for a probe monitor).
+   */
+  async create(
+    scope: StatusScope,
+    actorUserId: string,
+    input: MonitorInput,
+  ): Promise<MonitorView & { heartbeatToken: string | null }> {
     const links = linksOf(input);
     await this.assertLinks(scope, links);
     const now = this.now();
+    const settings = settingsOf(input);
+    const heartbeatToken = isHeartbeat(settings.kind) ? generateHeartbeatToken() : null;
     const monitor = await this.deps.db.transaction(async tx => {
       const created = await new MonitorRepo(tx).insert({
         ...scope,
-        ...settingsOf(input),
+        ...settings,
         state: MonitorStates.pending,
         stateChangedAt: now,
-        nextRoundAt: now,
+        nextRoundAt: heartbeatToken === null ? now : silenceDeadline(settings, now),
+        heartbeatTokenHash: heartbeatToken === null ? null : hashHeartbeatToken(heartbeatToken),
         createdByUserId: actorUserId,
       });
       await new MonitorLocationRepo(tx).replace(scope.workspaceId, created.id, links.locationIds);
@@ -239,21 +283,41 @@ export class MonitorService {
         ...links,
       },
     });
-    return monitor;
+    return { ...viewOf(monitor), heartbeatToken };
   }
 
-  /** Replace the monitor's settings, locations and components. Its state is kept. */
-  async update(scope: StatusScope, actorUserId: string, monitorId: string, input: MonitorInput): Promise<MonitorRow> {
+  /**
+   * Replace the monitor's settings, locations and components. Its state is kept. A monitor stays
+   * a heartbeat or a probe kind (`MonitorKindError`); a heartbeat's new period and grace apply to
+   * the deadline it is waiting on.
+   */
+  async update(scope: StatusScope, actorUserId: string, monitorId: string, input: MonitorInput): Promise<MonitorView> {
     const links = linksOf(input);
     await this.assertLinks(scope, links);
+    const settings = settingsOf(input);
+    const now = this.now();
     const monitor = await this.deps.db.transaction(async tx => {
-      const updated = await new MonitorRepo(tx).updateSettings(scope, monitorId, settingsOf(input));
+      const monitors = new MonitorRepo(tx);
+      const current = await monitors.lockForStateChange(scope, monitorId);
+      if (current === undefined) {
+        throw new StatusEntityNotFoundError('monitor', monitorId);
+      }
+      if (isHeartbeat(current.kind) !== isHeartbeat(settings.kind)) {
+        throw new MonitorKindError('A monitor stays a heartbeat or a probe check; create a new monitor to switch');
+      }
+      const updated = await monitors.updateSettings(scope, monitorId, settings);
       if (updated === undefined) {
         throw new StatusEntityNotFoundError('monitor', monitorId);
       }
       await new MonitorLocationRepo(tx).replace(scope.workspaceId, monitorId, links.locationIds);
       await new ComponentMonitorRepo(tx).replace(scope.workspaceId, monitorId, links.components);
-      return updated;
+      if (!isHeartbeat(current.kind) || current.state === MonitorStates.paused) {
+        return updated;
+      }
+      // The deadline counts from the same moment (the last ping, the creation or the resume),
+      // with the new period and grace.
+      const since = new Date(current.nextRoundAt.getTime() - silenceWindowMs(current));
+      return await monitors.setNextRound(scope, monitorId, silenceDeadline(settings, since), now);
     });
     await this.deps.audit.record(scope.workspaceId, {
       actorUserId,
@@ -261,11 +325,41 @@ export class MonitorService {
       ...subject(monitorId),
       payload: { name: input.name, kind: input.spec.kind, incidentPolicy: input.incidentPolicy, ...links },
     });
-    return monitor;
+    return viewOf(monitor);
   }
 
-  /** Stop checking the monitor. Pausing a paused monitor changes nothing. */
-  async pause(scope: StatusScope, actorUserId: string, monitorId: string): Promise<MonitorRow> {
+  /** Issue a new ping token for a heartbeat; the old one stops working at once. The token is in
+   * this answer only. */
+  async rotateHeartbeatToken(
+    scope: StatusScope,
+    actorUserId: string,
+    monitorId: string,
+  ): Promise<{ monitor: MonitorView; token: string }> {
+    const token = generateHeartbeatToken();
+    const now = this.now();
+    const monitor = await this.deps.db.transaction(async tx => {
+      const monitors = new MonitorRepo(tx);
+      const current = await monitors.lockForStateChange(scope, monitorId);
+      if (current === undefined) {
+        throw new StatusEntityNotFoundError('monitor', monitorId);
+      }
+      if (!isHeartbeat(current.kind)) {
+        throw new MonitorKindError(`Monitor ${monitorId} isn't a heartbeat; it has no ping token`);
+      }
+      return await monitors.setHeartbeatTokenHash(scope, monitorId, hashHeartbeatToken(token), now);
+    });
+    await this.deps.audit.record(scope.workspaceId, {
+      actorUserId,
+      action: AuditActions.statusMonitorHeartbeatTokenRotated,
+      ...subject(monitorId),
+      payload: { name: monitor.name },
+    });
+    return { monitor: viewOf(monitor), token };
+  }
+
+  /** Stop checking the monitor. Pausing a paused monitor changes nothing. A paused heartbeat
+   * still accepts pings, but they don't move its state. */
+  async pause(scope: StatusScope, actorUserId: string, monitorId: string): Promise<MonitorView> {
     return await this.changeState(scope, actorUserId, monitorId, {
       applies: state => state !== MonitorStates.paused,
       to: MonitorStates.paused,
@@ -275,7 +369,7 @@ export class MonitorService {
 
   /** Check the monitor again: it is `pending` until its next verdict, and a round is due now.
    * Resuming a monitor that isn't paused changes nothing. */
-  async resume(scope: StatusScope, actorUserId: string, monitorId: string): Promise<MonitorRow> {
+  async resume(scope: StatusScope, actorUserId: string, monitorId: string): Promise<MonitorView> {
     return await this.changeState(scope, actorUserId, monitorId, {
       applies: state => state === MonitorStates.paused,
       to: MonitorStates.pending,
@@ -287,7 +381,7 @@ export class MonitorService {
    * Run a round now (`POST /v1/monitors/:id/check`, #155): a round that isn't due yet is pulled
    * to now; one already due or open stays. Returns the round's time. The state and streaks are
    * the evaluator's, so nothing else changes and the verdict follows as for any round. A paused
-   * monitor has no rounds: `MonitorPausedError`.
+   * monitor has no rounds: `MonitorPausedError`; neither has a heartbeat: `MonitorKindError`.
    */
   async requestCheck(scope: StatusScope, monitorId: string): Promise<{ monitorId: string; roundAt: Date }> {
     const now = this.deps.now?.() ?? new Date();
@@ -296,6 +390,11 @@ export class MonitorService {
       const monitor = await monitors.lockForStateChange(scope, monitorId);
       if (monitor === undefined) {
         throw new StatusEntityNotFoundError('monitor', monitorId);
+      }
+      if (isHeartbeat(monitor.kind)) {
+        throw new MonitorKindError(
+          `Monitor ${monitorId} is a heartbeat; its job pings it, so it has no rounds to check`,
+        );
       }
       if (monitor.state === MonitorStates.paused) {
         throw new MonitorPausedError(monitorId);

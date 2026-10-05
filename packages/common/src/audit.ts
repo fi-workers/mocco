@@ -105,6 +105,7 @@ export const AuditActions = {
   statusMonitorDeleted: 'status.monitor.deleted',
   statusMonitorPaused: 'status.monitor.paused',
   statusMonitorResumed: 'status.monitor.resumed',
+  statusMonitorHeartbeatTokenRotated: 'status.monitor.heartbeat_token_rotated',
   /** A private probe location was created; its token is shown once. */
   statusLocationCreated: 'status.location.created',
   statusLocationTokenRotated: 'status.location.token_rotated',
@@ -214,6 +215,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.statusMonitorDeleted]: 'Monitor deleted',
   [AuditActions.statusMonitorPaused]: 'Monitor paused',
   [AuditActions.statusMonitorResumed]: 'Monitor resumed',
+  [AuditActions.statusMonitorHeartbeatTokenRotated]: 'Heartbeat ping URL replaced',
   [AuditActions.statusLocationCreated]: 'Probe location created',
   [AuditActions.statusLocationTokenRotated]: 'Probe location token rotated',
   [AuditActions.statusLocationDisabled]: 'Probe location disabled',

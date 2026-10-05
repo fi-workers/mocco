@@ -271,11 +271,17 @@ export const statusRouter = router({
     .input(monitorInput)
     .query(async ({ ctx, input }) => await ctx.statusMonitors.get(scopeOf(input), input.monitorId)),
 
+  /** Create a monitor. A heartbeat's ping token is in this answer only (`heartbeatToken`, null otherwise). */
   createMonitor: protectedStatusProcedure
     .input(projectInput.and(monitorInputSchema))
-    .mutation(async ({ ctx, input }) => ({
-      monitor: await ctx.statusMonitors.create(scopeOf(input), ctx.session.user.id, input),
-    })),
+    .mutation(async ({ ctx, input }) => {
+      const { heartbeatToken, ...monitor } = await ctx.statusMonitors.create(
+        scopeOf(input),
+        ctx.session.user.id,
+        input,
+      );
+      return { monitor, heartbeatToken };
+    }),
 
   /** Replace the monitor's settings, locations and components; its state is kept. */
   updateMonitor: protectedStatusProcedure
@@ -291,6 +297,14 @@ export const statusRouter = router({
   resumeMonitor: protectedStatusProcedure.input(monitorInput).mutation(async ({ ctx, input }) => ({
     monitor: await ctx.statusMonitors.resume(scopeOf(input), ctx.session.user.id, input.monitorId),
   })),
+
+  /** Issue a new ping token for a heartbeat; the old one stops working. The token is in this answer only. */
+  rotateHeartbeatToken: protectedStatusProcedure
+    .input(monitorInput)
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.statusMonitors.rotateHeartbeatToken(scopeOf(input), ctx.session.user.id, input.monitorId),
+    ),
 
   deleteMonitor: protectedStatusProcedure.input(monitorInput).mutation(async ({ ctx, input }) => {
     await ctx.statusMonitors.delete(scopeOf(input), ctx.session.user.id, input.monitorId);

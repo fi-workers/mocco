@@ -2,6 +2,7 @@
 // production singletons, tests and the job runtime call it with their own db.
 import { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
 import { CorrelationService } from '@backend/domain/status/CorrelationService';
+import { HeartbeatService } from '@backend/domain/status/HeartbeatService';
 import { IncidentService } from '@backend/domain/status/IncidentService';
 import { LocationService } from '@backend/domain/status/LocationService';
 import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
@@ -31,6 +32,7 @@ export interface StatusDomain {
   statusLocations: LocationService;
   statusProbes: ProbeService;
   statusVerdicts: VerdictEvaluator;
+  statusHeartbeats: HeartbeatService;
   statusCorrelation: CorrelationService;
   statusRollups: RollupService;
 }
@@ -71,16 +73,14 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     runTimeline: createRunTimeline(db),
     ...now,
   });
-  const statusVerdicts = new VerdictEvaluator({
-    db,
-    onStateChange: async (monitor, change) => {
-      await transitions.react(monitor, change);
-    },
-    ...now,
-  });
+  const onStateChange = async (...args: Parameters<MonitorTransitionService['react']>) => {
+    await transitions.react(...args);
+  };
+  const statusVerdicts = new VerdictEvaluator({ db, onStateChange, ...now });
   return {
     statusPages,
     statusVerdicts,
+    statusHeartbeats: new HeartbeatService({ db, onStateChange, ...now }),
     statusCorrelation,
     statusIncidents: new IncidentService({ db, audit: deps.audit, pages: statusPages, snapshots, onOpened, ...now }),
     statusMaintenances: new MaintenanceService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),

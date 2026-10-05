@@ -54,6 +54,15 @@ export class MonitorPausedError extends ConflictError {
   }
 }
 
+/** Something a monitor's kind rules out: changing between a heartbeat and a probe kind, checking a
+ * heartbeat's round, or rotating a probe monitor's heartbeat token — CONFLICT. */
+export class MonitorKindError extends ConflictError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'MonitorKindError';
+  }
+}
+
 /** A maintenance window that ends before it starts — BAD_REQUEST. */
 export class MaintenanceWindowError extends BadRequestError {
   constructor(options?: ErrorOptions) {

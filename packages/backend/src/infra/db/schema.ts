@@ -141,10 +141,10 @@ import type {
   LocationKind,
   MaintenanceStatus,
   MonitorKind,
-  MonitorSpec,
   MonitorState,
   QuorumMode,
   RoundVerdict,
+  StoredMonitorSpec,
 } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
@@ -3544,8 +3544,9 @@ export const statusLocations = pgTable(
   ],
 );
 
-/** An HTTP or TCP check of a project. `state` is written only by the evaluator and by pause and
- * resume, both under the monitor's advisory lock; `next_round_at` is the probes' schedule. */
+/** An HTTP or TCP check of a project, or a heartbeat (#153) its job pings. `state` is written only
+ * by the evaluator, the heartbeat pings, and pause and resume, all under the monitor's advisory
+ * lock; `next_round_at` is the probes' schedule, and a heartbeat's silence deadline. */
 export const statusMonitors = pgTable(
   'mocco_status_monitors',
   {
@@ -3554,7 +3555,7 @@ export const statusMonitors = pgTable(
     projectId: uuid('project_id').notNull(),
     name: text().notNull(),
     kind: text().$type<MonitorKind>().notNull(),
-    spec: jsonb().$type<MonitorSpec>().notNull(),
+    spec: jsonb().$type<StoredMonitorSpec>().notNull(),
     intervalSeconds: integer('interval_s').notNull(),
     confirmations: integer().notNull(),
     recoveryConfirmations: integer('recovery_confirmations').notNull(),
@@ -3572,12 +3573,22 @@ export const statusMonitors = pgTable(
     watchUntil: timestamp('watch_until'),
     watchIntervalSeconds: integer('watch_interval_s'),
     watchRunId: uuid('watch_run_id').references(() => runs.id, { onDelete: 'set null' }),
+    /** A heartbeat (#153): the SHA-256 of its ping token, its period and grace, the last
+     * completion ping (success or failure), the last `/start`, and the run time from that start
+     * to the completion after it. Null for probe kinds. */
+    heartbeatTokenHash: text('heartbeat_token_hash'),
+    heartbeatPeriodSeconds: integer('heartbeat_period_s'),
+    heartbeatGraceSeconds: integer('heartbeat_grace_s'),
+    lastPingAt: timestamp('last_ping_at'),
+    lastStartAt: timestamp('last_start_at'),
+    lastDurationMs: integer('last_duration_ms'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
   },
   t => [
     index('mocco_status_monitors_project_idx').on(t.workspaceId, t.projectId),
+    uniqueIndex('mocco_status_monitors_heartbeat_token_uq').on(t.heartbeatTokenHash),
     // The probes' lease scan: rounds coming due on monitors that aren't paused.
     index('mocco_status_monitors_next_round_idx')
       .on(t.nextRoundAt)
@@ -3607,6 +3618,13 @@ export const statusMonitors = pgTable(
     check(
       'mocco_status_monitors_confirmations_check',
       sql`${t.confirmations} >= 1 AND ${t.recoveryConfirmations} >= 1`,
+    ),
+    // A heartbeat has a token, a period and a grace, and goes down on its first failure; a probe
+    // kind has none of them. (That a heartbeat has no locations is the service's rule: a check
+    // can't see another table.)
+    check(
+      'mocco_status_monitors_heartbeat_check',
+      sql`CASE WHEN ${t.kind} IN (${sqlInList([MonitorKinds.heartbeat])}) THEN ${t.heartbeatTokenHash} IS NOT NULL AND ${t.heartbeatPeriodSeconds} IS NOT NULL AND ${t.heartbeatGraceSeconds} IS NOT NULL AND ${t.heartbeatPeriodSeconds} >= 60 AND ${t.heartbeatGraceSeconds} >= 60 AND ${t.confirmations} = 1 AND ${t.recoveryConfirmations} = 1 ELSE ${t.heartbeatTokenHash} IS NULL AND ${t.heartbeatPeriodSeconds} IS NULL AND ${t.heartbeatGraceSeconds} IS NULL AND ${t.lastPingAt} IS NULL AND ${t.lastStartAt} IS NULL END`,
     ),
   ],
 );

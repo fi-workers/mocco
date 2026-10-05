@@ -14,7 +14,7 @@
 // and nothing else of its spec but the method and the timeouts ever leaves here. A location's
 // token hash is never read out either.
 import { Products } from '@mocco/common/project';
-import { LocationKinds, MonitorKinds, MonitorStates } from '@mocco/common/status';
+import { isProbeSpec, LocationKinds, MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { z } from 'zod';
 
 import { monitorTargetOf } from '@backend/domain/status/monitor-target';
@@ -30,10 +30,9 @@ import {
 
 import type { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import type { LocationService } from '@backend/domain/status/LocationService';
-import type { MonitorService } from '@backend/domain/status/MonitorService';
+import type { MonitorService, MonitorView } from '@backend/domain/status/MonitorService';
 import type { LocationRow } from '@backend/domain/status/repos/location.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
-import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { LocationKind, MonitorComponent, MonitorSpec, MonitorState } from '@mocco/common/status';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -116,6 +115,15 @@ const checkOf = (spec: MonitorSpec) =>
       }
     : { timeoutMs: spec.timeoutMs };
 
+/** A heartbeat's settings and its last ping and run, never its token. */
+const heartbeatOf = (monitor: MonitorView) => ({
+  periodSeconds: monitor.heartbeatPeriodSeconds,
+  graceSeconds: monitor.heartbeatGraceSeconds,
+  lastPingAt: monitor.lastPingAt,
+  lastStartAt: monitor.lastStartAt,
+  lastDurationMs: monitor.lastDurationMs,
+});
+
 /** Ascending by a position string, one page of `limit` after `after`, and the next cursor when there is more. */
 function pageAfter<T>(rows: readonly { row: T; position: string }[], args: { limit: number; after?: string }) {
   const rest = rows
@@ -134,7 +142,7 @@ function pageAfter<T>(rows: readonly { row: T; position: string }[], args: { lim
   };
 }
 
-type LinkedMonitor = MonitorRow & { locationIds: string[]; components: MonitorComponent[] };
+type LinkedMonitor = MonitorView & { locationIds: string[]; components: MonitorComponent[] };
 
 /** A monitor as the tools show it; `locations` names its locations for the detailed shape. */
 function monitorOf(
@@ -156,7 +164,7 @@ function monitorOf(
       impactWhenDown: component.impactWhenDown,
     })),
     ...(locations !== undefined && {
-      ...checkOf(monitor.spec),
+      ...(isProbeSpec(monitor.spec) ? checkOf(monitor.spec) : heartbeatOf(monitor)),
       intervalSeconds: monitor.intervalSeconds,
       confirmations: monitor.confirmations,
       recoveryConfirmations: monitor.recoveryConfirmations,
@@ -178,6 +186,9 @@ const reasonSchema = z.object({
   okCount: z.number().optional(),
   failCount: z.number().optional(),
   noDataCount: z.number().optional(),
+  /** A heartbeat's: `success`, `fail` (with the job's `exitCode`, if it sent one) or `silence`. */
+  cause: z.string().optional(),
+  exitCode: z.number().optional(),
 });
 
 const stateChangeOf = (change: MonitorStateChangeRow, isDetailed: boolean) => {
@@ -308,7 +319,7 @@ export function registerStatusMonitorTools(server: McpServer, deps: StatusMonito
     {
       title: 'Find status monitors',
       description:
-        "A project's HTTP and TCP monitors by name: what each checks (host only), its state (up, suspect, down, recovering, degraded, paused or pending) and since when, and the components it reports on. Filter by state, e.g. the ones down. Read-only.",
+        "A project's HTTP, TCP and heartbeat monitors by name: what each checks (host only; none for a heartbeat, which its job pings), its state (up, suspect, down, recovering, degraded, paused or pending) and since when, and the components it reports on. Filter by state, e.g. the ones down. Read-only.",
       inputSchema: monitorsInput,
       annotations: { readOnlyHint: true },
     },

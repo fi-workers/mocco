@@ -20,9 +20,9 @@ import type {
   IncidentSeverity,
   IncidentStatus,
   MaintenanceStatus,
-  MonitorSpec,
   MonitorState,
   RoundVerdict,
+  StoredMonitorSpec,
 } from '@mocco/common/status';
 import type { inferRouterOutputs } from '@trpc/server';
 
@@ -177,9 +177,13 @@ export function RoundVerdictBadge({ verdict }: { verdict: RoundVerdict }) {
 
 /**
  * What a monitor checks, for the console: the method, origin and path of an HTTP check (never its
- * URL credentials or query, which can hold secrets), or `host:port` for TCP.
+ * URL credentials or query, which can hold secrets), `host:port` for TCP, or that a heartbeat
+ * waits for its job's pings.
  */
-export function monitorTargetLabel(spec: MonitorSpec): string {
+export function monitorTargetLabel(spec: StoredMonitorSpec): string {
+  if (spec.kind === MonitorKinds.heartbeat) {
+    return 'Heartbeat pings';
+  }
   if (spec.kind === MonitorKinds.tcp) {
     return `${spec.host}:${String(spec.port)}`;
   }

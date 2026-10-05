@@ -1,10 +1,10 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, status, components, incidents, maintenance]
@@ -28,6 +28,10 @@ code_refs:
   - packages/backend/src/domain/status/latency-hist.ts
   - packages/backend/src/domain/status/VerdictEvaluator.ts
   - packages/backend/src/domain/status/MonitorTransitionService.ts
+  - packages/backend/src/domain/status/HeartbeatService.ts
+  - packages/backend/src/domain/status/heartbeat.ts
+  - packages/backend/src/domain/status/heartbeat-token.ts
+  - packages/backend/src/transport/ext/v1/heartbeat-ping.ts
   - packages/backend/src/domain/status/repos/incident-monitor.repo.ts
   - packages/backend/src/domain/status/consensus.ts
   - packages/backend/src/transport/ext/v1/probe.ts
@@ -82,7 +86,9 @@ agent run at a private location or embedded in a single-node self-hosted server 
 components, opens incidents and sends alerts ([below](#what-a-state-change-does)). Each incident lists the releases
 around its start and any run a person links to it, and a run lists its incidents (#154,
 [below](#deploy-correlation)); after a release its monitors check every 30 seconds for 15 minutes, and a failure then
-opens an incident naming the run (#155, [the deploy watch](#the-deploy-watch)). There are no subscribers yet.
+opens an incident naming the run (#155, [the deploy watch](#the-deploy-watch)). A heartbeat monitor takes pings from a
+customer's job instead of probing, and goes down when the job falls silent or reports a failure (#153,
+[heartbeat monitors](#heartbeat-monitors)). There are no subscribers yet.
 
 ## Console
 
@@ -142,7 +148,7 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id` |
+| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`, `heartbeat`), `spec` (jsonb; a heartbeat's holds only its kind), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id`; for a [heartbeat](#heartbeat-monitors), `heartbeat_token_hash` (unique), `heartbeat_period_s`, `heartbeat_grace_s`, `last_ping_at`, `last_start_at` and `last_duration_ms`. A DB check (`mocco_status_monitors_heartbeat_check`, migration 0068) requires a heartbeat to have the token hash, a period and a grace of 60 seconds or more and both confirmations at 1, and a probe kind to have no token, period, grace or pings |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_incident_runs` | The runs linked to an incident ([deploy correlation](#deploy-correlation)): `relation` (`suspected`, `before_window`, `fix`, `manual`), `score` (a suggestion's), `linked_by_user_id` (null for a suggestion). Keyed by (incident, run), with an index on `run_id` for the run's side; deleting the incident or the run deletes the link |
@@ -379,7 +385,7 @@ changed in the meantime. Posting an incident while the app is down needs the bre
 ## Monitors and the probe protocol
 
 A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at the locations it is assigned to
-([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). Monitors and locations are managed over tRPC, and
+([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)), or a [heartbeat](#heartbeat-monitors) that a job pings. Monitors and locations are managed over tRPC, and
 agents lease and report rounds over the [probe protocol](#probe-protocol); the
 [verdict evaluator](#verdicts-and-the-state-machine) closes each round and moves the monitor's state and schedule. The
 [probe agent](#the-probe-agent) runs the checks at private locations, or inside a single-node self-hosted server as
@@ -391,6 +397,10 @@ agents lease and report rounds over the [probe protocol](#probe-protocol); the
 |---|---|
 | `http` | `url` (http or https), `method` (`GET`, `HEAD`, `POST`), `body`, `expectedStatus` (empty means any 2xx), `keyword` with `keywordMode` (`contains`, `absent`), `latencyThresholdMs`, `timeoutMs` (1 to 30 seconds, default 10), `followRedirects` (default on), `tlsWarnDays` |
 | `tcp` | `host`, `port`, `timeoutMs` |
+
+`monitorInputSchema` also takes `{ kind: 'heartbeat', periodSeconds, graceSeconds }`; it isn't part of
+`monitorSpecSchema`, which is what probes run and what a lease carries. A heartbeat has no locations, and every probe
+kind has at least one (the schema refuses both mistakes).
 
 A monitor also has `intervalSeconds` (60 to 86,400, default 60), `confirmations` and `recoveryConfirmations` (1 to
 10, default 2), `quorumMode` (`majority`, `any`, `all`), one to ten locations, and the components it reports on,
@@ -406,10 +416,11 @@ A monitor may use enabled shared locations and its workspace's own; any other lo
 monitor can't be pointed at another tenant's private network. Every linked component must be on one of the
 project's pages.
 
-**State.** A new monitor is `pending` with its first round due at once (`next_round_at`). Only two writers change
-`state`: the evaluator and the operator's pause and resume. Both take the monitor's
+**State.** A new monitor is `pending` with its first round due at once (`next_round_at`). Only three writers change
+`state`: the evaluator, a heartbeat's pings, and the operator's pause and resume. All take the monitor's
 `pg_advisory_xact_lock` (`AdvisoryLockNamespaces.statusMonitor`) inside their transaction and append a row to
-`mocco_status_monitor_state_changes`. Pausing sets `paused`; resuming sets `pending` and makes a round due now. Pausing
+`mocco_status_monitor_state_changes`. Pausing sets `paused`; resuming sets `pending` and makes a round due now (a
+heartbeat's deadline starts over from the resume instead). Pausing
 a paused monitor, or resuming one that isn't paused, changes nothing. Editing a monitor replaces its settings,
 locations and components and keeps its state. Deleting it deletes its links and history.
 
@@ -577,6 +588,62 @@ streaks, and moves `next_round_at` to one interval after the round (`watch_inter
 recheck). When the state moved, it appends a state change with the round and a
 `reason` carrying the verdict and counts. Probes then lease the next round as usual.
 
+### Heartbeat monitors
+
+A heartbeat (#153) checks nothing itself: a customer's cron job or worker pings Mocco, and the monitor goes down when
+the pings stop or report a failure. It has no locations, probes, rounds or verdict rows.
+
+**Token.** Creating a heartbeat generates its ping token, `mhb_` and 43 base64url characters (256 random bits,
+`heartbeat-token.ts`), returned once as `heartbeatToken` by `createMonitor`; only its SHA-256 is stored, in
+`heartbeat_token_hash`, which every read strips (`MonitorView`). `rotateHeartbeatToken` issues a new one (audited as
+`status.monitor.heartbeat_token_rotated`) and the old one stops working at once.
+
+**Pings.** `GET` or `POST` on the ext app's `/v1/ping/{token}` ([public API](./public-api.md#routes)), so `curl` or
+`wget` is enough; the token is the only credential, no API key:
+
+| Route | Means |
+|---|---|
+| `/v1/ping/{token}` | The job finished |
+| `/v1/ping/{token}/start` | The job started: records `last_start_at`, moves neither the state nor the deadline |
+| `/v1/ping/{token}/fail` | The job failed |
+| `/v1/ping/{token}/{exitCode}` | The job exited with this code (0 to 255): 0 is a success, anything else a failure |
+
+The route answers `200 OK`. A token of the wrong shape, an unknown or rotated token, and an exit code over 255 get the
+ext app's own `404`, byte for byte the answer to a route that doesn't exist, so a ping can't probe for tokens. Pings
+are limited to 5 every 5 seconds per token (a hash of it, counted before the lookup, so unknown tokens are limited
+the same way) and 600 a minute per client address. `HeartbeatService.ping` looks the hash up, takes the monitor's
+state lock, and checks the hash again under it (a rotation in between makes the old token not found).
+
+**Silence.** A heartbeat's `next_round_at` is its silence deadline: the last completion ping, or its creation or
+resume, plus `heartbeat_period_s` and `heartbeat_grace_s` (each 60 seconds or more; the period up to 31 days, the grace
+up to 7; defaults one hour and five minutes; `interval_s` mirrors the period). The evaluator's per-minute scan picks it
+up like a due round once the deadline has passed and takes the monitor down (`reason` `{ by: 'evaluator', cause:
+'silence', lastPingAt }`), then sets the next deadline a period and grace later, so a heartbeat that stays silent stays
+`down` without a new change. A heartbeat that was never pinged goes down a period and grace after it was created.
+
+**The state machine.** Each completion ping is a verdict: a success is `ok`, `/fail` or a non-zero exit code is `fail`.
+Pings and silence go through the same `nextState` as probe rounds, with `confirmations` and `recoveryConfirmations`
+fixed at 1 (the service sets them and a DB check holds them): a ping is the job's own report, not a sample a network
+blip can spoil, and silence has already waited out the grace, so a second confirmation would only delay a real
+alert by a whole period. So a failure or silence is `down` at once and the next success is `up`. The ping records
+`last_ping_at` and, when a `/start` came after the previous completion, `last_duration_ms` (null otherwise), and the
+deadline restarts from the ping. The state change's `reason` is `{ by: 'heartbeat', cause: 'success' | 'fail',
+exitCode? }`.
+
+**Paused.** A paused heartbeat still answers `200` and records its pings and durations, so the console shows the job
+is alive, but its state doesn't move and silence isn't evaluated. Resuming starts a fresh deadline from the resume, so
+a ping missed while paused never takes it down.
+
+**What doesn't apply.** Probes never lease a heartbeat (the lease query skips the kind, even if an assignment row
+existed), a deploy watch skips it, and `POST /v1/monitors/{id}/check` refuses it (`MonitorKindError`, `409`): it has no
+rounds. A monitor can't switch between a heartbeat and a probe kind (`MonitorKindError`); editing a heartbeat's period
+and grace moves the deadline it is waiting on, counted from the same moment.
+
+Everything after a change is shared with probe monitors: [what a state change does](#what-a-state-change-does)
+(components, incidents, audit, alerts; the alert's description says "No ping for N min" or "The job exited with code
+N"), and the [rollups](#uptime-rollups), which read downtime from the state changes, so a heartbeat's outage counts in
+its daily uptime, its components' days and the 90-day bars like any other.
+
 ### What a state change does
 
 After a change commits, the evaluator calls its `onStateChange` port, which `compose.ts` binds to
@@ -698,7 +765,7 @@ These changes are appended to the workspace's audit chain, after their transacti
 | `status.incident.created`, `status.incident.updated` for a monitor's incident (no actor, `monitorId` in the payload) | `status_incident` |
 | `status.maintenance.scheduled`, `status.maintenance.canceled` | `status_maintenance` |
 | `status.maintenance.started`, `status.maintenance.completed` (by the tick, no actor) | `status_maintenance` |
-| `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed` | `status_monitor` |
+| `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed`, `status.monitor.heartbeat_token_rotated` | `status_monitor` |
 | `status.location.created`, `status.location.token_rotated`, `status.location.disabled` | `status_location` |
 
 Group and other component edits are not audited, and neither are the runs Mocco suggests for an incident.
@@ -708,7 +775,7 @@ Group and other component edits are not audited, and neither are the runs Mocco 
 `status.*` is built on `productProcedure(Products.status)`: the caller must be a member of `workspaceId`,
 `projectId` must belong to it, and the status product must be enabled (`FORBIDDEN` otherwise). The same procedure
 maps the domain's errors: `StatusEntityNotFoundError` is `NOT_FOUND`; `StatusPageSlugTakenError`,
-`IncidentTransitionError`, `MaintenanceTransitionError` and `LocationCodeTakenError` are `CONFLICT`; `MaintenanceWindowError` is
+`IncidentTransitionError`, `MaintenanceTransitionError`, `LocationCodeTakenError` and `MonitorKindError` are `CONFLICT`; `MaintenanceWindowError` is
 `BAD_REQUEST`. Every lookup is scoped by workspace and project, so another tenant's ids are `NOT_FOUND`. A test
 calls every procedure as a non-member and with another tenant's ids, and fails if a procedure is missing from it.
 
@@ -721,7 +788,7 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `incidentRuns`, `correlateIncident`, `linkRun`, `unlinkRun` | The runs linked to an incident ([deploy correlation](#deploy-correlation)); `linkRun` takes `relation` `manual` or `fix` |
 | `runIncidents` | The incidents a run is linked to (`workspaceId`, `runId`; membership and the status product, no `projectId`), for the run's page. It lives here so the execution router never depends on status; another workspace's run is `NOT_FOUND` |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
-| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first), the incident it opened that is still open (`openIncident`, or null), and `history`: its rolled-up `hours` (the last 48) and `days` (the last 90), oldest first, each with `rounds`, `downSeconds`, and `p50Ms` / `p95Ms` read from the latency histogram (days add `uptimeRatio`); rows the rollup hasn't written are absent |
+| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor`, `rotateHeartbeatToken` | Monitors (never a heartbeat token's hash); `createMonitor` answers `{ monitor, heartbeatToken }` (null for a probe kind) and `rotateHeartbeatToken` `{ monitor, token }`, the only times a ping token is shown; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first), the incident it opened that is still open (`openIncident`, or null), and `history`: its rolled-up `hours` (the last 48) and `days` (the last 90), oldest first, each with `rounds`, `downSeconds`, and `p50Ms` / `p95Ms` read from the latency histogram (days add `uptimeRatio`); rows the rollup hasn't written are absent |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
 Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)); see
@@ -730,7 +797,9 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 ## Not built yet
 
 Hosted locations, publishing `@mocco/probe` to npm and its image to
-GHCR, heartbeat monitors, a location-unhealthy
+GHCR, heartbeat monitors in the console (the Heartbeat kind in the form, the ping URL and last ping on the monitor
+page) and the SDK's `heartbeat(token).wrap(fn)`, the `hb.mocco.club` ping host, a heartbeat that goes down when a
+`/start` isn't followed by a finish within a time limit, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
@@ -754,8 +823,10 @@ looked up among the project's own, so another tenant's page or incident reads li
 Monitors and locations are in `transport/mcp/tools/status-monitors.ts`. `mocco_status_monitors_search` reads
 `MonitorService.list` (by name, paged with `after`; filtered by `states` and name text) and
 `mocco_status_monitors_get` reads `MonitorService.get` (the latest state changes, newest first, capped by `limit`; the
-open monitor incident; detailed adds each change's `reason`, the latest closed rounds and the same `history` as
-`status.monitor`: uptime and p50/p95 latency for the last 48 hours and 90 days), both behind `ProjectScope`.
+open monitor incident; detailed adds each change's `reason` (with a heartbeat's `cause` and `exitCode`), the latest
+closed rounds and the same `history` as `status.monitor`: uptime and p50/p95 latency for the last 48 hours and 90 days,
+and for a heartbeat its period, grace, last ping, last start and last duration instead of the probe settings), both
+behind `ProjectScope`.
 A monitor's `target` is `monitorTargetOf`, the same host and port alerts show: its URL credentials, path and query, its
 request body and its keyword never leave the server, because they can hold secrets. `mocco_status_locations_search`
 reads `LocationService.list` behind the checks of the workspace-level `locations` query (membership and the status
