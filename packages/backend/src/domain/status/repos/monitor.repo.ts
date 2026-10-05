@@ -14,7 +14,14 @@ type MonitorInsert = typeof schema.statusMonitors.$inferInsert;
 /** The settings an operator edits; state and schedule belong to pause, resume and the evaluator. */
 export type MonitorSettings = Pick<
   MonitorInsert,
-  'name' | 'kind' | 'spec' | 'intervalSeconds' | 'confirmations' | 'recoveryConfirmations' | 'quorumMode'
+  | 'name'
+  | 'kind'
+  | 'spec'
+  | 'intervalSeconds'
+  | 'confirmations'
+  | 'recoveryConfirmations'
+  | 'quorumMode'
+  | 'incidentPolicy'
 >;
 
 const m = schema.statusMonitors;

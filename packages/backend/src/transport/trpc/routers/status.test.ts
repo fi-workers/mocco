@@ -366,6 +366,28 @@ describe('status router on pglite', () => {
     });
     const { monitor } = await api.status.pauseMonitor({ ...scope, monitorId: ids.monitorId });
     expect(monitor.state).toBe('paused');
+    // A monitor opens draft incidents unless told otherwise.
+    expect(monitor.incidentPolicy).toBe('draft');
+    const { monitor: publishing } = await api.status.updateMonitor({
+      ...scope,
+      monitorId: ids.monitorId,
+      name: 'API health',
+      spec: httpSpec,
+      locationIds: [ids.locationId],
+      incidentPolicy: 'publish',
+    });
+    expect(publishing.incidentPolicy).toBe('publish');
+    await expect(
+      api.status.updateMonitor({
+        ...scope,
+        monitorId: ids.monitorId,
+        name: 'API health',
+        spec: httpSpec,
+        locationIds: [ids.locationId],
+        // @ts-expect-error -- not a policy
+        incidentPolicy: 'always',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(
       api.status.createMonitor({
         ...scope,

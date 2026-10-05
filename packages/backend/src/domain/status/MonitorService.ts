@@ -36,6 +36,7 @@ const settingsOf = (input: MonitorInput): MonitorSettings => ({
   confirmations: input.confirmations,
   recoveryConfirmations: input.recoveryConfirmations,
   quorumMode: input.quorumMode,
+  incidentPolicy: input.incidentPolicy,
 });
 
 /** Each location once, and each component once (the last impact given wins). */
@@ -178,7 +179,13 @@ export class MonitorService {
       actorUserId,
       action: AuditActions.statusMonitorCreated,
       ...subject(monitor.id),
-      payload: { projectId: scope.projectId, name: input.name, kind: input.spec.kind, ...links },
+      payload: {
+        projectId: scope.projectId,
+        name: input.name,
+        kind: input.spec.kind,
+        incidentPolicy: input.incidentPolicy,
+        ...links,
+      },
     });
     return monitor;
   }
@@ -200,7 +207,7 @@ export class MonitorService {
       actorUserId,
       action: AuditActions.statusMonitorUpdated,
       ...subject(monitorId),
-      payload: { name: input.name, kind: input.spec.kind, ...links },
+      payload: { name: input.name, kind: input.spec.kind, incidentPolicy: input.incidentPolicy, ...links },
     });
     return monitor;
   }

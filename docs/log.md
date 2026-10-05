@@ -152,6 +152,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `adr/0026-*`, `adr/README.md`, `index.md`, `reference/roadmap.md`, `log.md`
 - Source: PR #349
 
+## 2026-10-05 — Monitor state drives components, incidents and alerts
+
+- The status reference gains "What a state change does": the evaluator's `onStateChange` port, the pages marked dirty
+  when a monitor's change shows on a component, the monitor-origin incident (`incident_policy`, draft by default,
+  held as a draft during maintenance, followed to monitoring and resolved, one open per monitor through
+  `mocco_status_incident_monitors`), audit with no actor, and the `status.monitor.*` alerts deduped per state change.
+  "What a component shows" adds the monitors. The events reference lists the three status types and their payload;
+  the notifications reference adds `ota.*` and `status.*` to the fan-out and the status types to the `mocco` preset.
+  The feature map's monitors row says what is built.
+- Docs touched: `reference/status.md`, `reference/events.md`, `reference/notifications.md`,
+  `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-monitor-incidents` (#150, part 6)
+
 ## 2026-10-05 — Status embedded probe
 
 - The status reference gains "The embedded probe": `STATUS_PROBE_EMBEDDED` runs `@mocco/probe`'s loop inside a

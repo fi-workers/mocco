@@ -4,7 +4,7 @@ description: The domain event catalog, how to publish and subscribe, delivery se
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, events, jobs, backend, notifications]
@@ -48,8 +48,16 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `sentry.*`, `vercel.*`, `github.*` (16 types) | `InboundService`, for a mapped webhook delivery | `inbound_receipt` / receipt id |
 | `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a change to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
 | `ota.emergency_launch.spike` | `OtaMetricsService` (the `ota.rollupMetrics` job), when a release's emergency launches today cross the threshold | `ota_update` / update id |
+| `status.monitor.down`, `status.monitor.degraded`, `status.monitor.recovered` | `MonitorTransitionService`, after the verdict evaluator moves a monitor to `down`, to `degraded`, or to `up` after an outage or a degradation ([status](./status.md#what-a-state-change-does)) | `status_monitor_state_change` / state change id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
+
+### Status payloads
+
+The `status.monitor.*` types carry a rendered message (`{ facts, message }`, like the OTA and flag types) with the
+facts `monitor` (its name), `state` (the new state) and `duringMaintenance` (a window in progress covers one of the
+monitor's components; the title then ends "(during maintenance)"). Each has the dedupe key
+`<type>:<state change id>`, so one change alerts once even if its reaction runs again.
 
 ### Governance payloads
 
@@ -154,7 +162,8 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
   pure `domain/<x>/subscribers.ts` factory). It never imports an `instance.ts`, which keeps the
   composition free of import cycles (see [jobs: composition](./jobs.md#composition)).
 - Registered today: the notification fan-out (`registerNotificationSubscribers`,
-  `domain/notification/subscribers.ts`) on `gate.*`, `run.*`, `sentry.*`, `vercel.*` and `github.*`
+  `domain/notification/subscribers.ts`) on `gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*` and
+  `status.*`
   (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
   the links in its messages.
 

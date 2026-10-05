@@ -83,6 +83,7 @@ describe('NotificationService fan-out (pglite)', () => {
     expect(bus.subscribersFor('sentry.issue.created')).toEqual([NotificationSubscribers.sentry.name]);
     expect(bus.subscribersFor('vercel.deployment.error')).toEqual([NotificationSubscribers.vercel.name]);
     expect(bus.subscribersFor('github.push')).toEqual([NotificationSubscribers.github.name]);
+    expect(bus.subscribersFor('status.monitor.down')).toEqual([NotificationSubscribers.status.name]);
   });
 
   it('queues one delivery per matching channel, each with a kicked job deduped by its id', async () => {

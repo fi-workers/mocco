@@ -160,6 +160,14 @@ export const MessengerEventTypes = {
   messengerMessageReceived: 'messenger.message.received',
 } as const;
 
+/** Status monitors (#150): a monitor's confirmed state changes, one event per change. */
+export const StatusEventTypes = {
+  statusMonitorDown: 'status.monitor.down',
+  statusMonitorDegraded: 'status.monitor.degraded',
+  /** Up again after `down`, `recovering` or `degraded`. */
+  statusMonitorRecovered: 'status.monitor.recovered',
+} as const;
+
 /** A product event that, like an inbound one, carries its message rendered when it
  * happened, plus the flat facts rules filter on (`app`, `channel`, `release`). */
 export const renderedEventPayloadSchema = z.object({
@@ -187,6 +195,12 @@ export const messengerEventPayloadSchemas = {
   [MessengerEventTypes.messengerMessageReceived]: renderedEventPayloadSchema,
 } as const;
 
+export const statusEventPayloadSchemas = {
+  [StatusEventTypes.statusMonitorDown]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusMonitorDegraded]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusMonitorRecovered]: renderedEventPayloadSchema,
+} as const;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
@@ -194,6 +208,7 @@ export const DomainEventTypes = {
   ...OtaEventTypes,
   ...FlagEventTypes,
   ...MessengerEventTypes,
+  ...StatusEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
@@ -204,6 +219,7 @@ export const domainEventPayloadSchemas = {
   ...otaEventPayloadSchemas,
   ...flagEventPayloadSchemas,
   ...messengerEventPayloadSchemas,
+  ...statusEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;

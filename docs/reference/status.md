@@ -24,6 +24,8 @@ code_refs:
   - packages/backend/src/domain/status/ProbeService.ts
   - packages/backend/src/domain/status/TimeSeriesRetention.ts
   - packages/backend/src/domain/status/VerdictEvaluator.ts
+  - packages/backend/src/domain/status/MonitorTransitionService.ts
+  - packages/backend/src/domain/status/repos/incident-monitor.repo.ts
   - packages/backend/src/domain/status/consensus.ts
   - packages/backend/src/transport/ext/v1/probe.ts
   - packages/probe/src/agent.ts
@@ -59,7 +61,9 @@ The status page product ([design spec](../specs/2026-09-24-status-page-design.md
 This page describes what is built: operators manage a project's status pages, components, incidents and scheduled
 maintenance by hand through the `status.*` tRPC router (#148), and every change is published as a static public page
 (#149, [below](#public-page)). Monitors and probe locations are configured over tRPC and checked by the `@mocco/probe`
-agent run at a private location (#150, [below](#monitors-and-the-probe-protocol)). There is no subscriber or deploy
+agent run at a private location or embedded in a single-node self-hosted server (#150,
+[below](#monitors-and-the-probe-protocol)); a monitor's state drives its
+components, opens incidents and sends alerts ([below](#what-a-state-change-does)). There is no subscriber or deploy
 correlation yet.
 
 ## Console
@@ -101,9 +105,10 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `state`, `state_changed_at`, `next_round_at`, and the streaks `consecutive_fails` and `consecutive_oks` |
+| `mocco_status_monitors` | A check of a project: `name`, `kind` (`http`, `tcp`), `spec` (jsonb), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, and the streaks `consecutive_fails` and `consecutive_oks` |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
+| `mocco_status_incident_monitors` | The incident a monitor opened: `incident_id`, `monitor_id`, `closed_at` (set when the monitor recovers). A partial unique index on `monitor_id` where `closed_at` is null keeps one open incident per monitor |
 | `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
 | `mocco_status_round_verdicts` | One closed round of a monitor: `verdict` (`ok`, `degraded`, `fail`, `unknown`), `ok_count`, `fail_count`, `no_data_count`, `p50_latency_ms`, `closed_at`. Key (monitor, round); partitioned by day like the raw results and kept 30 days |
 | `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
@@ -144,10 +149,12 @@ The affected components can be replaced at any time. The postmortem is a Markdow
 
 A component's `status` is what an operator reported. The status the page shows is derived
 (`deriveComponentStatus`): the worst of that status, the impacts of the unresolved incidents affecting the
-component, and `maintenance` while a window covering it is in progress. The order is
+component, what its linked monitors put on it, and `maintenance` while a window covering it is in progress. A
+monitor that is `down` or `recovering` (an outage runs until the next `up`) puts the link's `impact_when_down` on the
+component, a `degraded` one puts `degraded`, and any other state (`suspect` is unconfirmed) puts nothing. The order is
 `operational` < `maintenance` < `degraded` < `partial_outage` < `major_outage`, so an outage during a maintenance
-window still shows as an outage. `status.page` returns each component with `displayedStatus`. Monitors join the
-derivation in their own slice.
+window still shows as an outage. `status.page` returns each component with `displayedStatus`; the public page counts
+published incidents only, but every monitor.
 
 ## Maintenance
 
@@ -242,7 +249,8 @@ agents lease and report rounds over the [probe protocol](#probe-protocol); the
 
 A monitor also has `intervalSeconds` (60 to 86,400, default 60), `confirmations` and `recoveryConfirmations` (1 to
 10, default 2), `quorumMode` (`majority`, `any`, `all`), one to ten locations, and the components it reports on,
-each with the impact it has while the monitor is down. Request headers, which can carry secrets, aren't accepted yet.
+each with the impact it has while the monitor is down, and an `incidentPolicy` (`none`, `draft` or `publish`, default
+`draft`; see [below](#what-a-state-change-does)). Request headers, which can carry secrets, aren't accepted yet.
 
 **Locations.** A workspace sees Mocco's shared locations (`workspace_id` null: hosted regions, or the embedded probe
 on a one-box install) and its own private ones. An owner or admin creates a private location with a `code` unique in
@@ -423,6 +431,38 @@ streaks, and moves `next_round_at` to one interval after the round, or to now wh
 monitor just became `suspect` (the recheck). When the state moved, it appends a state change with the round and a
 `reason` carrying the verdict and counts. Probes then lease the next round as usual.
 
+### What a state change does
+
+After a change commits, the evaluator calls its `onStateChange` port, which `compose.ts` binds to
+`MonitorTransitionService.react`; the evaluator itself knows nothing of pages, incidents or notifications. A failed
+reaction is logged and never undoes the change. Operator pause and resume don't react.
+
+In one transaction under the monitor's advisory lock, so reactions to one monitor never interleave:
+
+1. **Pages.** Each page with a component whose monitor-derived status the change moves (`suspect` and `recovering`
+   don't) is marked dirty, and a [publish](#public-page) is requested.
+2. **Incidents.** On `down`, a monitor without an open incident and with `incident_policy` other than `none` opens one
+   on the page holding most of its components (first in page order on a tie): "<monitor> is down", `investigating`,
+   severity `major` when a component goes to `major_outage` and `minor` otherwise, those components with their
+   `impact_when_down`, and a link in `mocco_status_incident_monitors`. It is a `draft` unless the policy is `publish`
+   and no maintenance window in progress covers one of the monitor's components; a draft never reaches the public
+   page. While the monitor is open-linked: `recovering` posts a `monitoring` update, a failure while recovering posts
+   `identified`, and `up` or `degraded` posts `resolved` and closes the link. An incident an operator resolved by hand
+   closes its link at the next change, so the next outage opens a new one. Updates have no author.
+3. **Audit.** After the commit, `status.incident.created` and `status.incident.updated` are appended with no actor,
+   and a `monitorId` in the payload.
+4. **Alerts.** One domain event per change ([events](./events.md)): `status.monitor.down` on `down`,
+   `status.monitor.degraded` on `degraded`, and `status.monitor.recovered` on `up` after `down`, `recovering` or
+   `degraded`. A false alarm (`suspect` to `up`), a first `up`, repeated verdicts and `unknown` rounds send nothing.
+   The dedupe key is `<type>:<state change id>`, so a retried reaction publishes nothing new. The payload is a
+   rendered message (title "Down: API health", the target, the previous state, whether an incident was opened, a
+   link to the incident or the status console) with the facts `monitor`, `state` and `duringMaintenance`; during a
+   window covering the monitor's components the title ends "(during maintenance)". Notification rules route them
+   like any event; the `mocco` preset includes all three.
+
+A crash between the state change and its reaction loses the reaction (the same trade-off as other best-effort
+events); a reconcile over unreacted state changes would close that gap.
+
 ### Time series and their partitions
 
 `mocco_status_check_results` and `mocco_status_round_verdicts` are range-partitioned by UTC day on `round_at`, one
@@ -446,6 +486,7 @@ These changes are appended to the workspace's audit chain, after their transacti
 | `status.page.created`, `status.page.deleted` | `status_page` |
 | `status.component.status_changed` (from, to) | `status_component` |
 | `status.incident.created`, `status.incident.updated` (from, to), `status.incident.components_changed`, `status.incident.postmortem_changed` | `status_incident` |
+| `status.incident.created`, `status.incident.updated` for a monitor's incident (no actor, `monitorId` in the payload) | `status_incident` |
 | `status.maintenance.scheduled`, `status.maintenance.canceled` | `status_maintenance` |
 | `status.maintenance.started`, `status.maintenance.completed` (by the tick, no actor) | `status_maintenance` |
 | `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed` | `status_monitor` |
@@ -479,10 +520,10 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 Hosted locations, publishing `@mocco/probe` to npm and its image to
 GHCR, heartbeat monitors, a location-unhealthy
-alert, component status derived from monitors
-(`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
-(`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` (and a way to create or publish a
-draft, which arrives with monitor-origin incidents); repo and project links on components; run links
+alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
+lost; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping
+(`<slug>.status.mocco.club`) and custom domains; subscribers; incident `origin` and a way to publish a draft incident
+(a monitor's draft is visible in the console but can't be published yet); repo and project links on components; run links
 (`suspected_run_id`, `mocco_status_incident_runs`); and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
