@@ -115,6 +115,10 @@ per-minute tick). `STATUS_PROBE_CONCURRENCY` (1 to 200, default 20) is how many 
 ignored on Vercel. See [the embedded probe](./status.md#the-embedded-probe). A probe that runs elsewhere is
 configured by its own `MOCCO_*` variables, not by the server's env.
 
+`STATUS_RAW_RETENTION_DAYS` (1 to 365, default 14) is how many days of raw status check results are kept, today
+included; the `status.retention` job drops older days' partitions. Uptime history doesn't depend on it: rollups come
+from the round verdicts and the state changes. See [time series](./status.md#time-series-and-their-partitions).
+
 ## Messenger vars
 
 `EXPO_ACCESS_TOKEN` (optional) is sent to Expo's push service with messenger reply notifications, for Expo projects that require an access token ("enhanced push security"). Without it, pushes go out unauthenticated, which Expo accepts unless the project requires one. Attachments use [object storage](./storage.md). See [Messenger](./messenger.md#push).

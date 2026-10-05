@@ -1,5 +1,5 @@
 import { MonitorStates } from '@mocco/common/status';
-import { and, asc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { expectOne } from '@backend/infra/db/rows';
@@ -33,6 +33,11 @@ export class MonitorRepo {
 
   async list(scope: StatusScope): Promise<MonitorRow[]> {
     return await this.db.select().from(m).where(scoped(scope)).orderBy(asc(m.name), asc(m.createdAt)).limit(500);
+  }
+
+  /** Every workspace's monitors created before `at`. System-wide, for the rollup job. */
+  async listCreatedBefore(at: Date): Promise<MonitorRow[]> {
+    return await this.db.select().from(m).where(lt(m.createdAt, at));
   }
 
   async find(scope: StatusScope, id: string): Promise<MonitorRow | undefined> {

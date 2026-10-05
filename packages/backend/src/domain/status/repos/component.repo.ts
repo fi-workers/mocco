@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -21,6 +21,11 @@ export class ComponentRepo {
       .from(c)
       .where(and(scoped(scope), eq(c.pageId, pageId)))
       .orderBy(asc(c.position), asc(c.createdAt));
+  }
+
+  /** Every workspace's components created before `at`. System-wide, for the rollup job. */
+  async listCreatedBefore(at: Date): Promise<ComponentRow[]> {
+    return await this.db.select().from(c).where(lt(c.createdAt, at));
   }
 
   async find(scope: StatusScope, id: string): Promise<ComponentRow | undefined> {

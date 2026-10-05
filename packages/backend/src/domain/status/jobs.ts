@@ -6,6 +6,7 @@ import { defineJob, handleJob, type JobHandler } from '@backend/domain/jobs/hand
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import type { RollupService } from '@backend/domain/status/RollupService';
 import type { SnapshotService } from '@backend/domain/status/SnapshotService';
 import type { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import type { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
@@ -15,6 +16,7 @@ export const StatusJobKinds = {
   snapshotPublish: 'status.snapshot.publish',
   retention: 'status.retention',
   evaluate: 'status.evaluate',
+  rollup: 'status.rollup',
 } as const;
 
 /** Start and complete scheduled maintenance windows. */
@@ -23,17 +25,24 @@ export const tickMaintenance = defineJob(StatusJobKinds.maintenanceTick, z.objec
 /** Publish one page's public snapshot; without a page, the safety run requests every page with work left. */
 export const publishSnapshot = defineJob(StatusJobKinds.snapshotPublish, z.object({ pageId: z.uuid().optional() }));
 
-/** Create the coming days' raw result partitions and drop the ones past retention. */
+/** Create the coming days' raw result and verdict partitions, drop the ones past retention, and
+ * delete hourly rollups past theirs. */
 export const runRetention = defineJob(StatusJobKinds.retention, z.object({}));
 
 /** Close the monitor rounds that are due, decide them, and move the monitors' states. */
 export const evaluateRounds = defineJob(StatusJobKinds.evaluate, z.object({}));
+
+/** Roll the round verdicts and state changes up into hours, days and component days. */
+export const runRollup = defineJob(StatusJobKinds.rollup, z.object({}));
 
 export const statusSchedules: SystemSchedule[] = [
   { kind: StatusJobKinds.evaluate, payload: {}, intervalSeconds: 60 },
   { kind: StatusJobKinds.maintenanceTick, payload: {}, intervalSeconds: 60 },
   // Hourly, so a missed run never leaves the next day without a partition.
   { kind: StatusJobKinds.retention, payload: {}, intervalSeconds: 3600 },
+  // Every ten minutes: each run rolls up the hours that ended since the last one, so a day is
+  // final within ten minutes of 00:10 UTC (RollupService.run).
+  { kind: StatusJobKinds.rollup, payload: {}, intervalSeconds: 600 },
 ];
 
 /** The five-minute safety run, registered only when an object store is configured. */
@@ -49,6 +58,7 @@ export function createStatusHandlers(deps: {
   snapshots: Pick<SnapshotService, 'publish' | 'sweep'> | undefined;
   retention: Pick<TimeSeriesRetention, 'run'>;
   verdicts: Pick<VerdictEvaluator, 'evaluate'>;
+  rollups: Pick<RollupService, 'run'>;
   now: () => Date;
 }): JobHandler[] {
   return [
@@ -66,6 +76,9 @@ export function createStatusHandlers(deps: {
     }),
     handleJob(evaluateRounds, async () => {
       await deps.verdicts.evaluate({ now: deps.now() });
+    }),
+    handleJob(runRollup, async () => {
+      await deps.rollups.run(deps.now());
     }),
   ];
 }

@@ -23,6 +23,9 @@ code_refs:
   - packages/backend/src/domain/status/LocationService.ts
   - packages/backend/src/domain/status/ProbeService.ts
   - packages/backend/src/domain/status/TimeSeriesRetention.ts
+  - packages/backend/src/domain/status/RollupService.ts
+  - packages/backend/src/domain/status/uptime.ts
+  - packages/backend/src/domain/status/latency-hist.ts
   - packages/backend/src/domain/status/VerdictEvaluator.ts
   - packages/backend/src/domain/status/MonitorTransitionService.ts
   - packages/backend/src/domain/status/repos/incident-monitor.repo.ts
@@ -140,6 +143,9 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_incident_monitors` | The incident a monitor opened: `incident_id`, `monitor_id`, `closed_at` (set when the monitor recovers). A partial unique index on `monitor_id` where `closed_at` is null keeps one open incident per monitor |
 | `mocco_status_monitor_state_changes` | Every change of a monitor's state: `from_state`, `to_state`, `at`, `round_at`, `reason`. Append-only, and the source of truth for downtime |
 | `mocco_status_round_verdicts` | One closed round of a monitor: `verdict` (`ok`, `degraded`, `fail`, `unknown`), `ok_count`, `fail_count`, `no_data_count`, `p50_latency_ms`, `closed_at`. Key (monitor, round); partitioned by day like the raw results and kept 30 days |
+| `mocco_status_rollups_hourly` | One monitor's hour ([uptime rollups](#uptime-rollups)): `rounds`, `ok_rounds`, `fail_rounds`, `unknown_rounds`, `down_seconds`, `latency_sum_ms`, `latency_count` and `latency_hist`. Key (monitor, hour); kept 90 days |
+| `mocco_status_rollups_daily` | One monitor's UTC day: `rounds`, `ok_rounds`, `down_seconds`, `maintenance_seconds`, `uptime_ratio` (numeric(7,6), null when nothing could be measured), `latency_hist` and `p95_ms`. Key (monitor, day); kept forever |
+| `mocco_status_component_days` | One component's UTC day, for the 90-day bars: `worst_status`, `down_seconds`, `uptime_ratio` (null when no monitor reports on it) and `incident_ids`. Key (component, day); kept forever |
 | `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
 | `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#time-series-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
 
@@ -313,8 +319,8 @@ failure is stored in `upload_error` and doesn't fail the job; the safety run ret
 the overall status, the components by group with the status they show, open incidents with their updates, maintenance
 in progress or scheduled, and the latest 50 resolved incidents. Only `published` incidents are read, and a draft's
 impact doesn't count toward a component's public status. Component ids are the only internal ids; an incident is keyed
-by a hash of its id, and no author or user appears. Postmortems are not published yet. The 90-day uptime bars show
-"no data" until daily rollups exist.
+by a hash of its id, and no author or user appears. Postmortems are not published yet. The 90-day uptime bars still show
+"no data": they will read the [component days](#uptime-rollups) that the rollup job now writes.
 
 **Files**, through the storage domain's `ObjectStore` under `pub/status/{slug}/` (`StaticPublisher`):
 
@@ -604,9 +610,62 @@ still compares `schema.ts` to the snapshots, which don't record partitioning.
 
 The `status.retention` job runs every hour (`TimeSeriesRetention`). For both tables it creates the partitions for
 today and the next two days, and drops whole days past retention, so old rows go without a `DELETE`: 14 days of raw
-results, 30 days of verdicts. State changes are not partitioned and are kept. If a result arrives for a day with no
+results (`STATUS_RAW_RETENTION_DAYS`, 1 to 365, today included), 30 days of verdicts. Nothing reads a raw result after
+its round closes, so the setting only bounds how long a round's per-location detail stays inspectable. State changes
+are not partitioned and are kept. The same job deletes hourly rollups older than 90 days; that table is small (one row
+per monitor and hour), so a `DELETE` on its `hour` index is enough and it isn't partitioned. If a result arrives for a day with no
 partition yet (a fresh install before the job's first run), the insert creates that day's partition and retries once;
 the evaluator creates the verdict partitions it needs before its transactions.
+
+### Uptime rollups
+
+The `status.rollup` job (`RollupService`, #152) turns the verdicts and state changes into the history that outlives
+them: hourly rows from the round verdicts, and daily rows and component days from the hourly rows and the state
+changes. Everything it writes is an upsert of a value computed from scratch, so rolling the same hour or day up again
+gives the same rows, and dropping a day's raw or verdict partition never changes a daily row.
+
+**Downtime is time, not rounds.** It comes from `mocco_status_monitor_state_changes`: a monitor is down from a change
+to `down` until the next change to a state other than `down` or `recovering` (an outage runs until the next `up`), cut
+at the hour or day boundary, so an outage across midnight counts on both days. Time between rounds is counted, and a
+round with an `unknown` verdict (a location failure, every location silent) never changes the state, so it can't add
+downtime. Before a monitor's first change it was in that change's `from_state`.
+
+**Uptime** of a monitor's UTC day (`uptime.ts`):
+
+```
+uptime = 1 - (down - overlap_with_maintenance) / (observed - maintenance)
+```
+
+`observed` is the part of the day the monitor was watched: from the day's start, or the monitor's creation if later, to
+the day's end, or now for the current day, without time spent `paused`. That is the design's `86400` for a whole
+day. `maintenance` is the time a window covering one of the monitor's components actually ran (`actual_start` to
+`actual_end`, or still in progress) inside the observed time, and `overlap_with_maintenance` the downtime inside it.
+The ratio is rounded to six places; it is null when maintenance covered everything observed. A day before a monitor
+existed has no row, so the history starts when tracking did.
+
+**Hours.** Per monitor and hour: the closed rounds by verdict (`degraded` counts as `ok`: its checks passed, slowly),
+the seconds down in the hour, and the rounds' latency (each round's median across locations, `p50_latency_ms`) as a
+sum, a count and a histogram. An hour gets a row when the monitor had a round or downtime in it.
+
+**Latency histograms** (`latency-hist.ts`) have 16 fixed buckets with doubling bounds: below 8 ms, 8 to 16 ms, and so on
+up to 131,072 ms, then one open bucket. Every histogram has the same buckets, so a day's is the sum of its hours', and a
+percentile read from any sum (interpolated inside its bucket) is within a factor of two; the daily row keeps `p95_ms`.
+
+**Days.** Per monitor: the day's rounds and ok rounds (summed from its hours), `down_seconds`,
+`maintenance_seconds`, `uptime_ratio`, the merged histogram and `p95_ms`. Per component (`mocco_status_component_days`,
+from the day the component was created): `worst_status`, the worst of what its monitors put on it that day (the same
+rule as [what a component shows](#what-a-component-shows)), the impacts of published incidents open some time that day,
+and `maintenance` when a window covering it ran; `down_seconds`, the union of its monitors' downtime; `uptime_ratio`
+with the formula above over that union and its own maintenance (null when no monitor reports on it); and
+`incident_ids`, the published incidents open that day. Draft incidents never count, and a status set by hand has no
+history yet, so it doesn't either.
+
+**Schedule.** The job runs every ten minutes. Each run rolls up the hours that ended at least ten minutes ago and
+aren't rolled up yet (24 at most, so a stopped job catches up on a day), then the current UTC day so far, then the
+previous day again while the run is within two hours of 00:10. So a day is final from 00:10 UTC the next day, and late
+rounds are still picked up until 02:10. Hourly rows are kept 90 days (deleted by `status.retention`), daily rows and
+component days forever. The 90-day bars on the public page don't read component days yet, and neither the console nor
+MCP shows a monitor's uptime or latency yet.
 
 ## Audit
 
@@ -658,7 +717,9 @@ alert, a per-component `status_source` switch, TLS expiry warnings, and a reconc
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
-`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
+`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; the public
+page's 90-day bars from component days, and a monitor's uptime and p50/p95 latency in the console, the `status.monitor`
+read and MCP; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
 ## MCP
