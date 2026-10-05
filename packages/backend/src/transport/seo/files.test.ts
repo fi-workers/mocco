@@ -49,6 +49,7 @@ const deps = (overrides: Partial<SeoFileDeps> = {}): SeoFileDeps => ({
       });
     },
   },
+  indexNowKeyOf: slug => `key-for-${slug}`,
   ...overrides,
 });
 
@@ -120,6 +121,14 @@ describe('seoFile', () => {
     expect(file.body).toContain('hreflang="en" href="https://help.syt.app/en"/>');
     // A page in one language has no alternates, and its URL is escaped.
     expect(file.body).toContain('<loc>https://help.syt.app/ko/articles/def456-a&amp;b</loc>\n  </url>');
+  });
+
+  it("serves a help site's IndexNow key on its host, and none on the app's", async () => {
+    const help = await seoFile(SeoFiles.indexNowKey, 'help.syt.app', deps());
+    const app = await seoFile(SeoFiles.indexNowKey, 'www.mocco.club', deps());
+
+    expect([help.status, help.body]).toEqual([200, 'key-for-syt']);
+    expect(app.status).toBe(404);
   });
 
   it('answers 404 for a help host with no such site', async () => {

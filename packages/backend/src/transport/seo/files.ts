@@ -11,7 +11,7 @@ import { sitemapXml, withLanguageVersions } from '@backend/transport/seo/sitemap
 
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 
-export const SeoFiles = { robots: 'robots', sitemap: 'sitemap' } as const;
+export const SeoFiles = { robots: 'robots', sitemap: 'sitemap', indexNowKey: 'indexnow' } as const;
 export type SeoFile = (typeof SeoFiles)[keyof typeof SeoFiles];
 
 /** A public page of the app: a path and when it last changed, if known. */
@@ -43,10 +43,19 @@ export interface SeoFileDeps {
   /** A help site's canonical origin, or null when help centers aren't served. */
   helpSiteOrigin: (slug: string) => string | null;
   help: Pick<HelpPublicReadService, 'site' | 'sitemap'>;
+  /** A help site's IndexNow key (#367), or null when none can be derived. */
+  indexNowKeyOf: (slug: string) => string | null;
 }
 
 export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): Promise<SeoFileResponse> {
   const slug = deps.helpSiteForHost(host);
+  if (file === SeoFiles.indexNowKey) {
+    // Only help sites submit to IndexNow; the app's host has no key.
+    const key = slug === null ? null : deps.indexNowKeyOf(slug);
+    return key === null
+      ? { status: 404, contentType: TEXT, body: 'Not found\n' }
+      : { status: 200, contentType: TEXT, body: key };
+  }
   if (slug === null) {
     if (file === SeoFiles.robots) {
       return {

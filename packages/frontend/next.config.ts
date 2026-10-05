@@ -56,6 +56,7 @@ const config: NextConfig = {
       { source: '/og/v1/:path*', destination: '/api/ext/og/v1/:path*' },
       { source: '/robots.txt', destination: '/api/seo/robots' },
       { source: '/sitemap.xml', destination: '/api/seo/sitemap' },
+      { source: '/indexnow.txt', destination: '/api/seo/indexnow' },
       // Agents (#366): llms.txt, llms-full.txt and every page's Markdown — by a `.md` URL, or
       // the page's own URL asked for with `Accept: text/markdown`. The `:locale` forms only
       // answer on a help center's host.
