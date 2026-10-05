@@ -97,8 +97,9 @@ governance event carries (`workspaceId`, `runId`, `repoFullName`, `pipelineName`
 `occurredAt` is the run's finish time, so a release published late by the reconcile job still
 sorts and prunes by when it happened.
 
-No subscriber is registered for it yet. The notification fan-out does not cover `deploy.*`, so
-a notification rule on `deploy.released` does not fire until it does.
+The notification fan-out subscribes to `deploy.*`, so a channel rule on `deploy.released` posts a
+"Released: owner/name" message ([notifications: templates](./notifications.md#templates)). It is
+not in the `mocco` preset; add the rule to a channel to get it.
 
 ## Reconciling
 

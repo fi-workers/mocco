@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { DomainEventTypes } from '@mocco/common/events';
+import {
+  DomainEventTypes,
+  domainEventPayloadSchemas,
+  isDomainEventType,
+  renderedEventPayloadSchema,
+} from '@mocco/common/events';
 import { DeliveryStatuses, Severities } from '@mocco/common/notification';
+import { RulePresets, rulePresetRules } from '@mocco/common/notification-presets';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -10,6 +16,7 @@ import { createEventBus } from '@backend/domain/events/subscriptions';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
 import { NotificationJobKinds, NotificationSubscribers } from '@backend/domain/notification/constants';
+import { createTestChannelService } from '@backend/domain/notification/testing/channel-service';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
 import { domainEventDeliveries, jobs, notificationDeliveries } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -84,6 +91,45 @@ describe('NotificationService fan-out (pglite)', () => {
     expect(bus.subscribersFor('vercel.deployment.error')).toEqual([NotificationSubscribers.vercel.name]);
     expect(bus.subscribersFor('github.push')).toEqual([NotificationSubscribers.github.name]);
     expect(bus.subscribersFor('status.monitor.down')).toEqual([NotificationSubscribers.status.name]);
+  });
+
+  it('subscribes the fan-out to every catalog event type, so any rule can fire', () => {
+    const fanOut = new Set<string>(Object.values(NotificationSubscribers).map(subscriber => subscriber.name));
+    const uncovered = Object.values(DomainEventTypes).filter(
+      type => bus.subscribersFor(type).filter(name => fanOut.has(name)).length !== 1,
+    );
+    expect(uncovered).toEqual([]);
+  });
+
+  it('delivers every product event of the mocco preset to a channel that applied it', async () => {
+    const workspaceId = await seedWorkspace(t.db);
+    const channel = await seedChannel(t.db, workspaceId);
+    const { service } = createTestChannelService(t.db);
+    await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco);
+    // Governance events are covered above; these carry their message rendered when they happened.
+    const renderedTypes = rulePresetRules.mocco
+      .map(rule => rule.eventType)
+      .filter(type => isDomainEventType(type) && domainEventPayloadSchemas[type] === renderedEventPayloadSchema);
+    expect(renderedTypes).toEqual(expect.arrayContaining(['flags.changeset.requested', 'messenger.message.received']));
+
+    /** Publish `type`, hand it to every subscriber as `events.deliver` would, and count its deliveries. */
+    const deliveriesAfterPublishing = async (type: string) => {
+      const { event, subscribers } = await bus.publish({
+        type: type as PublishInput['type'],
+        workspaceId,
+        subject: { type: 'test', id: randomUUID() },
+        payload: { facts: {}, message: { title: type, severity: Severities.info, fields: [], footer: 'Mocco' } },
+      } as PublishInput);
+      await Promise.all(subscribers.map(async subscriber => await bus.deliver(event.id, subscriber)));
+      const deliveries = await deliveriesOf(event.id);
+      return deliveries.length;
+    };
+    // One at a time: the test db is a single connection.
+    const undelivered = await renderedTypes.reduce<Promise<string[]>>(async (previous, type) => {
+      const missed = await previous;
+      return (await deliveriesAfterPublishing(type)) === 1 ? missed : [...missed, type];
+    }, Promise.resolve([]));
+    expect(undelivered).toEqual([]);
   });
 
   it('queues one delivery per matching channel, each with a kicked job deduped by its id', async () => {

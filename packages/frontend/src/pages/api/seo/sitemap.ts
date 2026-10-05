@@ -9,6 +9,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const file = await seoFileFor(SeoFiles.sitemap, req.headers.host ?? '', () => [
     { path: '/', lastModified: null },
+    { path: '/docs', lastModified: null },
     ...listGuidePages(),
   ]);
   res.setHeader('Content-Type', file.contentType);

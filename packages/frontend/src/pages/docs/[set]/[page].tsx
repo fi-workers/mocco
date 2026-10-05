@@ -45,11 +45,13 @@ export default function GuidePage({ set, page, nav }: Props) {
         url={`${origin}${path}`}
         origin={origin}
         type="article"
+        markdownUrl={`${origin}${path}.md`}
         jsonLd={[
           organizationLd(origin),
           websiteLd(origin),
           breadcrumbLd(origin, [
             { name: 'Mocco', path: '/' },
+            { name: 'Docs', path: Routes.docs },
             { name: guideSetLabels[set], path: Routes.guide(set, first) },
             { name: page.title, path },
           ]),
@@ -65,7 +67,9 @@ export default function GuidePage({ set, page, nav }: Props) {
           <span aria-hidden="true" className="text-lg text-border">
             /
           </span>
-          <span className="text-sm text-muted-foreground">Docs</span>
+          <Link href={Routes.docs} className="text-sm text-muted-foreground hover:text-foreground">
+            Docs
+          </Link>
         </header>
         <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-6 py-10 md:flex-row">
           <nav aria-label={`${guideSetLabels[set]} guides`} className="shrink-0 md:w-56">

@@ -4,7 +4,6 @@ import { FlagApprovalSubjects } from '@mocco/common/flags';
 import { ApprovalStates } from '@mocco/common/governance';
 import { OtaApprovalSubjects } from '@mocco/common/ota';
 import { OtaHostingApprovalSubjects } from '@mocco/common/ota-hosting';
-import { Products } from '@mocco/common/project';
 import Link from 'next/link';
 
 import { Ago, Notice, Spinner, Tones } from '@frontend/components/notifications/notification-ui';
@@ -55,10 +54,6 @@ function LoadError({ what, message, retry }: { what: string; message: string; re
       </span>
     </Notice>
   );
-}
-
-function placeOf(places: ReadonlyMap<string, Place>, id: string | null): Place | null {
-  return id === null ? null : (places.get(id) ?? null);
 }
 
 function actionString(request: ApprovalRequestDto, key: string): string | null {
@@ -159,125 +154,65 @@ function ProjectList({ workspaceId }: { workspaceId: string }) {
 }
 
 // The workspace's Home: what is waiting for the team's approval across products, the
-// latest governed changes, and the projects. Approval requests carry no project, so
-// their subjects (a flag environment, a store app, an OTA channel) are traced back
-// through the projects' own lists — fetched only while something is pending.
+// latest governed changes, and the projects. Each approval request records its project,
+// so linking it to the screen where it's decided needs no lookups.
 export default function WorkspaceHome({ workspaceId }: Props) {
   const projectsQuery = trpc.project.list.useQuery({ workspaceId });
-  const productsQuery = trpc.product.list.useQuery({ workspaceId });
   const approvalsQuery = trpc.approval.list.useQuery({ workspaceId, state: ApprovalStates.pending });
   // Deploys paused at a gate wait for approval too; they live on runs, not approval requests.
   const gatesQuery = trpc.run.list.useQuery({ workspaceId, state: RunStates.awaitingGate, limit: 20 });
   const membersQuery = trpc.workspace.members.useQuery({ workspaceId });
 
-  const projects = projectsQuery.data?.projects ?? [];
-  const enabled = productsQuery.data?.products ?? [];
+  const projectNames = new Map((projectsQuery.data?.projects ?? []).map(project => [project.id, project.name]));
   const pending = approvalsQuery.data?.requests ?? [];
-  const hasPending = pending.length > 0;
-  const flagProjects = hasPending && enabled.includes(Products.flags) ? projects : [];
-  const otaProjects = hasPending && enabled.includes(Products.ota) ? projects : [];
 
-  const environmentQueries = trpc.useQueries(t =>
-    flagProjects.map(project => t.flags.environments({ workspaceId, projectId: project.id })),
-  );
-  const storeAppQueries = trpc.useQueries(t =>
-    otaProjects.map(project => t.project.listApps({ workspaceId, projectId: project.id })),
-  );
-  const otaAppQueries = trpc.useQueries(t =>
-    otaProjects.map(project => t.ota.hosting.apps.list({ workspaceId, projectId: project.id })),
-  );
-  const otaApps = otaAppQueries.flatMap((query, index) =>
-    (query.data?.apps ?? []).map(app => ({ app, project: otaProjects[index] })),
-  );
-  const channelQueries = trpc.useQueries(t =>
-    otaApps.flatMap(({ app, project }) =>
-      project === undefined ? [] : [t.ota.hosting.channels.list({ workspaceId, projectId: project.id, appId: app.id })],
-    ),
-  );
-
-  const environments = new Map<string, Place>(
-    environmentQueries.flatMap((query, index) => {
-      const project = flagProjects[index];
-      return project === undefined
-        ? []
-        : (query.data?.environments ?? []).map(environment => [
-            environment.id,
-            {
-              context: `${project.name} · ${environment.name}`,
-              href: Routes.projectFlags(workspaceId, project.id, environment.id),
-            },
-          ]);
-    }),
-  );
-  const storeApps = new Map<string, Place>(
-    storeAppQueries.flatMap((query, index) => {
-      const project = otaProjects[index];
-      return project === undefined
-        ? []
-        : (query.data?.apps ?? []).map(app => [
-            app.id,
-            { context: `${project.name} · ${app.name}`, href: Routes.projectOta(workspaceId, project.id, app.id) },
-          ]);
-    }),
-  );
-  const channels = new Map<string, Place>(
-    channelQueries.flatMap((query, index) => {
-      const owner = otaApps[index];
-      const project = owner?.project;
-      return owner === undefined || project === undefined
-        ? []
-        : (query.data?.channels ?? []).map(channel => [
-            channel.id,
-            {
-              context: `${project.name} · ${channel.name}`,
-              href: Routes.projectOtaChannel(workspaceId, project.id, owner.app.id, channel.id),
-            },
-          ]);
-    }),
-  );
-
+  // Where a request is decided: its project (recorded on the request) and the screen there.
   const describe = (request: ApprovalRequestDto): Described => {
+    const { projectId } = request;
+    const at = (href: (project: string) => string): Place | null =>
+      projectId === null ? null : { context: projectNames.get(projectId) ?? 'Project', href: href(projectId) };
+    const environmentId = actionString(request, 'environmentId') ?? undefined;
     switch (request.subjectType) {
       case FlagApprovalSubjects.changeset: {
         return {
           product: 'Flags',
           title: 'Flag change in a protected environment',
-          place: placeOf(environments, actionString(request, 'environmentId')),
+          place: at(project => Routes.projectFlags(workspaceId, project, environmentId)),
         };
       }
       case FlagApprovalSubjects.changeGate: {
         return {
           product: 'Flags',
           title: 'New approval rule for an environment',
-          place: placeOf(environments, request.subjectId),
+          place: at(project => Routes.projectFlags(workspaceId, project, request.subjectId)),
         };
       }
       case FlagApprovalSubjects.kill: {
         return {
           product: 'Flags',
           title: 'Review of a kill switch',
-          place: placeOf(environments, actionString(request, 'environmentId')),
+          place: at(project => Routes.projectFlags(workspaceId, project, environmentId)),
         };
       }
       case OtaApprovalSubjects.versionPolicy: {
         return {
           product: 'OTA',
           title: 'Minimum or recommended app version',
-          place: storeApps.get(request.subjectId) ?? null,
+          place: at(project => Routes.projectOta(workspaceId, project, request.subjectId)),
         };
       }
       case OtaHostingApprovalSubjects.channelPolicy: {
         return {
           product: 'OTA',
           title: 'New approval rule for a channel',
-          place: channels.get(request.subjectId) ?? null,
+          place: at(project => Routes.projectOtaHosting(workspaceId, project)),
         };
       }
       case OtaHostingApprovalSubjects.channelChange: {
         return {
           product: 'OTA',
           title: 'Release change on a protected channel',
-          place: channels.get(request.subjectId) ?? null,
+          place: at(project => Routes.projectOtaHosting(workspaceId, project)),
         };
       }
       default: {
@@ -314,11 +249,6 @@ export default function WorkspaceHome({ workspaceId }: Props) {
       };
     }),
   ].toSorted((a, b) => b.at.getTime() - a.at.getTime());
-  // A request whose screen couldn't be traced because a lookup failed, as opposed to
-  // one that simply has no screen to link to.
-  const haveLookupsFailed = [...environmentQueries, ...storeAppQueries, ...otaAppQueries, ...channelQueries].some(
-    query => query.isError,
-  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -349,11 +279,6 @@ export default function WorkspaceHome({ workspaceId }: Props) {
               fireAndForget(approvalsQuery.refetch());
             }}
           />
-        ) : null}
-        {haveLookupsFailed ? (
-          <p className="text-xs text-muted-foreground">
-            Some approvals couldn’t be linked to their screen; reload the page to try again.
-          </p>
         ) : null}
         {approvalsQuery.isSuccess && gatesQuery.isSuccess && waiting.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">

@@ -1,4 +1,5 @@
 // Notification domain constants (platform foundations §12, relay design §6–§8).
+import type { DomainEventType } from '@mocco/common/events';
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -13,19 +14,38 @@ export const NotificationJobKinds = {
   prune: 'notification.prune',
 } as const;
 
+/** The first segment of a catalog type: `gate` of `gate.pending`, `flags` of `flags.flag.killed`. */
+type FamilyOf<T extends string> = T extends `${infer Family}.${string}` ? Family : never;
+type EventFamily = FamilyOf<DomainEventType>;
+
+/** One fan-out subscriber per catalog family, its pattern and name spelled from the family. */
+type FanOutSubscribers = {
+  readonly [Family in EventFamily]: {
+    readonly pattern: `${Family}.*`;
+    readonly name: `notification.fan-out.${Family}`;
+  };
+};
+
 /**
- * The fan-out's event bus subscribers, one per event family it listens to. The names
- * are permanent (they are part of the events.deliver dedupe key and ledger).
+ * The fan-out's event bus subscribers, one per event family of the catalog: a rule can
+ * name any catalog type, so every family must reach the fan-out. The `satisfies` makes
+ * that a type check — a family added to `DomainEventTypes` without an entry here (or an
+ * entry for a family the catalog lacks) fails to compile, so a rule can never silently
+ * not fire. The names are permanent (they are part of the events.deliver dedupe key and
+ * ledger).
  */
 export const NotificationSubscribers = {
   gate: { pattern: 'gate.*', name: 'notification.fan-out.gate' },
   run: { pattern: 'run.*', name: 'notification.fan-out.run' },
+  deploy: { pattern: 'deploy.*', name: 'notification.fan-out.deploy' },
   sentry: { pattern: 'sentry.*', name: 'notification.fan-out.sentry' },
   vercel: { pattern: 'vercel.*', name: 'notification.fan-out.vercel' },
   github: { pattern: 'github.*', name: 'notification.fan-out.github' },
   ota: { pattern: 'ota.*', name: 'notification.fan-out.ota' },
+  flags: { pattern: 'flags.*', name: 'notification.fan-out.flags' },
+  messenger: { pattern: 'messenger.*', name: 'notification.fan-out.messenger' },
   status: { pattern: 'status.*', name: 'notification.fan-out.status' },
-} as const;
+} as const satisfies FanOutSubscribers;
 
 export const DeliveryPolicy = {
   /** `max_attempts` of a `notification.deliver` job: about two hours of backoff (relay design §6). */

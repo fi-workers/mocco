@@ -259,6 +259,7 @@ export class FlagGovernanceService {
       expiresAt,
     });
     const request = await this.deps.approvals.request(workspaceId, {
+      projectId: environment.projectId,
       kind: ApprovalKinds.preApproval,
       subjectType: FlagApprovalSubjects.changeset,
       subjectId: created.id,
@@ -462,6 +463,7 @@ export class FlagGovernanceService {
       actorUserId,
     );
     const request = await this.deps.approvals.request(workspaceId, {
+      projectId: environment.projectId,
       kind: ApprovalKinds.preApproval,
       subjectType: FlagApprovalSubjects.changeGate,
       subjectId: environment.id,

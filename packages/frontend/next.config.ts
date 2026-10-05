@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 // Next matches `host` against the hostname (no port), as a regex.
 const hostnameOf = (domain: string | undefined) => (domain ?? '').split(':', 1)[0] ?? '';
 const escape = (hostname: string) => hostname.replaceAll('.', String.raw`\.`);
+// A request that prefers Markdown (`Accept: text/markdown`) gets a page's Markdown instead of its HTML.
+const acceptsMarkdown = { type: 'header' as const, key: 'accept', value: '.*text/markdown.*' };
 
 const config: NextConfig = {
   // `next dev` serves local help centers at <site>.help.localhost (HELP_SITES_DOMAIN).
@@ -29,6 +31,11 @@ const config: NextConfig = {
   },
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
+  // The same URL answers HTML or Markdown depending on Accept, so caches must key on it.
+  headers: async () => [
+    { source: '/docs/:set/:page', headers: [{ key: 'Vary', value: 'Accept' }] },
+    { source: '/:locale/articles/:ref', headers: [{ key: 'Vary', value: 'Accept' }] },
+  ],
   rewrites: async () => {
     const apiHostname = hostnameOf(process.env.PUBLIC_API_DOMAIN);
     // Help centers (#96, ADR 0015): with HELP_SITES_DOMAIN set (e.g. help.mocco.club),
@@ -40,6 +47,25 @@ const config: NextConfig = {
       // come from one route that looks at the host, so they go before the help rewrites.
       { source: '/robots.txt', destination: '/api/seo/robots' },
       { source: '/sitemap.xml', destination: '/api/seo/sitemap' },
+      // Agents (#366): llms.txt, llms-full.txt and every page's Markdown — by a `.md` URL, or
+      // the page's own URL asked for with `Accept: text/markdown`. The `:locale` forms only
+      // answer on a help center's host.
+      ...(['llms', 'llms-full'] as const).flatMap(file => [
+        { source: `/${file}.txt`, destination: `/api/seo/agents?file=${file}` },
+        { source: `/:locale/${file}.txt`, destination: `/api/seo/agents?file=${file}&locale=:locale` },
+      ]),
+      { source: '/docs/:set/:page.md', destination: '/api/seo/agents?file=guide&path=/docs/:set/:page' },
+      {
+        source: '/docs/:set/:page',
+        has: [acceptsMarkdown],
+        destination: '/api/seo/agents?file=guide&path=/docs/:set/:page',
+      },
+      { source: '/:locale/articles/:ref.md', destination: '/api/seo/agents?file=article&locale=:locale&path=:ref' },
+      {
+        source: '/:locale/articles/:ref',
+        has: [acceptsMarkdown],
+        destination: '/api/seo/agents?file=article&locale=:locale&path=:ref',
+      },
       ...(apiHostname === ''
         ? []
         : [

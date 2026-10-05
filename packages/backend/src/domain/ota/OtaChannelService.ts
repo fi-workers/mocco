@@ -523,6 +523,7 @@ export class OtaChannelService {
     // One pending change per channel: a newer request replaces older ones.
     await this.deps.approvals.supersedePending(app.workspaceId, subjectType, channel.id, actor.userId);
     const request = await this.deps.approvals.request(app.workspaceId, {
+      projectId: app.projectId,
       kind: ApprovalKinds.preApproval,
       subjectType,
       subjectId: channel.id,

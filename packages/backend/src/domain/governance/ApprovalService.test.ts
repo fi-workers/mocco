@@ -18,7 +18,7 @@ import { createApprovalService } from '@backend/domain/governance/instance';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
 import { expectOne } from '@backend/infra/db/rows';
-import { users, workspaces } from '@backend/infra/db/schema';
+import { projects, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { ApprovalRequestRow, ApprovalService } from '@backend/domain/governance/ApprovalService';
@@ -108,6 +108,28 @@ describe('ApprovalService (pglite)', () => {
   });
   afterEach(async () => {
     await t.close();
+  });
+
+  it('records the project a request belongs to, and lists it with the request', async () => {
+    const projectId = expectOne(
+      await t.db.insert(projects).values({ workspaceId, name: 'Acme', handle: 'acme' }).returning(),
+    ).id;
+    const requester = await seedUser();
+    const scoped = await service.request(workspaceId, {
+      kind: ApprovalKinds.preApproval,
+      projectId,
+      subjectType: SUBJECT,
+      subjectId: 'app-1',
+      action: {},
+      requirements: requirementsWith({}),
+      requestedByUserId: requester,
+    });
+    const workspaceWide = await open(requester);
+
+    const listed = await service.list(workspaceId, { state: ApprovalStates.pending });
+    const projectOf = new Map(listed.map(request => [request.id, request.projectId]));
+    expect(projectOf.get(scoped.id)).toBe(projectId);
+    expect(projectOf.get(workspaceWide.id)).toBeNull();
   });
 
   it('approves on N distinct approvers and runs the handler exactly once', async () => {

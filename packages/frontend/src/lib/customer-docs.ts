@@ -5,12 +5,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { GuideSets } from '@frontend/lib/guide-sets';
+import { guideSetLabels, GuideSets } from '@frontend/lib/guide-sets';
 import { markdownToBlocks } from '@frontend/lib/markdown-blocks';
 import { Routes } from '@frontend/lib/routes';
 
 import type { DocInline, DocNavEntry, DocPage } from '@frontend/lib/doc-ast';
 import type { GuideSet } from '@frontend/lib/guide-sets';
+import type { GuideSetForAgents } from '@mocco/backend/seo/handler';
 
 /** A set's guides, relative to the frontend package (the cwd of `next build` / `next dev`). */
 const guidesDir = (set: GuideSet) => path.join(process.cwd(), '..', '..', 'docs', 'customer', set);
@@ -36,6 +37,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
   [GuideSets.messenger]: ['contact-us'],
   [GuideSets.help]: ['help-center'],
   [GuideSets.status]: ['status-page'],
+  [GuideSets.mcp]: ['connect'],
 };
 
 const SLUG = /^[a-z0-9-]+$/u;
@@ -131,6 +133,17 @@ export function listGuidePages(): { path: string; lastModified: Date | null }[] 
       };
     }),
   );
+}
+
+/** Every set's guides as Markdown (frontmatter dropped), for llms.txt and the `.md` pages. */
+export function guidesForAgents(): GuideSetForAgents[] {
+  return Object.values(GuideSets).map(set => ({
+    label: guideSetLabels[set],
+    guides: listGuideSlugs(set).map(slug => {
+      const { title, description, body } = splitFrontmatter(readGuide(set, slug));
+      return { path: Routes.guide(set, slug), title, description, markdown: body };
+    }),
+  }));
 }
 
 /** One guide as a render tree. The page's own `# Title` is kept as its heading. */

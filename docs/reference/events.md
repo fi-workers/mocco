@@ -106,7 +106,10 @@ The catalog is assembled from per-area parts. An area adds an `*EventTypes` obje
 `*EventPayloadSchemas` object in `@mocco/common` and spreads both into `DomainEventTypes` and
 `domainEventPayloadSchemas`. The inbound source types (`sentry.issue.created`, `github.push`, …,
 [notification relay design](../superpowers/specs/2026-09-25-notification-relay-design.md) §4) joined
-this way as the `inbound` area.
+this way as the `inbound` area. A type whose first segment is a new family (`deploy` of
+`deploy.released`) also needs that family's entry in `NotificationSubscribers`
+(`domain/notification/constants.ts`); its type requires one entry per catalog family, so the
+backend does not compile until it is added (see [notifications](./notifications.md#fan-out)).
 
 ### Inbound payloads
 
@@ -174,8 +177,8 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
   pure `domain/<x>/subscribers.ts` factory). It never imports an `instance.ts`, which keeps the
   composition free of import cycles (see [jobs: composition](./jobs.md#composition)).
 - Registered today: the notification fan-out (`registerNotificationSubscribers`,
-  `domain/notification/subscribers.ts`) on `gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*` and
-  `status.*`
+  `domain/notification/subscribers.ts`), one `<family>.*` subscription per catalog family:
+  `gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`
   (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
   the links in its messages.
 - The release registry (`registerReleaseSubscribers`, `domain/project/subscribers.ts`) as

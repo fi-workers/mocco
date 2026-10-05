@@ -235,6 +235,51 @@ export class HelpPublicReadService {
   }
 
   /**
+   * Everything a site publishes in `locale`, text included, for agents (llms.txt and
+   * llms-full.txt): its collections, sections and articles in order, each article in the
+   * asked language where translated, else the source (at the source's address).
+   */
+  async forAgents(slug: string, locale: string) {
+    const site = await this.requireSite(slug);
+    const tree = await this.tree(slug, locale);
+    const { articles } = await this.publishedTree(site);
+    const sources = await new HelpArticleRepo(this.deps.db).revisionsByIds(
+      articles.map(article => article.publishedRevisionId ?? ''),
+    );
+    const sourceById = new Map(sources.map(revision => [revision.id, revision]));
+    const translations =
+      tree.locale === site.sourceLocale
+        ? new Map<string, { bodyMd: string }>()
+        : await this.translationTexts(
+            articles.map(article => article.id),
+            tree.locale,
+          );
+    // The tree already holds each article's title and address in the language it is served in.
+    const bodyOf = (shortId: string) => {
+      const article = articles.find(candidate => candidate.shortId === shortId);
+      if (article === undefined) {
+        return '';
+      }
+      return (translations.get(article.id) ?? sourceById.get(article.publishedRevisionId ?? ''))?.bodyMd ?? '';
+    };
+    return {
+      name: site.name,
+      locale: tree.locale,
+      collections: tree.collections.map(collection => ({
+        title: collection.title,
+        sections: collection.sections.map(section => ({
+          title: section.title,
+          articles: section.articles.map(entry => ({
+            title: entry.title,
+            path: entry.path,
+            body: bodyOf(entry.shortId),
+          })),
+        })),
+      })),
+    };
+  }
+
+  /**
    * Published articles matching `query`, in `locale` where translated (else the source),
    * best first: every term must appear in the title or the text, or with `any`, one of them.
    */
