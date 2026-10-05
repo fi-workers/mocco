@@ -1,8 +1,8 @@
 // The public entry of @mocco/js (the package's "exports" target). Product features join
 // as subpath exports (`@mocco/js/flags`, …) as they ship.
-import { MoccoClient } from '@mocco/sdk-core';
+import { HelpClient, MoccoClient } from '@mocco/sdk-core';
 
-import type { WhoAmI } from '@mocco/sdk-core';
+import type { HelpClientOptions, WhoAmI } from '@mocco/sdk-core';
 
 export interface MoccoJsOptions {
   /** A publishable key (`mk_pub_…`). The page's origin must be one of the project's web origins. */
@@ -27,5 +27,23 @@ export function createMocco(options: MoccoJsOptions): MoccoJs {
   return { client, whoami: async () => await client.whoami() };
 }
 
-export { MoccoError, MoccoKeyError, MoccoNetworkError } from '@mocco/sdk-core';
-export type { WhoAmI } from '@mocco/sdk-core';
+/**
+ * The project's published help center (needs a key with help:read): search it, list its
+ * collections and show an article on the page. Create it once.
+ */
+export function createHelp(options: HelpClientOptions): HelpClient {
+  return new HelpClient(options);
+}
+
+export { HelpClient, MoccoError, MoccoKeyError, MoccoNetworkError } from '@mocco/sdk-core';
+export type {
+  HelpArticle,
+  HelpArticleEntry,
+  HelpArticleHit,
+  HelpClientOptions,
+  HelpCollection,
+  HelpReadOptions,
+  HelpSearchOptions,
+  HelpSite,
+  WhoAmI,
+} from '@mocco/sdk-core';

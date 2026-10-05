@@ -171,6 +171,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
+## 2026-10-05 — Help center /v1 reads and the SDK
+
+- The public API reference lists `GET /v1/help/site`, `/collections/{slug}` and `/articles/{id}` with their
+  language negotiation and ETags, and says the table plus `@mocco/common/help-v1` is the contract (no OpenAPI
+  description). The help center reference gains "The /v1 read API", including the messenger's in-process search
+  contract; the SDK reference adds `HelpClient`'s reads and `createHelp` in `@mocco/js`; the feature map gains an
+  "App API and SDK" row.
+- The customer guide gains "Show articles in your app".
+- Docs touched: `reference/public-api.md`, `reference/help-center.md`, `reference/sdk.md`,
+  `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
+- Source: branch `feat/help-v1-read` (#216)
+
 ## 2026-10-05 — Help center editor: images and autosave
 
 - The help center reference gains "Images": `HelpImageService` (moved out of the import service), uploads completed

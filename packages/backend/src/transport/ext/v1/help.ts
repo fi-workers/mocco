@@ -1,42 +1,92 @@
-// /v1/help (#96): search a project's published help center, e.g. to suggest articles on
-// an app's contact screen. Read-only and published content only, so publishable keys
-// may call it (scope help:read).
+// /v1/help (#96, #216): read a project's published help center from an app — search it
+// (e.g. to suggest articles on a contact screen), list its collections and show an
+// article. Read-only and published content only, so publishable keys may call it (scope
+// help:read). Every answer says which language it is in, and carries a weak ETag
+// (If-None-Match → 304).
+import { createHash } from 'node:crypto';
+
 import { ApiScopes } from '@mocco/common/apikey';
+import {
+  helpV1ArticleRefSchema,
+  helpV1ArticleSchema,
+  helpV1CollectionResultSchema,
+  helpV1LocaleQuerySchema,
+  helpV1SearchQuerySchema,
+  helpV1SearchResultSchema,
+  helpV1SiteSchema,
+} from '@mocco/common/help-v1';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
 import { requireKey } from '@backend/transport/ext/v1/middleware';
 import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
+import type { Context } from 'hono';
+import type { z } from 'zod';
 
 export interface HelpServingDeps {
-  help: Pick<HelpPublicReadService, 'searchInProject'>;
+  help: Pick<HelpPublicReadService, 'searchInProject' | 'siteInProject' | 'articleInProject'>;
   /** The site's public origin, for absolute article URLs; null when not served. */
   originOf: (slug: string) => string | null;
 }
 
-const searchQuerySchema = z.object({
-  q: z.string().trim().min(1).max(500),
-  /** Any language tag (`en`, `en-KR`, `zh-Hant-TW`): its language is served where offered. */
-  locale: z
-    .string()
-    .max(35)
-    .regex(/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*$/u)
-    // eslint-disable-next-line sonarjs/null-dereference -- zod hands the transform a string
-    .transform(tag => tag.split(/[-_]/u, 1)[0]?.toLowerCase() ?? '')
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(20).default(5),
-  /** `any`: one word is enough, for free text such as an inquiry being written. */
-  match: z.enum(['all', 'any']).default('all'),
-});
+/** Published content changes within a minute on the public site too. */
+const CACHE_CONTROL = 'public, max-age=60';
+
+const noHelpCenter = () => problemResponse(problemOf(404, ProblemCodes.notFound, 'This project has no help center'));
+
+const isMissingSite = (error: unknown) => error instanceof Error && error.name === 'HelpSiteNotFoundError';
+
+/** The entity tags an `If-None-Match` header lists, weak or not. */
+const heldEtags = (header: string | undefined): string[] =>
+  (header ?? '')
+    .split(',')
+    // eslint-disable-next-line sonarjs/null-dereference -- split() yields strings, never null
+    .map(tag => tag.trim().replace(/^W\//u, ''))
+    .filter(tag => tag !== '');
+
+/** Answer `body` narrowed by `schema`, with a weak ETag over it; 304 when the caller holds it. */
+function answer<S extends z.ZodType>(c: Context<V1Env>, schema: S, body: z.input<S>): Response {
+  const narrowed = schema.parse(body);
+  const json = JSON.stringify(narrowed);
+  const tag = `"${createHash('sha256').update(json).digest('base64url').slice(0, 27)}"`;
+  const headers = { ETag: `W/${tag}`, 'Cache-Control': CACHE_CONTROL };
+  const held = heldEtags(c.req.header('if-none-match'));
+  if (held.includes(tag) || held.includes('*')) {
+    return c.body(null, 304, headers);
+  }
+  return c.body(json, 200, { ...headers, 'Content-Type': 'application/json' });
+}
+
+type PublishedCollection = Awaited<ReturnType<HelpPublicReadService['tree']>>['collections'][number];
+
+/** The tree's collections as /v1 shows them: each article by its short id, with its address. */
+const withUrls = (collections: PublishedCollection[], urlOf: (path: string) => string | null) =>
+  collections.map(collection => ({
+    ...collection,
+    sections: collection.sections.map(section => ({
+      title: section.title,
+      articles: section.articles.map(article => ({
+        id: article.shortId,
+        slug: article.slug,
+        title: article.title,
+        path: article.path,
+        url: urlOf(article.path),
+      })),
+    })),
+  }));
 
 export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1Env> {
   const app = new Hono<V1Env>();
+  const read = requireKey(deps, { scope: ApiScopes.helpRead });
+  const urlOf = (slug: string, path: string) => {
+    const origin = help.originOf(slug);
+    return origin === null ? null : `${origin}${path}`;
+  };
 
-  app.get('/search', requireKey(deps, { scope: ApiScopes.helpRead }), async c => {
-    const query = searchQuerySchema.safeParse(c.req.query());
+  app.get('/search', read, async c => {
+    const query = helpV1SearchQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return problemResponse(problemOf(400, ProblemCodes.badRequest, 'q is required (1–500 characters)'));
     }
@@ -50,15 +100,100 @@ export function createHelpRoutes(deps: V1Deps, help: HelpServingDeps): Hono<V1En
         query.data.limit,
         query.data.match,
       );
-      const origin = help.originOf(result.slug);
-      c.header('Cache-Control', 'public, max-age=60');
-      return c.json({
+      return answer(c, helpV1SearchResultSchema, {
         locale: result.locale,
-        hits: result.hits.map(hit => ({ ...hit, url: origin === null ? null : `${origin}${hit.path}` })),
+        hits: result.hits.map(hit => ({ ...hit, url: urlOf(result.slug, hit.path) })),
       });
     } catch (error) {
-      if (error instanceof Error && error.name === 'HelpSiteNotFoundError') {
-        return problemResponse(problemOf(404, ProblemCodes.notFound, 'This project has no help center'));
+      if (isMissingSite(error)) {
+        return noHelpCenter();
+      }
+      throw error;
+    }
+  });
+
+  /** The site, its languages and what it publishes in the asked language. */
+  const loadSite = async (c: Context<V1Env>) => {
+    const query = helpV1LocaleQuerySchema.safeParse(c.req.query());
+    if (!query.success) {
+      return { refused: problemResponse(problemOf(400, ProblemCodes.badRequest, 'locale is not a language tag')) };
+    }
+    const { workspaceId, projectId } = c.var.principal;
+    try {
+      const site = await help.help.siteInProject(workspaceId, projectId, query.data.locale ?? '');
+      return {
+        site: {
+          name: site.name,
+          sourceLocale: site.sourceLocale,
+          locales: site.locales,
+          locale: site.tree.locale,
+          url: urlOf(site.slug, `/${site.tree.locale}`),
+          collections: withUrls(site.tree.collections, path => urlOf(site.slug, path)),
+        },
+      };
+    } catch (error) {
+      if (isMissingSite(error)) {
+        return { refused: noHelpCenter() };
+      }
+      throw error;
+    }
+  };
+
+  app.get('/site', read, async c => {
+    const loaded = await loadSite(c);
+    return loaded.site === undefined ? loaded.refused : answer(c, helpV1SiteSchema, loaded.site);
+  });
+
+  app.get('/collections/:slug', read, async c => {
+    const loaded = await loadSite(c);
+    if (loaded.site === undefined) {
+      return loaded.refused;
+    }
+    const collection = loaded.site.collections.find(candidate => candidate.slug === c.req.param('slug'));
+    if (collection === undefined) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'No such published collection'));
+    }
+    return answer(c, helpV1CollectionResultSchema, { locale: loaded.site.locale, collection });
+  });
+
+  app.get('/articles/:ref', read, async c => {
+    const query = helpV1LocaleQuerySchema.safeParse(c.req.query());
+    const ref = helpV1ArticleRefSchema.safeParse(c.req.param('ref'));
+    if (!query.success || !ref.success) {
+      return problemResponse(
+        problemOf(
+          400,
+          ProblemCodes.badRequest,
+          'Use the article id ({shortId} or {shortId}-{slug}) and a language tag',
+        ),
+      );
+    }
+    const { workspaceId, projectId } = c.var.principal;
+    try {
+      const { slug, article } = await help.help.articleInProject(
+        workspaceId,
+        projectId,
+        query.data.locale ?? '',
+        ref.data,
+      );
+      if (article === undefined) {
+        return problemResponse(problemOf(404, ProblemCodes.notFound, 'No such published article'));
+      }
+      return answer(c, helpV1ArticleSchema, {
+        id: article.shortId,
+        slug: article.slug,
+        locale: article.locale,
+        title: article.title,
+        body: article.body,
+        path: article.canonicalPath,
+        url: urlOf(slug, article.canonicalPath),
+        locales: article.locales,
+        publishedAt: article.publishedAt?.toISOString() ?? null,
+        updatedAt: article.modifiedAt?.toISOString() ?? null,
+      });
+    } catch (error) {
+      if (isMissingSite(error)) {
+        return noHelpCenter();
       }
       throw error;
     }

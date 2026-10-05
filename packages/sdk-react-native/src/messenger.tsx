@@ -20,9 +20,14 @@ import type {
 import type { ReactNode } from 'react';
 
 export type {
+  HelpArticle,
+  HelpArticleEntry,
   HelpArticleHit,
+  HelpCollection,
+  HelpReadOptions,
   HelpSearchOptions,
   HelpClientOptions,
+  HelpSite,
   MessengerAttachment,
   MessengerCategory,
   MessengerClientOptions,

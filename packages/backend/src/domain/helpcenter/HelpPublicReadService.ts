@@ -33,6 +33,15 @@ export class HelpPublicReadService {
     return site;
   }
 
+  /** The slug of a project's help site: the /v1 surface, where a key names the project. */
+  private async slugInProject(workspaceId: string, projectId: string): Promise<string> {
+    const site = await new HelpSiteRepo(this.deps.db).find(workspaceId, projectId);
+    if (site === undefined) {
+      throw new HelpSiteNotFoundError(`project ${projectId}`);
+    }
+    return site.slug;
+  }
+
   /** Translated titles of these articles in `locale`, by article id. */
   private async translatedTitles(articleIds: readonly string[], locale: string): Promise<Map<string, string>> {
     const rows = await new HelpTranslationRepo(this.deps.db).withText(articleIds, locale);
@@ -318,11 +327,20 @@ export class HelpPublicReadService {
     limit = 10,
     match: SearchMatch = 'all',
   ) {
-    const site = await new HelpSiteRepo(this.deps.db).find(workspaceId, projectId);
-    if (site === undefined) {
-      throw new HelpSiteNotFoundError(`project ${projectId}`);
-    }
-    return { slug: site.slug, ...(await this.search(site.slug, locale, query, limit, match)) };
+    const slug = await this.slugInProject(workspaceId, projectId);
+    return { slug, ...(await this.search(slug, locale, query, limit, match)) };
+  }
+
+  /** A project's help site and its published tree in `locale` (the /v1 surface). */
+  async siteInProject(workspaceId: string, projectId: string, locale: string) {
+    const slug = await this.slugInProject(workspaceId, projectId);
+    return { ...(await this.site(slug)), tree: await this.tree(slug, locale) };
+  }
+
+  /** A published article of a project's help site by its ref, or undefined (the /v1 surface). */
+  async articleInProject(workspaceId: string, projectId: string, locale: string, ref: string) {
+    const slug = await this.slugInProject(workspaceId, projectId);
+    return { slug, article: await this.article(slug, locale, ref) };
   }
 
   /** Where an old path (an imported site's URL) now lives, or undefined. */

@@ -16,6 +16,8 @@ code_refs:
   - packages/backend/src/domain/helpcenter/HelpImageService.ts
   - packages/backend/src/domain/helpcenter/HelpPublicReadService.ts
   - packages/common/src/help.ts
+  - packages/common/src/help-v1.ts
+  - packages/backend/src/transport/ext/v1/help.ts
 ---
 
 # Help center
@@ -45,6 +47,12 @@ Text lives in `mocco_help_revisions`: locale, title, Markdown body, a `content_h
 ## Public read
 
 `HelpPublicReadService` reads by the site's slug, with no session: the site, the published tree in a language, a published article by its URL ref, and old paths in `mocco_help_redirects` (an imported site's URLs). A language the site doesn't have is served in the source language. Drafts never appear.
+
+## The /v1 read API
+
+Apps read a project's help center through `/v1/help` with a key holding `help:read` (publishable keys allowed, so the origin check and the per-key rate limit of the [public API](./public-api.md) apply): `GET /v1/help/site` (name, languages and the published collections → sections → articles), `GET /v1/help/collections/{slug}`, `GET /v1/help/articles/{id}` and `GET /v1/help/search`. The key names the project (`siteInProject`, `articleInProject`, `searchInProject` on `HelpPublicReadService`), so a key never reads another project's help center. An article's `id` is its short id; the slug alone isn't unique in a project, so a ref always carries the short id. The language is negotiated as the public site does it: a device's tag counts by its language, an offered language is served where translated and the source elsewhere, and the answer's `locale` says which. Answers are narrowed through the schemas in `@mocco/common/help-v1` and carry a weak ETag (`304` on a match). The SDK wraps them as `HelpClient` (`search`, `getSite`, `getCollection`, `getArticle`; [SDK packages](./sdk.md)).
+
+The messenger can use the same search in-process (`domain/messenger/help-suggestions.test.ts` is the contract): what a contact's conversation knows, its workspace, project and text, is all `searchInProject` takes.
 
 ## Public site
 

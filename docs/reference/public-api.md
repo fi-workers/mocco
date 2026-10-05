@@ -4,7 +4,7 @@ description: The versioned public API on the ext app — publishable and secret 
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-02
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, platform, api, api-keys, rate-limiting]
@@ -17,6 +17,8 @@ code_refs:
   - packages/backend/src/transport/ext/v1/middleware.ts
   - packages/backend/src/transport/ext/v1/routes.ts
   - packages/common/src/apikey.ts
+  - packages/common/src/help-v1.ts
+  - packages/backend/src/transport/ext/v1/help.ts
 ---
 
 # Public /v1 API
@@ -74,6 +76,9 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/whoami` | any | `{ projectId, kind, scopes }` |
 | `GET /v1/apps/{appId}/version-check` | none (CDN-cached) | see [OTA version policy](./ota-version-policy.md) |
 | `GET /v1/help/search?q=&locale=&limit=&match=` | `help:read` | The key's project's published help articles matching `q` (every word, or with `match=any` any word, ranked by how many match; title hits first), in `locale` where translated (any language tag; `en-KR` counts as `en`): `{ locale, hits: [{ title, path, url, snippet }] }`; `url` is absolute when the site's domain is configured; 404 without a help center; see [Help center](./help-center.md#search) |
+| `GET /v1/help/site?locale=` | `help:read` | The key's project's help center: `{ name, sourceLocale, locales, locale, url, collections: [{ slug, title, description, sections: [{ title, articles: [{ id, slug, title, path, url }] }] }] }`, published articles only; see [Help center](./help-center.md#the-v1-read-api) |
+| `GET /v1/help/collections/{slug}?locale=` | `help:read` | `{ locale, collection }`, one published collection as `/site` lists it; `404` for an unknown or empty one |
+| `GET /v1/help/articles/{id}?locale=` | `help:read` | A published article by its `id` (the 6-character short id, or the `{id}-{slug}` ref from its path; a stale slug still resolves): `{ id, slug, locale, title, body (Markdown), path, url, locales, publishedAt, updatedAt }`. `404` for a draft, an unpublished or deleted article, or another project's |
 | `POST /v1/messenger/sessions` | `messenger:chat` | A session for a user the app's server signed (`userHash`); then `/v1/messenger/conversations…` with the `mms_` session token; see [Messenger](./messenger.md) |
 | `GET /v1/flags/stream` | `flags:read` key, or `?token=` from an OFREP response | OFREP event stream: `refetchEvaluation` events (`id` = version, `Last-Event-ID` resumes), pings every 25 s, closes after 240 s; see [Feature flags](./flags.md#change-stream) |
 | `POST /v1/flags/telemetry` | `flags:read` (publishable: client-visible flags only) | Aggregated evaluation counts `{ evaluations: [{ flag, variant, count, windowStart }] }` (≤ 500 entries); `202 { accepted, ignored }`; 300 a minute per key on top of the key's limit; see [Feature flags](./flags.md#evaluation-telemetry-and-stale-flags) |
@@ -95,5 +100,7 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `POST /v1/ota/apps/{otaAppId}/upload-sessions` | secret, `ota:write` | `201 { sessionToken, expiresAt }`: a 15-minute `mk_ups_` upload session |
 | `POST /v1/ota/uploads` | upload session | `201 { releaseId, assetBaseUrl, missing, rollbackTargets }`; see [Mocco-hosted OTA](./ota-hosting.md#uploads-from-ci) |
 | `POST /v1/ota/uploads/{releaseId}/finalize` | upload session | `200 { releaseId, status, updates }`, or `400 upload_rejected` whose `detail` says what to fix |
+
+The `/v1/help` reads take `locale` as any language tag (`en-KR` and `en_KR` count as `en`) and answer in that language where the site offers it, else in its source language; `locale` in the answer says which was served (an article not yet translated is served in the source). They carry a weak `ETag` over the answer and `Cache-Control: public, max-age=60`; `If-None-Match` with the current tag → `304`. There is no OpenAPI description: this table and the wire types in `@mocco/common/help-v1` (which the SDK is checked against) are the contract.
 
 Products add their routes to `transport/ext/v1/routes.ts` with `requireKey(deps, { scope })`. New fields are additive only inside `v1`; a breaking change is `/v2`.
