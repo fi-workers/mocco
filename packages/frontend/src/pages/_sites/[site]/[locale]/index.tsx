@@ -27,7 +27,15 @@ export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
 
 export default function HelpSiteHome({ nav }: Props) {
   return (
-    <HelpSiteLayout nav={nav} title={nav.name}>
+    <HelpSiteLayout
+      nav={nav}
+      title={nav.name}
+      seo={{
+        path: `/${nav.locale}`,
+        description: nav.collections.map(collection => collection.title).join(' · '),
+        versions: nav.locales.map(locale => ({ locale, path: `/${locale}` })),
+        jsonLd: origin => [{ '@type': 'WebSite', name: nav.name, url: `${origin}/`, inLanguage: nav.locales }],
+      }}>
       <div className="flex flex-col gap-10">
         <h1 className="text-3xl font-semibold tracking-tight">{nav.name}</h1>
         {nav.collections.map(collection => (

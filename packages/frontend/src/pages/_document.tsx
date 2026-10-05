@@ -1,8 +1,15 @@
 import { Html, Head, Main, NextScript } from 'next/document';
+import { z } from 'zod';
 
-export default function Document() {
+import type { DocumentProps } from 'next/document';
+
+// A help center page is in its reader's language; everything else Mocco serves is English.
+const helpPageProps = z.object({ nav: z.object({ locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u) }) });
+
+export default function Document(props: DocumentProps) {
+  const parsed = helpPageProps.safeParse(props.__NEXT_DATA__.props?.pageProps);
   return (
-    <Html lang="en">
+    <Html lang={parsed.success ? parsed.data.nav.locale : 'en'}>
       <Head>
         {/* Favicons — modern minimal set (favicon.ico for legacy tools, SVG for
             crisp/theme-aware, apple-touch for iOS, manifest for PWA/maskable). */}

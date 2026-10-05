@@ -1,15 +1,19 @@
 // Server-side data for the public help center pages (pages/_sites/**): reads the published
 // site through the backend's public-read service and turns article Markdown into the
 // render tree. Only getStaticProps calls it; nothing here reaches the browser bundle.
-import { getHelpDomain } from '@mocco/backend/helpcenter/instance';
+import { getHelpDomain, helpSiteOriginFor } from '@mocco/backend/helpcenter/instance';
+import { articlePath } from '@mocco/common/help';
 
 import { helpArticleBlocks } from '@frontend/lib/help-markdown';
+import { excerptOf } from '@frontend/lib/seo';
 
 import type { DocBlock } from '@frontend/lib/doc-ast';
 
 export interface HelpSiteNav {
   slug: string;
   name: string;
+  /** Where the site is served — its custom domain, else its Mocco subdomain — or null when help sites aren't served. */
+  origin: string | null;
   locale: string;
   locales: string[];
   collections: {
@@ -34,6 +38,7 @@ export async function loadHelpNav(site: string, locale: string): Promise<HelpSit
     return {
       slug: info.slug,
       name: info.name,
+      origin: helpSiteOriginFor(info.slug),
       locale: tree.locale,
       locales: [info.sourceLocale, ...info.locales],
       collections: tree.collections.map(collection => ({
@@ -65,7 +70,14 @@ export async function loadHelpArticle(site: string, locale: string, ref: string)
       title: article.title,
       locale: article.locale,
       canonicalPath: article.canonicalPath,
+      // The address of this article in each language it is served in.
+      versions: article.locales.map(served => ({
+        locale: served,
+        path: articlePath(served, article.shortId, article.slug),
+      })),
+      description: excerptOf(blocks),
       publishedAt: article.publishedAt?.toISOString() ?? null,
+      modifiedAt: article.modifiedAt?.toISOString() ?? null,
       blocks,
     };
   } catch (error) {

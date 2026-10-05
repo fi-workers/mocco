@@ -16,6 +16,11 @@ interface Props {
   siteName?: string;
   /** BCP 47 language of the page, e.g. `en` or `ko`. */
   locale?: string;
+  /** The page in other languages, itself included, plus `x-default` — absolute URLs. */
+  alternates?: readonly { hreflang: string; href: string }[];
+  /** False leaves out the share image (a customer's help site doesn't share Mocco's). */
+  withImage?: boolean;
+  noindex?: boolean;
   jsonLd?: readonly Record<string, unknown>[];
 }
 
@@ -27,6 +32,9 @@ export default function SeoHead({
   type = 'website',
   siteName = SITE_NAME,
   locale = 'en',
+  alternates = [],
+  withImage = true,
+  noindex = false,
   jsonLd = [],
 }: Props) {
   const image = `${origin}${DEFAULT_SHARE_IMAGE.path}`;
@@ -36,22 +44,34 @@ export default function SeoHead({
     <Head>
       <title key="title">{title}</title>
       <meta key="description" name="description" content={description} />
-      <meta key="robots" name="robots" content="index, follow" />
+      <meta key="robots" name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
       <link key="canonical" rel="canonical" href={url} />
+      {alternates.map(alternate => (
+        <link
+          key={`alternate:${alternate.hreflang}`}
+          rel="alternate"
+          hrefLang={alternate.hreflang}
+          href={alternate.href}
+        />
+      ))}
       <meta key="og:type" property="og:type" content={type} />
       <meta key="og:site_name" property="og:site_name" content={siteName} />
       <meta key="og:title" property="og:title" content={title} />
       <meta key="og:description" property="og:description" content={description} />
       <meta key="og:url" property="og:url" content={url} />
       <meta key="og:locale" property="og:locale" content={ogLocale} />
-      <meta key="og:image" property="og:image" content={image} />
-      <meta key="og:image:width" property="og:image:width" content={String(DEFAULT_SHARE_IMAGE.width)} />
-      <meta key="og:image:height" property="og:image:height" content={String(DEFAULT_SHARE_IMAGE.height)} />
-      <meta key="og:image:alt" property="og:image:alt" content={DEFAULT_SHARE_IMAGE.alt} />
-      <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
+      {withImage ? <meta key="og:image" property="og:image" content={image} /> : null}
+      {withImage ? (
+        <meta key="og:image:width" property="og:image:width" content={String(DEFAULT_SHARE_IMAGE.width)} />
+      ) : null}
+      {withImage ? (
+        <meta key="og:image:height" property="og:image:height" content={String(DEFAULT_SHARE_IMAGE.height)} />
+      ) : null}
+      {withImage ? <meta key="og:image:alt" property="og:image:alt" content={DEFAULT_SHARE_IMAGE.alt} /> : null}
+      <meta key="twitter:card" name="twitter:card" content={withImage ? 'summary_large_image' : 'summary'} />
       <meta key="twitter:title" name="twitter:title" content={title} />
       <meta key="twitter:description" name="twitter:description" content={description} />
-      <meta key="twitter:image" name="twitter:image" content={image} />
+      {withImage ? <meta key="twitter:image" name="twitter:image" content={image} /> : null}
       {jsonLd.length === 0 ? null : (
         <script
           key="ld+json"

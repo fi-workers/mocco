@@ -4,6 +4,8 @@
 // site, SoftwareApplication describes the product, BreadcrumbList and TechArticle describe a
 // guide; no FAQPage or HowTo (Google retired those rich results in 2023).
 
+import type { DocBlock, DocInline } from '@frontend/lib/doc-ast';
+
 /** The app's origin, e.g. https://www.mocco.club — from SERVICE_DOMAIN at build time. */
 export function siteOrigin(): string {
   const host = process.env.NEXT_PUBLIC_SITE_HOST ?? '';
@@ -91,4 +93,59 @@ export function techArticleLd(
 /** One JSON-LD document holding several nodes; `<` is escaped so it can't close the script. */
 export function jsonLdScript(nodes: readonly JsonLd[]): string {
   return JSON.stringify({ '@context': 'https://schema.org', '@graph': nodes }).replaceAll('<', String.raw`\u003c`);
+}
+
+const inlineText = (inlines: readonly DocInline[]): string =>
+  inlines
+    .map(inline => {
+      if (inline.t === 'text' || inline.t === 'code') {
+        return inline.v;
+      }
+      if ('c' in inline) {
+        return inlineText(inline.c);
+      }
+      return inline.t === 'br' ? ' ' : '';
+    })
+    .join('');
+
+/** A page's description from its first paragraphs: plain text, cut at a word near `max` characters. */
+export function excerptOf(blocks: readonly DocBlock[], max = 160): string {
+  const text = blocks
+    .flatMap(block => (block.t === 'p' ? [inlineText(block.c)] : []))
+    .join(' ')
+    .replaceAll(/\s+/gu, ' ')
+    .trim();
+  // eslint-disable-next-line sonarjs/null-dereference -- a string, never null
+  if (text.length <= max) {
+    return text;
+  }
+  const cut = text.slice(0, max - 1);
+  // eslint-disable-next-line sonarjs/null-dereference -- a string, never null
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/** A help center article: published by the customer's site, in its language. */
+export function helpArticleLd(
+  origin: string,
+  article: {
+    path: string;
+    title: string;
+    description: string;
+    locale: string;
+    siteName: string;
+    publishedAt: string | null;
+    modifiedAt: string | null;
+  },
+): JsonLd {
+  return {
+    '@type': 'Article',
+    headline: article.title,
+    description: article.description,
+    url: `${origin}${article.path}`,
+    inLanguage: article.locale,
+    ...(article.publishedAt !== null && { datePublished: article.publishedAt }),
+    ...(article.modifiedAt !== null && { dateModified: article.modifiedAt }),
+    publisher: { '@type': 'Organization', name: article.siteName, url: `${origin}/` },
+  };
 }
