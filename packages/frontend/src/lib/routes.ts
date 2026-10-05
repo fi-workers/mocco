@@ -73,7 +73,7 @@ export const Routes = {
     `/workspaces/${id}/p/${projectId}/help/${articleId}`,
   /**
    * The project's status pages (#148); `pageId` selects the page shown, `tab` its components,
-   * incidents or maintenance, and `filter` which incidents are listed.
+   * incidents, maintenance or the project's monitors, and `filter` which incidents are listed.
    */
   projectStatus: (id: string, projectId: string, pageId?: string, view: { tab?: string; filter?: string } = {}) => {
     const query = new URLSearchParams();
@@ -93,6 +93,9 @@ export const Routes = {
   /** One incident: its timeline, affected components and postmortem. */
   projectStatusIncident: (id: string, projectId: string, incidentId: string) =>
     `/workspaces/${id}/p/${projectId}/status/incidents/${incidentId}`,
+  /** One monitor: its state, latest rounds and state changes, and its open incident. */
+  projectStatusMonitor: (id: string, projectId: string, monitorId: string) =>
+    `/workspaces/${id}/p/${projectId}/status/monitors/${monitorId}`,
   /** The project's API keys for the public /v1 API. */
   projectApiKeys: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/api-keys`,
   /** The publishing tokens Mocco holds for the project's existing OTA tool. */

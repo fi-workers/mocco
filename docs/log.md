@@ -304,6 +304,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/feature-map.md`, `reference/releases.md`, `log.md`
 - Source: branch `feat/status-incident-correlation` (#154)
 
+## 2026-10-05 — Status monitors in the console
+
+- The status console gains a Monitors view (`?tab=monitors`: list, create and edit form, a monitor's route with its
+  rounds, state changes, open incident and deploy watch, pause, resume and delete). No backend change. The status
+  reference's console section, the feature map rows and the guide order follow; a new customer guide covers running the
+  probe, creating a monitor, what a failure does and the deploy watch, with screenshots. Locations in the console come
+  next.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `customer/status/monitor-your-service.md`,
+  `customer/status/images/{new-monitor,monitors,monitor-down,monitor-recovered,deploy-watch}.png`, `log.md`
+- Source: branch `feat/status-monitors-console` (#150)
+
 ## 2026-10-05 — Release registry and `deploy.released`
 
 - Added the release registry reference: a release is a run that succeeded and passed at least one resumed gate
