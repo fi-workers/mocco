@@ -3,6 +3,7 @@
 // as a safety run that picks up pages whose request was lost or whose upload failed.
 import { createHash } from 'node:crypto';
 
+import { ComponentDayRepo } from '@backend/domain/status/repos/component-day.repo';
 import { ComponentGroupRepo } from '@backend/domain/status/repos/component-group.repo';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { IncidentUpdateRepo } from '@backend/domain/status/repos/incident-update.repo';
@@ -12,7 +13,7 @@ import { MaintenanceRepo } from '@backend/domain/status/repos/maintenance.repo';
 import { PageSnapshotRepo } from '@backend/domain/status/repos/page-snapshot.repo';
 import { StatusPageRepo } from '@backend/domain/status/repos/page.repo';
 import { publicSnapshotSchema } from '@backend/domain/status/snapshot/format';
-import { projectSnapshot } from '@backend/domain/status/snapshot/project';
+import { projectSnapshot, uptimeBarDays } from '@backend/domain/status/snapshot/project';
 import { renderAtomFeed, renderStatusPage } from '@backend/domain/status/snapshot/render';
 
 import type { ComponentStatusService } from '@backend/domain/status/ComponentStatusService';
@@ -92,16 +93,33 @@ export class SnapshotService {
       new MaintenanceRepo(db).listUpcoming(scope, page.id),
     ]);
     const incidentIds = [...incidents.open, ...incidents.resolved].map(incident => incident.id);
-    const [updates, incidentComponents, maintenanceComponents] = await Promise.all([
+    const barDays = uptimeBarDays(builtAt);
+    const [updates, incidentComponents, maintenanceComponents, componentDays] = await Promise.all([
       new IncidentUpdateRepo(db).listForIncidents(page.workspaceId, incidentIds),
       new IncidentComponentRepo(db).listForIncidents(page.workspaceId, incidentIds),
       new MaintenanceComponentRepo(db).listFor(
         page.workspaceId,
         maintenances.map(window => window.id),
       ),
+      new ComponentDayRepo(db).listForComponents(
+        page.workspaceId,
+        components.map(component => component.id),
+        barDays[0] ?? '',
+        barDays.at(-1) ?? '',
+      ),
     ]);
     return projectSnapshot(
-      { page, groups, components, incidents, updates, incidentComponents, maintenances, maintenanceComponents },
+      {
+        page,
+        groups,
+        components,
+        incidents,
+        updates,
+        incidentComponents,
+        maintenances,
+        maintenanceComponents,
+        componentDays,
+      },
       { version, builtAt },
     );
   }

@@ -235,7 +235,10 @@ export async function getStatusMonitor(deps: StatusMonitorToolDeps, args: GetSta
   // The monitor first: it is the read that refuses a monitor outside the project. Started
   // alongside the name lookups, a refusal would return while their queries were still running,
   // and they would outlive the request.
-  const { monitor, stateChanges, recentVerdicts, openIncident } = await deps.statusMonitors.get(scope, args.monitorId);
+  const { monitor, stateChanges, recentVerdicts, openIncident, history } = await deps.statusMonitors.get(
+    scope,
+    args.monitorId,
+  );
   const [components, locations] = await Promise.all([
     projectComponents(deps, scope),
     isDetailed ? locationsById(deps, scope.workspaceId) : undefined,
@@ -265,6 +268,8 @@ export async function getStatusMonitor(deps: StatusMonitorToolDeps, args: GetSta
         noDataCount: round.noDataCount,
         p50LatencyMs: round.p50LatencyMs,
       })),
+      // The last 48 hours and 90 days of uptime and p50/p95 latency, from the rollups.
+      history,
     }),
   };
 }
@@ -315,7 +320,7 @@ export function registerStatusMonitorTools(server: McpServer, deps: StatusMonito
     {
       title: 'Read a status monitor',
       description:
-        'One monitor: its state, its latest state changes newest first, and the incident it opened that is still open; detailed adds its settings, why each change happened and its latest closed rounds. Read-only.',
+        'One monitor: its state, its latest state changes newest first, and the incident it opened that is still open; detailed adds its settings, why each change happened, its latest closed rounds, and its uptime and p50/p95 latency for the last 48 hours and 90 days. Read-only.',
       inputSchema: monitorInput,
       annotations: { readOnlyHint: true },
     },

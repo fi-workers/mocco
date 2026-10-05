@@ -281,6 +281,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/help/help-center.md`, `customer/help/images/editor.png`, `customer/help/images/editor-images.png`, `log.md`
 - Source: branch `feat/help-editor-images` (#208)
 
+## 2026-10-05 — Status 90-day bars and monitor latency
+
+- The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its
+  component days, no data before tracking started, percentages rounded down, and their mean), how the page draws and
+  labels them without JavaScript, and how the daily rollup marks a page dirty only when a bar's status or shown
+  percentage changes. `status.monitor` and `mocco_status_monitors_get` (detailed) list the new `history` (48 hours and
+  90 days of uptime and p50/p95 latency from the histograms). "Uptime rollups" and "Not built yet" follow.
+- The feature map's "Uptime history and 90-day bars" row is Live, and the public page row describes the bars.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-uptime-bars` (#152)
+
 ## 2026-10-05 — Status uptime rollups
 
 - The status reference gains "Uptime rollups": `mocco_status_rollups_hourly`, `mocco_status_rollups_daily` and

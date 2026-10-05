@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { and, asc, eq, gte, sql } from 'drizzle-orm';
 
 import { inBatches } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -38,5 +38,14 @@ export class RollupDailyRepo {
             },
           }),
     );
+  }
+
+  /** One monitor's days from `fromDay` (`YYYY-MM-DD`) on, oldest first. */
+  async listForMonitor(workspaceId: string, monitorId: string, fromDay: string): Promise<RollupDailyRow[]> {
+    return await this.db
+      .select()
+      .from(d)
+      .where(and(eq(d.workspaceId, workspaceId), eq(d.monitorId, monitorId), gte(d.day, fromDay)))
+      .orderBy(asc(d.day));
   }
 }

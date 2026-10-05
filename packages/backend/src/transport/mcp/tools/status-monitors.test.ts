@@ -357,6 +357,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
         startedAt: expect.any(String),
       });
       expect(body).not.toHaveProperty('recentRounds');
+      expect(body).not.toHaveProperty('history');
     });
 
     it('adds why each state changed and the latest closed rounds when asked, and caps the changes', async () => {
@@ -380,6 +381,8 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       expect(rounds.map(round => round.verdict)).toEqual(['fail', 'fail']);
       expect(String(rounds[0]?.roundAt) > String(rounds[1]?.roundAt)).toBe(true);
       expect(body.monitor).toMatchObject({ incidentPolicy: IncidentPolicies.draft });
+      // Nothing rolled up yet: the uptime and latency history is there, and empty.
+      expect(body.history).toEqual({ hours: [], days: [] });
       expect(paused.openIncident).toBeNull();
       expect(paused.stateChanges).toEqual([
         expect.objectContaining({ to: MonitorStates.paused, reason: { by: 'operator', userId: ada } }),
