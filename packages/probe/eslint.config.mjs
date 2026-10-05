@@ -24,6 +24,9 @@ export default [
       'unicorn/prefer-https': 'off',
     },
   },
+  // The bin's source carries its shebang (tsup keeps it for that entry only); the rule
+  // looks for `src/cli.ts` in package.json's `bin`, which names the built file.
+  { files: ['src/cli.ts'], rules: { 'n/hashbang': 'off' } },
   // Vendor isolation: only the HTTP check talks to undici.
   {
     files: ['src/**/*.ts'],

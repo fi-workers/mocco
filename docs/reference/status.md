@@ -34,6 +34,8 @@ code_refs:
   - packages/probe/src/address-policy.ts
   - packages/probe/src/resolve.ts
   - packages/probe/Dockerfile
+  - packages/probe/src/create-agent.ts
+  - packages/backend/src/runtime/probe.ts
   - packages/backend/src/domain/status/ComponentStatusService.ts
   - packages/backend/src/domain/status/component-status.ts
   - packages/backend/src/domain/status/jobs.ts
@@ -228,8 +230,8 @@ A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at 
 ([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md)). Monitors and locations are managed over tRPC, and
 agents lease and report rounds over the [probe protocol](#probe-protocol); the
 [verdict evaluator](#verdicts-and-the-state-machine) closes each round and moves the monitor's state and schedule. The
-[probe agent](#the-probe-agent) runs the checks; for now it runs at private locations only (no hosted fleet, no
-embedded mode yet).
+[probe agent](#the-probe-agent) runs the checks at private locations, or inside a single-node self-hosted server as
+[the embedded probe](#the-embedded-probe); there is no hosted fleet yet.
 
 **Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
 
@@ -358,6 +360,39 @@ Neither the npm package nor `ghcr.io/fi-workers/mocco-probe` is published yet, s
 `locationIds`; the location's `last_seen_at` and `agent_version` show it is polling. Running two agents with one token
 splits that location's work between them.
 
+### The embedded probe
+
+A single-node self-hosted install can run the probe inside the server instead of as a second process
+([ADR 0027](../adr/0027-status-probes-are-pull-based-agents.md) §6). With `STATUS_PROBE_EMBEDDED=true` the server runs
+`@mocco/probe`'s own loop and checks (`createAgent` from `@mocco/probe/create-agent`; `runtime/probe.ts` is the
+composition root) as one location. Only the transport differs from the bin: instead of HTTP with a token, the loop
+calls `ProbeService` directly as that location, so leasing, result matching and the inline evaluation are the same
+code the `/v1/probe` routes run.
+
+- **Its location** is the shared `embedded` location (`code` `embedded`, named "This server", `workspace_id` null),
+  created on first start by `LocationService.ensureEmbedded` and reused after (an insert that does nothing when it
+  exists, so two starts get one row). Every workspace on the install can assign it to monitors, like a hosted region.
+  Its token is generated and thrown away, because nothing authenticates as it over HTTP. Disabling the location
+  keeps the embedded probe off. It applies no address block list: like a private location, it checks the install's
+  own network.
+- **When it starts:** with the first authorized job tick after the server boots (`/api/ext/internal/jobs/tick`, which a
+  self-host cron already calls every minute, and which the evaluator needs anyway). The tick calls
+  `ensureEmbeddedProbe()`, which starts the loop once per process and does nothing after that. It decides
+  synchronously, so concurrent ticks can't start two loops, and it keeps its handle on `globalThis` so a module
+  reloaded by the dev server doesn't start another. `STATUS_PROBE_CONCURRENCY` (default 20) bounds the checks run at
+  once.
+- **Never on Vercel:** with `VERCEL_ENV` set it logs one warning and never starts. A function's process is frozen
+  between requests and runs as many instances, so a background loop there would stall or multiply. Hosted
+  deployments use probe locations instead.
+- **One box:** it is meant for one server process. A second process with the flag (another replica) starts its
+  own loop as the same location, which is safe but redundant: the two split that location's rounds through the same
+  `SKIP LOCKED` leasing, and a round is never leased twice to one location, so nothing is checked twice. Set the
+  flag on one process only.
+- **Stopping:** on `SIGTERM` or `SIGINT` the loop stops leasing and drops checks that haven't started. Next's own
+  signal handler then exits the process, so a check still running may go unreported. Either way the round is
+  `no_data` for this location, which never counts as downtime. A loop that fails (a lost database) is logged and
+  not restarted until the process restarts.
+
 ### Verdicts and the state machine
 
 The `status.evaluate` job runs every minute (`VerdictEvaluator`), and the results route runs it for the monitors it
@@ -442,7 +477,7 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-The embedded probe (`STATUS_PROBE_EMBEDDED`), hosted locations, publishing `@mocco/probe` to npm and its image to
+Hosted locations, publishing `@mocco/probe` to npm and its image to
 GHCR, heartbeat monitors, a location-unhealthy
 alert, component status derived from monitors
 (`status_source`) and monitor alerts; MCP tools for monitors; page `visibility`, `locale` and `theme`; the CDN host mapping

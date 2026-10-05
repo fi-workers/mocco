@@ -21,6 +21,9 @@ export interface LocationDeps {
   now?: () => Date;
 }
 
+/** The embedded probe's location. */
+export const EMBEDDED_LOCATION = { code: 'embedded', name: 'This server' } as const;
+
 const subject = (locationId: string) => ({ subjectType: 'status_location', subjectId: locationId });
 
 export class LocationService {
@@ -84,6 +87,20 @@ export class LocationService {
       payload: { code: location.code },
     });
     return { location, token };
+  }
+
+  /**
+   * The shared `embedded` location a one-box install's in-process probe runs as (ADR 0027 §6),
+   * created on first use. Its token is never handed out: the embedded loop calls ProbeService
+   * directly, so nothing authenticates as it over HTTP. Not audited: no person created it.
+   */
+  async ensureEmbedded(): Promise<LocationRow> {
+    return await this.locations.ensureShared({
+      code: EMBEDDED_LOCATION.code,
+      name: EMBEDDED_LOCATION.name,
+      kind: LocationKinds.embedded,
+      tokenHash: hashLocationToken(generateLocationToken()),
+    });
   }
 
   /** Stop a private location: it can't lease work and no new monitor can use it. Idempotent. */

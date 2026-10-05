@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "yarn workspace @mocco/flags-core build && node ../../scripts/copy-customer-docs-images.mjs && next dev -p 3100",
-    "build": "yarn workspace @mocco/flags-core build && node ../../scripts/copy-customer-docs-images.mjs && next build",
+    "dev": "yarn workspace @mocco/flags-core build && yarn workspace @mocco/probe build && node ../../scripts/copy-customer-docs-images.mjs && next dev -p 3100",
+    "build": "yarn workspace @mocco/flags-core build && yarn workspace @mocco/probe build && node ../../scripts/copy-customer-docs-images.mjs && next build",
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "doctor": "react-doctor . --no-score --blocking error",

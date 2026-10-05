@@ -2532,6 +2532,7 @@ __metadata:
     "@mocco/openfeature-react-native": "workspace:*"
     "@mocco/openfeature-server": "workspace:*"
     "@mocco/openfeature-web": "workspace:*"
+    "@mocco/probe": "workspace:*"
     "@mocco/sdk-core": "workspace:*"
     "@modelcontextprotocol/server": "npm:2.2.0"
     "@octokit/app": "npm:16.1.2"
@@ -2734,7 +2735,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@mocco/probe@workspace:packages/probe":
+"@mocco/probe@workspace:*, @mocco/probe@workspace:packages/probe":
   version: 0.0.0-use.local
   resolution: "@mocco/probe@workspace:packages/probe"
   dependencies:
