@@ -22,7 +22,7 @@ export interface MoccoClientOptions {
 export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
-  /** Makes a POST safe to retry (Mocco dedupes on it). */
+  /** Makes a POST safe to retry (Mocco dedupes on it). GETs and PUTs are retried without one. */
   idempotencyKey?: string;
 }
 
@@ -65,7 +65,7 @@ async function problemOf(response: Response): Promise<{ type?: string; title?: s
 
 /**
  * The /v1 client every Mocco SDK builds on: it sends the key, retries what is safe to
- * retry (GETs, and POSTs with an idempotency key) on 429 and 5xx with the server's wait
+ * retry (GETs, PUTs, and POSTs with an idempotency key) on 429 and 5xx with the server's wait
  * hint or backoff, and turns problem+json refusals into `MoccoError`.
  */
 export class MoccoClient {
@@ -86,7 +86,8 @@ export class MoccoClient {
 
   /** Send with the key, retrying what is safe to retry; resolves with a 2xx or 304 response. */
   private async send(method: string, path: string, opts: RequestOptions): Promise<Response> {
-    const isRetryable = method === 'GET' || opts.idempotencyKey !== undefined;
+    // A PUT replaces what it names (the status monitor upsert), so sending it twice is harmless.
+    const isRetryable = method === 'GET' || method === 'PUT' || opts.idempotencyKey !== undefined;
     const maxRetries = isRetryable ? (this.options.maxRetries ?? 2) : 0;
     const attempt = async (count: number): Promise<Response> => {
       let response: Response;

@@ -65,6 +65,7 @@ code_refs:
   - packages/backend/src/transport/ext/v1/status.ts
   - packages/backend/src/transport/ext/v1/status-openapi.ts
   - packages/common/src/status-v1.ts
+  - packages/sdk-core/src/status.ts
   - packages/frontend/src/components/status/status-pages.tsx
   - packages/frontend/src/components/status/page-components.tsx
   - packages/frontend/src/components/status/incidents.tsx
@@ -837,6 +838,29 @@ their request and answer schemas with `z.toJSONSchema` from the same zod schemas
 came in on as its server. `status-openapi.test.ts` fails if a mounted status route is missing from it or it lists one
 that isn't mounted, and validates real answers from the routes against its schemas.
 
+**The SDK.** `@mocco/node`'s `createMoccoServer({ secretKey })` has `status`, a `StatusClient` from `@mocco/sdk-core/status`
+([SDK packages](./sdk.md)): `status.monitors` (`list`, `get`, `upsert(key, input)`, `pause`, `resume`, `delete`,
+`check`), `status.incidents` (`list(pageId, { open })`, `get`, `create`, `update(id, { status, body })`,
+`setComponents`), `status.maintenances` (`list`, `schedule`, which takes `Date`s or ISO strings, and `cancel`),
+`status.pages.list`, `status.components` (`list(pageId)`, `setStatus`) and `status.locations` (`list`, and
+`idsOf(codes)`, which turns location codes into `locationIds`, preferring the workspace's own location over a shared
+one with the same code and throwing for an unknown or disabled code). Methods resolve with the route's answer (lists
+unwrapped) and throw `MoccoError` with the problem's `code` for a refusal. Reads and the upsert are retried on 429 and
+5xx; other changes aren't. Its wire types are written out in `sdk-core/src/status.ts`, and `sdk-contract.test.ts`
+checks them against the `@mocco/common/status-v1` schemas; `status-sdk.test.ts` runs it against the real `/v1` app on
+pglite.
+
+```ts
+import { createMoccoServer } from '@mocco/node';
+
+const mocco = createMoccoServer({ secretKey: process.env.MOCCO_SECRET_KEY! });
+await mocco.status.monitors.upsert('api-health', {
+  name: 'API health',
+  spec: { kind: 'http', url: 'https://api.acme.com/health', expectedStatus: [200] },
+  locationIds: await mocco.status.locations.idsOf(['office-network']),
+});
+```
+
 ## tRPC
 
 `status.*` is built on `productProcedure(Products.status)`: the caller must be a member of `workspaceId`,
@@ -863,8 +887,7 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-The SDK's `status.*` namespace over the [`/v1` API](#the-v1-management-api) (with a key-resolving
-`locations` helper), an `api` incident origin, and changing an incident's title or severity through `/v1`; hosted
+An `api` incident origin, and changing an incident's title or severity through `/v1`; hosted
 locations, publishing `@mocco/probe` to npm and its image to
 GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in the console), a heartbeat that goes down when a
 `/start` isn't followed by a finish within a time limit, a location-unhealthy

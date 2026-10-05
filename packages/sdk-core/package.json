@@ -11,6 +11,12 @@
       "types": "./dist/sdk-core.d.ts",
       "import": "./dist/sdk-core.js",
       "require": "./dist/sdk-core.cjs"
+    },
+    "./status": {
+      "@mocco/source": "./src/status.ts",
+      "types": "./dist/status.d.ts",
+      "import": "./dist/status.js",
+      "require": "./dist/status.cjs"
     }
   },
   "main": "./dist/sdk-core.cjs",
