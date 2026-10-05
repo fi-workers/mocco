@@ -20,6 +20,7 @@ const toDto = (site: HelpSiteRow) => ({
   slug: site.slug,
   sourceLocale: site.sourceLocale,
   locales: site.locales,
+  allowAiTraining: site.allowAiTraining,
   createdAt: site.createdAt,
 });
 
@@ -78,6 +79,20 @@ export class HelpSiteService {
       subjectType: 'project',
       subjectId: projectId,
       payload: { ...input },
+    });
+    return toDto(site);
+  }
+
+  /** Let AI training crawlers read the public site, or keep them out (robots.txt). */
+  async setAiTraining(workspaceId: string, projectId: string, actorUserId: string, isAllowed: boolean) {
+    await this.require(workspaceId, projectId);
+    const site = await new HelpSiteRepo(this.deps.db).update(workspaceId, projectId, { allowAiTraining: isAllowed });
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.helpSiteAiTrainingChanged,
+      subjectType: 'project',
+      subjectId: projectId,
+      payload: { allowAiTraining: isAllowed },
     });
     return toDto(site);
   }

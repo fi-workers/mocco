@@ -421,6 +421,13 @@
       "when": 1791151418940,
       "tag": "0059_partition_round_verdicts",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791158340780,
+      "tag": "0060_goofy_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

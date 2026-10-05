@@ -2898,6 +2898,9 @@ export const helpSites = pgTable(
     sourceLocale: text('source_locale').notNull(),
     // The languages articles are translated into (never the source).
     locales: text().array().notNull(),
+    // Whether robots.txt lets AI companies' training crawlers read the site (#363). Search
+    // crawlers, AI search included, are always allowed.
+    allowAiTraining: boolean('allow_ai_training').notNull().default(true),
     createdAt,
     updatedAt,
   },

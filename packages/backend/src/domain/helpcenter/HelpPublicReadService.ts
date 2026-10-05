@@ -88,7 +88,13 @@ export class HelpPublicReadService {
 
   async site(slug: string) {
     const site = await this.requireSite(slug);
-    return { slug: site.slug, name: site.name, sourceLocale: site.sourceLocale, locales: site.locales };
+    return {
+      slug: site.slug,
+      name: site.name,
+      sourceLocale: site.sourceLocale,
+      locales: site.locales,
+      allowAiTraining: site.allowAiTraining,
+    };
   }
 
   /** The published tree in `locale`: collections, sections and articles with something published. */

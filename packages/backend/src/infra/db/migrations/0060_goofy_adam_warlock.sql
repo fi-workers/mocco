@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_help_sites" ADD COLUMN "allow_ai_training" boolean DEFAULT true NOT NULL;

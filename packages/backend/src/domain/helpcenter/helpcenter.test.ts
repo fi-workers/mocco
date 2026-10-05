@@ -14,7 +14,7 @@ import {
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
-import { users, workspaces } from '@backend/infra/db/schema';
+import { auditLog, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 import type { HelpDomain } from '@backend/domain/helpcenter/compose';
@@ -105,6 +105,25 @@ describe('help center (pglite)', () => {
       slug: 'showyourtime',
       sourceLocale: 'ko',
     });
+  });
+
+  it('lets AI training crawlers in until the site turns them away, and records who did', async () => {
+    await help.helpSites.enable(workspaceId, projectId, authorId, {
+      slug: 'showyourtime',
+      sourceLocale: 'ko',
+      locales: [],
+    });
+    const before = await help.helpPublic.site('showyourtime');
+
+    const changed = await help.helpSites.setAiTraining(workspaceId, projectId, authorId, false);
+    const after = await help.helpPublic.site('showyourtime');
+    const audit = await t.db.select().from(auditLog);
+
+    expect([before.allowAiTraining, changed.allowAiTraining, after.allowAiTraining]).toEqual([true, false, false]);
+    expect(audit.map(entry => [entry.action, entry.payload])).toContainEqual([
+      'help.site.ai_training.changed',
+      { allowAiTraining: false },
+    ]);
   });
 
   it('shows an article publicly only once published, and keeps the published text while the draft changes', async () => {
