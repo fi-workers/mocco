@@ -46,6 +46,14 @@ export class MaintenanceTransitionError extends ConflictError {
   }
 }
 
+/** An ad-hoc check of a paused monitor: it has no rounds until it is resumed — CONFLICT. */
+export class MonitorPausedError extends ConflictError {
+  constructor(monitorId: string, options?: ErrorOptions) {
+    super(`Monitor ${monitorId} is paused; resume it to check it`, options);
+    this.name = 'MonitorPausedError';
+  }
+}
+
 /** A maintenance window that ends before it starts — BAD_REQUEST. */
 export class MaintenanceWindowError extends BadRequestError {
   constructor(options?: ErrorOptions) {

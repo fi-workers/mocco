@@ -457,6 +457,7 @@ export async function extHandler(request: Request): Promise<Response> {
         originOf: slug => helpSiteOrigin(slug, env),
       },
       probe: { probes: getStatusDomain().statusProbes },
+      monitors: { monitors: getStatusDomain().statusMonitors },
     },
     og: getOgImages(),
     storage:

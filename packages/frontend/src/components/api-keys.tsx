@@ -43,6 +43,7 @@ const scopeLabels: Record<ApiScope, string> = {
   [ApiScopes.flagsWrite]: 'flags:write — change feature flags',
   [ApiScopes.messengerChat]: 'messenger:chat — let signed-in users contact you',
   [ApiScopes.helpRead]: 'help:read — search your published help center',
+  [ApiScopes.statusWrite]: 'status:write — run a monitor check now (e.g. after a deploy)',
 };
 
 const ALL_SCOPES = Object.values(ApiScopes);

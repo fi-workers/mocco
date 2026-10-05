@@ -14,6 +14,7 @@ import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domai
 import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
 import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
+import type { MonitorCheckDeps } from '@backend/transport/ext/v1/monitors';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ProbeProtocolDeps } from '@backend/transport/ext/v1/probe';
@@ -35,6 +36,8 @@ export interface V1Deps {
   help?: HelpServingDeps;
   /** The status probe protocol (location tokens, not keys); undefined leaves /v1/probe unmounted. */
   probe?: ProbeProtocolDeps;
+  /** Ad-hoc monitor checks (`status:write`); undefined leaves /v1/monitors unmounted. */
+  monitors?: MonitorCheckDeps;
 }
 
 export interface V1Env {

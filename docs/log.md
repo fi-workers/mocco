@@ -220,6 +220,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
 - Source: branch `feat/help-v1-read` (#216)
 
+## 2026-10-05 — Status: check a monitor now
+
+- The public API lists `POST /v1/monitors/{id}/check` and the secret-only `status:write` scope; the status reference's
+  deploy watch section gains "Checking now" (`MonitorService.requestCheck`: the round pulled to now, `404` for another
+  project's monitor, `409` for a paused one, 10 a minute per key, not audited); the feature map's deploy watch row is
+  complete.
+- Docs touched: `reference/public-api.md`, `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-monitor-check` (#155)
+
 ## 2026-10-05 — Status: the deploy watch
 
 - The status reference gains "The deploy watch": the `status.deploy_watch` subscriber on `deploy.released` (a

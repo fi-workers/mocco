@@ -6,7 +6,7 @@
 import { AuditActions } from '@mocco/common/audit';
 import { MonitorStates } from '@mocco/common/status';
 
-import { StatusEntityNotFoundError } from '@backend/domain/status/errors';
+import { MonitorPausedError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { IncidentMonitorRepo } from '@backend/domain/status/repos/incident-monitor.repo';
@@ -245,6 +245,31 @@ export class MonitorService {
       applies: state => state === MonitorStates.paused,
       to: MonitorStates.pending,
       action: AuditActions.statusMonitorResumed,
+    });
+  }
+
+  /**
+   * Run a round now (`POST /v1/monitors/:id/check`, #155): a round that isn't due yet is pulled
+   * to now; one already due or open stays. Returns the round's time. The state and streaks are
+   * the evaluator's, so nothing else changes and the verdict follows as for any round. A paused
+   * monitor has no rounds: `MonitorPausedError`.
+   */
+  async requestCheck(scope: StatusScope, monitorId: string): Promise<{ monitorId: string; roundAt: Date }> {
+    const now = this.deps.now?.() ?? new Date();
+    return await this.deps.db.transaction(async tx => {
+      const monitors = new MonitorRepo(tx);
+      const monitor = await monitors.lockForStateChange(scope, monitorId);
+      if (monitor === undefined) {
+        throw new StatusEntityNotFoundError('monitor', monitorId);
+      }
+      if (monitor.state === MonitorStates.paused) {
+        throw new MonitorPausedError(monitorId);
+      }
+      if (monitor.nextRoundAt <= now) {
+        return { monitorId, roundAt: monitor.nextRoundAt };
+      }
+      await monitors.setNextRound(scope, monitorId, now, now);
+      return { monitorId, roundAt: now };
     });
   }
 
