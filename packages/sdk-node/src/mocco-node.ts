@@ -3,6 +3,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { MoccoClient } from '@mocco/sdk-core';
 
+/** Heartbeat pings for cron jobs and workers: `await heartbeat('mhb_…').wrap(async () => job())`. */
+export { Heartbeat, heartbeat, HeartbeatPingError } from '@mocco/sdk-core';
+export type { HeartbeatOptions, HeartbeatPingKind } from '@mocco/sdk-core';
+
 export interface MoccoNodeOptions {
   /** A secret key (`mk_sec_…`). Keep it on the server. */
   secretKey: string;

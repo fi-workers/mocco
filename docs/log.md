@@ -294,6 +294,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-heartbeat-monitors` (#153)
 
+## 2026-10-06 — Heartbeat monitors in the console and the SDK
+
+- The status reference's Console section describes the Heartbeat kind in the monitor form (period and grace in
+  minutes, the kinds an edit may keep), the ping URL shown once with its snippets, a heartbeat's route (last ping, run
+  time, change reasons) and **Replace ping URL**; "Not built yet" keeps only the `hb.mocco.club` host.
+- The SDK reference lists `heartbeat(token)` in `@mocco/sdk-core`, re-exported by `@mocco/node`.
+- The customer guide "Monitor your service" gains "6. Heartbeats for cron jobs and workers" with three screenshots;
+  the feature map's "Heartbeat monitors" row is Live.
+- Docs touched: `reference/status.md`, `reference/sdk.md`, `reference/feature-map.md`,
+  `customer/status/monitor-your-service.md`, `customer/status/images/new-heartbeat.png`,
+  `customer/status/images/heartbeat-ping-url.png`, `customer/status/images/heartbeat.png`, `log.md`
+- Source: branch `feat/status-heartbeat-console` (#153)
+
 ## 2026-10-05 — Status 90-day bars and monitor latency
 
 - The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its

@@ -1,7 +1,7 @@
 // The public entry of @mocco/sdk-core (the package's "exports" target).
 export { DEFAULT_BASE_URL, MoccoClient, withoutTrailingSlashes } from './client';
 export type { ConditionalResult, MoccoClientOptions, RequestOptions, WhoAmI } from './client';
-export { MoccoError, MoccoKeyError, MoccoNetworkError } from './errors';
+export { HeartbeatPingError, MoccoError, MoccoKeyError, MoccoNetworkError } from './errors';
 export { checkKey, keyKindOf } from './keys';
 export type { KeyKind } from './keys';
 export { backoffMs, isRetryableStatus } from './retry';
@@ -37,6 +37,8 @@ export type { EvaluationCount, EvaluationCounterOptions } from './telemetry';
 export { DEFAULT_MESSENGER_POLL_MS, MessengerClient, messengerConversationIdOf } from './messenger';
 export type { MessengerClientOptions, MessengerIdentity, MessengerState, MessengerStorage } from './messenger';
 export { HelpClient } from './help';
+export { Heartbeat, heartbeat } from './heartbeat';
+export type { HeartbeatOptions, HeartbeatPingKind } from './heartbeat';
 export type {
   HelpArticle,
   HelpArticleEntry,

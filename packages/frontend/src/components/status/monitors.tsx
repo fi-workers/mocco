@@ -1,10 +1,13 @@
 // The project's monitors (#150), the status section's monitors view: each monitor's state,
-// target, last change and the components it reports on, and creating a new one. Monitors
+// target (or, for a heartbeat, its period and last ping), last change and the components it
+// reports on, and creating a new one. Monitors
 // belong to the project, so the view is the same on every page.
+import { MonitorKinds } from '@mocco/common/status';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { Ago, errorMessage, Spinner } from '@frontend/components/notifications/notification-ui';
+import { formatSpan } from '@frontend/components/status/heartbeat-ping';
 import MonitorForm from '@frontend/components/status/monitor-form';
 import { useProjectComponents } from '@frontend/components/status/project-components';
 import { MonitorStateBadge, monitorTargetLabel } from '@frontend/components/status/status-ui';
@@ -33,7 +36,8 @@ export default function Monitors({ workspaceId, projectId }: Props) {
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="max-w-prose text-sm text-muted-foreground">
-          Monitors check your service from probe locations and change what its components show when it fails.
+          Monitors check your service from probe locations, or wait for your jobs&apos; heartbeat pings, and change what
+          its components show when it fails.
         </p>
         {isCreating ? null : (
           <Button
@@ -71,7 +75,14 @@ export default function Monitors({ workspaceId, projectId }: Props) {
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="text-sm font-medium">{monitor.name}</span>
                   <span className="truncate font-mono text-xs text-muted-foreground">
-                    {monitorTargetLabel(monitor.spec)}
+                    {monitor.kind === MonitorKinds.heartbeat ? (
+                      <>
+                        Heartbeat every {formatSpan(monitor.heartbeatPeriodSeconds ?? 0)} · last ping{' '}
+                        {monitor.lastPingAt === null ? 'never' : <Ago date={monitor.lastPingAt} />}
+                      </>
+                    ) : (
+                      monitorTargetLabel(monitor.spec)
+                    )}
                   </span>
                 </span>
                 {monitor.components.length === 0 ? null : (

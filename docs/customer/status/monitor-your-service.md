@@ -1,13 +1,13 @@
 ---
 title: Monitor your service
-description: Run the Mocco probe at a private location, create an HTTP or TCP monitor that checks your service every minute, and see what happens when it fails — the components it changes, the draft incident it opens and follows, the alerts it sends — and how Mocco watches your monitors right after a deploy.
+description: Run the Mocco probe at a private location, create an HTTP or TCP monitor that checks your service every minute, and see what happens when it fails — the components it changes, the draft incident it opens and follows, the alerts it sends — how Mocco watches your monitors right after a deploy, and how a heartbeat monitor alerts when a cron job stops pinging.
 type: guide
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
-tags: [customer, status, monitors, probe, guide]
+tags: [customer, status, monitors, probe, heartbeat, guide]
 related:
   - ./status-page.md
   - ../../reference/status.md
@@ -97,6 +97,43 @@ If a monitor goes down during the watch, the incident it opens says it started f
 
 A pipeline step can also ask for a round right away with `POST /v1/monitors/{id}/check` and a secret key with `status:write`.
 
+## 6. Heartbeats for cron jobs and workers
+
+A probe can't see a nightly backup or a queue worker. A **heartbeat** monitor works the other way round: the job pings Mocco each time it runs, and the monitor goes down when the pings stop or report a failure. It needs no probe and no location.
+
+Choose **New monitor**, then **Check: Heartbeat**:
+
+- **Expected every (min)**: how often the job runs, such as 1440 for a daily job.
+- **Grace (min)**: how late a ping may be before it counts as missed, such as 30.
+- **While down** and **When it goes down** work as for any monitor.
+
+![A new heartbeat monitor for a daily backup, expected every 1440 minutes with 30 minutes of grace](./images/new-heartbeat.png)
+
+After **Create monitor**, Mocco shows the monitor's **ping URL** once, with commands to copy. The token in the URL is its only credential, and Mocco keeps only a hash of it, so copy it now.
+
+![The ping URL shown once, with curl, crontab and Node snippets](./images/heartbeat-ping-url.png)
+
+Ping it from the job with `GET` or `POST` (no API key):
+
+```bash
+# when the job finishes
+curl -fsS -m 10 --retry 3 https://…/v1/ping/mhb_...
+# or report the start, then the exit code (0 is a success, anything else is down at once)
+curl -fsS -m 10 --retry 3 https://…/v1/ping/mhb_.../start
+/usr/local/bin/backup.sh
+curl -fsS -m 10 --retry 3 https://…/v1/ping/mhb_.../$?
+```
+
+`/fail` reports a failure without a code. From Node, `@mocco/node` does the same around a function: `await heartbeat('mhb_...', { baseUrl }).wrap(async () => runBackup())` pings `/start`, then success, or `/fail` when the function throws. A ping that can't be delivered is logged and never breaks the job.
+
+The monitor is **Down** when no ping arrives for the period plus the grace (a new one, never pinged, counts from its creation), or at once when a ping reports a failure. The next successful ping brings it **Up**; there is no **Down after** or **Up after** to wait for. The components, the incident and the alerts follow as for any monitor ([4. What happens when it fails](#4-what-happens-when-it-fails)), and the downtime counts in the uptime history.
+
+The monitor's page shows when the last ping came and how long the last run took (from `/start` to the finish), and each state change says why: a ping, a failure with its exit code, or no ping in time.
+
+![A heartbeat's page: its period and grace, last ping, last run time and the changes from its pings and a missed ping](./images/heartbeat.png)
+
+**Replace ping URL** issues a new URL; the old one stops working at once, so update the job. A paused heartbeat still accepts pings and shows them, but they don't change its state, and after **Resume** it waits a full period and grace before a missed ping counts. Pings are limited to five every five seconds per URL.
+
 ## What gets recorded
 
-Creating, editing, pausing, resuming and deleting monitors, and creating, rotating and disabling locations, are written to the workspace's [audit log](../start/audit-log.md), as are the incidents a monitor opens and updates.
+Creating, editing, pausing, resuming and deleting monitors, replacing a heartbeat's ping URL, and creating, rotating and disabling locations, are written to the workspace's [audit log](../start/audit-log.md), as are the incidents a monitor opens and updates.
