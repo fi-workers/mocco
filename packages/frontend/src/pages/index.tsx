@@ -1,3 +1,4 @@
+import { Products } from '@mocco/common/project';
 import Head from 'next/head';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -6,81 +7,67 @@ import { productCatalog, sectionGroupLabels, SectionGroups } from '@frontend/lib
 import { Routes } from '@frontend/lib/routes';
 
 import type { SectionGroup } from '@frontend/lib/products';
+import type { Product } from '@mocco/common/project';
 
 const GITHUB_URL = 'https://github.com/fi-workers/mocco';
 
-interface Pillar {
-  group: SectionGroup;
-  summary: string;
-  products: { name: string; description: string; href: string }[];
+interface PillarItem {
+  name: string;
+  description: string;
+  href: string;
 }
 
-// The products that have screens today, grouped by the job they do. The roadmap row
-// below is read from the product registry, so it never lists a product that shipped.
-const pillarsByJob: Pillar[] = [
+/** What each group is for, in one line; a group without one isn't shown on the landing. */
+const groupSummaries: Partial<Record<SectionGroup, string>> = {
+  [SectionGroups.release]: 'Write ≠ ship: changes that add risk wait for the right people.',
+  [SectionGroups.operate]: 'Know what happened, and who did it.',
+  [SectionGroups.support]: 'Hear from the people who use what you built.',
+};
+
+/** Landing copy for a product; without it the registry's own description is used. */
+const productPitches: Partial<Record<Product, string>> = {
+  [Products.governance]:
+    'Pipelines pause at gates on GitHub Actions. Production credentials exist only after approval.',
+  [Products.ota]:
+    'Host React Native updates with rollouts and instant rollback, or gate the tool you use today; raise minimum app versions only with approval.',
+  [Products.flags]: 'Targeting, segments and rollouts over OpenFeature, with approvals and a kill switch.',
+  [Products.status]:
+    'Components, incidents with updates and postmortems, and maintenance Mocco starts and ends on time. The public page is coming next.',
+  [Products.messenger]: 'Users write to you from inside your app; your team answers from one inbox.',
+  [Products.helpcenter]: 'A public help site in Markdown, on your own domain, translated and searchable from your app.',
+};
+
+/** Always on in every workspace, so not in the product registry, but part of a group's job. */
+const capabilities: readonly (PillarItem & { group: SectionGroup })[] = [
   {
-    group: SectionGroups.release,
-    summary: 'Write ≠ ship: changes that add risk wait for the right people.',
-    products: [
-      {
-        name: 'Deploy governance',
-        description: 'Pipelines pause at gates on GitHub Actions. Production credentials exist only after approval.',
-        href: Routes.guide('governance', 'overview'),
-      },
-      {
-        name: 'OTA updates',
-        description: 'Host React Native updates with rollouts and instant rollback, or gate the tool you use today.',
-        href: Routes.guide('ota', 'overview'),
-      },
-      {
-        name: 'Force update',
-        description: 'Minimum and recommended versions per store app, raised only with approval.',
-        href: Routes.guide('ota', 'force-update'),
-      },
-      {
-        name: 'Feature flags',
-        description: 'Targeting, segments and rollouts over OpenFeature, with approvals and a kill switch.',
-        href: Routes.guide('flags', 'quickstart'),
-      },
-    ],
-  },
-  {
-    group: SectionGroups.support,
-    summary: 'Hear from the people who use what you built.',
-    products: [
-      {
-        name: 'Messenger',
-        description: 'Users write to you from inside your app; your team answers from one inbox.',
-        href: Routes.guide('messenger', 'contact-us'),
-      },
-      {
-        name: 'Help center',
-        description: 'A public help site in Markdown, on your own domain, translated and searchable from your app.',
-        href: Routes.guide('help', 'help-center'),
-      },
-    ],
+    group: SectionGroups.operate,
+    name: 'Notifications',
+    description: 'Mocco, Sentry, Vercel and GitHub events routed to the Discord channels that need them.',
+    href: Routes.guide('notifications', 'overview'),
   },
   {
     group: SectionGroups.operate,
-    summary: 'Know what happened, and who did it.',
-    products: [
-      {
-        name: 'Notifications',
-        description: 'Mocco, Sentry, Vercel and GitHub events routed to the Discord channels that need them.',
-        href: Routes.guide('notifications', 'overview'),
-      },
-      {
-        name: 'Audit log',
-        description: 'Every approval, credential release and production change, in one record.',
-        href: Routes.guide('start', 'audit-log'),
-      },
-    ],
+    name: 'Audit log',
+    description: 'Every approval, credential release and production change, in one record.',
+    href: Routes.guide('start', 'audit-log'),
   },
 ];
 
-// Shown in the registry's group order, the order every list in Mocco follows.
-const groupOrder: readonly SectionGroup[] = Object.values(SectionGroups);
-const pillars = pillarsByJob.toSorted((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group));
+// The groups in the registry's order, each with the products that ship today (read from
+// the registry, so a product appears here the day it's marked available) and the
+// always-on capabilities that belong to it.
+const pillars = Object.values(SectionGroups).flatMap(group => {
+  const summary = groupSummaries[group];
+  const products: PillarItem[] = (Object.keys(productCatalog) as Product[])
+    .filter(product => productCatalog[product].available && productCatalog[product].group === group)
+    .map(product => ({
+      name: productCatalog[product].label,
+      description: productPitches[product] ?? productCatalog[product].description,
+      href: productCatalog[product].guide ?? Routes.guide('start', 'overview'),
+    }));
+  const items = [...products, ...capabilities.filter(capability => capability.group === group)];
+  return summary === undefined || items.length === 0 ? [] : [{ group, summary, items }];
+});
 
 // An illustration of one morning in a workspace: every product in one feed.
 const feed = [
@@ -146,7 +133,7 @@ export default function Home() {
         <title>Mocco — everything your product needs, except the code</title>
         <meta
           name="description"
-          content="Ship it, run it and hear from the people who use it, in one workspace: deploy approvals, OTA updates, feature flags, alerts, in-app messaging and a help center that share one team, one set of roles and one history."
+          content="Ship it, run it and hear from the people who use it, in one workspace: deploy approvals, OTA updates, feature flags, alerts, a status page, in-app messaging and a help center that share one team, one set of roles and one history."
         />
       </Head>
       <div className="flex min-h-screen flex-col">
@@ -195,8 +182,8 @@ export default function Home() {
               </h1>
               <p className="max-w-xl leading-relaxed text-pretty text-muted-foreground">
                 Ship it, run it and hear from the people who use it — in one workspace. Deploys, OTA updates, feature
-                flags, alerts, in-app messaging and your help center share the same team, the same roles and the same
-                history, instead of ten tools that don’t know about each other.
+                flags, alerts, a status page, in-app messaging and your help center share the same team, the same roles
+                and the same history, instead of ten tools that don’t know about each other.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link href={Routes.signUp} className={primaryButton}>
@@ -257,7 +244,7 @@ export default function Home() {
                     <p className="text-sm">{pillar.summary}</p>
                   </div>
                   <ul className="flex flex-col gap-3">
-                    {pillar.products.map(product => (
+                    {pillar.items.map(product => (
                       <li key={product.name}>
                         <Link
                           href={product.href}
