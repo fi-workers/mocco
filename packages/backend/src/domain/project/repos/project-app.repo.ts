@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
@@ -27,6 +27,17 @@ export class ProjectAppRepo {
       .from(schema.projectApps)
       .where(and(eq(schema.projectApps.workspaceId, workspaceId), eq(schema.projectApps.projectId, projectId)))
       .orderBy(asc(schema.projectApps.name));
+  }
+
+  /** The workspace's apps among `ids`, in one query (ids it doesn't own are left out). */
+  async listByIds(workspaceId: string, ids: readonly string[]) {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(schema.projectApps)
+      .where(and(eq(schema.projectApps.workspaceId, workspaceId), inArray(schema.projectApps.id, [...ids])));
   }
 
   /** An app of the project — or throw EntityNotFoundError for a foreign or unknown id. */

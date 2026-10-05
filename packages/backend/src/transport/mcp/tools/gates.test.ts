@@ -265,7 +265,7 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
     await settings.setAgentsMayDecide(workspaceId, true, ada);
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
-      approvals: { list: refuse, get: refuse, vote: refuse },
+      approvals: { listLabeled: refuse, get: refuse, vote: refuse },
       gates,
       scope: new WorkspaceScope({ memberships: new MembershipRepo(t.db) }),
       settings,

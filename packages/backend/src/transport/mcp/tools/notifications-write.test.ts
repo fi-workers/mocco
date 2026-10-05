@@ -119,7 +119,7 @@ describe('mocco_notifications_* changes (pglite, over HTTP)', () => {
 
   const deps = (notifications: McpToolDeps['notifications']): McpToolDeps => ({
     runs: { searchInWorkspace: refuse, get: refuse },
-    approvals: { list: refuse, get: refuse, vote: refuse },
+    approvals: { listLabeled: refuse, get: refuse, vote: refuse },
     gates: { getPending: refuse, resume: refuse },
     flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
     otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
