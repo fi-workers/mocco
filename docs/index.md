@@ -55,6 +55,7 @@ related:
 - [0028 — Public status pages are static snapshots on object storage (draft)](./adr/0028-status-pages-are-static-snapshots.md)
 - [0029 — Mocco is everything a product needs, except the code (draft)](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)
 - [0030 — Open Graph images are rendered from templates on Node and stored by content hash (draft)](./adr/0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md)
+- [0031 — Custom domains are routed by a cached database lookup in the proxy (draft)](./adr/0031-custom-domains-are-routed-by-a-cached-database-lookup.md)
 
 ## Implementation
 
