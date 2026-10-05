@@ -61,7 +61,7 @@ export default function HelpSearchPage({ nav }: Props) {
   }, [nav.slug, nav.locale, query]);
 
   return (
-    <HelpSiteLayout nav={nav} title={words.search}>
+    <HelpSiteLayout nav={nav} title={words.search} noindex>
       <div className="flex max-w-3xl flex-col gap-6">
         <form method="get" role="search" className="flex gap-2">
           <input

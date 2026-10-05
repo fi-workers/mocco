@@ -14,18 +14,21 @@ export default function HelpSiteLayout({
   nav,
   title,
   currentPath,
+  noindex = false,
   children,
 }: {
   nav: HelpSiteNav;
   title: string;
   currentPath?: string;
+  /** Keep the page out of search (the search results page: empty to a crawler). */
+  noindex?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <Head>
-        <title>{title === nav.name ? title : `${title} · ${nav.name}`}</title>
-        <meta name="robots" content="index, follow" />
+        <title key="title">{title === nav.name ? title : `${title} · ${nav.name}`}</title>
+        <meta key="robots" name="robots" content={noindex ? 'noindex, follow' : 'index, follow'} />
       </Head>
       <div lang={nav.locale} className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="flex h-14 items-center justify-between gap-4 border-b border-border px-4 md:px-6">

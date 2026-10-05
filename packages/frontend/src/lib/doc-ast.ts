@@ -25,6 +25,8 @@ export interface DocPage {
   slug: string;
   title: string;
   description: string;
+  /** The frontmatter's `updated:` date (YYYY-MM-DD), or null. */
+  updated: string | null;
   blocks: DocBlock[];
 }
 

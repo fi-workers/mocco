@@ -22,8 +22,9 @@ export default function App({ Component, pageProps }: AppProps) {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <Head>
-          <title>Mocco</title>
-          <meta name="description" content="Pipeline governance control plane" />
+          <title key="title">Mocco</title>
+          {/* The console and auth screens stay out of search; public pages override this (SeoHead). */}
+          <meta key="robots" name="robots" content="noindex" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
         <EnvironmentRibbon />

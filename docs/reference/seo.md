@@ -35,3 +35,16 @@ URLs are absolute on `SERVICE_DOMAIN` (else `VERCEL_URL`), whatever host asked. 
 URLs are absolute on the site's canonical origin: its custom domain when `HELP_CUSTOM_DOMAINS` maps one, else its Mocco subdomain — so the subdomain copy of a site with a custom domain points crawlers at the custom domain.
 
 One `<urlset>` holds the whole site; a sitemap index is only needed past 50,000 URLs.
+
+## Page metadata
+
+Every page starts out of search: `_app.tsx` sets `<meta name="robots" content="noindex">`, so the console and auth screens are never indexed by default. A public page opts in by rendering `SeoHead` (`components/seo-head.tsx`), which replaces that tag (every tag carries a `key`, so a page's value wins over `_app`'s) and adds the title, description, an absolute canonical URL, Open Graph (`og:type`, `og:site_name`, `og:title`, `og:description`, `og:url`, `og:locale`, `og:image` with width, height and alt) and a `summary_large_image` Twitter card. Absolute URLs use `NEXT_PUBLIC_SITE_HOST`, which `next.config.ts` fills from `SERVICE_DOMAIN` (else `VERCEL_URL`, a preview's own host) at build time.
+
+The share image is `public/og/mocco.png` (1200×630) on every page until per-page images are generated (#368).
+
+JSON-LD (`lib/seo.ts`, one `@graph` per page, `<` escaped so it can't end the script):
+
+- **Landing:** Organization, WebSite, SoftwareApplication (`DeveloperApplication`).
+- **A customer guide:** Organization, WebSite, a BreadcrumbList (Mocco → the guide set → the guide) and a TechArticle with `dateModified` from the guide's frontmatter `updated:`.
+
+Not FAQPage or HowTo: Google restricted and retired those rich results in 2023. Help center pages set their own `robots` (`index, follow`, and `noindex, follow` on search results); their canonical, hreflang and Open Graph tags come with #365.

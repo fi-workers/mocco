@@ -21,6 +21,9 @@ const config: NextConfig = {
   // HELP_SITES_DOMAIN goes to the client too, so the console can link a help center's public site.
   env: {
     NEXT_PUBLIC_VERCEL_ENV: process.env.VERCEL_ENV ?? '',
+    // The app's canonical host, for absolute URLs in public pages' metadata (lib/seo.ts): SERVICE_DOMAIN,
+    // else the deployment's own host (a preview), as the backend resolves its origin.
+    NEXT_PUBLIC_SITE_HOST: process.env.SERVICE_DOMAIN ?? process.env.VERCEL_URL ?? '',
     NEXT_PUBLIC_HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN ?? '',
     NEXT_PUBLIC_HELP_CUSTOM_DOMAINS: process.env.HELP_CUSTOM_DOMAINS ?? '',
   },

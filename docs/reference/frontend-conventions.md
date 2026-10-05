@@ -4,7 +4,7 @@ description: How packages/frontend is written — a client-rendered app (no SSR)
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-09-26
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, frontend, nextjs, react, csr, react-query, performance, lint]
@@ -21,6 +21,7 @@ tags: [reference, frontend, nextjs, react, csr, react-query, performance, lint]
 - **Client data through React Query.** All reads/writes go through `@trpc/react-query` hooks — never a vanilla client call in a component. Loading and error states are the query's, not hand-rolled.
 - **Client-side auth guard.** Gated surfaces check better-auth's `useSession`: while it's pending, render a spinner; if there's no session, redirect to sign-in. There is no server-side gate.
 - **Parse, don't validate.** Every external boundary (API responses, URL params, storage) goes through zod `safeParse`; reuse the `@mocco/common` schemas so client validation matches the server. `as` casts live only inside parsers; `any`/`@ts-ignore` are lint errors.
+- **Public pages declare their metadata; everything else is noindex.** `_app.tsx` marks every page `noindex`. A page meant for search (the landing, the customer guides) renders `SeoHead` with its title, description and canonical URL, which also emits Open Graph, the Twitter card and JSON-LD ([Search engines and crawlers](./seo.md)). Never put a bare `<title>`/description `<Head>` on a public page.
 - **URL is state.** Shareable view state (the active workspace is the `[id]` in the path; filters/tabs/`?create` in the query) lives in the URL. Rule of thumb: "if someone opens this URL, must they see the same screen?" Never put secrets/ephemeral UI state in the URL. `push` for undoable steps, `replace` for redirects and live typing.
 
 ## Architecture
