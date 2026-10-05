@@ -70,7 +70,11 @@ export interface MonitorTransitionDeps {
 }
 
 type MonitorLink = Awaited<ReturnType<ComponentMonitorRepo['componentsOfMonitor']>>[number];
-type AlertType = (typeof StatusEventTypes)[keyof typeof StatusEventTypes];
+/** A monitor's alerts: every status event but the maintenance overrun (MaintenanceService). */
+type AlertType = Exclude<
+  (typeof StatusEventTypes)[keyof typeof StatusEventTypes],
+  typeof StatusEventTypes.statusMaintenanceOverran
+>;
 
 const SEVERITY_OF_IMPACT: Record<ComponentImpact, IncidentSeverity> = {
   [ComponentImpacts.majorOutage]: IncidentSeverities.major,

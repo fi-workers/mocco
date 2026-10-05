@@ -1,5 +1,5 @@
 import { MaintenanceStatuses } from '@mocco/common/status';
-import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -14,7 +14,8 @@ const m = schema.statusMaintenances;
 const scoped = (scope: StatusScope) => and(eq(m.workspaceId, scope.workspaceId), eq(m.projectId, scope.projectId));
 
 /** Data access for mocco_status_maintenances. Scoped by workspace and project, except the
- * tick's system-wide transitions (`completeDue`, `startDue`). */
+ * tick's system-wide transitions (`completeDue`, `startDue`, `flagOverrunDue`,
+ * `listRunLinkedInProgress`) and the run's own (`completeForRun`), which go by workspace. */
 export class MaintenanceRepo {
   constructor(private readonly db: Db) {}
 
@@ -79,8 +80,61 @@ export class MaintenanceRepo {
     );
   }
 
+  /** Insert a window a resumed gate started; undefined when the gate already started one on the page. */
+  async insertForGate(row: typeof m.$inferInsert): Promise<MaintenanceRow | undefined> {
+    const [created] = await this.db
+      .insert(m)
+      .values(row)
+      .onConflictDoNothing({ target: [m.gateId, m.pageId], where: isNotNull(m.gateId) })
+      .returning();
+    return created;
+  }
+
+  /** Complete the run's windows still in progress, with `endNote` saying why when not as planned. */
+  async completeForRun(
+    workspaceId: string,
+    runId: string,
+    values: { now: Date; endNote: string | null },
+  ): Promise<MaintenanceRow[]> {
+    return await this.db
+      .update(m)
+      .set({
+        status: MaintenanceStatuses.completed,
+        actualEnd: values.now,
+        endNote: values.endNote,
+        updatedAt: values.now,
+      })
+      .where(and(eq(m.workspaceId, workspaceId), eq(m.runId, runId), eq(m.status, MaintenanceStatuses.inProgress)))
+      .returning();
+  }
+
+  /** Every run-linked window in progress, across all workspaces (the tick checks their runs). */
+  async listRunLinkedInProgress(): Promise<MaintenanceRow[]> {
+    return await this.db
+      .select()
+      .from(m)
+      .where(and(eq(m.status, MaintenanceStatuses.inProgress), isNotNull(m.runId)));
+  }
+
+  /** Flag every run-linked window still in progress past its expected end, once. Across all workspaces. */
+  async flagOverrunDue(now: Date): Promise<MaintenanceRow[]> {
+    return await this.db
+      .update(m)
+      .set({ overranAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(m.status, MaintenanceStatuses.inProgress),
+          isNotNull(m.runId),
+          isNull(m.overranAt),
+          lte(m.scheduledEnd, now),
+        ),
+      )
+      .returning();
+  }
+
   /** Complete every window whose end has passed (a window the tick never saw start goes
-   * straight to completed). Across all workspaces: the tick is a system job. */
+   * straight to completed). A run-linked window ends with its run instead, so it is left
+   * alone here. Across all workspaces: the tick is a system job. */
   async completeDue(now: Date): Promise<MaintenanceRow[]> {
     return await this.db
       .update(m)
@@ -94,6 +148,7 @@ export class MaintenanceRepo {
         and(
           inArray(m.status, [MaintenanceStatuses.scheduled, MaintenanceStatuses.inProgress]),
           lte(m.scheduledEnd, now),
+          isNull(m.runId),
         ),
       )
       .returning();

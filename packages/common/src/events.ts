@@ -205,6 +205,8 @@ export const StatusEventTypes = {
   statusMonitorDegraded: 'status.monitor.degraded',
   /** Up again after `down`, `recovering` or `degraded`. */
   statusMonitorRecovered: 'status.monitor.recovered',
+  /** A run-linked maintenance window is still in progress after its expected minutes. */
+  statusMaintenanceOverran: 'status.maintenance.overran',
 } as const;
 
 /** A product event that, like an inbound one, carries its message rendered when it
@@ -238,6 +240,7 @@ export const statusEventPayloadSchemas = {
   [StatusEventTypes.statusMonitorDown]: renderedEventPayloadSchema,
   [StatusEventTypes.statusMonitorDegraded]: renderedEventPayloadSchema,
   [StatusEventTypes.statusMonitorRecovered]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusMaintenanceOverran]: renderedEventPayloadSchema,
 } as const;
 
 /** Every domain event type. Extension point: spread each area's types here. */

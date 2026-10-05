@@ -326,6 +326,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/og-images.md`, `log.md`
 - Source: branch `feat/og-fallback-fonts` (#412)
 
+## 2026-10-06 — Maintenance from gated runs
+
+- The status reference gains "Maintenance from gated runs": a page's gate maintenances
+  (`mocco_status_gate_maintenances`, set through `status.setGateMaintenance`), the window `gate.resumed` starts on the
+  pages of the run's projects, how `run.succeeded`, `run.failed`, `gate.rejected` and the tick (for a canceled run or a
+  lost event) complete it with an end note, and the overrun flag and alert after the expected minutes. The Tables,
+  Audit and tRPC sections list the new columns, table, actions and procedures; "Not built yet" keeps the console form,
+  `/v1` and MCP fields, and a per-window `suppress_alerts` switch.
+- The events reference lists `status.maintenance.overran` and the four maintenance subscribers; the feature map's
+  status row says what is built.
+- Docs touched: `reference/status.md`, `reference/events.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-maintenance-from-runs` (#158)
+
 ## 2026-10-05 — Status 90-day bars and monitor latency
 
 - The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its

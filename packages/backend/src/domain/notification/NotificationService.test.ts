@@ -87,7 +87,8 @@ describe('NotificationService fan-out (pglite)', () => {
 
   it('subscribes to governance and every inbound source family', () => {
     expect(bus.subscribersFor('gate.pending')).toEqual([NotificationSubscribers.gate.name]);
-    expect(bus.subscribersFor('run.failed')).toEqual([NotificationSubscribers.run.name]);
+    // Gate-linked maintenance also listens to run.failed (status/subscribers.ts).
+    expect(bus.subscribersFor('run.failed')).toContain(NotificationSubscribers.run.name);
     expect(bus.subscribersFor('sentry.issue.created')).toEqual([NotificationSubscribers.sentry.name]);
     expect(bus.subscribersFor('vercel.deployment.error')).toEqual([NotificationSubscribers.vercel.name]);
     expect(bus.subscribersFor('github.push')).toEqual([NotificationSubscribers.github.name]);

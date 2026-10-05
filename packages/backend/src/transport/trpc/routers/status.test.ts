@@ -55,6 +55,7 @@ interface Ids {
   componentId: string;
   incidentId: string;
   maintenanceId: string;
+  gateMaintenanceId: string;
   locationId: string;
   monitorId: string;
   runId: string;
@@ -112,6 +113,17 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
     }),
   cancelMaintenance: async (api, scope, ids) =>
     await api.status.cancelMaintenance({ ...scope, maintenanceId: ids.maintenanceId }),
+  gateMaintenances: async (api, scope, ids) => await api.status.gateMaintenances({ ...scope, pageId: ids.pageId }),
+  setGateMaintenance: async (api, scope, ids) =>
+    await api.status.setGateMaintenance({
+      ...scope,
+      pageId: ids.pageId,
+      gateName: 'production',
+      title: 'x',
+      expectedMinutes: 10,
+    }),
+  deleteGateMaintenance: async (api, scope, ids) =>
+    await api.status.deleteGateMaintenance({ ...scope, gateMaintenanceId: ids.gateMaintenanceId }),
   monitors: async (api, scope) => await api.status.monitors(scope),
   monitor: async (api, scope, ids) => await api.status.monitor({ ...scope, monitorId: ids.monitorId }),
   // With the caller's own scope, the victim's private location is NOT_FOUND.
@@ -172,6 +184,14 @@ const seed = async (db: Db, api: Api, scope: Scope, slug: string): Promise<Ids> 
     scheduledEnd: new Date('2030-01-01T01:00:00Z'),
     componentIds: [component.id],
   });
+  const { gateMaintenance } = await api.status.setGateMaintenance({
+    ...scope,
+    pageId: page.id,
+    gateName: 'production',
+    title: 'Deploying',
+    expectedMinutes: 20,
+    componentIds: [component.id],
+  });
   const { location } = await api.status.createLocation({ ...scope, code: 'office', name: 'Office' });
   const { monitor } = await api.status.createMonitor({
     ...scope,
@@ -189,6 +209,7 @@ const seed = async (db: Db, api: Api, scope: Scope, slug: string): Promise<Ids> 
     componentId: component.id,
     incidentId: incident.id,
     maintenanceId: maintenance.id,
+    gateMaintenanceId: gateMaintenance.id,
     locationId: location.id,
     monitorId: monitor.id,
     runId,

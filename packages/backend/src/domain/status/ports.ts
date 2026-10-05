@@ -2,6 +2,8 @@
 // registry, never the reverse: the composition root (compose.ts) implements these ports over
 // their repos, so neither domain imports status.
 
+import type { RunState } from '@mocco/common/execution';
+
 /** A recorded release of a run (docs/reference/releases.md), as correlation sees it. */
 export interface DeployRelease {
   runId: string;
@@ -42,4 +44,17 @@ export interface RunTimelineEvent {
 export interface RunTimeline {
   /** Append to the run's timeline; false (and nothing written) when the run isn't the workspace's. */
   append(workspaceId: string, runId: string, event: RunTimelineEvent): Promise<boolean>;
+}
+
+/** A run, as gate-linked maintenance sees it: its state, and the projects its repository is linked to. */
+export interface RunContext {
+  runId: string;
+  state: RunState;
+  projectIds: readonly string[];
+}
+
+/** Where gate-linked maintenance reads runs (#158). */
+export interface RunSource {
+  /** The workspace's runs among `runIds`; another workspace's ids are left out. */
+  runs(workspaceId: string, runIds: readonly string[]): Promise<readonly RunContext[]>;
 }

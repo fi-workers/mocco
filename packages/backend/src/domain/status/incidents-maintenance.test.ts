@@ -257,11 +257,11 @@ describe('incidents and maintenance (pglite)', () => {
     const missed = await window(1, 5, 'missed');
     const canceled = await window(60, 90, 'canceled');
 
-    expect(await status.statusMaintenances.tick(minutes(9))).toEqual({ started: 0, completed: 1 });
-    expect(await status.statusMaintenances.tick(minutes(10))).toEqual({ started: 1, completed: 0 });
-    expect(await status.statusMaintenances.tick(minutes(11))).toEqual({ started: 0, completed: 0 });
+    expect(await status.statusMaintenances.tick(minutes(9))).toEqual({ started: 0, completed: 1, overran: 0 });
+    expect(await status.statusMaintenances.tick(minutes(10))).toEqual({ started: 1, completed: 0, overran: 0 });
+    expect(await status.statusMaintenances.tick(minutes(11))).toEqual({ started: 0, completed: 0, overran: 0 });
     await status.statusMaintenances.cancel(scope, actor, canceled.id);
-    expect(await status.statusMaintenances.tick(minutes(61))).toEqual({ started: 0, completed: 1 });
+    expect(await status.statusMaintenances.tick(minutes(61))).toEqual({ started: 0, completed: 1, overran: 0 });
 
     expect(await windowStates()).toEqual({
       soon: [MaintenanceStatuses.completed, minutes(10), minutes(61)],

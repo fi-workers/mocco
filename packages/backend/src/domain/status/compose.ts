@@ -9,7 +9,7 @@ import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import { MonitorService } from '@backend/domain/status/MonitorService';
 import { MonitorTransitionService } from '@backend/domain/status/MonitorTransitionService';
 import { ProbeService } from '@backend/domain/status/ProbeService';
-import { createReleaseDeploySource, createRunTimeline } from '@backend/domain/status/release-deploys';
+import { createReleaseDeploySource, createRunSource, createRunTimeline } from '@backend/domain/status/release-deploys';
 import { RollupService } from '@backend/domain/status/RollupService';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import { SnapshotService } from '@backend/domain/status/SnapshotService';
@@ -83,7 +83,17 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     statusHeartbeats: new HeartbeatService({ db, onStateChange, ...now }),
     statusCorrelation,
     statusIncidents: new IncidentService({ db, audit: deps.audit, pages: statusPages, snapshots, onOpened, ...now }),
-    statusMaintenances: new MaintenanceService({ db, audit: deps.audit, pages: statusPages, snapshots, ...now }),
+    statusMaintenances: new MaintenanceService({
+      db,
+      audit: deps.audit,
+      pages: statusPages,
+      snapshots,
+      // Gate-linked windows read their runs through the execution and project repos.
+      runs: createRunSource(db),
+      ...(deps.events !== undefined && { events: deps.events }),
+      ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
+      ...now,
+    }),
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
     statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),

@@ -18,6 +18,14 @@ export const RunStates = {
 export type RunState = (typeof RunStates)[keyof typeof RunStates];
 export const runStateSchema = z.enum(Object.values(RunStates) as [RunState, ...RunState[]]);
 
+/** Run states from which nothing moves the run any more: it finished, was canceled or a gate rejected it. */
+export const FINISHED_RUN_STATES: ReadonlySet<RunState> = new Set<RunState>([
+  RunStates.succeeded,
+  RunStates.failed,
+  RunStates.canceled,
+  RunStates.rejected,
+]);
+
 /** Run-step lifecycle: `pending → dispatched → running → (succeeded | failed | skipped | canceled)`. */
 export const RunStepStatuses = {
   pending: 'pending',

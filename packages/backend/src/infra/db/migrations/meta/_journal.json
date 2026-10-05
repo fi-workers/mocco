@@ -491,6 +491,13 @@
       "when": 1791224757151,
       "tag": "0069_empty_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1791236582254,
+      "tag": "0070_condemned_katie_power",
+      "breakpoints": true
     }
   ]
 }
