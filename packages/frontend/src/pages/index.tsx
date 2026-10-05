@@ -1,15 +1,18 @@
 import { Products } from '@mocco/common/project';
-import Head from 'next/head';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import SeoHead from '@frontend/components/seo-head';
 import { productCatalog, sectionGroupLabels, SectionGroups } from '@frontend/lib/products';
 import { Routes } from '@frontend/lib/routes';
+import { organizationLd, siteOrigin, softwareApplicationLd, websiteLd } from '@frontend/lib/seo';
 
 import type { SectionGroup } from '@frontend/lib/products';
 import type { Product } from '@mocco/common/project';
 
 const GITHUB_URL = 'https://github.com/fi-workers/mocco';
+const DESCRIPTION =
+  'Ship it, run it and hear from the people who use it, in one workspace: deploy approvals, OTA updates, feature flags, alerts, a status page, in-app messaging and a help center that share one team, one set of roles and one history.';
 
 interface PillarItem {
   name: string;
@@ -127,15 +130,16 @@ const secondaryButton =
 
 // Public landing page (static). Auth lives at /auth/* (reached from the nav or the CTAs).
 export default function Home() {
+  const origin = siteOrigin();
   return (
     <>
-      <Head>
-        <title>Mocco — everything your product needs, except the code</title>
-        <meta
-          name="description"
-          content="Ship it, run it and hear from the people who use it, in one workspace: deploy approvals, OTA updates, feature flags, alerts, a status page, in-app messaging and a help center that share one team, one set of roles and one history."
-        />
-      </Head>
+      <SeoHead
+        title="Mocco — everything your product needs, except the code"
+        description={DESCRIPTION}
+        url={`${origin}/`}
+        origin={origin}
+        jsonLd={[organizationLd(origin), websiteLd(origin), softwareApplicationLd(origin, DESCRIPTION)]}
+      />
       <div className="flex min-h-screen flex-col">
         <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
           <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">

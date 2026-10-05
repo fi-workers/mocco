@@ -39,6 +39,16 @@ const ORDER: Record<GuideSet, readonly string[]> = {
 };
 
 const SLUG = /^[a-z0-9-]+$/u;
+const DATE = /^\d{4}-\d{2}-\d{2}$/u;
+
+/** A frontmatter date (YYYY-MM-DD) that is a real calendar day, else null (`2026-02-30` is not). */
+function guideDate(value: string): string | null {
+  if (!DATE.test(value)) {
+    return null;
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : value;
+}
 const GUIDE_FILE = /^([a-z0-9-]+)\.md$/u;
 const SETS = new Set<string>(Object.values(GuideSets));
 
@@ -117,7 +127,7 @@ export function listGuidePages(): { path: string; lastModified: Date | null }[] 
       const { updated } = splitFrontmatter(readGuide(set, slug));
       return {
         path: Routes.guide(set, slug),
-        lastModified: /^\d{4}-\d{2}-\d{2}$/u.test(updated) ? new Date(`${updated}T00:00:00Z`) : null,
+        lastModified: guideDate(updated) === null ? null : new Date(`${updated}T00:00:00Z`),
       };
     }),
   );
@@ -128,11 +138,12 @@ export function readGuidePage(set: GuideSet, slug: string): DocPage {
   if (!SLUG.test(slug)) {
     throw new Error(`invalid guide slug ${slug}`);
   }
-  const { title, description, body } = splitFrontmatter(readGuide(set, slug));
+  const { title, description, updated, body } = splitFrontmatter(readGuide(set, slug));
   return {
     slug,
     title,
     description,
+    updated: guideDate(updated),
     blocks: markdownToBlocks(body, {
       link: href => resolveHref(set, href),
       image: (href, alt) => guideImage(set, href, alt),
