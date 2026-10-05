@@ -4,7 +4,7 @@ description: How packages/backend is written — layering and dependency directi
 type: reference
 status: active
 created: 2026-07-13
-updated: 2026-09-27
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, backend, trpc, architecture, errors, lint]
@@ -199,4 +199,4 @@ sealed with `SecretBox` (`infra/crypto/secret-box.ts`, AES-256-GCM) before they 
 
 ## Testing
 
-Integration tests run on **pglite** (in-memory WASM Postgres) via `infra/db/testing/pglite.ts`, applying the real migrations — no docker needed. Prefer extending those over mocking the DB. Tests compose the same factories production uses (no seams); a tRPC test asserts transport behavior through `appRouter.createCaller(...)` (e.g. a non-member `update` surfaces as `NOT_FOUND`).
+Integration tests run on **pglite** (in-memory WASM Postgres) via `infra/db/testing/pglite.ts`, applying the real migrations — no docker needed. A vitest global setup (`infra/db/testing/pglite-global-setup.ts`) applies them to one PGlite per run, and `createTestDb()` boots each test's fresh database from that data directory instead of migrating again (#420). Prefer extending those over mocking the DB. Tests compose the same factories production uses (no seams); a tRPC test asserts transport behavior through `appRouter.createCaller(...)` (e.g. a non-member `update` surfaces as `NOT_FOUND`).

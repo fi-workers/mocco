@@ -30,6 +30,10 @@ import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import type { NeutralMessage } from '@mocco/common/notification';
 
 const SECOND = 1000;
+// The 1500-delivery run drains 400 runner rounds on one pglite. It runs on the injected clock, so
+// its wall time only guards against a hang: alone it takes 1-2 minutes, but in a full suite on a
+// loaded machine it took 500 s, near the old 600 s cap (#420).
+const LONG_RUN_TIMEOUT_MS = 20 * 60 * SECOND;
 const message: NeutralMessage = { title: 'Deploy', severity: Severities.info, fields: [], footer: 'Mocco' };
 
 describe('capacity waits through the job runner (pglite)', () => {
@@ -160,22 +164,26 @@ describe('capacity waits through the job runner (pglite)', () => {
     expect(await statuses()).toEqual([DeliveryStatuses.sent]);
   });
 
-  it('1500 deliveries at 120 per minute all get sent, none failing and no attempt spent on waiting', async () => {
-    const count = 1500;
-    await queueDeliveries(count);
+  it(
+    '1500 deliveries at 120 per minute all get sent, none failing and no attempt spent on waiting',
+    async () => {
+      const count = 1500;
+      await queueDeliveries(count);
 
-    await drain(400);
+      await drain(400);
 
-    const all = await statuses();
-    expect(all.filter(status => status === DeliveryStatuses.sent)).toHaveLength(count);
-    const jobRows = await deliverJobs();
-    expect(jobRows.every(job => job.status === JobStatuses.succeeded && job.attempts === 1)).toBe(true);
-    // Never more than 120 sends in any 60 s window.
-    const times = sends.map(sent => sent.getTime()).toSorted((a, b) => a - b);
-    const busiest = times.reduce((max, time, index) => {
-      const inWindow = times.slice(index).filter(other => other < time + DeliveryPolicy.fairnessWindowMs).length;
-      return Math.max(max, inWindow);
-    }, 0);
-    expect(busiest).toBeLessThanOrEqual(DeliveryPolicy.workspacePerMinute);
-  }, 600_000);
+      const all = await statuses();
+      expect(all.filter(status => status === DeliveryStatuses.sent)).toHaveLength(count);
+      const jobRows = await deliverJobs();
+      expect(jobRows.every(job => job.status === JobStatuses.succeeded && job.attempts === 1)).toBe(true);
+      // Never more than 120 sends in any 60 s window.
+      const times = sends.map(sent => sent.getTime()).toSorted((a, b) => a - b);
+      const busiest = times.reduce((max, time, index) => {
+        const inWindow = times.slice(index).filter(other => other < time + DeliveryPolicy.fairnessWindowMs).length;
+        return Math.max(max, inWindow);
+      }, 0);
+      expect(busiest).toBeLessThanOrEqual(DeliveryPolicy.workspacePerMinute);
+    },
+    LONG_RUN_TIMEOUT_MS,
+  );
 });
