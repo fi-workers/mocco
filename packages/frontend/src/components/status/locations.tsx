@@ -7,12 +7,12 @@ import { useState } from 'react';
 
 import {
   Ago,
-  CopyButton,
   CopyField,
   errorMessage,
   inputClass,
   labelClass,
   Notice,
+  Snippet,
   Spinner,
   StatusBadge,
   Tones,
@@ -52,20 +52,6 @@ function codeFromName(name: string): string {
 }
 
 const CODE_HINT = 'Lowercase letters, digits and inner hyphens, up to 32 characters. Unique in the workspace.';
-
-function Snippet({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex items-start gap-2">
-        <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs">
-          {value}
-        </pre>
-        <CopyButton value={value} />
-      </div>
-    </div>
-  );
-}
 
 /** The token, once, and the commands that run a probe with it. */
 function TokenOnce({ issued, onDone }: { issued: IssuedToken; onDone: () => void }) {

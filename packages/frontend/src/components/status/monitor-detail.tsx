@@ -1,7 +1,8 @@
 // One monitor in the console (#150): its state and settings, a deploy watch in progress (#155),
 // the incident it opened that is still open, its latest closed rounds and state changes, and
-// editing, pausing, resuming or deleting it.
-import { IncidentVisibilities, MonitorStates, RoundVerdicts } from '@mocco/common/status';
+// editing, pausing, resuming or deleting it. A heartbeat (#153) shows its period and grace, its
+// last ping and run time instead of rounds and locations, and can replace its ping URL.
+import { IncidentVisibilities, MonitorKinds, MonitorStates, RoundVerdicts } from '@mocco/common/status';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
@@ -15,6 +16,7 @@ import {
   StatusBadge,
   Tones,
 } from '@frontend/components/notifications/notification-ui';
+import { formatDuration, formatSpan, ReplacePingUrl } from '@frontend/components/status/heartbeat-ping';
 import MonitorForm from '@frontend/components/status/monitor-form';
 import { MONITOR_REFRESH_MS } from '@frontend/components/status/monitors';
 import { useProjectComponents } from '@frontend/components/status/project-components';
@@ -42,8 +44,13 @@ interface Props {
 
 type MonitorData = StatusOutputs['monitor'];
 
-/** Why a state changed: a closed round's verdict, or an operator's pause or resume. */
+/** Why a state changed: a heartbeat's ping or silence, a closed round's verdict, or an operator's
+ * pause or resume. */
 const reasonSchema = z.union([
+  z.object({
+    cause: z.enum(['success', 'fail', 'silence']),
+    exitCode: z.int().optional(),
+  }),
   z.object({
     by: z.literal('evaluator'),
     verdict: z.enum(RoundVerdicts),
@@ -57,15 +64,23 @@ const reasonSchema = z.union([
 const countsOf = (counts: { okCount: number; failCount: number; noDataCount: number }) =>
   `${String(counts.okCount)} passed, ${String(counts.failCount)} failed, ${String(counts.noDataCount)} no data`;
 
-function reasonText(reason: unknown): string {
-  const parsed = reasonSchema.safeParse(reason);
+function reasonText(raw: unknown): string {
+  const parsed = reasonSchema.safeParse(raw);
   if (!parsed.success) {
     return '';
   }
-  if (parsed.data.by === 'operator') {
+  const reason = parsed.data;
+  if ('cause' in reason) {
+    if (reason.cause === 'silence') {
+      return 'No ping within the period and grace';
+    }
+    const code = reason.exitCode === undefined ? '' : ` (exit code ${String(reason.exitCode)})`;
+    return reason.cause === 'fail' ? `The job reported a failure${code}` : `Ping${code}`;
+  }
+  if (reason.by === 'operator') {
     return 'By a person';
   }
-  return `${roundVerdictLabels[parsed.data.verdict]}: ${countsOf(parsed.data)}`;
+  return `${roundVerdictLabels[reason.verdict]}: ${countsOf(reason)}`;
 }
 
 /** Whether a deploy watch is running: its window hasn't ended. */
@@ -177,6 +192,37 @@ function StateChanges({ changes }: { changes: MonitorData['stateChanges'] }) {
   );
 }
 
+/** A heartbeat's period and grace, its last ping, and its last run time (or the run in progress). */
+function HeartbeatFacts({ monitor }: { monitor: MonitorData['monitor'] }) {
+  const runningSince =
+    monitor.lastStartAt !== null && (monitor.lastPingAt === null || monitor.lastStartAt > monitor.lastPingAt)
+      ? monitor.lastStartAt
+      : null;
+  return (
+    <>
+      <dt className="text-muted-foreground">Expects</dt>
+      <dd>
+        A ping every {formatSpan(monitor.heartbeatPeriodSeconds ?? 0)}, with{' '}
+        {formatSpan(monitor.heartbeatGraceSeconds ?? 0)} of grace
+      </dd>
+      <dt className="text-muted-foreground">Last ping</dt>
+      <dd>{monitor.lastPingAt === null ? 'Never' : <Ago date={monitor.lastPingAt} />}</dd>
+      <dt className="text-muted-foreground">Last run</dt>
+      <dd>
+        {monitor.lastDurationMs === null
+          ? 'No run time (the job sends no /start ping)'
+          : formatDuration(monitor.lastDurationMs)}
+        {runningSince === null ? null : (
+          <span className="text-muted-foreground">
+            {' '}
+            · running since <Ago date={runningSince} />
+          </span>
+        )}
+      </dd>
+    </>
+  );
+}
+
 export default function MonitorDetail({ workspaceId, projectId, monitorId }: Props) {
   const router = useRouter();
   const utils = trpc.useUtils();
@@ -218,6 +264,7 @@ export default function MonitorDetail({ workspaceId, projectId, monitorId }: Pro
   const { monitor, stateChanges, recentVerdicts, openIncident } = monitorQuery.data;
   const locationNames = new Map((locationsQuery.data?.locations ?? []).map(location => [location.id, location.name]));
   const isPaused = monitor.state === MonitorStates.paused;
+  const isHeartbeat = monitor.kind === MonitorKinds.heartbeat;
   const actionError = pause.error ?? resume.error ?? remove.error;
 
   return (
@@ -233,13 +280,19 @@ export default function MonitorDetail({ workspaceId, projectId, monitorId }: Pro
         </div>
         <p className="font-mono text-xs text-muted-foreground">{monitorTargetLabel(monitor.spec)}</p>
         <dl className="grid max-w-2xl grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-          <dt className="text-muted-foreground">Checks</dt>
-          <dd>
-            Every {String(monitor.intervalSeconds)} s; down after {String(monitor.confirmations)} failed rounds, up
-            after {String(monitor.recoveryConfirmations)} passing
-          </dd>
-          <dt className="text-muted-foreground">Locations</dt>
-          <dd>{monitor.locationIds.map(id => locationNames.get(id) ?? 'Location').join(', ')}</dd>
+          {isHeartbeat ? (
+            <HeartbeatFacts monitor={monitor} />
+          ) : (
+            <>
+              <dt className="text-muted-foreground">Checks</dt>
+              <dd>
+                Every {String(monitor.intervalSeconds)} s; down after {String(monitor.confirmations)} failed rounds, up
+                after {String(monitor.recoveryConfirmations)} passing
+              </dd>
+              <dt className="text-muted-foreground">Locations</dt>
+              <dd>{monitor.locationIds.map(id => locationNames.get(id) ?? 'Location').join(', ')}</dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Components</dt>
           <dd>
             {monitor.components.length === 0
@@ -332,10 +385,13 @@ export default function MonitorDetail({ workspaceId, projectId, monitorId }: Pro
         </p>
       ) : null}
       {actionError ? <p className="text-sm text-destructive">{errorMessage(actionError)}</p> : null}
+      {isHeartbeat && !isEditing ? (
+        <ReplacePingUrl workspaceId={workspaceId} projectId={projectId} monitorId={monitorId} name={monitor.name} />
+      ) : null}
       {openIncident === null ? null : (
         <OpenIncident workspaceId={workspaceId} projectId={projectId} incident={openIncident} />
       )}
-      <Rounds verdicts={recentVerdicts} />
+      {isHeartbeat ? null : <Rounds verdicts={recentVerdicts} />}
       <StateChanges changes={stateChanges} />
     </div>
   );

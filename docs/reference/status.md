@@ -72,6 +72,7 @@ code_refs:
   - packages/frontend/src/components/status/monitors.tsx
   - packages/frontend/src/components/status/monitor-form.tsx
   - packages/frontend/src/components/status/monitor-detail.tsx
+  - packages/frontend/src/components/status/heartbeat-ping.tsx
   - packages/frontend/src/components/status/locations.tsx
 ---
 
@@ -121,9 +122,16 @@ absent, the slow threshold, follow redirects) or TCP (host, port), the timeout, 
 down and up confirmations, the locations (enabled ones, plus any disabled one the monitor already uses), the quorum,
 each component of each of the project's pages with its impact while down, and the incident policy. The fields are
 parsed with `monitorInputSchema` before the call, so a bad field shows its zod issue, and a refused save shows the
-server's error. A monitor's route (`/status/monitors/[monitorId]`, `monitor-detail.tsx`) shows its settings, the
+server's error. **Heartbeat** replaces the check, timeout, interval, confirmations, locations and quorum with the period
+and grace in minutes; editing offers only the kinds a monitor may stay (a heartbeat, or HTTP and TCP). Creating a
+heartbeat shows its ping URL once (`heartbeat-ping.tsx`: the console's origin plus `/api/ext/v1/ping/{token}`) with
+`curl`, crontab, `/start` plus exit code and `@mocco/node` snippets, before the form closes. The list shows a heartbeat
+as its period and last ping. A monitor's route (`/status/monitors/[monitorId]`, `monitor-detail.tsx`) shows its settings, the
 open monitor incident (with a Draft badge), the latest ten rounds and 50 state changes with their reasons, **Watching
-after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. It doesn't chart
+after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. A heartbeat's route shows its period and grace, its last ping, its last run time
+(or "running since" after a `/start`), and why each change happened (a ping, a failure with its exit code, or no ping in
+time) instead of rounds and locations, and **Replace ping URL** (`rotateHeartbeatToken`, after a confirmation) shows
+the new URL once. It doesn't chart
 the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). **Locations**
 (`?tab=locations`, `locations.tsx`) lists the workspace's locations (kind, code, last seen, agent version, disabled)
 to every member; owners and admins (`useWorkspaceAdmin`) create a private location, rotate its token and disable it.
@@ -797,8 +805,7 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 ## Not built yet
 
 Hosted locations, publishing `@mocco/probe` to npm and its image to
-GHCR, heartbeat monitors in the console (the Heartbeat kind in the form, the ping URL and last ping on the monitor
-page) and the SDK's `heartbeat(token).wrap(fn)`, the `hb.mocco.club` ping host, a heartbeat that goes down when a
+GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in the console), a heartbeat that goes down when a
 `/start` isn't followed by a finish within a time limit, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping

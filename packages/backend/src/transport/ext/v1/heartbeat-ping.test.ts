@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { MonitorKinds, MonitorStates, monitorInputSchema } from '@mocco/common/status';
+import { heartbeat } from '@mocco/sdk-core';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -144,6 +145,25 @@ describe('/v1/ping (pglite)', () => {
     // The next window takes pings again.
     clock = new Date(clock.getTime() + PING_TOKEN_RATE_LIMIT.windowSeconds * 1000);
     expect(await statusOf(token)).toBe(200);
+  });
+
+  it("is what the SDK's heartbeat(token).wrap(fn) calls", async () => {
+    const pings = heartbeat(token, {
+      baseUrl: BASE,
+      fetch: async (input, init) => {
+        tick();
+        return await app.request(input instanceof Request ? input : String(input), init);
+      },
+    });
+    expect(await pings.wrap(async () => await Promise.resolve('backed up'))).toBe('backed up');
+    expect(await monitor()).toMatchObject({ state: MonitorStates.up, lastDurationMs: 1000 });
+
+    await expect(
+      pings.wrap(() => {
+        throw new Error('disk full');
+      }),
+    ).rejects.toThrow('disk full');
+    expect(await monitor()).toMatchObject({ state: MonitorStates.down });
   });
 
   it('limits pings per client address across tokens', async () => {

@@ -21,6 +21,18 @@ export class MoccoNetworkError extends Error {
   }
 }
 
+/** A heartbeat ping that couldn't be delivered: unreachable (`status` undefined) or refused. */
+export class HeartbeatPingError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | undefined,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'HeartbeatPingError';
+  }
+}
+
 /** A key that must not be used where it is (a secret key in a browser, a malformed key). */
 export class MoccoKeyError extends Error {
   constructor(message: string) {

@@ -4,7 +4,7 @@ description: Mocco's published SDKs — @mocco/sdk-core, @mocco/js, @mocco/node,
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, sdk, npm, publishing, react-native]
@@ -16,6 +16,7 @@ code_refs:
   - packages/sdk-core/src/client.ts
   - packages/sdk-core/src/wire.ts
   - packages/sdk-core/src/help.ts
+  - packages/sdk-core/src/heartbeat.ts
   - packages/sdk-react-native/src/ota.ts
   - packages/sdk-react-native/app.plugin.js
   - packages/backend/src/transport/ext/v1/sdk-contract.test.ts
@@ -34,9 +35,9 @@ Platform foundations §11: one MIT-licensed SDK per platform, product features a
 
 | Package | For | What's in it |
 |---|---|---|
-| `@mocco/sdk-core` | every SDK | `MoccoClient` (the `/v1` fetch client: the key as `Authorization: Bearer`, retries on 429 and 502–504 for GETs and idempotent POSTs with the server's `Retry-After` / `RateLimit-Reset` or backoff, problem+json → `MoccoError` with `status` and `code`), key checks (a secret key is refused in a browser), `EvaluationCounter` (the flag providers' per-minute evaluation counts), `MessengerClient` (a signed-in user's messenger conversations: session from the server-signed identity, kept in the app's storage and reopened on 401; seq-incremental threads; one network retry with the same client message id; polling while watched), `HelpClient` (a project's published help center: `search`, `getSite`, `getCollection`, `getArticle`, each in the reader's language where translated, `null` for an article or collection that isn't published; `sendFeedback` with the app's `visitorId`, or a random one per client), and the `/v1` wire types |
+| `@mocco/sdk-core` | every SDK | `MoccoClient` (the `/v1` fetch client: the key as `Authorization: Bearer`, retries on 429 and 502–504 for GETs and idempotent POSTs with the server's `Retry-After` / `RateLimit-Reset` or backoff, problem+json → `MoccoError` with `status` and `code`), key checks (a secret key is refused in a browser), `EvaluationCounter` (the flag providers' per-minute evaluation counts), `MessengerClient` (a signed-in user's messenger conversations: session from the server-signed identity, kept in the app's storage and reopened on 401; seq-incremental threads; one network retry with the same client message id; polling while watched), `HelpClient` (a project's published help center: `search`, `getSite`, `getCollection`, `getArticle`, each in the reader's language where translated, `null` for an article or collection that isn't published; `sendFeedback` with the app's `visitorId`, or a random one per client), `heartbeat(token)` (a [heartbeat monitor](./status.md#heartbeat-monitors)'s pings: `wrap(fn)` pings `/start`, runs `fn`, then success or `/fail` when it throws, rethrowing `fn`'s error and returning its result; `success()`, `start()`, `fail()`, `exitCode(code)`; no key; a ping never throws: one retry on a network error, timeout, 429 or 5xx, then `onError`, a console warning by default), and the `/v1` wire types |
 | `@mocco/js` | browsers | `createMocco({ publishableKey })`; `createHelp({ publishableKey })` for the help center (`HelpClient`); product clients join as subpaths (`@mocco/js/flags`). Size budget: 10 KB gzipped with sdk-core (`yarn sdk:size`; 2.3 KB today) |
-| `@mocco/node` | servers | `createMoccoServer({ secretKey })`, `signIdentity(secret, externalId)` (hex HMAC-SHA256, platform foundations §5), and `verifyWebhook({ body, signatureHeader, secret })` for `mocco-signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">` with a 5-minute replay window — the contract Mocco's outbound webhooks will sign with |
+| `@mocco/node` | servers | `createMoccoServer({ secretKey })`, `heartbeat(token, { baseUrl? })` for cron jobs and workers (sdk-core's, re-exported), `signIdentity(secret, externalId)` (hex HMAC-SHA256, platform foundations §5), and `verifyWebhook({ body, signatureHeader, secret })` for `mocco-signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">` with a 5-minute replay window — the contract Mocco's outbound webhooks will sign with |
 | `@mocco/react-native` | React Native apps | `createMoccoNative`; **`/ota`**: `<MoccoOta appId clientId />` (reports `launched` / `emergency_launch`), `reportOtaError()`, `useMoccoUpdate()` (status, `isMandatory`, `applyNow`; downloads in the background and applies a mandatory update when the app returns to the foreground); the Expo config plugin (`"plugins": [["@mocco/react-native", { "manifestUrl", "channel" }]]`); **`/messenger`**: `createMessenger`, `<MessengerProvider client>` (pauses polling in the background, refreshes on return), `useConversations`, `useConversation(id)` (marks new messages read), `useUnreadCount`, `useMessengerCategories`, `useMessenger`, `createHelp` and `useHelpSearch` (the `HelpClient`'s reads are there too) — headless, the app draws the screens. Peers: `react`, `react-native`, and `expo-updates` (optional; only `/ota` needs it). No native code |
 | `@mocco/flags-core` | servers, flagd-compatible tooling | Local evaluation of a flags ruleset: `parseRuleset`, `resolveFlag` / `resolveTyped`, the restricted JsonLogic subset, `fractional` bucketing (`murmur3`), `sem_ver`. No dependencies, ~4.7 KB gzipped; see [Feature flags](./flags.md#sdks) |
 | `@mocco/openfeature-server` | Node servers | `MoccoProvider({ secretKey, changeDetection?, pollIntervalMs?, bootstrap? })`, an OpenFeature server provider over flags-core. It listens to `GET /v1/flags/stream` and fetches `GET /v1/flags/ruleset` (ETag) on each change, polling as a fallback (`changeDetection: 'poll'` polls only), and serves the last good ruleset as STALE when Mocco is down. Peer: `@openfeature/server-sdk` |

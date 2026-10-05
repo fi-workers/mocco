@@ -1,8 +1,11 @@
 // Create or edit a monitor (#150): an HTTP or TCP check, how often it runs and how many rounds
 // confirm a change, the probe locations that run it, the components it reports on with what
-// they show while it is down, and whether going down opens an incident. The input is parsed
-// with the same `monitorInputSchema` the server uses, and a refused save shows the server's error.
+// they show while it is down, and whether going down opens an incident. A heartbeat (#153) has
+// a period and a grace instead of a check, interval, confirmations and locations, and creating
+// one shows its ping URL once. The input is parsed with the same `monitorInputSchema` the server
+// uses, and a refused save shows the server's error.
 import {
+  HeartbeatLimits,
   HttpMonitorMethods,
   IncidentPolicies,
   incidentPolicySchema,
@@ -19,6 +22,7 @@ import { z } from 'zod';
 
 import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
 import AffectedComponentsPicker from '@frontend/components/status/affected-components';
+import { HeartbeatPingOnce } from '@frontend/components/status/heartbeat-ping';
 import { useProjectComponents } from '@frontend/components/status/project-components';
 import { Button } from '@frontend/components/ui/button';
 import { trpc } from '@frontend/lib/trpc';
@@ -84,6 +88,9 @@ interface Fields {
   followRedirects: boolean;
   host: string;
   port: string;
+  /** A heartbeat's period and grace, in minutes. */
+  periodMinutes: string;
+  graceMinutes: string;
   intervalSeconds: string;
   confirmations: string;
   recoveryConfirmations: string;
@@ -111,6 +118,8 @@ function fieldsOf(monitor: Monitor | undefined): Fields {
     followRedirects: http?.followRedirects ?? true,
     host: tcp?.host ?? '',
     port: tcp === undefined ? '' : String(tcp.port),
+    periodMinutes: String((monitor?.heartbeatPeriodSeconds ?? HeartbeatLimits.defaultPeriodSeconds) / 60),
+    graceMinutes: String((monitor?.heartbeatGraceSeconds ?? HeartbeatLimits.defaultGraceSeconds) / 60),
     intervalSeconds: String(monitor?.intervalSeconds ?? MonitorLimits.minIntervalSeconds),
     confirmations: String(monitor?.confirmations ?? MonitorLimits.defaultConfirmations),
     recoveryConfirmations: String(monitor?.recoveryConfirmations ?? MonitorLimits.defaultConfirmations),
@@ -128,35 +137,47 @@ function fieldsOf(monitor: Monitor | undefined): Fields {
 // eslint-disable-next-line sonarjs/null-dereference -- value is a string, never null
 const numberOf = (value: string): number => (value.trim() === '' ? NaN : Number(value));
 
+/** The spec the fields describe: an HTTP or TCP check, or a heartbeat's period and grace. */
+function specOf(fields: Fields) {
+  const timeoutMs = Math.round(numberOf(fields.timeoutSeconds) * 1000);
+  if (fields.kind === MonitorKinds.heartbeat) {
+    return {
+      kind: MonitorKinds.heartbeat,
+      periodSeconds: Math.round(numberOf(fields.periodMinutes) * 60),
+      graceSeconds: Math.round(numberOf(fields.graceMinutes) * 60),
+    };
+  }
+  return fields.kind === MonitorKinds.tcp
+    ? { kind: MonitorKinds.tcp, host: fields.host, port: numberOf(fields.port), timeoutMs }
+    : {
+        kind: MonitorKinds.http,
+        url: fields.url.trim(),
+        method: fields.method,
+        ...(fields.method === HttpMonitorMethods.POST && fields.body !== '' && { body: fields.body }),
+        expectedStatus: fields.expectedStatus
+          .split(/[\s,]+/u)
+          .filter(code => code !== '')
+          .map(Number),
+        ...(fields.keywordMode !== NO_KEYWORD && { keyword: fields.keyword, keywordMode: fields.keywordMode }),
+        ...(fields.latencyThresholdMs.trim() !== '' && { latencyThresholdMs: numberOf(fields.latencyThresholdMs) }),
+        timeoutMs,
+        followRedirects: fields.followRedirects,
+      };
+}
+
 /** The monitor input the fields describe, parsed with the server's schema. */
 function parseFields(fields: Fields) {
-  const timeoutMs = Math.round(numberOf(fields.timeoutSeconds) * 1000);
-  const spec =
-    fields.kind === MonitorKinds.tcp
-      ? { kind: MonitorKinds.tcp, host: fields.host, port: numberOf(fields.port), timeoutMs }
-      : {
-          kind: MonitorKinds.http,
-          url: fields.url.trim(),
-          method: fields.method,
-          ...(fields.method === HttpMonitorMethods.POST && fields.body !== '' && { body: fields.body }),
-          expectedStatus: fields.expectedStatus
-            .split(/[\s,]+/u)
-            .filter(code => code !== '')
-            .map(Number),
-          ...(fields.keywordMode !== NO_KEYWORD && { keyword: fields.keyword, keywordMode: fields.keywordMode }),
-          ...(fields.latencyThresholdMs.trim() !== '' && { latencyThresholdMs: numberOf(fields.latencyThresholdMs) }),
-          timeoutMs,
-          followRedirects: fields.followRedirects,
-        };
+  const isHeartbeat = fields.kind === MonitorKinds.heartbeat;
   return monitorInputSchema.safeParse({
     name: fields.name,
-    spec,
+    spec: specOf(fields),
     intervalSeconds: numberOf(fields.intervalSeconds),
     confirmations: numberOf(fields.confirmations),
     recoveryConfirmations: numberOf(fields.recoveryConfirmations),
     quorumMode: fields.quorumMode,
     incidentPolicy: fields.incidentPolicy,
-    locationIds: fields.locationIds,
+    // A heartbeat has no locations; ones ticked before switching the kind don't count.
+    locationIds: isHeartbeat ? [] : fields.locationIds,
     components: fields.components.map(link => ({ componentId: link.componentId, impactWhenDown: link.impact })),
   });
 }
@@ -394,81 +415,67 @@ function TcpFields({ fields, set }: { fields: Fields; set: (patch: Partial<Field
   );
 }
 
-export default function MonitorForm({ workspaceId, projectId, monitor, onDone }: Props) {
-  const id = useId();
-  const utils = trpc.useUtils();
-  const [fields, setFields] = useState<Fields>(() => fieldsOf(monitor));
-  const [issue, setIssue] = useState<string | null>(null);
-  const set = (patch: Partial<Fields>) => {
-    setFields(current => ({ ...current, ...patch }));
-    setIssue(null);
-  };
-  const locationsQuery = trpc.status.locations.useQuery({ workspaceId });
-  const project = useProjectComponents(workspaceId, projectId);
-  const onSuccess = async () => {
-    await Promise.all([utils.status.monitors.invalidate(), utils.status.monitor.invalidate()]);
-    onDone();
-  };
-  const create = trpc.status.createMonitor.useMutation({ onSuccess });
-  const update = trpc.status.updateMonitor.useMutation({ onSuccess });
-  const save = monitor === undefined ? create : update;
-  const submit = (input: MonitorInput) => {
-    if (monitor === undefined) {
-      create.mutate({ workspaceId, projectId, ...input });
-    } else {
-      update.mutate({ workspaceId, projectId, monitorId: monitor.id, ...input });
-    }
-  };
-  const pagesWithComponents = project.pages.filter(entry => entry.components.length > 0);
-
+function HeartbeatFields({ fields, set }: { fields: Fields; set: (patch: Partial<Fields>) => void }) {
   return (
-    <form
-      aria-label={monitor === undefined ? 'New monitor' : `Edit ${monitor.name}`}
-      className="flex max-w-2xl flex-col gap-4 rounded-xl border border-border p-4"
-      onSubmit={event => {
-        event.preventDefault();
-        const parsed = parseFields(fields);
-        setIssue(parsed.success ? null : firstIssue(parsed.error));
-        if (parsed.success) {
-          submit(parsed.data);
-        }
-      }}>
-      <h3 className="text-sm font-medium">{monitor === undefined ? 'New monitor' : `Edit ${monitor.name}`}</h3>
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-4">
-        <label className={`${labelClass} min-w-64 flex-1`}>
-          Name
-          <input
-            className={inputClass}
-            placeholder="API health"
-            value={fields.name}
-            maxLength={120}
-            onChange={event => {
-              set({ name: event.target.value });
-            }}
-          />
-        </label>
-        <label className={labelClass} htmlFor={`${id}-kind`}>
-          Check
-          <select
-            id={`${id}-kind`}
-            className={inputClass}
-            value={fields.kind}
-            onChange={event => {
-              const parsed = kindSchema.safeParse(event.target.value);
-              if (parsed.success) {
-                set({ kind: parsed.data });
-              }
-            }}>
-            <option value={MonitorKinds.http}>HTTP</option>
-            <option value={MonitorKinds.tcp}>TCP</option>
-          </select>
-        </label>
+        <NumberField
+          label="Expected every (min)"
+          value={fields.periodMinutes}
+          min={HeartbeatLimits.minPeriodSeconds / 60}
+          max={HeartbeatLimits.maxPeriodSeconds / 60}
+          hint="How often the job runs."
+          onChange={value => {
+            set({ periodMinutes: value });
+          }}
+        />
+        <NumberField
+          label="Grace (min)"
+          value={fields.graceMinutes}
+          min={HeartbeatLimits.minGraceSeconds / 60}
+          max={HeartbeatLimits.maxGraceSeconds / 60}
+          hint="How late a ping may be."
+          onChange={value => {
+            set({ graceMinutes: value });
+          }}
+        />
       </div>
-      {fields.kind === MonitorKinds.http ? (
-        <HttpFields fields={fields} set={set} />
-      ) : (
-        <TcpFields fields={fields} set={set} />
-      )}
+      <p className="max-w-prose text-xs text-muted-foreground">
+        The job pings Mocco when it finishes. With no ping for the period plus the grace, or a ping that reports a
+        failure, the monitor is down at once; the next successful ping brings it back up.
+      </p>
+    </div>
+  );
+}
+
+/** The kinds a monitor may be: any for a new one; an existing one stays a heartbeat or a probe check. */
+function kindsFor(monitor: Monitor | undefined): MonitorKind[] {
+  const probes = [MonitorKinds.http, MonitorKinds.tcp];
+  if (monitor === undefined) {
+    return [...probes, MonitorKinds.heartbeat];
+  }
+  return monitor.kind === MonitorKinds.heartbeat ? [MonitorKinds.heartbeat] : probes;
+}
+
+const kindLabels: Readonly<Record<MonitorKind, string>> = {
+  [MonitorKinds.http]: 'HTTP',
+  [MonitorKinds.tcp]: 'TCP',
+  [MonitorKinds.heartbeat]: 'Heartbeat',
+};
+
+/** A probe monitor's timeout, interval, confirmations, locations and quorum. */
+function ProbeSettings({
+  workspaceId,
+  fields,
+  set,
+}: {
+  workspaceId: string;
+  fields: Fields;
+  set: (patch: Partial<Fields>) => void;
+}) {
+  const locationsQuery = trpc.status.locations.useQuery({ workspaceId });
+  return (
+    <>
       <div className="flex flex-wrap gap-4">
         <NumberField
           label="Timeout (s)"
@@ -542,6 +549,105 @@ export default function MonitorForm({ workspaceId, projectId, monitor, onDone }:
           don&apos;t count.
         </span>
       </label>
+    </>
+  );
+}
+
+export default function MonitorForm({ workspaceId, projectId, monitor, onDone }: Props) {
+  const id = useId();
+  const utils = trpc.useUtils();
+  const [fields, setFields] = useState<Fields>(() => fieldsOf(monitor));
+  const [issue, setIssue] = useState<string | null>(null);
+  /** A new heartbeat's ping URL, shown once before the form closes. */
+  const [created, setCreated] = useState<{ name: string; token: string } | null>(null);
+  const set = (patch: Partial<Fields>) => {
+    setFields(current => ({ ...current, ...patch }));
+    setIssue(null);
+  };
+  const project = useProjectComponents(workspaceId, projectId);
+  const refresh = async () => {
+    await Promise.all([utils.status.monitors.invalidate(), utils.status.monitor.invalidate()]);
+  };
+  const onSuccess = async () => {
+    await refresh();
+    onDone();
+  };
+  const create = trpc.status.createMonitor.useMutation({
+    onSuccess: async result => {
+      await refresh();
+      if (result.heartbeatToken === null) {
+        onDone();
+      } else {
+        setCreated({ name: result.monitor.name, token: result.heartbeatToken });
+      }
+    },
+  });
+  const update = trpc.status.updateMonitor.useMutation({ onSuccess });
+  const save = monitor === undefined ? create : update;
+  const submit = (input: MonitorInput) => {
+    if (monitor === undefined) {
+      create.mutate({ workspaceId, projectId, ...input });
+    } else {
+      update.mutate({ workspaceId, projectId, monitorId: monitor.id, ...input });
+    }
+  };
+  const pagesWithComponents = project.pages.filter(entry => entry.components.length > 0);
+  const isHeartbeat = fields.kind === MonitorKinds.heartbeat;
+
+  if (created !== null) {
+    return <HeartbeatPingOnce name={created.name} token={created.token} onDone={onDone} />;
+  }
+
+  return (
+    <form
+      aria-label={monitor === undefined ? 'New monitor' : `Edit ${monitor.name}`}
+      className="flex max-w-2xl flex-col gap-4 rounded-xl border border-border p-4"
+      onSubmit={event => {
+        event.preventDefault();
+        const parsed = parseFields(fields);
+        setIssue(parsed.success ? null : firstIssue(parsed.error));
+        if (parsed.success) {
+          submit(parsed.data);
+        }
+      }}>
+      <h3 className="text-sm font-medium">{monitor === undefined ? 'New monitor' : `Edit ${monitor.name}`}</h3>
+      <div className="flex flex-wrap gap-4">
+        <label className={`${labelClass} min-w-64 flex-1`}>
+          Name
+          <input
+            className={inputClass}
+            placeholder="API health"
+            value={fields.name}
+            maxLength={120}
+            onChange={event => {
+              set({ name: event.target.value });
+            }}
+          />
+        </label>
+        <label className={labelClass} htmlFor={`${id}-kind`}>
+          Check
+          <select
+            id={`${id}-kind`}
+            className={inputClass}
+            value={fields.kind}
+            onChange={event => {
+              const parsed = kindSchema.safeParse(event.target.value);
+              if (parsed.success) {
+                set({ kind: parsed.data });
+              }
+            }}>
+            {kindsFor(monitor).map(kind => (
+              <option key={kind} value={kind}>
+                {kindLabels[kind]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {fields.kind === MonitorKinds.http ? <HttpFields fields={fields} set={set} /> : null}
+      {fields.kind === MonitorKinds.tcp ? <TcpFields fields={fields} set={set} /> : null}
+      {isHeartbeat ? <HeartbeatFields fields={fields} set={set} /> : null}
+      {isHeartbeat ? null : <ProbeSettings workspaceId={workspaceId} fields={fields} set={set} />}
       {project.isPending ? <Spinner /> : null}
       {!project.isPending && pagesWithComponents.length === 0 ? (
         <p className="text-sm text-muted-foreground">
