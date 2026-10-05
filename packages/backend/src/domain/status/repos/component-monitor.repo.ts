@@ -26,6 +26,11 @@ export class ComponentMonitorRepo {
       .where(and(eq(cm.workspaceId, workspaceId), inArray(cm.monitorId, [...monitorIds])));
   }
 
+  /** Every workspace's links. System-wide, for the rollup job. */
+  async listAll(): Promise<ComponentMonitorRow[]> {
+    return await this.db.select().from(cm);
+  }
+
   /** The current state of every monitor linked to a page's components, one row per link. */
   async monitorStatesForPage(scope: StatusScope, pageId: string) {
     return await this.db

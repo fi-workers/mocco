@@ -1,5 +1,5 @@
 import { IncidentStatuses, IncidentVisibilities } from '@mocco/common/status';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lt, ne, or } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -44,6 +44,28 @@ export class IncidentComponentRepo {
         .insert(ic)
         .values([...byId].map(([componentId, impact]) => ({ workspaceId, incidentId, componentId, impact })));
     }
+  }
+
+  /** The impacts published incidents open some time in `[from, to)` put on their components.
+   * Drafts never reach the public page, so they are left out. System-wide, for the rollup job. */
+  async publishedOpenBetween(from: Date, to: Date) {
+    return await this.db
+      .select({
+        componentId: ic.componentId,
+        incidentId: ic.incidentId,
+        impact: ic.impact,
+        startedAt: i.startedAt,
+        resolvedAt: i.resolvedAt,
+      })
+      .from(ic)
+      .innerJoin(i, and(eq(i.id, ic.incidentId), eq(i.workspaceId, ic.workspaceId)))
+      .where(
+        and(
+          eq(i.visibility, IncidentVisibilities.published),
+          lt(i.startedAt, to),
+          or(isNull(i.resolvedAt), gt(i.resolvedAt, from)),
+        ),
+      );
   }
 
   /** The impacts unresolved incidents put on a page's components; `isPublishedOnly` leaves out drafts. */

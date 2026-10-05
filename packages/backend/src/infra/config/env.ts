@@ -108,6 +108,8 @@ const schema = z.object({
     .transform(value => value === 'true' || value === '1'),
   /** How many checks the embedded probe runs at once. */
   STATUS_PROBE_CONCURRENCY: z.coerce.number().int().min(1).max(200).default(20),
+  /** Days of raw status check results kept, today included; older days' partitions are dropped. */
+  STATUS_RAW_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(14),
 });
 
 export type Env = z.infer<typeof schema>;

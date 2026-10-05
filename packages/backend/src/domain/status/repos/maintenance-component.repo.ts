@@ -1,5 +1,5 @@
 import { MaintenanceStatuses } from '@mocco/common/status';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -51,6 +51,19 @@ export class MaintenanceComponentRepo {
       )
       .limit(1);
     return rows.length > 0;
+  }
+
+  /**
+   * The components under maintenance some time in `[from, to)`: one row per covered component of
+   * each window that actually ran then (`actual_start`, and `actual_end` or still in progress).
+   * A window canceled before it started never ran. System-wide, for the rollup job.
+   */
+  async ranBetween(from: Date, to: Date) {
+    return await this.db
+      .select({ componentId: mc.componentId, start: m.actualStart, end: m.actualEnd })
+      .from(mc)
+      .innerJoin(m, and(eq(m.id, mc.maintenanceId), eq(m.workspaceId, mc.workspaceId)))
+      .where(and(isNotNull(m.actualStart), lt(m.actualStart, to), or(isNull(m.actualEnd), gt(m.actualEnd, from))));
   }
 
   /** The page's components under a window in progress. */
