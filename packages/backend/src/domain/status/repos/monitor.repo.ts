@@ -1,5 +1,5 @@
 import { MonitorStates } from '@mocco/common/status';
-import { and, asc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { expectOne } from '@backend/infra/db/rows';
@@ -80,6 +80,44 @@ export class MonitorRepo {
       .limit(opts.limit);
   }
 
+  /** The monitors of `projectIds` that aren't paused: the ones a release of those projects watches. */
+  async listWatchable(workspaceId: string, projectIds: readonly string[]): Promise<MonitorRow[]> {
+    if (projectIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(m)
+      .where(
+        and(eq(m.workspaceId, workspaceId), inArray(m.projectId, [...projectIds]), ne(m.state, MonitorStates.paused)),
+      )
+      .orderBy(asc(m.id));
+  }
+
+  /**
+   * Start a deploy watch (under `lockForStateChange`): rounds before `watchUntil` run every
+   * `intervalSeconds`, from `nextRoundAt`. A watch that already runs longer (a newer release's) is
+   * kept; returns undefined then.
+   */
+  async startWatch(
+    scope: StatusScope,
+    id: string,
+    watch: { watchUntil: Date; intervalSeconds: number; runId: string; nextRoundAt: Date; at: Date },
+  ): Promise<MonitorRow | undefined> {
+    const [row] = await this.db
+      .update(m)
+      .set({
+        watchUntil: watch.watchUntil,
+        watchIntervalSeconds: watch.intervalSeconds,
+        watchRunId: watch.runId,
+        nextRoundAt: watch.nextRoundAt,
+        updatedAt: watch.at,
+      })
+      .where(and(scoped(scope), eq(m.id, id), or(isNull(m.watchUntil), lte(m.watchUntil, watch.watchUntil))))
+      .returning();
+    return row;
+  }
+
   /** Set the state, streaks and schedule (under `lockForStateChange`). */
   async setState(
     scope: StatusScope,
@@ -90,6 +128,10 @@ export class MonitorRepo {
       nextRoundAt?: Date;
       consecutiveFails?: number;
       consecutiveOks?: number;
+      /** Set all three to null when the deploy watch ends. */
+      watchUntil?: null;
+      watchIntervalSeconds?: null;
+      watchRunId?: null;
     },
     at: Date,
   ): Promise<MonitorRow> {

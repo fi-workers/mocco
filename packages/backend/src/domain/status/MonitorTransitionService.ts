@@ -8,17 +8,24 @@
 // while it recovers and resolved once it is up. After the commit the incident changes are
 // audited as the system, and one alert is published per change (`status.monitor.*`, deduped
 // on the state change id) for the notification rules to route.
+//
+// A `down` in a round of a deploy watch (#155) opens the incident with origin `deploy_watch` and
+// the watched run as `suspected_run_id`, and appends `status.post_deploy_check_failed` to that
+// run's timeline through the RunTimeline port. The run itself is never changed.
 import { AuditActions } from '@mocco/common/audit';
 import { StatusEventTypes } from '@mocco/common/events';
 import { Severities } from '@mocco/common/notification';
 import {
   COMPONENT_STATUS_RANK,
   ComponentImpacts,
+  DeployWatch,
+  IncidentOrigins,
   IncidentPolicies,
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
   MonitorStates,
+  StatusRunEventTypes,
 } from '@mocco/common/status';
 import { z } from 'zod';
 
@@ -37,6 +44,7 @@ import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
 import type { AuditRecordInput, AuditService } from '@backend/domain/audit/AuditService';
 import type { PublishInput } from '@backend/domain/events/EventBus';
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { RunTimeline } from '@backend/domain/status/ports';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
@@ -55,6 +63,8 @@ export interface MonitorTransitionDeps {
   appOrigin?: string;
   /** Called after the monitor's incident is opened and audited (deploy correlation); must not throw. */
   onIncidentOpened?: (incident: IncidentRow) => Promise<void>;
+  /** Where a failure during a deploy watch is added to the run's timeline; without it, it isn't. */
+  runTimeline?: RunTimeline;
   now?: () => Date;
 }
 
@@ -141,11 +151,41 @@ function incidentPageOf(links: readonly MonitorLink[]): string | undefined {
 
 const subject = (incidentId: string) => ({ subjectType: 'status_incident', subjectId: incidentId });
 
+/** A failure inside a deploy watch: the run watched, and how long after its release the round was. */
+interface WatchFailure {
+  runId: string;
+  minutesAfterRelease: number;
+}
+
+/** The deploy watch a `down` change happened in, if any: its round started before `watch_until`.
+ * `monitor` is the row as the evaluator left it, which keeps the watch for a watched round. */
+// eslint-disable-next-line sonarjs/function-return-type -- undefined is the "not in a watch" answer
+function watchFailureOf(monitor: MonitorRow, change: MonitorStateChangeRow): WatchFailure | undefined {
+  const { watchRunId, watchUntil } = monitor;
+  if (
+    change.toState !== MonitorStates.down ||
+    watchRunId === null ||
+    watchUntil === null ||
+    change.roundAt === null ||
+    change.roundAt >= watchUntil
+  ) {
+    return undefined;
+  }
+  // The watch runs for `durationMs` from the release (DeployWatchService).
+  const releasedAt = watchUntil.getTime() - DeployWatch.durationMs;
+  return {
+    runId: watchRunId,
+    minutesAfterRelease: Math.max(1, Math.ceil((change.roundAt.getTime() - releasedAt) / 60_000)),
+  };
+}
+
 interface Reaction {
   /** Audit entries for the incident changes, appended after the commit. */
   audits: AuditRecordInput[];
   /** The incident the monitor opened with this change, if it did. */
   opened?: IncidentRow;
+  /** The monitor's incident when the change is a failure during a deploy watch. */
+  watched?: { incident: IncidentRow; isOpened: boolean };
 }
 
 /** Post a system update to the monitor's incident, moving it to `step.status`. */
@@ -178,7 +218,7 @@ async function openMonitorIncident(
   tx: Db,
   touch: TouchPage,
   monitor: MonitorRow,
-  opts: { links: readonly MonitorLink[]; isDuringMaintenance: boolean; now: Date },
+  opts: { links: readonly MonitorLink[]; isDuringMaintenance: boolean; now: Date; watch: WatchFailure | undefined },
 ): Promise<Reaction> {
   const pageId = incidentPageOf(opts.links);
   if (pageId === undefined) {
@@ -207,13 +247,20 @@ async function openMonitorIncident(
     status: IncidentStatuses.investigating,
     visibility,
     startedAt: opts.now,
+    origin: opts.watch === undefined ? IncidentOrigins.monitor : IncidentOrigins.deployWatch,
+    suspectedRunId: opts.watch?.runId ?? null,
     createdByUserId: null,
   });
+  // The body may be public: it says a deploy came first, never which repo or run.
+  const opening =
+    opts.watch === undefined
+      ? `The monitor "${monitor.name}" is failing its checks.`
+      : `The monitor "${monitor.name}" started failing within ${String(opts.watch.minutesAfterRelease)} min of a deploy.`;
   await new IncidentUpdateRepo(tx).insert({
     workspaceId: scope.workspaceId,
     incidentId: incident.id,
     status: IncidentStatuses.investigating,
-    bodyMd: `The monitor "${monitor.name}" is failing its checks. We are looking into it.`,
+    bodyMd: `${opening} We are looking into it.`,
     authorUserId: null,
   });
   await new IncidentComponentRepo(tx).replace(scope.workspaceId, incident.id, components);
@@ -224,6 +271,7 @@ async function openMonitorIncident(
   });
   return {
     opened: incident,
+    ...(opts.watch !== undefined && { watched: { incident, isOpened: true } }),
     audits: [
       {
         actorUserId: null,
@@ -237,6 +285,8 @@ async function openMonitorIncident(
           visibility,
           components,
           monitorId: monitor.id,
+          origin: incident.origin,
+          ...(incident.suspectedRunId !== null && { suspectedRunId: incident.suspectedRunId }),
         },
       },
     ],
@@ -249,7 +299,7 @@ async function followIncident(
   touch: TouchPage,
   monitor: MonitorRow,
   change: MonitorStateChangeRow,
-  opts: { links: readonly MonitorLink[]; isDuringMaintenance: boolean; now: Date },
+  opts: { links: readonly MonitorLink[]; isDuringMaintenance: boolean; now: Date; watch: WatchFailure | undefined },
 ): Promise<Reaction> {
   const incidentMonitors = new IncidentMonitorRepo(tx);
   const found = await incidentMonitors.findOpen(monitor.workspaceId, monitor.id);
@@ -263,15 +313,18 @@ async function followIncident(
       ? await openMonitorIncident(tx, touch, monitor, opts)
       : { audits: [] };
   }
+  // An outage that began before the deploy keeps its incident (it isn't re-attributed), but the
+  // run's timeline still shows that the check failed during its watch.
+  const watched = opts.watch === undefined ? {} : { watched: { incident: open, isOpened: false } };
   const step = incidentStepOf(change.toState, open.status);
   if (step === undefined) {
-    return { audits: [] };
+    return { audits: [], ...watched };
   }
   const audit = await postSystemUpdate(tx, touch, open, { ...step, monitorId: monitor.id, now: opts.now });
   if (step.status === IncidentStatuses.resolved) {
     await incidentMonitors.close(monitor.workspaceId, open.id, monitor.id, opts.now);
   }
-  return { audits: [audit] };
+  return { audits: [audit], ...watched };
 }
 
 /** The event for a change's alert: a rendered message, with the facts rules filter on. */
@@ -331,6 +384,38 @@ export class MonitorTransitionService {
     return this.deps.now?.() ?? new Date();
   }
 
+  /** Add the failure to the watched run's timeline, with the monitor's incident when there is one
+   * (`incident_policy` `none` opens none). Best-effort, like an alert: the change stands. */
+  private async appendWatchFailure(
+    monitor: MonitorRow,
+    watch: WatchFailure,
+    watched: { incident: IncidentRow; isOpened: boolean } | undefined,
+  ): Promise<void> {
+    const incident = watched?.incident;
+    const statusPath = `/workspaces/${monitor.workspaceId}/p/${monitor.projectId}/status`;
+    try {
+      await this.deps.runTimeline?.append(monitor.workspaceId, watch.runId, {
+        type: StatusRunEventTypes.postDeployCheckFailed,
+        payload: {
+          monitorId: monitor.id,
+          monitorName: monitor.name,
+          projectId: monitor.projectId,
+          incidentId: incident?.id ?? null,
+          incidentTitle: incident?.title ?? null,
+          incidentOpened: watched?.isOpened ?? false,
+          minutesAfterRelease: watch.minutesAfterRelease,
+          linkPath: incident === undefined ? statusPath : `${statusPath}/incidents/${incident.id}`,
+        },
+      });
+    } catch (error) {
+      console.error('[status] adding a post-deploy check failure to the run timeline failed', {
+        monitorId: monitor.id,
+        runId: watch.runId,
+        error,
+      });
+    }
+  }
+
   /** React to a committed state change of `monitor` (the row as the evaluator left it). */
   async react(monitor: MonitorRow, change: MonitorStateChangeRow): Promise<void> {
     const now = this.now();
@@ -340,6 +425,7 @@ export class MonitorTransitionService {
       scope.workspaceId,
       links.map(link => link.componentId),
     );
+    const watch = watchFailureOf(monitor, change);
     const reaction = await this.deps.snapshots.change(async (tx, touch) => {
       const current = await new MonitorRepo(tx).lockForStateChange(scope, monitor.id);
       if (current === undefined) {
@@ -351,7 +437,7 @@ export class MonitorTransitionService {
           monitorImpact(change.fromState, link.impactWhenDown) !== monitorImpact(change.toState, link.impactWhenDown),
       );
       touch(...shows.map(link => ({ workspaceId: scope.workspaceId, pageId: link.pageId })));
-      return await followIncident(tx, touch, current, change, { links, isDuringMaintenance, now });
+      return await followIncident(tx, touch, current, change, { links, isDuringMaintenance, now, watch });
     });
     // One at a time: each append extends the workspace's hash chain.
     await reaction.audits.reduce(async (previous, entry) => {
@@ -360,6 +446,9 @@ export class MonitorTransitionService {
     }, Promise.resolve());
     if (reaction.opened !== undefined) {
       await this.deps.onIncidentOpened?.(reaction.opened);
+    }
+    if (watch !== undefined) {
+      await this.appendWatchFailure(monitor, watch, reaction.watched);
     }
     const type = alertOf(change.fromState, change.toState);
     const { events } = this.deps;

@@ -32,6 +32,7 @@ import {
   CheckOutcomes,
   ComponentImpacts,
   ComponentStatuses,
+  IncidentOrigins,
   IncidentPolicies,
   IncidentRunRelations,
   IncidentSeverities,
@@ -132,6 +133,7 @@ import type {
   ComponentStatus,
   IncidentPolicy,
   IncidentRunRelation,
+  IncidentOrigin,
   IncidentSeverity,
   IncidentStatus,
   IncidentVisibility,
@@ -3320,6 +3322,9 @@ export const statusIncidents = pgTable(
     identifiedAt: timestamp('identified_at'),
     resolvedAt: timestamp('resolved_at'),
     postmortemMd: text('postmortem_md'),
+    origin: text().$type<IncidentOrigin>().notNull().default(IncidentOrigins.manual),
+    // The run whose deploy watch opened it (origin `deploy_watch`). SET NULL: the incident outlives the run.
+    suspectedRunId: uuid('suspected_run_id').references(() => runs.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3342,6 +3347,7 @@ export const statusIncidents = pgTable(
       'mocco_status_incidents_visibility_check',
       sql`${t.visibility} IN (${sqlInList(Object.values(IncidentVisibilities))})`,
     ),
+    check('mocco_status_incidents_origin_check', sql`${t.origin} IN (${sqlInList(Object.values(IncidentOrigins))})`),
     check(
       'mocco_status_incidents_resolved_check',
       sql`(${t.status} IN (${sqlInList([IncidentStatuses.resolved])})) = (${t.resolvedAt} IS NOT NULL)`,
@@ -3560,6 +3566,11 @@ export const statusMonitors = pgTable(
     consecutiveOks: integer('consecutive_oks').notNull().default(0),
     /** What going down does to the page: no incident, a draft one, or a published one. */
     incidentPolicy: text('incident_policy').$type<IncidentPolicy>().notNull().default(IncidentPolicies.draft),
+    /** The deploy watch (#155): rounds before `watch_until` run every `watch_interval_s` seconds, for
+     * the release of `watch_run_id`. The evaluator clears all three once a round reaches `watch_until`. */
+    watchUntil: timestamp('watch_until'),
+    watchIntervalSeconds: integer('watch_interval_s'),
+    watchRunId: uuid('watch_run_id').references(() => runs.id, { onDelete: 'set null' }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
@@ -3584,6 +3595,10 @@ export const statusMonitors = pgTable(
       sql`${t.quorumMode} IN (${sqlInList(Object.values(QuorumModes))})`,
     ),
     check('mocco_status_monitors_interval_check', sql`${t.intervalSeconds} >= 60`),
+    check(
+      'mocco_status_monitors_watch_check',
+      sql`(${t.watchUntil} IS NULL) = (${t.watchIntervalSeconds} IS NULL) AND (${t.watchIntervalSeconds} IS NULL OR ${t.watchIntervalSeconds} >= 30)`,
+    ),
     check(
       'mocco_status_monitors_incident_policy_check',
       sql`${t.incidentPolicy} IN (${sqlInList(Object.values(IncidentPolicies))})`,

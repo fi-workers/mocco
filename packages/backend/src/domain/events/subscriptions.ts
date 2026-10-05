@@ -10,6 +10,7 @@ import { EventBus } from '@backend/domain/events/EventBus';
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { registerNotificationSubscribers } from '@backend/domain/notification/subscribers';
 import { registerReleaseSubscribers } from '@backend/domain/project/subscribers';
+import { registerStatusSubscribers } from '@backend/domain/status/subscribers';
 
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -28,5 +29,6 @@ export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   // Register each subscriber here under a stable name.
   registerNotificationSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin });
   registerReleaseSubscribers(bus, { db: deps.db });
+  registerStatusSubscribers(bus, { db: deps.db, now: deps.now });
   return bus;
 }
