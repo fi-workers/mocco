@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import DocContent from '@frontend/components/doc-content';
 import { useEditorImages } from '@frontend/components/help/editor-images';
+import HelpfulnessPanel from '@frontend/components/help/helpfulness-panel';
 import TranslationsPanel from '@frontend/components/help/translations-panel';
 import {
   Ago,
@@ -331,6 +332,9 @@ export default function ArticleEditor({ workspaceId, projectId, articleId }: Pro
         articleId={articleId}
         source={article.published === null ? null : { title: article.published.title, body: article.published.body }}
       />
+      {article.published === null ? null : (
+        <HelpfulnessPanel workspaceId={workspaceId} projectId={projectId} articleId={articleId} />
+      )}
       <History
         workspaceId={workspaceId}
         projectId={projectId}

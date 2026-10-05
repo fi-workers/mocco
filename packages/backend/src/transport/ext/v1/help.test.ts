@@ -9,11 +9,12 @@ import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { HELP_FEEDBACK_RATE_LIMIT } from '@backend/domain/helpcenter/HelpFeedbackService';
 import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
 import { expectOne } from '@backend/infra/db/rows';
-import { users, workspaces } from '@backend/infra/db/schema';
+import { helpFeedback, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 
@@ -30,6 +31,7 @@ describe('/v1/help (pglite)', () => {
   let t: TestDb;
   let app: Hono<V1Env>;
   let help: HelpDomain;
+  let clock: Date;
   let projects: ReturnType<typeof createProjectDomain>['projects'];
   let workspaceId: string;
   let userId: string;
@@ -49,6 +51,21 @@ describe('/v1/help (pglite)', () => {
       etag: response.headers.get('etag'),
       body: (text === '' ? undefined : JSON.parse(text)) as Record<string, unknown> | undefined,
     };
+  };
+
+  const answer = async (key: string | undefined, ref: string, body: unknown, headers?: Record<string, string>) => {
+    const response = await app.fetch(
+      new Request(`${BASE}/articles/${ref}/feedback`, {
+        method: 'POST',
+        headers: {
+          ...(key !== undefined && { authorization: `Bearer ${key}` }),
+          'content-type': 'application/json',
+          ...(headers ?? { 'x-forwarded-for': '203.0.113.7', 'user-agent': 'Phone/1' }),
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };
 
   /** A published article (and a draft-only and an unpublished one) in `project`'s help center. */
@@ -84,7 +101,8 @@ describe('/v1/help (pglite)', () => {
   beforeEach(async () => {
     t = await createTestDb();
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
-    help = createHelpDomain(t.db, { audit });
+    clock = new Date('2026-10-05T10:00:00Z');
+    help = createHelpDomain(t.db, { audit, feedbackSecret: () => 'test-feedback-secret', now: () => clock });
     ({ projects } = createProjectDomain(t.db));
     const apiKeys = createApiKeyService(t.db, { projects, audit });
     const memory = new MemoryRateLimiter(() => new Date('2026-10-02T10:00:30Z'));
@@ -101,6 +119,7 @@ describe('/v1/help (pglite)', () => {
         limiter,
         help: {
           help: help.helpPublic,
+          feedback: help.helpFeedback,
           originOf: slug => helpSiteOrigin(slug, { HELP_CUSTOM_DOMAINS: 'help.showyourti.me=syt' }),
         },
       }),
@@ -314,6 +333,100 @@ describe('/v1/help (pglite)', () => {
 
       expect(statuses).toEqual([404, 404, 400]);
       expect(JSON.stringify(site.body)).not.toMatch(/준비 중|예전 글/u);
+    });
+  });
+
+  describe('was this helpful?', () => {
+    it('counts one answer per visitor, article and day; a later answer that day replaces the earlier', async () => {
+      const { widget } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const first = await answer(key, widget.shortId, { helpful: false, visitorId: 'visitor-aaaa', locale: 'en-US' });
+      const changed = await answer(key, widget.shortId, {
+        helpful: true,
+        visitorId: 'visitor-aaaa',
+        comment: ' Clear ',
+      });
+      const someoneElse = await answer(key, `${widget.shortId}-widget`, { helpful: false, visitorId: 'visitor-bbbb' });
+      clock = new Date('2026-10-06T09:00:00Z');
+      const nextDay = await answer(key, widget.shortId, { helpful: true, visitorId: 'visitor-aaaa' });
+
+      expect([first, changed, someoneElse, nextDay].map(({ status, body }) => [status, body.counted])).toEqual([
+        [201, true],
+        [201, false],
+        [201, true],
+        [201, true],
+      ]);
+      expect(await help.helpFeedback.helpfulness(workspaceId, projectId, widget.id)).toEqual({
+        days: 30,
+        helpful: 2,
+        notHelpful: 1,
+        comments: [{ helpful: true, comment: 'Clear', locale: 'ko', createdAt: new Date('2026-10-05T10:00:00Z') }],
+      });
+    });
+
+    it('without a visitor id, counts an address and user agent once a day, and stores neither', async () => {
+      const { widget } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+      const phone = { 'x-forwarded-for': '203.0.113.7', 'user-agent': 'Phone/1' };
+
+      const once = await answer(key, widget.shortId, { helpful: true }, phone);
+      const again = await answer(key, widget.shortId, { helpful: true }, phone);
+      const otherDevice = await answer(key, widget.shortId, { helpful: true }, { ...phone, 'user-agent': 'Tablet/2' });
+      clock = new Date('2026-10-06T09:00:00Z');
+      const tomorrow = await answer(key, widget.shortId, { helpful: true }, phone);
+      const stored = await t.db.select().from(helpFeedback);
+
+      expect([once, again, otherDevice, tomorrow].map(({ body }) => body.counted)).toEqual([true, false, true, true]);
+      expect(JSON.stringify(stored)).not.toMatch(/203\.0\.113|Phone|Tablet/u);
+      expect(stored.map(row => row.locale)).toEqual(['ko', 'ko', 'ko']);
+    });
+
+    it('takes answers only on published articles of the key’s project, with help:read', async () => {
+      const { widget, draft, pulled } = await publish();
+      await publish(otherProjectId, 'other');
+      const key = await keyFor([ApiScopes.helpRead]);
+      const other = await keyFor([ApiScopes.helpRead], otherProjectId);
+      const withoutScope = await keyFor([ApiScopes.messengerChat]);
+      const yes = { helpful: true, visitorId: 'visitor-aaaa' };
+
+      const statuses = await Promise.all(
+        [
+          answer(key, draft.shortId, yes),
+          answer(key, pulled.shortId, yes),
+          answer(other, widget.shortId, yes),
+          answer(undefined, widget.shortId, yes),
+          answer(withoutScope, widget.shortId, yes),
+          answer(key, widget.shortId, { helpful: 'yes' }),
+          answer(key, widget.shortId, { helpful: true, comment: 'x'.repeat(501) }),
+        ].map(async pending => {
+          const response = await pending;
+          return response.status;
+        }),
+      );
+
+      expect(statuses).toEqual([404, 404, 404, 401, 403, 400, 400]);
+      expect(await t.db.select().from(helpFeedback)).toEqual([]);
+    });
+
+    it('limits answers per client address', async () => {
+      const { widget } = await publish();
+      const key = await keyFor([ApiScopes.helpRead]);
+
+      const statuses: number[] = [];
+      for (let index = 0; index <= HELP_FEEDBACK_RATE_LIMIT.limit; index += 1) {
+        // eslint-disable-next-line no-await-in-loop -- sequential, to count the limit exactly
+        const response = await answer(key, widget.shortId, { helpful: true, visitorId: `visitor-${index}-xxxx` });
+        statuses.push(response.status);
+      }
+      const elsewhere = await answer(
+        key,
+        widget.shortId,
+        { helpful: true, visitorId: 'visitor-zzzz' },
+        { 'x-forwarded-for': '198.51.100.1' },
+      );
+
+      expect([statuses.at(-2), statuses.at(-1), elsewhere.status]).toEqual([201, 429, 201]);
     });
   });
 

@@ -119,6 +119,14 @@ Readers can search from the box at the top of every page. Every word they type h
 
 ![A published article on the public help site, with the article list and the language switcher](./images/public-article.png)
 
+Under every article, readers can answer **Was this article helpful?** with Yes or No, in their language. Changing their mind the same day replaces the first answer, so each reader counts once a day.
+
+![The end of a public article with "Was this article helpful?", Yes selected and a thank-you note](./images/helpful-widget.png)
+
+The article's page in Mocco shows what readers answered in the last 30 days: the share of Yes, the counts, and the newest comments sent from your app. Use it to find articles that need work.
+
+![The Was this helpful? section of an article in Mocco: 67% helpful, 4 yes and 2 no, and a comment](./images/helpfulness.png)
+
 ## Suggest articles in your app
 
 Your app can search the help center too, for example to show related articles while someone writes to you, so they may find the answer before they send. Create a **Publishable** key with the **help:read** scope on the **API keys** page (an app that already uses Messenger can add the scope to its key). Then, in React Native:
@@ -153,3 +161,11 @@ const article = await help.getArticle(site.collections[0].sections[0].articles[0
 ```
 
 Pass the device's language as it comes (`en-GB` counts as English). An article that isn't translated into it yet arrives in your own language, and `article.locale` says which language you got. Only published articles are there: a draft, or an article you unpublish, answers `null`. On the web, add your site's address to the **Web origins** of the project's web app ([Workspaces and projects](../start/workspace-and-projects.md)) so the browser may call Mocco with the key.
+
+Ask "Was this helpful?" in the app too, with an optional comment that only your team sees. Give `createHelp` an id your app keeps for the install, so a reader counts once a day; Mocco stores only a scrambled form of it.
+
+```ts
+const help = createHelp({ publishableKey: 'mk_pub_…', visitorId: installId });
+
+await help.sendFeedback(article.id, { helpful: false, locale: article.locale, comment: 'Missing Android steps' });
+```

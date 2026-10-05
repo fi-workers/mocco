@@ -1,6 +1,8 @@
 import DocContent from '@frontend/components/doc-content';
 import HelpSiteLayout from '@frontend/components/help/help-site-layout';
+import HelpfulWidget from '@frontend/components/help/helpful-widget';
 import { HELP_REVALIDATE_SECONDS, loadHelpArticle, loadHelpNav } from '@frontend/lib/help-site';
+import { wordsFor } from '@frontend/lib/help-site-words';
 import { helpArticleCard } from '@frontend/lib/og-card';
 import { breadcrumbLd, helpArticleLd } from '@frontend/lib/seo';
 
@@ -11,6 +13,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 interface Props {
   nav: HelpSiteNav;
   article: {
+    shortId: string;
     title: string;
     canonicalPath: string;
     description: string;
@@ -57,6 +60,7 @@ export const getStaticProps: GetStaticProps<Props> = async ({ params }) => {
       card,
       nav,
       article: {
+        shortId: article.shortId,
         title: article.title,
         canonicalPath: article.canonicalPath,
         description: article.description,
@@ -102,6 +106,7 @@ export default function HelpArticlePage({ nav, article, card }: Props) {
       <article className="flex max-w-3xl flex-col gap-4">
         <h1 className="text-3xl font-semibold tracking-tight">{article.title}</h1>
         <DocContent blocks={article.blocks} />
+        <HelpfulWidget site={nav.slug} article={article.shortId} locale={nav.locale} words={wordsFor(nav.locale)} />
       </article>
     </HelpSiteLayout>
   );

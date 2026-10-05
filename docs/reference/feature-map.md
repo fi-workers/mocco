@@ -123,6 +123,7 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 | Custom domains | Live | `HELP_CUSTOM_DOMAINS` (`help.example.com=<slug>`) serves a site on the customer's domain; adding the domain is a deployment step for now |
 | Console editor | Live | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, autosave, pasted, dropped or picked images (public objects in storage, PNG/JPEG/WebP/GIF up to 10 MB), publish and history ([customer guide](../customer/help/help-center.md)) |
 | App API and SDK | Live | `GET /v1/help/site`, `/collections/{slug}`, `/articles/{id}` and `/search` with a `help:read` key (publishable allowed), language-negotiated with ETags; `HelpClient` in `@mocco/js` and `@mocco/react-native/messenger` ([public API](./public-api.md)) |
+| Was this helpful? | Live | Yes/no and an optional comment under each published article, from the public site's widget and `POST /v1/help/articles/{id}/feedback` (`sendFeedback`); one answer per visitor, article and day under a keyed hash; the article editor shows the last 30 days |
 
 ### Status page (#103)
 

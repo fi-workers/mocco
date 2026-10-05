@@ -82,11 +82,47 @@ function localeParams(opts: HelpReadOptions): URLSearchParams {
   return new URLSearchParams(opts.locale === undefined ? {} : { locale: opts.locale });
 }
 
+/** "Was this helpful?" (`POST /v1/help/articles/:id/feedback`). */
+export interface HelpFeedback {
+  helpful: boolean;
+  /** The language the reader read the article in. */
+  locale?: string;
+  /** Up to 500 characters, seen only by your team. */
+  comment?: string;
+}
+
+/** What the feedback route sends: the answer and the reader's visitor id. */
+export interface HelpFeedbackRequest extends HelpFeedback {
+  visitorId?: string;
+}
+
+/** `counted` is false when this reader already answered today (the new answer replaced it). */
+export interface HelpFeedbackResult {
+  counted: boolean;
+}
+
 export interface HelpClientOptions {
   /** A key with help:read (`mk_pub_…` in an app). */
   publishableKey: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+  /**
+   * An opaque id for this reader (8–64 letters, digits, `-` or `_`) that the app keeps, such
+   * as an install id: Mocco counts one answer per reader, article and day, and stores only a
+   * hash of it. Without one, the client makes a random id that lasts as long as it does.
+   */
+  visitorId?: string;
+}
+
+/** A random visitor id for a client without one (crypto when available). */
+function randomVisitorId(): string {
+  // Feature-detected: not every React Native runtime has Web Crypto.
+  const webCrypto = Reflect.get(globalThis, 'crypto') as { randomUUID?: () => string } | undefined;
+  if (webCrypto?.randomUUID !== undefined) {
+    return webCrypto.randomUUID();
+  }
+  // eslint-disable-next-line sonarjs/pseudo-random -- a visitor id for counting votes, not a secret
+  return `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 export class HelpClient {
@@ -94,19 +130,33 @@ export class HelpClient {
 
   private readonly fetchImpl: typeof fetch;
 
+  private readonly visitorId: string;
+
   constructor(private readonly options: HelpClientOptions) {
     this.baseUrl = `${withoutTrailingSlashes(options.baseUrl ?? DEFAULT_BASE_URL)}/help`;
     this.fetchImpl = options.fetch ?? fetch.bind(globalThis);
+    this.visitorId = options.visitorId ?? randomVisitorId();
   }
 
-  /** GET a /v1/help path; null for a 404 when `missing` allows it. */
-  private async get<T>(path: string, params: URLSearchParams, missing: 'null' | 'throw' = 'throw'): Promise<T | null> {
+  /** Call a /v1/help path (a GET, or a POST with `body`); null for a 404 when `missing` allows it. */
+  private async get<T>(
+    path: string,
+    params: URLSearchParams,
+    missing: 'null' | 'throw' = 'throw',
+    body?: unknown,
+  ): Promise<T | null> {
     const query = params.toString();
     const url = query === '' ? `${this.baseUrl}${path}` : `${this.baseUrl}${path}?${query}`;
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
-        headers: { authorization: `Bearer ${this.options.publishableKey}`, accept: 'application/json' },
+        method: body === undefined ? 'GET' : 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.publishableKey}`,
+          accept: 'application/json',
+          ...(body !== undefined && { 'content-type': 'application/json' }),
+        },
+        ...(body !== undefined && { body: JSON.stringify(body) }),
       });
     } catch (error) {
       throw new MoccoNetworkError(`Couldn't reach Mocco at ${this.baseUrl}`, { cause: error });
@@ -177,5 +227,20 @@ export class HelpClient {
    */
   async getArticle(id: string, opts: HelpReadOptions = {}): Promise<HelpArticle | null> {
     return await this.get<HelpArticle>(`/articles/${encodeURIComponent(id)}`, localeParams(opts), 'null');
+  }
+
+  /**
+   * "Was this helpful?" for a published article. One answer per reader, article and day
+   * is counted; answering again the same day replaces it (`counted: false`). Not retried.
+   */
+  async sendFeedback(id: string, feedback: HelpFeedback): Promise<HelpFeedbackResult> {
+    const request: HelpFeedbackRequest = { ...feedback, visitorId: this.visitorId };
+    const result = await this.get<HelpFeedbackResult>(
+      `/articles/${encodeURIComponent(id)}/feedback`,
+      new URLSearchParams(),
+      'throw',
+      request,
+    );
+    return result ?? { counted: false };
   }
 }
