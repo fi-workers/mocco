@@ -4,7 +4,7 @@ description: Projects below workspaces (apps, linked repos), per-workspace produ
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [reference, project, product, schema, tenancy]
@@ -72,4 +72,4 @@ These map the project domain's errors. A product router composes them and maps i
 
 - Product enablement is open to any member; owner/admin restriction lands with billing.
 - No UI yet (the multi-product app shell is a separate slice).
-- `mocco_releases` (version ↔ run) lands with the domain-events slice.
+- `mocco_releases` records runs released to production ([release registry](./releases.md)); versions, apps and OTA or store sources are not recorded yet.

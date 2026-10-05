@@ -21,6 +21,7 @@ import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { createFakeDiscordFetch, jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
 import { OtaJobKinds } from '@backend/domain/ota/jobs';
+import { ReleaseJobKinds } from '@backend/domain/project/jobs';
 import { RateLimitJobKinds } from '@backend/domain/ratelimit/jobs';
 import { StatusJobKinds } from '@backend/domain/status/jobs';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
@@ -65,7 +66,7 @@ describe('job runtime composition (pglite)', () => {
 
     const report = await runner.tick({ budgetMs: 10_000, maxJobs: 20 });
 
-    expect(report).toMatchObject({ ran: 18, errors: [], outcomes: { succeeded: 18 } });
+    expect(report).toMatchObject({ ran: 19, errors: [], outcomes: { succeeded: 19 } });
     const schedules = await t.db.select().from(jobSchedules);
     expect(new Set(schedules.map(schedule => schedule.kind))).toEqual(
       new Set([
@@ -77,6 +78,7 @@ describe('job runtime composition (pglite)', () => {
         InboundJobKinds.prune,
         StorageJobKinds.gc,
         RateLimitJobKinds.prune,
+        ReleaseJobKinds.reconcile,
         OtaJobKinds.pruneUploadSessions,
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,

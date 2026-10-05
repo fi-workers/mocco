@@ -54,6 +54,8 @@ import { SigningCertificateRepo } from '@backend/domain/ota/repos/signing-certif
 import { UploadSessionRepo } from '@backend/domain/ota/repos/upload-session.repo';
 import { SigningService } from '@backend/domain/ota/SigningService';
 import { UploadService } from '@backend/domain/ota/UploadService';
+import { createReleaseService } from '@backend/domain/project/compose';
+import { createReleaseHandlers, reconcileReleasesSchedule } from '@backend/domain/project/jobs';
 import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain/ratelimit/jobs';
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
 import { createSnapshotService, createStatusDomain } from '@backend/domain/status/compose';
@@ -167,6 +169,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       }),
     }),
     ...createRateLimitHandlers({ counters: new RateLimitCounterRepo(db) }),
+    ...createReleaseHandlers({ releases: createReleaseService(db, { bus }) }),
     ...createStatusHandlers({
       maintenances: status.statusMaintenances,
       snapshots: createSnapshotService(db, { store: deps.storage?.store, queue, now: deps.now }),
@@ -199,6 +202,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       ...notificationSchedules,
       ...inboundSchedules,
       rateLimitPruneSchedule,
+      reconcileReleasesSchedule,
       pruneUploadSessionsSchedule,
       ...otaMetricsSchedules,
       ...flagSchedules,

@@ -14,6 +14,7 @@ related:
   - ./backend-conventions.md
   - ../superpowers/specs/2026-09-25-notification-relay-design.md
   - ./inbound.md
+  - ./releases.md
 code_refs:
   - packages/common/src/events.ts
   - packages/backend/src/domain/events/EventBus.ts
@@ -45,6 +46,7 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `gate.pending` | `RunService`, when a run pauses at a gate | `run_gate` / gate id |
 | `gate.resumed` | `GateService`, when the votes satisfy the gate | `run_gate` / gate id |
 | `gate.rejected` | `GateService`, on a reject vote | `run_gate` / gate id |
+| `deploy.released` | `ReleaseService`, when a succeeded run passed at least one resumed gate ([release registry](./releases.md)) | `run` / run id |
 | `sentry.*`, `vercel.*`, `github.*` (16 types) | `InboundService`, for a mapped webhook delivery | `inbound_receipt` / receipt id |
 | `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a change to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
 | `ota.emergency_launch.spike` | `OtaMetricsService` (the `ota.rollupMetrics` job), when a release's emergency launches today cross the threshold | `ota_update` / update id |
@@ -87,6 +89,16 @@ Every governance payload names its run so a notification can render without anot
 - Each governance event has the dedupe key `<type>:<subject id>` (`run.succeeded:<runId>`,
   `run.failed:<runId>`, `gate.pending:<gateId>`, `gate.resumed:<gateId>`, `gate.rejected:<gateId>`),
   so concurrent callbacks or votes that both reach a transition publish one event.
+
+### Release payload
+
+`deploy.released` carries the governance run payload plus `repoId`, `projectIds` (every project a
+release row was recorded for), `previousReleaseSha` (the repo's previous release commit, or null),
+`gates` (`{ gateId, name, resumedBy }[]`, the resumed gates in pipeline order), `resumedBy`
+(`{ userId, role | null }[]`, once per person and role) and `releasedAt` (ISO 8601). Its dedupe key
+is `deploy.released:<runId>` and its `occurredAt` is the run's finish time. It is published once per
+run, even when `run.succeeded` is redelivered, and the hourly `releases.reconcile` job publishes it
+for a release the event path missed. See [release registry](./releases.md).
 
 ### Extending the catalog
 
@@ -166,6 +178,9 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
   `status.*`
   (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
   the links in its messages.
+- The release registry (`registerReleaseSubscribers`, `domain/project/subscribers.ts`) as
+  `release.record` on `run.succeeded`: it records the run's releases and publishes
+  `deploy.released` ([release registry](./releases.md)).
 
 ## Delivery
 

@@ -435,6 +435,13 @@
       "when": 1791165980918,
       "tag": "0061_clumsy_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791169296258,
+      "tag": "0062_stiff_chamber",
+      "breakpoints": true
     }
   ]
 }
