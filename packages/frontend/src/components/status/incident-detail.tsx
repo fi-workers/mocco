@@ -1,11 +1,13 @@
 // One incident in the console (#148): post an update (offering only the status changes the
-// lifecycle allows), its timeline, the components it affects, and its postmortem.
+// lifecycle allows), its timeline, the components it affects, the deploys around it (#154),
+// and its postmortem.
 import { INCIDENT_TRANSITIONS, IncidentStatuses, incidentStatusSchema } from '@mocco/common/status';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
 import AffectedComponentsPicker from '@frontend/components/status/affected-components';
+import RecentDeploys from '@frontend/components/status/recent-deploys';
 import {
   ComponentStatusBadge,
   formatWhen,
@@ -283,6 +285,7 @@ function IncidentBody({ workspaceId, projectId, incidentId, data }: Props & { da
       ) : null}
       <Timeline updates={updates} />
       <AffectedComponents {...scope} affected={affected} components={pageQuery.data?.components ?? []} />
+      <RecentDeploys {...scope} />
       {/* Remount on a saved change so the editor starts from the saved text. */}
       <Postmortem
         key={incident.postmortemMd ?? ''}

@@ -2,6 +2,7 @@ import { RunStates, RunStepStatuses } from '@mocco/common/execution';
 import { ResumeDecisions } from '@mocco/common/governance';
 import { useState } from 'react';
 
+import RunIncidents from '@frontend/components/status/run-incidents';
 import { Button } from '@frontend/components/ui/button';
 import { useSession } from '@frontend/lib/auth-client';
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
@@ -314,6 +315,7 @@ export function RunDetail({ workspaceId, runId }: { workspaceId: string; runId: 
           viewerUserId={session?.user.id}
         />
       ) : null}
+      <RunIncidents workspaceId={workspaceId} runId={runId} />
     </div>
   );
 }

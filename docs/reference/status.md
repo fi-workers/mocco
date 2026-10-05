@@ -57,6 +57,8 @@ code_refs:
   - packages/frontend/src/components/status/incidents.tsx
   - packages/frontend/src/components/status/incident-detail.tsx
   - packages/frontend/src/components/status/maintenance.tsx
+  - packages/frontend/src/components/status/recent-deploys.tsx
+  - packages/frontend/src/components/status/run-incidents.tsx
 ---
 
 # Status page model
@@ -90,7 +92,8 @@ only the current status and `INCIDENT_TRANSITIONS` from it; an update refused by
 on in another tab) shows the `IncidentTransitionError` text and reloads the incident. It also shows the timeline
 (newest first), replaces the affected components, and sets or clears the postmortem. The maintenance view groups
 windows into in progress, scheduled and past, schedules a window (`datetime-local` inputs in the viewer's time
-zone, with the components it covers), and cancels a scheduled or in-progress one. The customer guide is
+zone, with the components it covers), and cancels a scheduled or in-progress one. An incident's route also lists the
+deploys around it, and the run page its incidents ([deploy correlation](#deploy-correlation)). The customer guide is
 [Run a status page](../customer/status/status-page.md).
 
 ## Tables
@@ -181,8 +184,13 @@ and keeps every link a person made.
 it); linking a suggested run turns it into their link. Unlinking removes a suggestion or a person's link. Both are
 audited. A suggestion that was unlinked comes back if the suggestions are recomputed.
 
+**Console.** The incident page has a **Recent deploys** panel (`recent-deploys.tsx`): each linked run with its
+relation, score (or "linked by a person"), repo and commit, a link to the run, and **Unlink**; a form that links one of
+the workspace's 50 latest runs (`run.list`) as related (`manual`) or `fix`; and **Recompute**. The run page gets an
+**Incidents** panel (`run-incidents.tsx`) through `runIncidents`, shown only when the status product is on.
+
 Not built yet: the deploy watch (monitors checking every 30 seconds after a release, and its 2x factor),
-`suspected_run_id` on the incident, a per-page window, and the console panels.
+`suspected_run_id` on the incident, and a per-page window.
 
 ## What a component shows
 
