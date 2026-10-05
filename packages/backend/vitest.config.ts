@@ -19,5 +19,7 @@ export default defineConfig({
     // whole suite runs in parallel.
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // Migrates one PGlite per run; createTestDb boots each test's database from it.
+    globalSetup: ['src/infra/db/testing/pglite-global-setup.ts'],
   },
 });
