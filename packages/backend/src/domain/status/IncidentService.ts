@@ -9,10 +9,11 @@ import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { IncidentUpdateRepo } from '@backend/domain/status/repos/incident-update.repo';
 import { IncidentRepo } from '@backend/domain/status/repos/incident.repo';
+import { actorOf } from '@backend/domain/status/scope';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
-import type { StatusScope } from '@backend/domain/status/scope';
+import type { StatusActor, StatusScope } from '@backend/domain/status/scope';
 import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { Db } from '@backend/infra/db/types';
@@ -92,7 +93,8 @@ export class IncidentService {
   }
 
   /** Open an incident with its first update. */
-  async create(scope: StatusScope, actorUserId: string, input: IncidentCreateInput) {
+  async create(scope: StatusScope, actor: StatusActor, input: IncidentCreateInput) {
+    const { userId, via } = actorOf(actor);
     await this.deps.pages.requirePage(scope, input.pageId);
     await this.assertComponentsOnPage(scope, input.pageId, input.components);
     const now = this.now();
@@ -106,20 +108,20 @@ export class IncidentService {
         status: input.status,
         startedAt: now,
         identifiedAt: input.status === IncidentStatuses.identified ? now : null,
-        createdByUserId: actorUserId,
+        createdByUserId: userId,
       });
       await new IncidentUpdateRepo(tx).insert({
         workspaceId: scope.workspaceId,
         incidentId: created.id,
         status: input.status,
         bodyMd: input.body,
-        authorUserId: actorUserId,
+        authorUserId: userId,
       });
       await new IncidentComponentRepo(tx).replace(scope.workspaceId, created.id, input.components);
       return created;
     });
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusIncidentCreated,
       ...subject(incident.id),
       payload: {
@@ -128,6 +130,7 @@ export class IncidentService {
         severity: input.severity,
         status: input.status,
         components: input.components,
+        ...via,
       },
     });
     await this.deps.onOpened?.(incident);
@@ -135,7 +138,8 @@ export class IncidentService {
   }
 
   /** Post an update to the timeline, moving the incident to `input.status` if that's a legal step. */
-  async postUpdate(scope: StatusScope, actorUserId: string, incidentId: string, input: IncidentUpdateInput) {
+  async postUpdate(scope: StatusScope, actor: StatusActor, incidentId: string, input: IncidentUpdateInput) {
+    const { userId, via } = actorOf(actor);
     const now = this.now();
     const { incident, from, update } = await this.deps.snapshots.change(async (tx, touch) => {
       const incidents = new IncidentRepo(tx);
@@ -150,15 +154,15 @@ export class IncidentService {
         incidentId,
         status: input.status,
         bodyMd: input.body,
-        authorUserId: actorUserId,
+        authorUserId: userId,
       });
       return { incident: updated, from: current.status, update: posted };
     });
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusIncidentUpdated,
       ...subject(incidentId),
-      payload: { updateId: update.id, from, to: input.status },
+      payload: { updateId: update.id, from, to: input.status, ...via },
     });
     return { incident, update };
   }
@@ -166,10 +170,11 @@ export class IncidentService {
   /** Replace the components the incident affects, and how badly. */
   async setComponents(
     scope: StatusScope,
-    actorUserId: string,
+    actor: StatusActor,
     incidentId: string,
     components: readonly AffectedComponent[],
   ) {
+    const { userId, via } = actorOf(actor);
     const incident = await this.require(scope, incidentId);
     await this.assertComponentsOnPage(scope, incident.pageId, components);
     await this.deps.snapshots.change(async (tx, touch) => {
@@ -177,10 +182,10 @@ export class IncidentService {
       await new IncidentComponentRepo(tx).replace(scope.workspaceId, incidentId, components);
     });
     await this.deps.audit.record(scope.workspaceId, {
-      actorUserId,
+      actorUserId: userId,
       action: AuditActions.statusIncidentComponentsChanged,
       ...subject(incidentId),
-      payload: { components: [...components] },
+      payload: { components: [...components], ...via },
     });
   }
 

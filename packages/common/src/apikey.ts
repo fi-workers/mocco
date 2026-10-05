@@ -35,8 +35,12 @@ export const ApiScopes = {
   /** Search the project's published help center (#96), e.g. to suggest articles in an app. */
   helpRead: 'help:read',
   /** Ask for an ad-hoc round of one of the project's monitors (#155), e.g. from a pipeline step
-   * after a deploy. Secret keys only: it makes Mocco send requests to the monitor's target. */
+   * after a deploy, and manage its monitors, incidents, maintenance and component statuses as
+   * code (#159). Secret keys only: it makes Mocco send requests to the monitor's target. */
   statusWrite: 'status:write',
+  /** Read the project's monitors, incidents (drafts too), maintenance and components (#159).
+   * Secret keys only: draft incidents and monitor settings are operational data. */
+  statusRead: 'status:read',
 } as const;
 export type ApiScope = (typeof ApiScopes)[keyof typeof ApiScopes];
 export const apiScopeSchema = z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]]);

@@ -15,11 +15,11 @@ import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
 import type { HeartbeatPingDeps } from '@backend/transport/ext/v1/heartbeat-ping';
 import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
 import type { MessengerServingDeps } from '@backend/transport/ext/v1/messenger';
-import type { MonitorCheckDeps } from '@backend/transport/ext/v1/monitors';
 import type { OtaServingDeps } from '@backend/transport/ext/v1/ota-manifest';
 import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ProbeProtocolDeps } from '@backend/transport/ext/v1/probe';
 import type { RunReadDeps } from '@backend/transport/ext/v1/runs';
+import type { StatusApiDeps } from '@backend/transport/ext/v1/status';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { Context } from 'hono';
 
@@ -37,8 +37,10 @@ export interface V1Deps {
   help?: HelpServingDeps;
   /** The status probe protocol (location tokens, not keys); undefined leaves /v1/probe unmounted. */
   probe?: ProbeProtocolDeps;
-  /** Ad-hoc monitor checks (`status:write`); undefined leaves /v1/monitors unmounted. */
-  monitors?: MonitorCheckDeps;
+  /** The status management API (`status:read`, `status:write`) and ad-hoc monitor checks;
+   * undefined leaves /v1/monitors, /v1/incidents, /v1/maintenances, /v1/pages, /v1/components
+   * and /v1/locations unmounted. */
+  status?: StatusApiDeps;
   /** Heartbeat pings (the token in the path, no key); undefined leaves /v1/ping/:token unmounted. */
   heartbeats?: HeartbeatPingDeps;
 }
@@ -124,7 +126,7 @@ export const cors = createMiddleware(async (c, next) => {
   if (c.req.method === 'OPTIONS') {
     return c.body(null, 204, {
       'Access-Control-Allow-Origin': origin ?? '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': ALLOWED_HEADERS,
       'Access-Control-Max-Age': '600',
       Vary: 'Origin',

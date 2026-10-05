@@ -53,6 +53,7 @@ import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jo
 import { createOgRoutes } from '@backend/transport/ext/og';
 import { createStorageRoutes, type StorageRouteDeps } from '@backend/transport/ext/storage';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
+import { statusApiDepsOf } from '@backend/transport/ext/v1/status';
 
 import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { CredentialBroker } from '@backend/domain/credential/CredentialBroker';
@@ -457,7 +458,7 @@ export async function extHandler(request: Request): Promise<Response> {
         originOf: slug => helpSiteOrigin(slug, env),
       },
       probe: { probes: getStatusDomain().statusProbes },
-      monitors: { monitors: getStatusDomain().statusMonitors },
+      status: statusApiDepsOf(getStatusDomain()),
       heartbeats: { heartbeats: getStatusDomain().statusHeartbeats },
     },
     og: getOgImages(),
