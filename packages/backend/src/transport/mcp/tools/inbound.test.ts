@@ -74,6 +74,7 @@ const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'inbound'> => ({
   statusMonitors: { list: refuse, get: refuse },
   statusLocations: { list: refuse },
   statusCorrelation: { list: refuse },
+  helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
   notifications: {
     listGuilds: refuse,
     listGuildChannels: refuse,

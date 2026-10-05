@@ -14,6 +14,7 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
+import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
 import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
@@ -35,6 +36,7 @@ export type McpToolDeps = RunToolDeps &
   OtaToolDeps &
   StatusToolDeps &
   StatusMonitorToolDeps &
+  HelpToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -59,6 +61,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerOtaTools(server, deps);
   registerStatusTools(server, deps);
   registerStatusMonitorTools(server, deps);
+  registerHelpTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);

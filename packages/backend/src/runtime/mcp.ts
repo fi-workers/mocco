@@ -8,6 +8,7 @@ import { MembershipRepo } from '@backend/domain/auth/repos/membership.repo';
 import { getExecution } from '@backend/domain/execution/instance';
 import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
+import { getHelpDomain } from '@backend/domain/helpcenter/instance';
 import { getInbound } from '@backend/domain/inbound/instance';
 import { getMcpSettings } from '@backend/domain/mcp/instance';
 import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
@@ -50,6 +51,7 @@ export function getMcpHandler(): McpHttpHandler {
       statusMonitors: status.statusMonitors,
       statusLocations: status.statusLocations,
       statusCorrelation: status.statusCorrelation,
+      helpPublic: getHelpDomain().helpPublic,
       notifications: getNotification().channels,
       notificationActivity: getNotification().activity,
       inbound: getInbound(),
