@@ -116,7 +116,8 @@ each component of each of the project's pages with its impact while down, and th
 parsed with `monitorInputSchema` before the call, so a bad field shows its zod issue, and a refused save shows the
 server's error. A monitor's route (`/status/monitors/[monitorId]`, `monitor-detail.tsx`) shows its settings, the
 open monitor incident (with a Draft badge), the latest ten rounds and 50 state changes with their reasons, **Watching
-after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. The customer guide is
+after a deploy** with the run while `watch_until` is ahead, and edit, pause or resume, and delete. It doesn't chart
+the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). The customer guide is
 [Monitor your service](../customer/status/monitor-your-service.md).
 
 ## Tables
@@ -319,8 +320,20 @@ failure is stored in `upload_error` and doesn't fail the job; the safety run ret
 the overall status, the components by group with the status they show, open incidents with their updates, maintenance
 in progress or scheduled, and the latest 50 resolved incidents. Only `published` incidents are read, and a draft's
 impact doesn't count toward a component's public status. Component ids are the only internal ids; an incident is keyed
-by a hash of its id, and no author or user appears. Postmortems are not published yet. The 90-day uptime bars still show
-"no data": they will read the [component days](#uptime-rollups) that the rollup job now writes.
+by a hash of its id, and no author or user appears. Postmortems are not published yet.
+
+**The 90-day bars.** Each component carries `uptime`: `days`, the last 90 UTC days ending on the build's day, oldest
+first, each with `day`, `status` (the day's `worst_status` from its [component day](#uptime-rollups)) and `uptime` (its
+`uptime_ratio` as a percentage with two decimals, rounded down so a day with any downtime never shows 100%), and
+`percent`, the mean of the days' percentages. A day without a row has no data (`status` and `uptime` null): the
+component didn't exist yet, or the rollup hasn't reached it, so history starts when tracking did. A day of a
+component no monitor reports on has a status but no uptime. The page draws one bar per day in its status colour
+(grey for no data) and writes each bar's day, status and uptime as escaped text, in its tooltip and as hidden text, so
+it reads without JavaScript or styles; under the bars it shows the mean ("99.95% uptime", or "No uptime data yet").
+The page is republished when a bar changes: the daily rollup compares each component day it writes with the stored one
+and, when the status or the shown percentage differs (or the day is new), marks the component's page dirty in the same
+transaction (`SnapshotScheduler.change`), so the debounced publish job builds the next version. A rollup that moves
+nothing visible publishes nothing; a new day's first rollup, just after midnight, republishes every page once.
 
 **Files**, through the storage domain's `ObjectStore` under `pub/status/{slug}/` (`StaticPublisher`):
 
@@ -664,8 +677,8 @@ history yet, so it doesn't either.
 aren't rolled up yet (24 at most, so a stopped job catches up on a day), then the current UTC day so far, then the
 previous day again while the run is within two hours of 00:10. So a day is final from 00:10 UTC the next day, and late
 rounds are still picked up until 02:10. Hourly rows are kept 90 days (deleted by `status.retention`), daily rows and
-component days forever. The 90-day bars on the public page don't read component days yet, and neither the console nor
-MCP shows a monitor's uptime or latency yet.
+component days forever. Component days feed the public page's [90-day bars](#public-page), and a monitor's hours and
+days are its `history` on the `status.monitor` read and on MCP.
 
 ## Audit
 
@@ -703,7 +716,7 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `incidentRuns`, `correlateIncident`, `linkRun`, `unlinkRun` | The runs linked to an incident ([deploy correlation](#deploy-correlation)); `linkRun` takes `relation` `manual` or `fix` |
 | `runIncidents` | The incidents a run is linked to (`workspaceId`, `runId`; membership and the status product, no `projectId`), for the run's page. It lives here so the execution router never depends on status; another workspace's run is `NOT_FOUND` |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
-| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first) and the incident it opened that is still open (`openIncident`, or null) |
+| `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor` | Monitors; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first), the incident it opened that is still open (`openIncident`, or null), and `history`: its rolled-up `hours` (the last 48) and `days` (the last 90), oldest first, each with `rounds`, `downSeconds`, and `p50Ms` / `p95Ms` read from the latency histogram (days add `uptimeRatio`); rows the rollup hasn't written are absent |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
 Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)); see
@@ -717,9 +730,9 @@ alert, a per-component `status_source` switch, TLS expiry warnings, and a reconc
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscribers; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
-`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; the public
-page's 90-day bars from component days, and a monitor's uptime and p50/p95 latency in the console, the `status.monitor`
-read and MCP; and gate-linked maintenance (`run_id`, `gate_id`, `overrun`,
+`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
+latency chart in the console's monitor view (the series is `history` on `status.monitor`); and gate-linked maintenance
+(`run_id`, `gate_id`, `overrun`,
 `suppress_alerts`). Each arrives with its slice as an additive column or table.
 
 ## MCP
@@ -736,7 +749,8 @@ looked up among the project's own, so another tenant's page or incident reads li
 Monitors and locations are in `transport/mcp/tools/status-monitors.ts`. `mocco_status_monitors_search` reads
 `MonitorService.list` (by name, paged with `after`; filtered by `states` and name text) and
 `mocco_status_monitors_get` reads `MonitorService.get` (the latest state changes, newest first, capped by `limit`; the
-open monitor incident; detailed adds each change's `reason` and the latest closed rounds), both behind `ProjectScope`.
+open monitor incident; detailed adds each change's `reason`, the latest closed rounds and the same `history` as
+`status.monitor`: uptime and p50/p95 latency for the last 48 hours and 90 days), both behind `ProjectScope`.
 A monitor's `target` is `monitorTargetOf`, the same host and port alerts show: its URL credentials, path and query, its
 request body and its keyword never leave the server, because they can hold secrets. `mocco_status_locations_search`
 reads `LocationService.list` behind the checks of the workspace-level `locations` query (membership and the status

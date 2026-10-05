@@ -1,4 +1,4 @@
-import { and, gte, lt, max, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, max, sql } from 'drizzle-orm';
 
 import { inBatches } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -46,6 +46,15 @@ export class RollupHourlyRepo {
       .select()
       .from(h)
       .where(and(gte(h.hour, from), lt(h.hour, to)));
+  }
+
+  /** One monitor's hours from `from` on, oldest first. */
+  async listForMonitor(workspaceId: string, monitorId: string, from: Date): Promise<RollupHourlyRow[]> {
+    return await this.db
+      .select()
+      .from(h)
+      .where(and(eq(h.workspaceId, workspaceId), eq(h.monitorId, monitorId), gte(h.hour, from)))
+      .orderBy(asc(h.hour));
   }
 
   /** The latest hour any monitor has a row for, or null. */

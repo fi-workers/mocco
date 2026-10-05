@@ -23,6 +23,7 @@ import { StatusJobKinds } from '@backend/domain/status/jobs';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { IncidentUpdateRepo } from '@backend/domain/status/repos/incident-update.repo';
 import { IncidentRepo } from '@backend/domain/status/repos/incident.repo';
+import { publicSnapshotSchema } from '@backend/domain/status/snapshot/format';
 import { escapeHtml } from '@backend/domain/status/snapshot/render';
 import { SnapshotPolicy } from '@backend/domain/status/SnapshotService';
 import { StatusCacheControls } from '@backend/domain/status/StaticPublisher';
@@ -31,7 +32,14 @@ import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
 import { StorageUrlSigner } from '@backend/domain/storage/signing';
 import { StorageService } from '@backend/domain/storage/StorageService';
 import { expectOne } from '@backend/infra/db/rows';
-import { jobs, statusPages, statusPageSnapshots, users, workspaces } from '@backend/infra/db/schema';
+import {
+  jobs,
+  statusComponentDays,
+  statusPages,
+  statusPageSnapshots,
+  users,
+  workspaces,
+} from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createJobRunner } from '@backend/runtime/jobs';
 
@@ -156,17 +164,69 @@ describe('status snapshots (pglite)', () => {
       page: { slug: 'acme', title: 'Acme status' },
       status: ComponentStatuses.operational,
       sections: [
-        { name: null, components: [{ name: 'Dashboard', uptime: null }] },
+        { name: null, components: [{ name: 'Dashboard', uptime: { percent: null } }] },
         { name: 'Core', components: [{ name: 'API' }] },
       ],
     });
     const html = await file('acme/index.html');
     expect(html).toContain('All systems operational');
-    expect(html).toContain('No data yet');
+    expect(html).toContain('No uptime data yet');
     expect(await page(created.id)).toMatchObject({ dirtyAt: null, publishedVersion: 1, publishedAt: T0 });
     // Nothing changed: no new version.
     expect(await snapshots.publish(created.id)).toBe(1);
     expect(await t.db.select().from(statusPageSnapshots)).toHaveLength(1);
+  });
+
+  it('draws the 90-day bars from the component days, with no data before them', async () => {
+    const { page: created, api, web } = await setUp();
+    const row = { workspaceId: scope.workspaceId, componentId: api.id, downSeconds: 0, incidentIds: [] };
+    await t.db.insert(statusComponentDays).values([
+      // Outside the 90 days: never shown.
+      { ...row, day: '2026-06-01', worstStatus: ComponentStatuses.majorOutage, uptimeRatio: 0 },
+      {
+        ...row,
+        day: '2026-10-04',
+        worstStatus: ComponentStatuses.partialOutage,
+        uptimeRatio: 0.99004,
+        downSeconds: 860,
+      },
+      { ...row, day: '2026-10-05', worstStatus: ComponentStatuses.operational, uptimeRatio: 1 },
+    ]);
+    // A component no monitor reports on: a status, but no uptime.
+    await t.db.insert(statusComponentDays).values({
+      ...row,
+      componentId: web.id,
+      day: '2026-10-05',
+      worstStatus: ComponentStatuses.maintenance,
+      uptimeRatio: null,
+    });
+
+    expect(await snapshots.publish(created.id)).toBe(1);
+
+    const snapshot = publicSnapshotSchema.parse(JSON.parse(await file('acme/v/1/snapshot.json')));
+    const bars = (name: string) =>
+      snapshot.sections.flatMap(section => section.components).find(component => component.name === name)?.uptime;
+    const apiBars = bars('API');
+    expect(apiBars?.days).toHaveLength(90);
+    expect(apiBars?.days[0]).toEqual({ day: '2026-07-08', status: null, uptime: null });
+    expect(apiBars?.days.slice(-2)).toEqual([
+      { day: '2026-10-04', status: ComponentStatuses.partialOutage, uptime: 99 },
+      { day: '2026-10-05', status: ComponentStatuses.operational, uptime: 100 },
+    ]);
+    expect(apiBars?.percent).toBe(99.5);
+    expect(bars('Dashboard')).toMatchObject({ percent: null });
+    expect(bars('Dashboard')?.days.at(-1)).toEqual({
+      day: '2026-10-05',
+      status: ComponentStatuses.maintenance,
+      uptime: null,
+    });
+
+    // Readable without JavaScript: every bar carries its day, status and uptime as text.
+    const html = await file('acme/index.html');
+    expect(html).toContain('Oct 4, 2026 · Partial outage · 99.00% uptime');
+    expect(html).toContain('Oct 5, 2026 · Under maintenance');
+    expect(html).toContain('Jul 8, 2026: no data');
+    expect(html).toContain('99.50% uptime');
   });
 
   it('never publishes a draft incident, its impact, author emails or internal ids', async () => {

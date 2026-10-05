@@ -4,7 +4,7 @@
 // of customer text goes through `escapeHtml`.
 import { ComponentStatuses, IncidentStatuses, MaintenanceStatuses } from '@mocco/common/status';
 
-import type { PublicIncident, PublicSnapshot } from '@backend/domain/status/snapshot/format';
+import type { PublicIncident, PublicSnapshot, PublicUptimeDay } from '@backend/domain/status/snapshot/format';
 import type { ComponentStatus, IncidentStatus } from '@mocco/common/status';
 
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -57,13 +57,16 @@ main{max-width:760px;margin:0 auto;padding:32px 16px 48px}h1{font-size:24px;marg
 .banner{border-radius:8px;padding:16px;color:#fff;font-weight:600;font-size:17px}
 .list{border:1px solid var(--line);border-radius:8px;overflow:hidden}.row{padding:12px 16px;border-top:1px solid var(--line)}.row:first-child{border-top:0}
 .group{background:var(--card);font-weight:600}.line{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
-.desc,.meta,footer{color:var(--muted);font-size:13px}.bars{display:flex;gap:2px;margin-top:8px;height:24px}.bars span{flex:1;border-radius:2px;background:var(--nodata)}
+.desc,.meta,footer{color:var(--muted);font-size:13px}.bars{display:flex;gap:2px;margin:8px 0 0;padding:0;list-style:none;height:24px}.bars li{flex:1;border-radius:2px;background:var(--nodata)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .status{font-size:13px;font-weight:600;white-space:nowrap}.card{border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:12px}
 .card h3{margin:0 0 4px;font-size:16px}.update{margin-top:12px}.update p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 footer{margin-top:40px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}a{color:inherit}
 `;
 
 const statusColor = (status: ComponentStatus) => `var(--${status})`;
+
+type PublicComponent = PublicSnapshot['sections'][number]['components'][number];
 
 /** One line of details, separated by middle dots; empty parts are dropped. */
 const details = (parts: readonly string[]) =>
@@ -91,13 +94,33 @@ function renderIncident(incident: PublicIncident): string {
   return `<article class="card" id="incident-${escapeHtml(incident.key)}"><h3>${escapeHtml(incident.title)}</h3>${meta}${updates}</article>`;
 }
 
-const NO_DATA_BARS = `<div class="bars" title="Uptime history: no data yet" aria-label="Uptime history: no data yet">${'<span></span>'.repeat(90)}</div><div class="line meta"><span>90 days ago</span><span>No data yet</span><span>Today</span></div>`;
+const DAY_FORMAT = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' });
 
-function renderComponent(component: PublicSnapshot['sections'][number]['components'][number]): string {
+// eslint-disable-next-line sonarjs/null-dereference -- percent is a number, never null
+const percentText = (percent: number) => `${percent.toFixed(2)}% uptime`;
+
+/** One day's bar: its colour is the worst status that day, and its text (a tooltip, and read by
+ * screen readers and text browsers) names the day, the status and the uptime. */
+function renderBar(bar: PublicUptimeDay): string {
+  const date = DAY_FORMAT.format(new Date(`${bar.day}T00:00:00.000Z`));
+  const text =
+    bar.status === null
+      ? `${date}: no data`
+      : [date, COMPONENT_LABELS[bar.status], ...(bar.uptime === null ? [] : [percentText(bar.uptime)])].join(' · ');
+  const color = bar.status === null ? '' : ` style="background:${statusColor(bar.status)}"`;
+  return `<li title="${escapeHtml(text)}"${color}><span class="sr">${escapeHtml(text)}</span></li>`;
+}
+
+function renderBars(uptime: PublicComponent['uptime']): string {
+  const summary = uptime.percent === null ? 'No uptime data yet' : percentText(uptime.percent);
+  return `<ol class="bars" aria-label="Uptime history, last ${uptime.days.length} days">${uptime.days.map(bar => renderBar(bar)).join('')}</ol><div class="line meta"><span>${uptime.days.length} days ago</span><span>${summary}</span><span>Today</span></div>`;
+}
+
+function renderComponent(component: PublicComponent): string {
   const description =
     component.description === null ? '' : `<div class="desc">${escapeHtml(component.description)}</div>`;
   const label = `<span class="status" style="color:${statusColor(component.status)}">${COMPONENT_LABELS[component.status]}</span>`;
-  return `<div class="row"><div class="line"><span>${escapeHtml(component.name)}</span>${label}</div>${description}${NO_DATA_BARS}</div>`;
+  return `<div class="row"><div class="line"><span>${escapeHtml(component.name)}</span>${label}</div>${description}${renderBars(component.uptime)}</div>`;
 }
 
 function renderComponents(snapshot: PublicSnapshot): string {
