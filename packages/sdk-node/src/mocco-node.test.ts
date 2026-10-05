@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { signIdentity, verifyWebhook } from './mocco-node';
+import { createMoccoServer, signIdentity, StatusClient, verifyWebhook } from './mocco-node';
 
 const SECRET = 'fixture-webhook-secret';
 const sign = (timestamp: number, body: string) => {
@@ -12,6 +12,22 @@ const sign = (timestamp: number, body: string) => {
 };
 
 describe('@mocco/node', () => {
+  it("gives the server client the status namespace, over the client's key and base URL", async () => {
+    const urls: string[] = [];
+    const mocco = createMoccoServer({
+      secretKey: 'mk_sec_0123456789abcdefghijklmnopqrstuv',
+      baseUrl: 'https://mocco.test/v1',
+      fetch: async input => {
+        urls.push(String(input));
+        return await Promise.resolve(Response.json({ monitors: [] }));
+      },
+    });
+
+    expect(mocco.status).toBeInstanceOf(StatusClient);
+    expect(await mocco.status.monitors.list()).toEqual([]);
+    expect(urls).toEqual(['https://mocco.test/v1/monitors']);
+  });
+
   it('signs identities as hex HMAC-SHA256 of the external id', () => {
     expect(signIdentity('secret', 'user-42')).toBe(createHmac('sha256', 'secret').update('user-42').digest('hex'));
   });

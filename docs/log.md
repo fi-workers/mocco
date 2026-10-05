@@ -659,3 +659,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   as code" row. The SDK's `status.*` namespace is the next slice.
 - Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-v1-api` (issue #159)
+
+## 2026-10-06 — Status: the SDK's status namespace
+
+- Documented `status.*` (#159): `StatusClient` on the `@mocco/sdk-core/status` subpath, on `createMoccoServer(...).status` in
+  `@mocco/node`, over the `/v1` status routes, with `locations.idsOf(codes)` and the PUT retry now in `MoccoClient`.
+  The [SDK packages](./reference/sdk.md) table and the [status page model](./reference/status.md#the-v1-management-api)
+  describe it, the feature map's "Monitors and incidents as code" row no longer lists it as missing, and it's out of
+  the status reference's "Not built yet".
+- Docs touched: `reference/sdk.md`, `reference/status.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-sdk-namespace` (issue #159)

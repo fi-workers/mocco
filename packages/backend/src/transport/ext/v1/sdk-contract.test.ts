@@ -26,6 +26,25 @@ import {
   type uploadRequestSchema,
   type UploadResponse,
 } from '@mocco/common/ota-hosting';
+import {
+  type incidentCreateInputSchema,
+  type incidentUpdateInputSchema,
+  type monitorInputSchema,
+} from '@mocco/common/status';
+import {
+  type statusV1ComponentSchema,
+  type statusV1ComponentStatusInputSchema,
+  type statusV1IncidentComponentsInputSchema,
+  type statusV1IncidentDetailSchema,
+  type statusV1IncidentListSchema,
+  type statusV1IncidentUpdateResultSchema,
+  type statusV1LocationListSchema,
+  type statusV1MaintenanceInputSchema,
+  type statusV1MaintenanceSchema,
+  type statusV1MonitorSchema,
+  type statusV1MonitorUpsertResultSchema,
+  type statusV1PageListSchema,
+} from '@mocco/common/status-v1';
 import { describe, expectTypeOf, it } from 'vitest';
 
 import type {
@@ -50,6 +69,23 @@ import type {
   OtaUploadResponse,
   WhoAmI,
 } from '@mocco/sdk-core';
+import type {
+  StatusAffectedComponent,
+  StatusComponent,
+  StatusComponentStatus,
+  StatusIncident,
+  StatusIncidentCreateRequest,
+  StatusIncidentDetail,
+  StatusIncidentUpdate,
+  StatusIncidentUpdateRequest,
+  StatusLocation,
+  StatusMaintenance,
+  StatusMaintenanceRequest,
+  StatusMonitor,
+  StatusMonitorInput,
+  StatusMonitorUpsertResult,
+  StatusPage,
+} from '@mocco/sdk-core/status';
 import type { z } from 'zod';
 
 describe('SDK wire types match the /v1 schemas', () => {
@@ -89,5 +125,29 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof contactMessageSchema>>().toExtend<MessengerMessage>();
     expectTypeOf<MessengerAttachmentRequest>().toExtend<z.input<typeof attachmentCreateInputSchema>>();
     expectTypeOf<MessengerPushTokenRequest>().toExtend<z.input<typeof pushTokenInputSchema>>();
+  });
+
+  it('status: what the SDK sends is accepted, and what the routes answer is what it types', () => {
+    expectTypeOf<StatusMonitorInput>().toExtend<z.input<typeof monitorInputSchema>>();
+    expectTypeOf<StatusIncidentCreateRequest>().toExtend<z.input<typeof incidentCreateInputSchema>>();
+    expectTypeOf<StatusIncidentUpdateRequest>().toExtend<z.input<typeof incidentUpdateInputSchema>>();
+    expectTypeOf<{ components: StatusAffectedComponent[] }>().toExtend<
+      z.input<typeof statusV1IncidentComponentsInputSchema>
+    >();
+    expectTypeOf<{ status: StatusComponentStatus }>().toExtend<z.input<typeof statusV1ComponentStatusInputSchema>>();
+    expectTypeOf<StatusMaintenanceRequest>().toExtend<z.input<typeof statusV1MaintenanceInputSchema>>();
+
+    expectTypeOf<z.output<typeof statusV1MonitorSchema>>().toExtend<StatusMonitor>();
+    expectTypeOf<z.output<typeof statusV1MonitorUpsertResultSchema>>().toExtend<StatusMonitorUpsertResult>();
+    expectTypeOf<z.output<typeof statusV1LocationListSchema>>().toExtend<{ locations: StatusLocation[] }>();
+    expectTypeOf<z.output<typeof statusV1PageListSchema>>().toExtend<{ pages: StatusPage[] }>();
+    expectTypeOf<z.output<typeof statusV1ComponentSchema>>().toExtend<StatusComponent>();
+    expectTypeOf<z.output<typeof statusV1IncidentListSchema>>().toExtend<{ incidents: StatusIncident[] }>();
+    expectTypeOf<z.output<typeof statusV1IncidentDetailSchema>>().toExtend<StatusIncidentDetail>();
+    expectTypeOf<z.output<typeof statusV1IncidentUpdateResultSchema>>().toExtend<{
+      incident: StatusIncident;
+      update: StatusIncidentUpdate;
+    }>();
+    expectTypeOf<z.output<typeof statusV1MaintenanceSchema>>().toExtend<StatusMaintenance>();
   });
 });
