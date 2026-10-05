@@ -16,6 +16,7 @@ import {
   componentStatusSchema,
   incidentCreateInputSchema,
   incidentRunSchema,
+  gateMaintenanceInputSchema,
   incidentUpdateInputSchema,
   locationInputSchema,
   locationSchema,
@@ -42,6 +43,7 @@ const componentInput = projectInput.extend({ componentId: z.uuid() });
 const incidentInput = projectInput.extend({ incidentId: z.uuid() });
 const incidentRunInput = incidentInput.extend({ runId: z.uuid() });
 const maintenanceInput = projectInput.extend({ maintenanceId: z.uuid() });
+const gateMaintenanceInput = projectInput.extend({ gateMaintenanceId: z.uuid() });
 const monitorInput = projectInput.extend({ monitorId: z.uuid() });
 const workspaceInput = z.object({ workspaceId: z.uuid() });
 const locationInput = workspaceInput.extend({ locationId: z.uuid() });
@@ -260,6 +262,22 @@ export const statusRouter = router({
   cancelMaintenance: protectedStatusProcedure.input(maintenanceInput).mutation(async ({ ctx, input }) => ({
     maintenance: await ctx.statusMaintenances.cancel(scopeOf(input), ctx.session.user.id, input.maintenanceId),
   })),
+
+  /** The page's gates that announce maintenance when resumed (#158). */
+  gateMaintenances: protectedStatusProcedure.input(pageInput).query(async ({ ctx, input }) => ({
+    gateMaintenances: await ctx.statusMaintenances.listGateMaintenances(scopeOf(input), input.pageId),
+  })),
+
+  setGateMaintenance: protectedStatusProcedure
+    .input(projectInput.and(gateMaintenanceInputSchema))
+    .mutation(async ({ ctx, input }) => ({
+      gateMaintenance: await ctx.statusMaintenances.setGateMaintenance(scopeOf(input), ctx.session.user.id, input),
+    })),
+
+  deleteGateMaintenance: protectedStatusProcedure.input(gateMaintenanceInput).mutation(async ({ ctx, input }) => {
+    await ctx.statusMaintenances.deleteGateMaintenance(scopeOf(input), ctx.session.user.id, input.gateMaintenanceId);
+    return { ok: true } as const;
+  }),
 
   /** The project's monitors, each with its location ids and components. */
   monitors: protectedStatusProcedure.input(projectInput).query(async ({ ctx, input }) => ({

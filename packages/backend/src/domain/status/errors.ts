@@ -5,7 +5,17 @@ import type { IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
 /** A status page, group, component, incident or maintenance window the project doesn't have — NOT_FOUND. */
 export class StatusEntityNotFoundError extends NotFoundError {
   constructor(
-    kind: 'page' | 'group' | 'component' | 'incident' | 'maintenance' | 'monitor' | 'location' | 'run' | 'run link',
+    kind:
+      | 'page'
+      | 'group'
+      | 'component'
+      | 'incident'
+      | 'maintenance'
+      | 'gate maintenance'
+      | 'monitor'
+      | 'location'
+      | 'run'
+      | 'run link',
     id: string,
     options?: ErrorOptions,
   ) {

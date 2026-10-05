@@ -1,6 +1,6 @@
 ---
 title: Status page model
-description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, the /v1 management API for CI and scripts with its OpenAPI description, what is audited, and the status tRPC router.
+description: How Mocco stores a project's status pages — pages, component groups, components, incidents with their timeline and affected components, and scheduled maintenance, including windows that resuming a gate starts and the run's end completes — the incident lifecycle, deploy correlation (the runs linked to an incident), how a component's shown status is derived, the maintenance tick, how the public page is published as static snapshots (and served by self-hosters), monitors and probe locations, the @mocco/probe agent and its address policy, heartbeat monitors and their ping routes, the /v1 management API for CI and scripts with its OpenAPI description, what is audited, and the status tRPC router.
 type: reference
 status: active
 created: 2026-10-05
@@ -19,6 +19,7 @@ code_refs:
   - packages/backend/src/domain/status/StatusPageService.ts
   - packages/backend/src/domain/status/IncidentService.ts
   - packages/backend/src/domain/status/MaintenanceService.ts
+  - packages/backend/src/domain/status/repos/gate-maintenance.repo.ts
   - packages/backend/src/domain/status/MonitorService.ts
   - packages/backend/src/domain/status/LocationService.ts
   - packages/backend/src/domain/status/ProbeService.ts
@@ -156,7 +157,8 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_incidents` | `title`, `status`, `severity` (`minor`, `major`, `critical`), `visibility` (`published`, or `draft`, which never reaches the public page), `started_at`, `identified_at`, `resolved_at`, `postmortem_md`, `origin` (`manual`, `monitor`, `deploy_watch`), `suspected_run_id` (the run whose [deploy watch](#the-deploy-watch) opened it; `SET NULL` when the run is deleted), `created_by_user_id` |
 | `mocco_status_incident_updates` | The incident's timeline: `status` and `body_md` per update, append-only |
 | `mocco_status_incident_components` | The components an incident affects, with `impact` (`degraded`, `partial_outage`, `major_outage`) |
-| `mocco_status_maintenances` | A window: `title`, `body_md`, `scheduled_start`/`scheduled_end` (end after start, DB-checked), `status`, `actual_start`/`actual_end` |
+| `mocco_status_maintenances` | A window: `title`, `body_md`, `scheduled_start`/`scheduled_end` (end after start, DB-checked), `status`, `actual_start`/`actual_end`. A window a resumed gate started also has `run_id` and `gate_id` (both `SET NULL` when the run is deleted; one window per gate and page, a partial unique index), `overran_at` and `end_note` ([maintenance from gated runs](#maintenance-from-gated-runs)) |
+| `mocco_status_gate_maintenances` | A gate that announces maintenance on a page: `gate_name` (unique per page), `title`, `expected_minutes` (1 to 1440, DB-checked) and `component_ids` |
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
 | `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
@@ -319,8 +321,40 @@ minute as a platform schedule ([jobs](./jobs.md)) and calls `MaintenanceService.
 Each step is one conditional `UPDATE`, so overlapping ticks can't move a window twice. `actual_start` and
 `actual_end` record when the tick made the change. An operator can cancel a `scheduled` or `in_progress` window
 (one in progress ends now). A completed or canceled window can't be canceled (`MaintenanceTransitionError`,
-`CONFLICT`). Windows can't be edited yet: cancel the window and schedule a new one. The spec's `overrun` status
-belongs to run-linked windows and arrives with them.
+`CONFLICT`). Windows can't be edited yet: cancel the window and schedule a new one.
+
+### Maintenance from gated runs
+
+A page can name gates that announce maintenance (#158): `status.setGateMaintenance` stores a gate name, a title,
+the expected minutes and the components it covers (`mocco_status_gate_maintenances`, one per gate name and page;
+setting the same gate name again replaces it). The mapping lives in Mocco, not in `.mocco.yml`; a `maintenance:` key
+on a gate item waits for the [ADR 0010](../adr/0010-mocco-yml-lean-core-and-enforcement-invariants.md) review.
+
+1. **Start.** The `status.maintenance.gate_resumed` subscriber on `gate.resumed` calls
+   `MaintenanceService.startForGate`. It reads the run through the `RunSource` port (`release-deploys.ts`, over the
+   execution and project repos) and finds the gate maintenances with the gate's name on the pages of every project the
+   run's repository is linked to. For each one it inserts a window `in_progress` from now, with `scheduled_end` now
+   plus the expected minutes, `run_id`, `gate_id`, and the components that are still on the page. A redelivered event
+   starts no second window (the `(gate_id, page_id)` unique index), and a run that already finished when the event is
+   delivered starts none. Audited as `status.maintenance.started` with `runId`, `gateId` and `gateName`.
+2. **Complete.** `run.succeeded`, `run.failed` and `gate.rejected` (a later gate rejected the run) complete the run's
+   windows in progress (`completeForRun`): `actual_end` is now and, unless the run succeeded, `end_note` says how it
+   ended ("Ended when the run failed.", "… was canceled.", "… a later gate rejected the run."). A canceled run
+   publishes no event, and an event can be lost, so each tick also reads the runs of every run-linked window in
+   progress and completes those whose run is `succeeded`, `failed`, `canceled` or `rejected`, with the same note.
+   Audited as `status.maintenance.completed` with `runId`, `runState` and `endNote`.
+3. **Overrun.** The tick's first step skips run-linked windows: they end with their run, not at `scheduled_end`.
+   Instead, a run-linked window still in progress at `scheduled_end` gets `overran_at` once, is audited as
+   `status.maintenance.overran`, and publishes the `status.maintenance.overran` alert ([events](./events.md)), which
+   the `mocco` notification preset routes. The window stays in progress, so the page keeps showing maintenance until
+   the run finishes. When the run is deleted, `run_id` becomes null and the tick completes the window at its
+   `scheduled_end`.
+
+A run-linked window is an ordinary window in progress for everything else: its components show `maintenance`, a
+monitor's incident on them is held back as a draft and its alerts say "(during maintenance)"
+([what a state change does](#what-a-state-change-does)), the time it ran (overrun included) is left out of uptime
+([uptime rollups](#uptime-rollups)), and an operator can cancel it. Deleting a gate maintenance leaves the windows it
+started alone.
 
 ## Public page
 
@@ -776,7 +810,8 @@ These changes are appended to the workspace's audit chain, after their transacti
 | `status.incident.run_linked`, `status.incident.run_unlinked` (`runId`, `relation`) | `status_incident` |
 | `status.incident.created`, `status.incident.updated` for a monitor's incident (no actor, `monitorId` in the payload) | `status_incident` |
 | `status.maintenance.scheduled`, `status.maintenance.canceled` | `status_maintenance` |
-| `status.maintenance.started`, `status.maintenance.completed` (by the tick, no actor) | `status_maintenance` |
+| `status.maintenance.started`, `status.maintenance.completed` (by the tick or a gated run, no actor), `status.maintenance.overran` (no actor) | `status_maintenance` |
+| `status.gate_maintenance.set`, `status.gate_maintenance.deleted` | `status_gate_maintenance` |
 | `status.monitor.created`, `status.monitor.updated`, `status.monitor.deleted`, `status.monitor.paused`, `status.monitor.resumed`, `status.monitor.heartbeat_token_rotated` | `status_monitor` |
 | `status.location.created`, `status.location.token_rotated`, `status.location.disabled` | `status_location` |
 
@@ -879,6 +914,7 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `incidentRuns`, `correlateIncident`, `linkRun`, `unlinkRun` | The runs linked to an incident ([deploy correlation](#deploy-correlation)); `linkRun` takes `relation` `manual` or `fix` |
 | `runIncidents` | The incidents a run is linked to (`workspaceId`, `runId`; membership and the status product, no `projectId`), for the run's page. It lives here so the execution router never depends on status; another workspace's run is `NOT_FOUND` |
 | `maintenances`, `scheduleMaintenance`, `cancelMaintenance` | Maintenance |
+| `gateMaintenances`, `setGateMaintenance`, `deleteGateMaintenance` | The page's gates that announce maintenance ([maintenance from gated runs](#maintenance-from-gated-runs)); `maintenances` returns `runId`, `gateId`, `overranAt` and `endNote` with each window |
 | `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor`, `rotateHeartbeatToken` | Monitors (never a heartbeat token's hash); `createMonitor` answers `{ monitor, heartbeatToken }` (null for a probe kind) and `rotateHeartbeatToken` `{ monitor, token }`, the only times a ping token is shown; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first), the incident it opened that is still open (`openIncident`, or null), and `history`: its rolled-up `hours` (the last 48) and `days` (the last 90), oldest first, each with `rounds`, `downSeconds`, and `p50Ms` / `p95Ms` read from the latency histogram (days add `uptimeRatio`); rows the rollup hasn't written are absent |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
@@ -897,8 +933,8 @@ lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
 `origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
 latency chart in the console's monitor view (the series is `history` on `status.monitor`); and gate-linked maintenance
-(`run_id`, `gate_id`, `overrun`,
-`suppress_alerts`). Each arrives with its slice as an additive column or table.
+in the console (the gate maintenance form, and a window's run, overrun and end note), in the `/v1` maintenance answers and on
+MCP, plus a per-window `suppress_alerts` switch. Each arrives with its slice as an additive column or table.
 
 ## MCP
 

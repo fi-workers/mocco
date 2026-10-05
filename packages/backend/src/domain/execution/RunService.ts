@@ -2,7 +2,13 @@ import { randomBytes } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
 import { DomainEventTypes } from '@mocco/common/events';
-import { RunCallbackStatuses, RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
+import {
+  FINISHED_RUN_STATES,
+  RunCallbackStatuses,
+  RunStates,
+  RunStepStatuses,
+  TriggerSources,
+} from '@mocco/common/execution';
 import { moccoConfigSchema, PipelineItemKinds } from '@mocco/common/mocco-config';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
@@ -51,15 +57,6 @@ const RunEventTypes = {
   runSucceeded: 'run.succeeded',
   runFailed: 'run.failed',
 } as const;
-
-/** Run states from which no callback can advance the machine — a redelivered final
- * callback after the run finished (or was gate-rejected) is a no-op. */
-const TERMINAL_RUN_STATES = new Set<RunState>([
-  RunStates.succeeded,
-  RunStates.failed,
-  RunStates.canceled,
-  RunStates.rejected,
-]);
 
 /** A pinned config's pipeline flattened to positional items: a step to dispatch or a
  * gate to pause at. `index` is the item's position — the shared cursor namespace for
@@ -502,7 +499,7 @@ export class RunService {
     }
 
     // Idempotent: a callback after the run already finished is a no-op.
-    if (TERMINAL_RUN_STATES.has(run.state)) {
+    if (FINISHED_RUN_STATES.has(run.state)) {
       return;
     }
 

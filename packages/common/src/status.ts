@@ -148,6 +148,24 @@ export const maintenanceInputSchema = z
   });
 export type MaintenanceInput = z.infer<typeof maintenanceInputSchema>;
 
+/** How long a gate's maintenance may be expected to take: a minute to a day. */
+export const GateMaintenanceLimits = { gateNameMax: 100, expectedMinutesMax: 1440 } as const;
+
+/**
+ * A gate that announces maintenance (#158): when a run of a repository linked to the page's
+ * project resumes a gate with this name, a window with this title starts on the page for the
+ * components, expected to last `expectedMinutes`; it completes when the run finishes. One per
+ * gate name and page.
+ */
+export const gateMaintenanceInputSchema = z.object({
+  pageId: z.uuid(),
+  gateName: z.string().trim().min(1).max(GateMaintenanceLimits.gateNameMax),
+  title: name,
+  expectedMinutes: z.int().min(1).max(GateMaintenanceLimits.expectedMinutesMax),
+  componentIds: z.array(z.uuid()).max(100).default([]),
+});
+export type GateMaintenanceInput = z.infer<typeof gateMaintenanceInputSchema>;
+
 // ─────────────────────────────────────────────────────────────
 // Monitors and probe locations (#150). A monitor is an HTTP or TCP check of a project, run
 // by `@mocco/probe` agents at the locations it is assigned to (ADR 0027), or a heartbeat (#153)

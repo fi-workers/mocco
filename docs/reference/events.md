@@ -4,7 +4,7 @@ description: The domain event catalog, how to publish and subscribe, delivery se
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, events, jobs, backend, notifications]
@@ -51,6 +51,7 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a change to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
 | `ota.emergency_launch.spike` | `OtaMetricsService` (the `ota.rollupMetrics` job), when a release's emergency launches today cross the threshold | `ota_update` / update id |
 | `status.monitor.down`, `status.monitor.degraded`, `status.monitor.recovered` | `MonitorTransitionService`, after the verdict evaluator moves a monitor to `down`, to `degraded`, or to `up` after an outage or a degradation ([status](./status.md#what-a-state-change-does)) | `status_monitor_state_change` / state change id |
+| `status.maintenance.overran` | `MaintenanceService` (the `status.maintenance.tick` job), once, when a window a resumed gate started is still in progress after its expected minutes ([status](./status.md#maintenance-from-gated-runs)) | `status_maintenance` / window id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
 
@@ -62,6 +63,10 @@ monitor's components; the title then ends "(during maintenance)"). The message s
 and port only, never the URL's credentials, path or query ([status](./status.md#what-a-state-change-does)). Each has
 the dedupe key
 `<type>:<state change id>`, so one change alerts once even if its reaction runs again.
+
+`status.maintenance.overran` carries the same rendered shape with the fact `maintenance` (the window's title): the
+title "Maintenance overran: <title>", the expected minutes, a warning severity and a link to the page's maintenance
+view. Its dedupe key is `status.maintenance.overran:<window id>`.
 
 ### Governance payloads
 
@@ -189,6 +194,10 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
 - The status deploy watch (`registerStatusSubscribers`, `domain/status/subscribers.ts`) as
   `status.deploy_watch` on `deploy.released`: it watches the released projects' monitors for 15
   minutes ([status: the deploy watch](./status.md#the-deploy-watch)).
+- Gate-linked maintenance (same factory) as `status.maintenance.gate_resumed` on `gate.resumed`, which starts the
+  windows the gate announces, and `status.maintenance.run_succeeded`, `status.maintenance.run_failed` and
+  `status.maintenance.gate_rejected`, which complete the run's windows
+  ([status: maintenance from gated runs](./status.md#maintenance-from-gated-runs)).
 
 ## Delivery
 

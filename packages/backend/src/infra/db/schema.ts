@@ -32,6 +32,7 @@ import {
   CheckOutcomes,
   ComponentImpacts,
   ComponentStatuses,
+  GateMaintenanceLimits,
   IncidentOrigins,
   IncidentPolicies,
   IncidentRunRelations,
@@ -3427,12 +3428,25 @@ export const statusMaintenances = pgTable(
     scheduledEnd: timestamp('scheduled_end').notNull(),
     actualStart: timestamp('actual_start'),
     actualEnd: timestamp('actual_end'),
+    // A window a resumed gate started (#158): the run it lasts for and the gate. SET NULL: the
+    // window outlives the run, and the tick then completes it at `scheduled_end`.
+    runId: uuid('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    gateId: uuid('gate_id').references(() => runGates.id, { onDelete: 'set null' }),
+    // When the tick saw a run-linked window still in progress past `scheduled_end` (its expected minutes).
+    overranAt: timestamp('overran_at'),
+    // Why the window ended, when not as planned (the run failed, was canceled or rejected).
+    endNote: text('end_note'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
   },
   t => [
     index('mocco_status_maintenances_page_start_idx').on(t.pageId, t.scheduledStart),
+    index('mocco_status_maintenances_run_idx').on(t.runId),
+    // A redelivered `gate.resumed` starts no second window on the page.
+    uniqueIndex('mocco_status_maintenances_gate_page_uq')
+      .on(t.gateId, t.pageId)
+      .where(sql`${t.gateId} IS NOT NULL`),
     // The tick's scan: windows still to start or complete.
     index('mocco_status_maintenances_due_idx')
       .on(t.scheduledStart, t.scheduledEnd)
@@ -3473,6 +3487,42 @@ export const statusMaintenanceComponents = pgTable(
       foreignColumns: [statusComponents.id, statusComponents.workspaceId],
       name: 'mocco_status_maintenance_components_component_fk',
     }).onDelete('cascade'),
+  ],
+);
+
+/** A gate that announces maintenance on a page when it is resumed (#158). Matched by gate name
+ * on runs of the repositories linked to the page's project; one per gate name and page. */
+export const statusGateMaintenances = pgTable(
+  'mocco_status_gate_maintenances',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    gateName: text('gate_name').notNull(),
+    title: text().notNull(),
+    expectedMinutes: integer('expected_minutes').notNull(),
+    // Components deleted since are skipped when a window starts.
+    componentIds: uuid('component_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    unique('mocco_status_gate_maintenances_page_gate_uq').on(t.pageId, t.gateName),
+    index('mocco_status_gate_maintenances_project_gate_idx').on(t.projectId, t.gateName),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_gate_maintenances_page_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_gate_maintenances_expected_minutes_check',
+      sql`${t.expectedMinutes} BETWEEN 1 AND ${sql.raw(String(GateMaintenanceLimits.expectedMinutesMax))}`,
+    ),
   ],
 );
 

@@ -1,11 +1,11 @@
-// The DeploySource and RunTimeline ports over the release registry and the execution repos.
+// The DeploySource, RunTimeline and RunSource ports over the release registry and the execution repos.
 // Built by the composition root (compose.ts); the status services only see the ports.
 import { RunEventRepo } from '@backend/domain/execution/repos/run-event.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { ProjectRepoRepo } from '@backend/domain/project/repos/project-repo.repo';
 import { ReleaseRepo } from '@backend/domain/project/repos/release.repo';
 
-import type { DeploySource, RunTimeline } from '@backend/domain/status/ports';
+import type { DeploySource, RunSource, RunTimeline } from '@backend/domain/status/ports';
 import type { Db } from '@backend/infra/db/types';
 
 export function createReleaseDeploySource(db: Db): DeploySource {
@@ -50,6 +50,23 @@ export function createRunTimeline(db: Db): RunTimeline {
       }
       await events.append({ workspaceId, runId, type: event.type, payload: event.payload });
       return true;
+    },
+  };
+}
+
+/** Runs with the projects their repository is linked to, through the execution and project repos. */
+export function createRunSource(db: Db): RunSource {
+  const runs = new RunRepo(db);
+  const projectRepos = new ProjectRepoRepo(db);
+  return {
+    runs: async (workspaceId, runIds) => {
+      const rows = await runs.listWithRepoInWorkspace(workspaceId, runIds);
+      return await Promise.all(
+        rows.map(async ({ run, repo }) => {
+          const links = await projectRepos.listByRepo(workspaceId, repo.id);
+          return { runId: run.id, state: run.state, projectIds: links.map(link => link.projectId) };
+        }),
+      );
     },
   };
 }

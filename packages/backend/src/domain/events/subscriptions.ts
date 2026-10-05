@@ -29,6 +29,6 @@ export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   // Register each subscriber here under a stable name.
   registerNotificationSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin });
   registerReleaseSubscribers(bus, { db: deps.db });
-  registerStatusSubscribers(bus, { db: deps.db, now: deps.now });
+  registerStatusSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin, now: deps.now });
   return bus;
 }

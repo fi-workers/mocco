@@ -100,6 +100,11 @@ export const AuditActions = {
   statusMaintenanceStarted: 'status.maintenance.started',
   /** The maintenance tick completed a window (no actor). */
   statusMaintenanceCompleted: 'status.maintenance.completed',
+  /** A run-linked window was still in progress after its expected minutes (no actor). */
+  statusMaintenanceOverran: 'status.maintenance.overran',
+  /** A gate was set to announce maintenance on a page when it is resumed, or that was changed. */
+  statusGateMaintenanceSet: 'status.gate_maintenance.set',
+  statusGateMaintenanceDeleted: 'status.gate_maintenance.deleted',
   statusMonitorCreated: 'status.monitor.created',
   statusMonitorUpdated: 'status.monitor.updated',
   statusMonitorDeleted: 'status.monitor.deleted',
@@ -210,6 +215,9 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.statusMaintenanceCanceled]: 'Maintenance canceled',
   [AuditActions.statusMaintenanceStarted]: 'Maintenance started',
   [AuditActions.statusMaintenanceCompleted]: 'Maintenance completed',
+  [AuditActions.statusMaintenanceOverran]: 'Maintenance overran',
+  [AuditActions.statusGateMaintenanceSet]: 'Gate maintenance set',
+  [AuditActions.statusGateMaintenanceDeleted]: 'Gate maintenance removed',
   [AuditActions.statusMonitorCreated]: 'Monitor created',
   [AuditActions.statusMonitorUpdated]: 'Monitor changed',
   [AuditActions.statusMonitorDeleted]: 'Monitor deleted',
