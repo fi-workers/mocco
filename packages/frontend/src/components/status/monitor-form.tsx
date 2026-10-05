@@ -107,7 +107,7 @@ function fieldsOf(monitor: Monitor | undefined): Fields {
     keywordMode: http?.keyword === undefined ? NO_KEYWORD : http.keywordMode,
     keyword: http?.keyword ?? '',
     latencyThresholdMs: http?.latencyThresholdMs === undefined ? '' : String(http.latencyThresholdMs),
-    timeoutSeconds: String((spec?.timeoutMs ?? MonitorLimits.defaultTimeoutMs) / 1000),
+    timeoutSeconds: String(((http ?? tcp)?.timeoutMs ?? MonitorLimits.defaultTimeoutMs) / 1000),
     followRedirects: http?.followRedirects ?? true,
     host: tcp?.host ?? '',
     port: tcp === undefined ? '' : String(tcp.port),

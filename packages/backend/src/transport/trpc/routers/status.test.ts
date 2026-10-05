@@ -128,6 +128,8 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
   pauseMonitor: async (api, scope, ids) => await api.status.pauseMonitor({ ...scope, monitorId: ids.monitorId }),
   resumeMonitor: async (api, scope, ids) => await api.status.resumeMonitor({ ...scope, monitorId: ids.monitorId }),
   deleteMonitor: async (api, scope, ids) => await api.status.deleteMonitor({ ...scope, monitorId: ids.monitorId }),
+  rotateHeartbeatToken: async (api, scope, ids) =>
+    await api.status.rotateHeartbeatToken({ ...scope, monitorId: ids.monitorId }),
   locations: async (api, scope) => await api.status.locations(scope),
   createLocation: async (api, scope) => await api.status.createLocation({ ...scope, code: 'attacker', name: 'x' }),
   rotateLocationToken: async (api, scope, ids) =>

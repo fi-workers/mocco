@@ -13,12 +13,16 @@
 // by one `watch_interval_s` later; the first round at or past it clears the watch, and the
 // monitor's own interval resumes.
 //
+// A heartbeat (#153) has no rounds: its `next_round_at` is its silence deadline, and when it passes
+// the evaluator takes the heartbeat down (heartbeat.ts) under the same lock, with no verdict row.
+//
 // After a change commits, the `onStateChange` port (bound in compose.ts to the
 // MonitorTransitionService) handles what it means for pages, incidents and alerts; the
 // evaluator knows nothing of those.
-import { MonitorKinds, MonitorStates } from '@mocco/common/status';
+import { isProbeSpec, MonitorKinds, MonitorStates, RoundVerdicts } from '@mocco/common/status';
 
 import { nextState, tallyRound } from '@backend/domain/status/consensus';
+import { applyHeartbeatVerdict, HeartbeatCauses } from '@backend/domain/status/heartbeat';
 import { leaseExpiry } from '@backend/domain/status/ProbeService';
 import { CheckResultRepo } from '@backend/domain/status/repos/check-result.repo';
 import { MonitorLocationRepo } from '@backend/domain/status/repos/monitor-location.repo';
@@ -30,9 +34,35 @@ import { utcDayOf } from '@backend/infra/db/day-partitions';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
 import type { Db } from '@backend/infra/db/types';
+import type { MonitorSpec } from '@mocco/common/status';
 
 /** What happens after a monitor's state change commits. */
 export type MonitorStateChangeHandler = (monitor: MonitorRow, change: MonitorStateChangeRow) => Promise<void>;
+
+/** Run the handler for a committed change; a failure is logged and the change stands. */
+export async function reactToStateChange(
+  handler: MonitorStateChangeHandler | undefined,
+  monitor: MonitorRow,
+  change: MonitorStateChangeRow,
+): Promise<void> {
+  if (handler === undefined) {
+    return;
+  }
+  try {
+    await handler(monitor, change);
+  } catch (error) {
+    console.error('[status] reacting to a monitor state change failed; the change stands', {
+      monitorId: monitor.id,
+      stateChangeId: change.id,
+      error,
+    });
+  }
+}
+
+interface Decision {
+  outcome: RoundClose;
+  change?: { monitor: MonitorRow; row: MonitorStateChangeRow };
+}
 
 export interface VerdictEvaluatorDeps {
   db: Db;
@@ -66,33 +96,51 @@ export class VerdictEvaluator {
   constructor(private readonly deps: VerdictEvaluatorDeps) {}
 
   private async closeRound(candidate: MonitorRow, now: Date): Promise<RoundClose> {
-    const result = await this.decideRound(candidate, now);
-    const handler = this.deps.onStateChange;
-    if (result.change !== undefined && handler !== undefined) {
-      try {
-        await handler(result.change.monitor, result.change.row);
-      } catch (error) {
-        console.error('[status] reacting to a monitor state change failed; the change stands', {
-          monitorId: candidate.id,
-          stateChangeId: result.change.row.id,
-          error,
-        });
-      }
+    const result = isProbeSpec(candidate.spec)
+      ? await this.decideRound(candidate, candidate.spec, now)
+      : await this.decideSilence(candidate, now);
+    if (result.change !== undefined) {
+      await reactToStateChange(this.deps.onStateChange, result.change.monitor, result.change.row);
     }
     return result.outcome;
   }
 
-  private async decideRound(
-    candidate: MonitorRow,
-    now: Date,
-  ): Promise<{ outcome: RoundClose; change?: { monitor: MonitorRow; row: MonitorStateChangeRow } }> {
+  /** A heartbeat whose deadline passed without a ping: down (or still down), with a new deadline. */
+  private async decideSilence(candidate: MonitorRow, now: Date): Promise<Decision> {
+    const scope = { workspaceId: candidate.workspaceId, projectId: candidate.projectId };
+    return await this.deps.db.transaction(async tx => {
+      const monitor = await new MonitorRepo(tx).lockForStateChange(scope, candidate.id);
+      // Paused, deleted, or pinged since it was read (a ping moves the deadline).
+      if (
+        monitor === undefined ||
+        monitor.state === MonitorStates.paused ||
+        monitor.nextRoundAt.getTime() !== candidate.nextRoundAt.getTime()
+      ) {
+        return { outcome: RoundCloses.skipped };
+      }
+      const applied = await applyHeartbeatVerdict(tx, monitor, RoundVerdicts.fail, {
+        now,
+        ping: {},
+        reason: {
+          by: 'evaluator',
+          cause: HeartbeatCauses.silence,
+          lastPingAt: monitor.lastPingAt?.toISOString() ?? null,
+        },
+      });
+      return applied.change === undefined
+        ? { outcome: RoundCloses.closed }
+        : { outcome: RoundCloses.changed, change: { monitor: applied.monitor, row: applied.change } };
+    });
+  }
+
+  private async decideRound(candidate: MonitorRow, spec: MonitorSpec, now: Date): Promise<Decision> {
     const scope = { workspaceId: candidate.workspaceId, projectId: candidate.projectId };
     const roundAt = candidate.nextRoundAt;
     const [reports, assigned] = await Promise.all([
       new CheckResultRepo(this.deps.db).listForRound(candidate.workspaceId, candidate.id, roundAt),
       new MonitorLocationRepo(this.deps.db).countEnabled(candidate.workspaceId, candidate.id),
     ]);
-    const deadline = leaseExpiry({ roundAt, spec: candidate.spec });
+    const deadline = leaseExpiry({ roundAt, spec });
     if (reports.length < assigned && now <= deadline) {
       return { outcome: RoundCloses.open };
     }

@@ -1,4 +1,4 @@
-import { MonitorStates } from '@mocco/common/status';
+import { MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { and, asc, eq, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
@@ -22,7 +22,12 @@ export type MonitorSettings = Pick<
   | 'recoveryConfirmations'
   | 'quorumMode'
   | 'incidentPolicy'
+  | 'heartbeatPeriodSeconds'
+  | 'heartbeatGraceSeconds'
 >;
+
+/** What a heartbeat ping records: the completion (`lastPingAt`, with the run's duration) or a start. */
+export type HeartbeatPingValues = Partial<Pick<MonitorInsert, 'lastPingAt' | 'lastStartAt' | 'lastDurationMs'>>;
 
 const m = schema.statusMonitors;
 const scoped = (scope: StatusScope) => and(eq(m.workspaceId, scope.workspaceId), eq(m.projectId, scope.projectId));
@@ -55,6 +60,27 @@ export class MonitorRepo {
     return await this.find(scope, id);
   }
 
+  /** The heartbeat monitor whose token hashes to `tokenHash`, in any workspace: the ping routes'
+   * lookup, since the token is their only credential. */
+  async findByHeartbeatTokenHash(tokenHash: string): Promise<MonitorRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(m)
+      .where(and(eq(m.heartbeatTokenHash, tokenHash), eq(m.kind, MonitorKinds.heartbeat)));
+    return row;
+  }
+
+  /** Replace a heartbeat's token hash (under `lockForStateChange`); the old token stops working. */
+  async setHeartbeatTokenHash(scope: StatusScope, id: string, tokenHash: string, at: Date): Promise<MonitorRow> {
+    return expectOne(
+      await this.db
+        .update(m)
+        .set({ heartbeatTokenHash: tokenHash, updatedAt: at })
+        .where(and(scoped(scope), eq(m.id, id), eq(m.kind, MonitorKinds.heartbeat)))
+        .returning(),
+    );
+  }
+
   async insert(row: MonitorInsert): Promise<MonitorRow> {
     return expectOne(await this.db.insert(m).values(row).returning());
   }
@@ -85,7 +111,8 @@ export class MonitorRepo {
       .limit(opts.limit);
   }
 
-  /** The monitors of `projectIds` that aren't paused: the ones a release of those projects watches. */
+  /** The probe monitors of `projectIds` that aren't paused: the ones a release of those projects
+   * watches. A heartbeat has no rounds to speed up. */
   async listWatchable(workspaceId: string, projectIds: readonly string[]): Promise<MonitorRow[]> {
     if (projectIds.length === 0) {
       return [];
@@ -94,7 +121,12 @@ export class MonitorRepo {
       .select()
       .from(m)
       .where(
-        and(eq(m.workspaceId, workspaceId), inArray(m.projectId, [...projectIds]), ne(m.state, MonitorStates.paused)),
+        and(
+          eq(m.workspaceId, workspaceId),
+          inArray(m.projectId, [...projectIds]),
+          ne(m.state, MonitorStates.paused),
+          ne(m.kind, MonitorKinds.heartbeat),
+        ),
       )
       .orderBy(asc(m.id));
   }
@@ -134,11 +166,12 @@ export class MonitorRepo {
     );
   }
 
-  /** Set the state, streaks and schedule (under `lockForStateChange`). */
+  /** Set the state, streaks and schedule (under `lockForStateChange`), with the heartbeat ping
+   * that moved them, if any. */
   async setState(
     scope: StatusScope,
     id: string,
-    values: {
+    values: HeartbeatPingValues & {
       state: MonitorState;
       stateChangedAt?: Date;
       nextRoundAt?: Date;

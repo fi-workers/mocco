@@ -1,4 +1,4 @@
-import { MonitorStates } from '@mocco/common/status';
+import { isProbeSpec, MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { and, asc, eq, inArray, isNull, lte, ne, notExists, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
@@ -50,6 +50,8 @@ export class ProbeLeaseRepo {
             eq(ml.locationId, opts.locationId),
             opts.workspaceId === null ? undefined : eq(ml.workspaceId, opts.workspaceId),
             ne(m.state, MonitorStates.paused),
+            // A heartbeat has no locations to lease to; its `next_round_at` is a silence deadline.
+            ne(m.kind, MonitorKinds.heartbeat),
             lte(m.nextRoundAt, opts.horizon),
             notExists(
               tx
@@ -62,13 +64,14 @@ export class ProbeLeaseRepo {
         .orderBy(asc(m.nextRoundAt))
         .limit(opts.limit)
         .for('update', { of: ml, skipLocked: true });
-      if (due.length === 0) {
+      const probed = due.flatMap(round => (isProbeSpec(round.spec) ? [{ ...round, spec: round.spec }] : []));
+      if (probed.length === 0) {
         return [];
       }
       const leased = await tx
         .insert(l)
         .values(
-          due.map(round => ({
+          probed.map(round => ({
             workspaceId: round.workspaceId,
             monitorId: round.monitorId,
             locationId: opts.locationId,
@@ -79,7 +82,7 @@ export class ProbeLeaseRepo {
         )
         .onConflictDoNothing({ target: [l.monitorId, l.locationId, l.roundAt] })
         .returning();
-      const specs = new Map(due.map(round => [round.monitorId, round.spec]));
+      const specs = new Map(probed.map(round => [round.monitorId, round.spec]));
       return leased.flatMap(lease => {
         const spec = specs.get(lease.monitorId);
         return spec === undefined ? [] : [{ ...lease, spec }];

@@ -4,11 +4,15 @@
 // the host and port.
 import { MonitorKinds } from '@mocco/common/status';
 
-import type { MonitorSpec } from '@mocco/common/status';
+import type { StoredMonitorSpec } from '@mocco/common/status';
 
 /** An HTTP URL's host (with its port when it isn't the scheme's default), never its
- * credentials, path, query or fragment; a TCP host and port. Null for a URL that doesn't parse. */
-export function monitorTargetOf(spec: MonitorSpec): string | null {
+ * credentials, path, query or fragment; a TCP host and port. Null for a URL that doesn't parse,
+ * and for a heartbeat, which checks nothing: its job pings Mocco. */
+export function monitorTargetOf(spec: StoredMonitorSpec): string | null {
+  if (spec.kind === MonitorKinds.heartbeat) {
+    return null;
+  }
   if (spec.kind === MonitorKinds.tcp) {
     return `${spec.host}:${spec.port}`;
   }
