@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 import { DayPartitions } from '@backend/infra/db/day-partitions';
 import * as schema from '@backend/infra/db/schema';
@@ -31,5 +31,15 @@ export class RoundVerdictRepo {
       .where(and(eq(v.workspaceId, workspaceId), eq(v.monitorId, monitorId)))
       .orderBy(asc(v.roundAt))
       .limit(500);
+  }
+
+  /** The monitor's latest closed rounds, newest first (the primary key's order, so it is cheap). */
+  async listLatestForMonitor(workspaceId: string, monitorId: string, limit: number): Promise<RoundVerdictRow[]> {
+    return await this.db
+      .select()
+      .from(v)
+      .where(and(eq(v.workspaceId, workspaceId), eq(v.monitorId, monitorId)))
+      .orderBy(desc(v.roundAt))
+      .limit(limit);
   }
 }

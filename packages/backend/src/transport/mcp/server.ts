@@ -24,6 +24,7 @@ import {
 import { registerOtaTools, type OtaToolDeps } from '@backend/transport/mcp/tools/ota';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
+import { registerStatusMonitorTools, type StatusMonitorToolDeps } from '@backend/transport/mcp/tools/status-monitors';
 
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
@@ -33,6 +34,7 @@ export type McpToolDeps = RunToolDeps &
   FlagToolDeps &
   OtaToolDeps &
   StatusToolDeps &
+  StatusMonitorToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -56,6 +58,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerFlagTools(server, deps);
   registerOtaTools(server, deps);
   registerStatusTools(server, deps);
+  registerStatusMonitorTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);

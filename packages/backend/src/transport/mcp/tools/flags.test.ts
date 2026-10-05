@@ -188,6 +188,9 @@ describe('mocco_flags_* (pglite, over HTTP)', () => {
       statusPages: { listPages: refuse, getPage: refuse },
       statusIncidents: { list: refuse, get: refuse },
       statusMaintenances: { list: refuse },
+      statusMonitors: { list: refuse, get: refuse },
+      statusLocations: { list: refuse },
+      statusCorrelation: { list: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

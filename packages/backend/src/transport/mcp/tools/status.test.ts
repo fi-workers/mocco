@@ -6,8 +6,9 @@
 // that does not exist, and a workspace without the status product says so.
 import { randomUUID } from 'node:crypto';
 
+import { RunStates } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
-import { ComponentStatuses, IncidentSeverities, IncidentStatuses } from '@mocco/common/status';
+import { ComponentStatuses, IncidentRunRelations, IncidentSeverities, IncidentStatuses } from '@mocco/common/status';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -17,6 +18,7 @@ import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { createStatusDomain } from '@backend/domain/status/compose';
+import { seedRelease, seedRepo, seedRun } from '@backend/domain/status/testing/deploys';
 import { expectOne } from '@backend/infra/db/rows';
 import { members, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -69,6 +71,14 @@ const STATUS_TOOLS = [
   'mocco_status_incidents_search',
   'mocco_status_maintenances_search',
   'mocco_status_pages_get',
+];
+
+/** Every status tool, with the monitor and location reads (`status-monitors.test.ts`). */
+const ALL_STATUS_TOOLS = [
+  ...STATUS_TOOLS,
+  'mocco_status_locations_search',
+  'mocco_status_monitors_get',
+  'mocco_status_monitors_search',
 ];
 
 describe('mocco_status_* (pglite, over HTTP)', () => {
@@ -256,6 +266,9 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
       statusPages: status.statusPages,
       statusIncidents: status.statusIncidents,
       statusMaintenances: status.statusMaintenances,
+      statusMonitors: status.statusMonitors,
+      statusLocations: status.statusLocations,
+      statusCorrelation: status.statusCorrelation,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings: { agentsMayDecide: refuse },
@@ -270,7 +283,7 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
     const listed = await rpc(ada, 'tools/list', {});
 
     const statusTools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_status_')) ?? [];
-    expect(new Set(statusTools.map(tool => tool.name))).toEqual(new Set(STATUS_TOOLS));
+    expect(new Set(statusTools.map(tool => tool.name))).toEqual(new Set(ALL_STATUS_TOOLS));
     expect(statusTools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
   });
 
@@ -443,6 +456,56 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
           status: ComponentStatuses.partialOutage,
         },
       ]);
+    });
+
+    it("adds the deploys linked to it, Mocco's suggestion and a person's link, only when asked", async () => {
+      const repoId = await seedRepo(t.db, mine.workspaceId, 'api', [mine.projectId]);
+      const suspect = await seedRelease(t.db, {
+        workspaceId: mine.workspaceId,
+        repoId,
+        projectIds: [mine.projectId],
+        releasedAt: minutes(5),
+      });
+      const { runId: fix, sha: fixSha } = await seedRun(t.db, {
+        workspaceId: mine.workspaceId,
+        repoId,
+        finishedAt: minutes(16),
+      });
+      await status.statusCorrelation.correlate(mine, elevatedErrors);
+      await status.statusCorrelation.link(mine, ada, { incidentId: elevatedErrors, runId: fix, relation: 'fix' });
+
+      const concise = bodyOf(await call('mocco_status_incidents_get', { incidentId: elevatedErrors }));
+      const detailed = bodyOf(
+        await call('mocco_status_incidents_get', { incidentId: elevatedErrors, responseFormat: 'detailed' }),
+      );
+
+      expect(concise).not.toHaveProperty('deploys');
+      const deploys = detailed.deploys as Row[];
+      expect(deploys).toHaveLength(2);
+      expect(deploys).toContainEqual({
+        runId: suspect,
+        relation: IncidentRunRelations.suspected,
+        score: expect.any(Number),
+        linkedBy: 'mocco',
+        linkedByUserId: null,
+        linkedAt: expect.any(String),
+        run: {
+          state: RunStates.succeeded,
+          repo: 'acme/api',
+          commitSha: expect.any(String),
+          finishedAt: minutes(5).toISOString(),
+        },
+      });
+      expect(deploys).toContainEqual(
+        expect.objectContaining({
+          runId: fix,
+          relation: IncidentRunRelations.fix,
+          score: null,
+          linkedBy: 'person',
+          linkedByUserId: ada,
+          run: expect.objectContaining({ commitSha: fixSha, finishedAt: minutes(16).toISOString() }),
+        }),
+      );
     });
 
     it("refuses another workspace's incident exactly as one that does not exist", async () => {

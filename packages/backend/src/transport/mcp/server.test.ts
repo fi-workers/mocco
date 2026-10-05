@@ -21,7 +21,7 @@ describe('createMcpServer', () => {
       scope: new WorkspaceScope({ memberships: { listForUser: refuse, isMember: refuse } }),
       settings: { agentsMayDecide: refuse },
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
-      projects: { resolve: refuse },
+      projects: { resolve: refuse, resolveWorkspace: refuse },
       otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
       otaChannels: { listHeads: refuse },
       otaReleases: { listReleases: refuse },
@@ -31,6 +31,9 @@ describe('createMcpServer', () => {
       statusPages: { listPages: refuse, getPage: refuse },
       statusIncidents: { list: refuse, get: refuse },
       statusMaintenances: { list: refuse },
+      statusMonitors: { list: refuse, get: refuse },
+      statusLocations: { list: refuse },
+      statusCorrelation: { list: refuse },
       confirmations: undefined,
     });
 

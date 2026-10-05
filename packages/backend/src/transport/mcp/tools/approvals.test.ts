@@ -176,7 +176,7 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       scope: new WorkspaceScope({ memberships: new MembershipRepo(t.db) }),
       settings,
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
-      projects: { resolve: refuse },
+      projects: { resolve: refuse, resolveWorkspace: refuse },
       otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
       otaChannels: { listHeads: refuse },
       otaReleases: { listReleases: refuse },
@@ -186,6 +186,9 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       statusPages: { listPages: refuse, getPage: refuse },
       statusIncidents: { list: refuse, get: refuse },
       statusMaintenances: { list: refuse },
+      statusMonitors: { list: refuse, get: refuse },
+      statusLocations: { list: refuse },
+      statusCorrelation: { list: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });
