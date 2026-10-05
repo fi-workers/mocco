@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
-import { loadOgFonts, ogFontsDir } from '@backend/domain/og/instance';
+import { describe, expect, it, vi } from 'vitest';
+
+import { cmapCodePoints, codePoints, createOgFallbacks } from '@backend/domain/og/fallback';
+import { loadOgFonts, ogAssetsDir } from '@backend/domain/og/instance';
 import { OgImageService } from '@backend/domain/og/OgImageService';
 import { createOgRenderer } from '@backend/domain/og/renderer';
 import { OG_HEIGHT, OG_WIDTH, OgTemplates } from '@backend/domain/og/templates';
 
-const loadFonts = async () => await loadOgFonts(ogFontsDir(process.cwd()));
+const assets = ogAssetsDir(process.cwd());
+const loadFonts = async () => await loadOgFonts(assets);
 
 /** PNG width and height from the IHDR chunk (bytes 16–23). */
 const pngSize = (png: Uint8Array) => {
@@ -13,11 +18,12 @@ const pngSize = (png: Uint8Array) => {
   return { width: view.getUint32(16), height: view.getUint32(20) };
 };
 
-const setUp = () => {
+const setUp = (fallbacks = createOgFallbacks(assets)) => {
   const stored = new Map<string, Uint8Array>();
   const missing: string[] = [];
   let renders = 0;
   const render = createOgRenderer(loadFonts, {
+    fallbacks,
     onMissingGlyphs: segment => {
       missing.push(segment);
     },
@@ -95,14 +101,14 @@ describe('OgImageService', () => {
     expect(OgTemplates.simple.version).toBeGreaterThan(0);
   });
 
-  it('has a glyph for every Latin and Hangul character a card shows', async () => {
+  it('has a glyph for every Latin, Hangul, Hanja, kana and emoji character a card shows', async () => {
     const { og, missing } = setUp();
     const { template, file, data } = parts(
       og.issue('article', {
-        brand: { name: '쇼유어타임 ShowYourTime' },
-        eyebrow: '시작하기',
-        title: 'iOS 위젯으로 홈 화면에서 바로 촬영하기 — 똠얌꿍 쌰 뷁',
-        description: 'Pricing: ₩9,900 · 50% off “today” (1–3 days).',
+        brand: { name: '쇼유어타임 ShowYourTime 🎬' },
+        eyebrow: '시작하기 · 入門 · はじめに',
+        title: 'iOS 위젯으로 홈 화면에서 바로 촬영하기 📸 — 똠얌꿍 쌰 뷁 · 大韓民國 學校',
+        description: 'Pricing: ₩9,900 · 50% off “today” (1–3 days). 東京のカフェ ☕️ 👩‍💻 🇰🇷 ❤️',
       }),
     );
 
@@ -110,5 +116,42 @@ describe('OgImageService', () => {
 
     expect(png).toBeDefined();
     expect(missing).toEqual([]);
+  });
+
+  it('reports what no font or emoji covers, and renders it as boxes', async () => {
+    const { og, missing } = setUp();
+    // Thai has no font here, and U+20000 (CJK extension B) is outside the Hanja subset.
+    const { template, file, data } = parts(og.issue('simple', { brand: { name: 'Mocco' }, title: 'สวัสดี 𠀀 漢' }));
+
+    const png = await og.image(template, file, data);
+
+    expect(png).toBeDefined();
+    expect(missing.join('')).toContain('ส');
+    expect(missing.join('')).toContain('𠀀');
+    expect(missing.join('')).not.toContain('漢');
+  });
+
+  it('still renders, with boxes, when the fallback assets cannot be read', async () => {
+    const { og, missing } = setUp(createOgFallbacks('/nonexistent'));
+    const { template, file, data } = parts(og.issue('simple', { brand: { name: 'Mocco' }, title: '東京 🎬' }));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const png = await og.image(template, file, data);
+
+    expect(png).toBeDefined();
+    expect(missing.join('')).toContain('東京');
+    expect(missing).toContain('🎬');
+    expect(errors).toHaveBeenCalledTimes(2);
+    errors.mockRestore();
+  });
+
+  it('maps the CJK subset to kana and the KS X 1001 and JIS X 0208 Hanja', async () => {
+    const font = await readFile(path.join(assets, 'fonts', 'NotoSansCJKkr-Regular.otf'));
+    const covered = cmapCodePoints(font);
+    const isCovered = (text: string) => codePoints(text).every(cp => covered.has(cp));
+
+    expect(isCovered('あいうえおアイウエオ漢字學校大韓民國東京')).toBe(true);
+    expect(covered.has(0x2_00_00)).toBe(false);
+    expect(covered.size).toBeGreaterThan(7000);
   });
 });

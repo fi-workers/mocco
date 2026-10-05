@@ -53,3 +53,5 @@ docs/prototype/ non-functional click-through (design validation)
 ## License
 
 [AGPL-3.0](./LICENSE). Free to self-host, modify, and redistribute. If you offer Mocco as a network service, AGPL terms apply (source of your modifications must be made available). For commercial use where AGPL doesn't fit, contact us about a separate license.
+
+OG share cards bundle third-party assets under their own licenses: Pretendard and Noto Sans CJK fonts (SIL OFL 1.1) and [Twemoji](https://github.com/jdecked/twemoji) graphics (Copyright 2014-2021 Twitter, Inc and other contributors; 2022-present Jason Sofonia & Justine De Caires; [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)). The license texts are in `packages/backend/src/domain/og/fonts/` and `packages/backend/src/domain/og/emoji/`.

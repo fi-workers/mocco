@@ -4,7 +4,7 @@ description: How Mocco renders Open Graph share images — templates, signed and
 type: reference
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, og-images, seo, platform]
@@ -16,6 +16,9 @@ code_refs:
   - packages/backend/src/domain/og/OgImageService.ts
   - packages/backend/src/domain/og/templates.ts
   - packages/backend/src/domain/og/renderer.ts
+  - packages/backend/src/domain/og/fallback.ts
+  - scripts/og-assets/build-cjk-fonts.py
+  - scripts/og-assets/pack-twemoji.mjs
   - packages/backend/src/transport/ext/og.ts
 ---
 
@@ -58,4 +61,21 @@ A change to the fields, or to the template's `version`, is a new signature and s
 
 ## Rendering
 
-`domain/og/renderer.ts` is the only file that imports satori (layout to SVG) and resvg (SVG to PNG). It runs on the Node runtime; `next.config.ts` keeps both out of the bundle (`serverExternalPackages`: resvg is a native addon and satori loads its wasm from its package) and traces the fonts into the ext route (`outputFileTracingIncludes`). Fonts are Pretendard 400 and 600 (OFL, `domain/og/fonts/`), subset to Latin, Latin-1, general punctuation, CJK punctuation, Hangul jamo and every Hangul syllable, read once on the first render. A test renders Latin and Hangul and fails if any glyph is missing. Emoji, Hanja and kana are not covered yet and render as boxes; a fallback font loader is the follow-up.
+`domain/og/renderer.ts` is the only file that imports satori (layout to SVG) and resvg (SVG to PNG). It runs on the Node runtime; `next.config.ts` keeps both out of the bundle (`serverExternalPackages`: resvg is a native addon and satori loads its wasm from its package) and traces the fonts into the ext route (`outputFileTracingIncludes`). Fonts are Pretendard 400 and 600 (OFL, `domain/og/fonts/`), subset to Latin, Latin-1, general punctuation, CJK punctuation, Hangul jamo and every Hangul syllable, read once on the first render.
+
+### Fallbacks: emoji, Hanja and kana
+
+satori hands the renderer each run of text Pretendard doesn't cover (`loadAdditionalAsset`), and `domain/og/fallback.ts` answers it from assets bundled beside the fonts:
+
+| Run | Drawn with | File |
+|---|---|---|
+| An emoji grapheme (ZWJ sequences, flags and skin tones included) | Twemoji 17.0.3's SVG, embedded as an image | `domain/og/emoji/twemoji.json.br`: all 4,009 SVGs as one brotli JSON, about 0.95 MB |
+| Kana, CJK punctuation, full-width forms, Hanja | Noto Sans CJK KR 2.004 at 400 and 600 | `domain/og/fonts/NotoSansCJKkr-{Regular,SemiBold}.otf`, about 4.1 MB each |
+
+The CJK fonts keep kana and the 7,159 ideographs that KS X 1001 (Korean Hanja) and JIS X 0208 (Japanese kanji) encode, with Korean glyph forms. Each asset is read on the first card that needs it and kept in memory for the instance's life; satori caches the parsed fonts. Anything still uncovered (another script, a rarer ideograph, an emoji Twemoji lacks) renders as a box and reaches `onMissingGlyphs`. If an asset can't be read, the card still renders with boxes, the error is logged with an `[og]` prefix, and the next card tries again. Keycap emoji (`#️⃣`, `1️⃣`) show their plain character: satori draws the base from Pretendard and never asks for the sequence.
+
+The assets are bundled rather than fetched because a card is rendered once and then served from storage forever under its URL: a fetch that failed, or a CDN that changed an image, would stay in that card for good. Bundling also keeps self-hosted and offline renders, and the tests, identical. It costs about 9 MB more in the ext function, well within a Node function's limit; Edge was already ruled out (ADR 0030).
+
+The tests render Latin, Hangul, Hanja, kana and emoji and fail if any glyph is missing, check that uncovered text is reported, and check that a card still renders when the assets are missing.
+
+Licenses sit beside the files: `fonts/OFL.txt` (Pretendard), `fonts/NotoSansCJK-OFL.txt` (Noto Sans CJK, OFL 1.1) and `emoji/LICENSE-GRAPHICS.txt` (Twemoji graphics, CC-BY 4.0, with the attribution). To rebuild them from upstream, `scripts/og-assets/build-cjk-fonts.py` (fontTools) instances and subsets `NotoSansCJKkr-VF.otf` from noto-cjk's `Sans2.004` tag, and `scripts/og-assets/pack-twemoji.mjs` packs `assets/svg` from Twemoji's `v17.0.3` tag. Bump a template's `version` if a rebuild changes how existing cards look.
