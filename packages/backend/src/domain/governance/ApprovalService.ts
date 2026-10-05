@@ -44,6 +44,8 @@ export interface ApprovalServiceDeps {
 
 export interface ApprovalRequestInput {
   kind: ApprovalKind;
+  /** The project the subject belongs to, so readers can tell where it's decided; omit for workspace-wide ones. */
+  projectId?: string;
   subjectType: string;
   subjectId: string;
   action: Record<string, unknown>;
@@ -151,6 +153,7 @@ export class ApprovalService {
   async request(workspaceId: string, input: ApprovalRequestInput) {
     const created = await this.deps.requests.create({
       workspaceId,
+      projectId: input.projectId ?? null,
       kind: input.kind,
       subjectType: input.subjectType,
       subjectId: input.subjectId,

@@ -1582,6 +1582,9 @@ export const approvalRequests = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     kind: text().$type<ApprovalKind>().notNull(),
+    // The project the subject belongs to, set by the product that opens the request, so a
+    // reader (Home, MCP) knows where the change is decided. Null for workspace-wide ones.
+    projectId: uuid('project_id'),
     // What the change is about, e.g. ('ota.version_policy', <appId>). Opaque to governance.
     subjectType: text('subject_type').notNull(),
     subjectId: text('subject_id').notNull(),
@@ -1607,6 +1610,12 @@ export const approvalRequests = pgTable(
   t => [
     index('mocco_approval_requests_workspace_state_idx').on(t.workspaceId, t.state, t.createdAt),
     index('mocco_approval_requests_subject_idx').on(t.workspaceId, t.subjectType, t.subjectId),
+    // Pinned to its workspace (skipped by Postgres while project_id is null).
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_approval_requests_project_workspace_fk',
+    }).onDelete('cascade'),
     check('mocco_approval_requests_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(ApprovalKinds))})`),
     check('mocco_approval_requests_state_check', sql`${t.state} IN (${sqlInList(Object.values(ApprovalStates))})`),
   ],

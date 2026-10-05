@@ -67,6 +67,7 @@ export async function searchApprovals(deps: ApprovalToolDeps, args: SearchApprov
     requests: requests.map(request => ({
       id: request.id,
       kind: request.kind,
+      projectId: request.projectId,
       subject: { type: request.subjectType, id: request.subjectId },
       state: request.state,
       createdAt: request.createdAt,
@@ -81,6 +82,7 @@ export async function getApproval(deps: ApprovalToolDeps, args: GetApprovalArgs,
   return {
     id: request.id,
     kind: request.kind,
+    projectId: request.projectId,
     subject: { type: request.subjectType, id: request.subjectId },
     state: request.state,
     // The pinned change: what will be applied if this is approved, and nothing else.

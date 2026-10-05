@@ -160,6 +160,8 @@ export const approvalDecisionSchema = z.enum(
 export const approvalRequestSchema = z.object({
   id: z.uuid(),
   workspaceId: z.uuid(),
+  /** The project the subject belongs to; null for workspace-wide requests. */
+  projectId: z.uuid().nullable(),
   kind: approvalKindSchema,
   subjectType: z.string(),
   subjectId: z.string(),
