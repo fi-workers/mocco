@@ -161,6 +161,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Monitor alerts show only the host and port
+
+- A monitor alert's "Checks" field carried the monitor's full URL, so credentials (`user:pass@`) or a token in the
+  path or query reached every Discord channel the alert was routed to and the stored event. The status reference
+  now says the alert shows only the host and port, and lists what else keeps the spec out (incident text, audit
+  payloads, the public snapshot); the events reference says the same for the `status.monitor.*` payloads.
+- Docs touched: `reference/status.md`, `reference/events.md`, `log.md`
+- Source: branch `fix/status-alert-target-redaction`
+
 ## 2026-10-05 — Deploy correlation in the console
 
 - The status guide gains "Check the deploys around it" with a screenshot of the Recent deploys panel (the
