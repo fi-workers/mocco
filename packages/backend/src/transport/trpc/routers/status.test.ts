@@ -24,11 +24,14 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { seedRepo, seedRun } from '@backend/domain/status/testing/deploys';
 import { members, users } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { statusRouter } from '@backend/transport/trpc/routers/status';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
+
+import type { Db } from '@backend/infra/db/types';
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
   const response = await auth.handler(
@@ -54,6 +57,7 @@ interface Ids {
   maintenanceId: string;
   locationId: string;
   monitorId: string;
+  runId: string;
 }
 
 const httpSpec = { kind: 'http', url: 'https://api.acme.test/health' } as const;
@@ -87,6 +91,16 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
     await api.status.setIncidentComponents({ ...scope, incidentId: ids.incidentId, components: [] }),
   setPostmortem: async (api, scope, ids) =>
     await api.status.setPostmortem({ ...scope, incidentId: ids.incidentId, postmortem: 'x' }),
+  incidentRuns: async (api, scope, ids) => await api.status.incidentRuns({ ...scope, incidentId: ids.incidentId }),
+  correlateIncident: async (api, scope, ids) =>
+    await api.status.correlateIncident({ ...scope, incidentId: ids.incidentId }),
+  linkRun: async (api, scope, ids) =>
+    await api.status.linkRun({ ...scope, incidentId: ids.incidentId, runId: ids.runId }),
+  unlinkRun: async (api, scope, ids) =>
+    await api.status.unlinkRun({ ...scope, incidentId: ids.incidentId, runId: ids.runId }),
+  // Workspace-scoped like runs: with the caller's own workspace, the victim's run is NOT_FOUND.
+  runIncidents: async (api, scope, ids) =>
+    await api.status.runIncidents({ workspaceId: scope.workspaceId, runId: ids.runId }),
   maintenances: async (api, scope, ids) => await api.status.maintenances({ ...scope, pageId: ids.pageId }),
   scheduleMaintenance: async (api, scope, ids) =>
     await api.status.scheduleMaintenance({
@@ -136,7 +150,7 @@ const outcome = async (run: () => Promise<unknown>): Promise<string | undefined>
 };
 
 /** A page with one of everything. */
-const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
+const seed = async (db: Db, api: Api, scope: Scope, slug: string): Promise<Ids> => {
   const { page } = await api.status.createPage({ ...scope, slug, title: 'Status' });
   const { group } = await api.status.createGroup({ ...scope, pageId: page.id, name: 'Core' });
   const { component } = await api.status.createComponent({ ...scope, pageId: page.id, name: 'API', groupId: group.id });
@@ -164,6 +178,9 @@ const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
     locationIds: [location.id],
     components: [{ componentId: component.id, impactWhenDown: 'major_outage' }],
   });
+  const repoId = await seedRepo(db, scope.workspaceId, 'api', [scope.projectId]);
+  const { runId } = await seedRun(db, { workspaceId: scope.workspaceId, repoId, finishedAt: new Date() });
+  await api.status.linkRun({ ...scope, incidentId: incident.id, runId });
   return {
     pageId: page.id,
     groupId: group.id,
@@ -172,6 +189,7 @@ const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
     maintenanceId: maintenance.id,
     locationId: location.id,
     monitorId: monitor.id,
+    runId,
   };
 };
 
@@ -255,7 +273,7 @@ describe('status router on pglite', () => {
 
   it('manages a page end to end and maps domain errors', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'acme');
+    const ids = await seed(t.db, api, scope, 'acme');
 
     await api.status.setComponentStatus({ ...scope, componentId: ids.componentId, status: 'degraded' });
     await api.status.createComponent({ ...scope, pageId: ids.pageId, name: 'Dashboard' });
@@ -279,7 +297,7 @@ describe('status router on pglite', () => {
 
   it('runs incidents and maintenance and maps their errors', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'acme');
+    const ids = await seed(t.db, api, scope, 'acme');
 
     const detail = await api.status.page({ ...scope, pageId: ids.pageId });
     expect(detail.components).toEqual([
@@ -310,9 +328,9 @@ describe('status router on pglite', () => {
 
   it("rejects a non-member and another tenant's ids on every procedure", async () => {
     const owner = await setup('owner@example.com', 'acme');
-    const victim = await seed(owner.api, owner.scope, 'acme');
+    const victim = await seed(t.db, owner.api, owner.scope, 'acme');
     const attacker = await setup('attacker@example.com', 'evil');
-    const own = await seed(attacker.api, attacker.scope, 'evil');
+    const own = await seed(t.db, attacker.api, attacker.scope, 'evil');
 
     const results: Record<string, [string | undefined, string | undefined]> = {};
     // One at a time: the calls share one pglite connection.
@@ -350,11 +368,55 @@ describe('status router on pglite', () => {
     expect(locations).toEqual([expect.objectContaining({ id: victim.locationId, disabledAt: null })]);
     const { locations: attackerLocations } = await attacker.api.status.locations(attacker.scope);
     expect(attackerLocations.map(location => location.id)).not.toContain(victim.locationId);
+    // The victim's run link survived the attacker's unlink, and only the victim sees it.
+    const { runs } = await owner.api.status.incidentRuns({ ...owner.scope, incidentId: victim.incidentId });
+    expect(runs.map(run => run.runId)).toEqual([victim.runId]);
+    const { incidents } = await attacker.api.status.runIncidents({
+      workspaceId: attacker.scope.workspaceId,
+      runId: own.runId,
+    });
+    expect(incidents.map(row => row.incidentId)).toEqual([own.incidentId]);
+  });
+
+  it('links runs to incidents both ways and reads them from either side', async () => {
+    const { api, scope } = await setup('owner@example.com', 'acme');
+    const ids = await seed(t.db, api, scope, 'acme');
+
+    const { runs } = await api.status.incidentRuns({ ...scope, incidentId: ids.incidentId });
+    expect(runs).toEqual([
+      expect.objectContaining({
+        runId: ids.runId,
+        relation: 'manual',
+        score: null,
+        run: expect.objectContaining({ repoFullName: 'acme/api', state: 'succeeded' }) as unknown,
+      }),
+    ]);
+    const { link } = await api.status.linkRun({
+      ...scope,
+      incidentId: ids.incidentId,
+      runId: ids.runId,
+      relation: 'fix',
+    });
+    expect(link).toMatchObject({ runId: ids.runId, relation: 'fix' });
+    expect(link).not.toHaveProperty('workspaceId');
+    const { incidents } = await api.status.runIncidents({ workspaceId: scope.workspaceId, runId: ids.runId });
+    expect(incidents).toEqual([
+      expect.objectContaining({ incidentId: ids.incidentId, projectId: scope.projectId, relation: 'fix' }),
+    ]);
+    await expect(
+      // @ts-expect-error -- Mocco's own relations can't be set by hand
+      api.status.linkRun({ ...scope, incidentId: ids.incidentId, runId: ids.runId, relation: 'suspected' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await api.status.unlinkRun({ ...scope, incidentId: ids.incidentId, runId: ids.runId });
+    await expect(
+      api.status.unlinkRun({ ...scope, incidentId: ids.incidentId, runId: ids.runId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await api.status.correlateIncident({ ...scope, incidentId: ids.incidentId })).toEqual({ suggested: 0 });
   });
 
   it('manages monitors and locations; a token is shown once and a plain member only reads', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'acme');
+    const ids = await seed(t.db, api, scope, 'acme');
 
     const { location, token } = await api.status.createLocation({ ...scope, code: 'dc-2', name: 'DC 2' });
     expect(token).toMatch(/^mpl_/);

@@ -1,6 +1,6 @@
 // Status page (#103): a project's status pages, their components, incidents and scheduled
-// maintenance (#148), and its monitors and probe locations (#150). Subscribers and deploy
-// correlation come in later slices (docs/specs/2026-09-24-status-page-design.md).
+// maintenance (#148), its monitors and probe locations (#150), and the runs correlated with
+// its incidents (#154). Subscribers come in a later slice (docs/specs/2026-09-24-status-page-design.md).
 import { z } from 'zod';
 
 /** What a component shows. The DB checks on `mocco_status_components.status` use this object. */
@@ -374,3 +374,67 @@ export const probeResultsResponseSchema = z.object({
   duplicates: z.int().min(0),
   rejected: z.array(z.uuid()),
 });
+
+/**
+ * Why a run is linked to an incident. Mocco suggests `suspected` (the best-scoring release in the
+ * window) and `before_window` (the other releases in it); a person links `manual` (any run they
+ * point at) or `fix` (the run that resolved it). The DB check on `mocco_status_incident_runs` uses this object.
+ */
+export const IncidentRunRelations = {
+  suspected: 'suspected',
+  beforeWindow: 'before_window',
+  fix: 'fix',
+  manual: 'manual',
+} as const;
+export type IncidentRunRelation = (typeof IncidentRunRelations)[keyof typeof IncidentRunRelations];
+export const incidentRunRelationSchema = z.enum(
+  Object.values(IncidentRunRelations) as [IncidentRunRelation, ...IncidentRunRelation[]],
+);
+
+/** The relations a person may give a link; the others are Mocco's own suggestions. */
+export const manualIncidentRunRelationSchema = incidentRunRelationSchema
+  .extract([IncidentRunRelations.manual, IncidentRunRelations.fix])
+  .default(IncidentRunRelations.manual);
+
+/**
+ * The window deploys are correlated in, around the incident's `started_at`: releases from two hours
+ * before it to five minutes after (a deploy that finishes just after the first failure still counts).
+ */
+export const CorrelationWindow = {
+  beforeMs: 2 * 60 * 60 * 1000,
+  afterMs: 5 * 60 * 1000,
+} as const;
+
+/** A run linked to an incident, with what the console shows about the run. */
+export const incidentRunSchema = z.object({
+  runId: z.uuid(),
+  relation: incidentRunRelationSchema,
+  /** The suspicion score of a suggested link; null for a link a person made. */
+  score: z.number().nullable(),
+  /** Who linked it; null when Mocco suggested it. */
+  linkedByUserId: z.string().nullable(),
+  linkedAt: z.date(),
+  run: z
+    .object({
+      state: z.string(),
+      repoFullName: z.string(),
+      commitSha: z.string(),
+      finishedAt: z.date().nullable(),
+    })
+    .nullable(),
+});
+export type IncidentRunDto = z.infer<typeof incidentRunSchema>;
+
+/** An incident linked to a run, for the run's page. */
+export const runIncidentSchema = z.object({
+  incidentId: z.uuid(),
+  projectId: z.uuid(),
+  pageId: z.uuid(),
+  title: z.string(),
+  status: incidentStatusSchema,
+  severity: incidentSeveritySchema,
+  startedAt: z.date(),
+  relation: incidentRunRelationSchema,
+  score: z.number().nullable(),
+});
+export type RunIncidentDto = z.infer<typeof runIncidentSchema>;

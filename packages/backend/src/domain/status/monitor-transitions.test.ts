@@ -10,6 +10,7 @@ import {
   ComponentImpacts,
   ComponentStatuses,
   IncidentPolicies,
+  IncidentRunRelations,
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
@@ -31,6 +32,7 @@ import { generateLocationToken, hashLocationToken } from '@backend/domain/status
 import { MonitorTransitionService } from '@backend/domain/status/MonitorTransitionService';
 import { LocationRepo } from '@backend/domain/status/repos/location.repo';
 import { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
+import { seedRelease, seedRepo } from '@backend/domain/status/testing/deploys';
 import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
 import { StorageUrlSigner } from '@backend/domain/storage/signing';
@@ -432,6 +434,24 @@ describe('monitor state changes: component status, incidents and alerts (pglite)
     expect(snapshot?.sections.flatMap(section => section.components.map(component => component.status))).toEqual([
       ComponentStatuses.majorOutage,
       ComponentStatuses.partialOutage,
+    ]);
+  });
+
+  it('suggests the release before a monitor incident opens', async () => {
+    const repoId = await seedRepo(t.db, scope.workspaceId, 'api', [scope.projectId]);
+    const runId = await seedRelease(t.db, {
+      workspaceId: scope.workspaceId,
+      repoId,
+      projectIds: [scope.projectId],
+      releasedAt: new Date(T0.getTime() - 60_000),
+    });
+    const { monitor } = await setUp();
+    await round(monitor.id, CheckOutcomes.fail);
+    await round(monitor.id, CheckOutcomes.fail);
+
+    const incident = expectOne(await incidents());
+    expect(await status.statusCorrelation.list(scope, incident.id)).toEqual([
+      expect.objectContaining({ runId, relation: IncidentRunRelations.suspected, linkedByUserId: null }),
     ]);
   });
 });

@@ -161,6 +161,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Status deploy correlation
+
+- The status reference gains "Deploy correlation": `mocco_status_incident_runs`, what counts as a deploy (a recorded
+  release, not any succeeded run, since the registry is the production marker the design's open question asked
+  for), the scope (the incident's project's linked repos, else the workspace), the `[-2h, +5m]` window and score,
+  suggestions on open and on demand, audited manual links, and the `incidentRuns`, `correlateIncident`, `linkRun`,
+  `unlinkRun` and `runIncidents` procedures. The feature map and the release registry reference point to it.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `reference/releases.md`, `log.md`
+- Source: branch `feat/status-incident-correlation` (#154)
+
 ## 2026-10-05 — Release registry and `deploy.released`
 
 - Added the release registry reference: a release is a run that succeeded and passed at least one resumed gate

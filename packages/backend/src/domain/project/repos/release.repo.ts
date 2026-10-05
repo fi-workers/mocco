@@ -1,5 +1,5 @@
 import { GateStates } from '@mocco/common/governance';
-import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -63,6 +63,32 @@ export class ReleaseRepo {
       )
       .orderBy(desc(schema.releases.releasedAt))
       .limit(filter.limit);
+  }
+
+  /**
+   * Releases between `from` and `to` (inclusive), oldest first, with a run that still exists.
+   * With `projectId`, only that project's releases of repos it still links, so a repo unlinked
+   * since is left out; without it, every release in the workspace.
+   */
+  async listReleasedBetween(workspaceId: string, window: { from: Date; to: Date; projectId?: string }) {
+    const { releases, projectRepos } = schema;
+    const conditions = [
+      eq(releases.workspaceId, workspaceId),
+      gte(releases.releasedAt, window.from),
+      lte(releases.releasedAt, window.to),
+      isNotNull(releases.runId),
+      ...(window.projectId === undefined
+        ? []
+        : [
+            eq(releases.projectId, window.projectId),
+            sql`EXISTS (SELECT 1 FROM ${projectRepos} WHERE ${projectRepos.projectId} = ${releases.projectId} AND ${projectRepos.repoId} = ${releases.repoId})`,
+          ]),
+    ];
+    return await this.db
+      .select()
+      .from(releases)
+      .where(and(...conditions))
+      .orderBy(asc(releases.releasedAt));
   }
 
   /**

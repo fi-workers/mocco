@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -125,6 +125,20 @@ export class RunRepo {
         ),
       );
     return row;
+  }
+
+  /** Runs of the workspace among `runIds`, with their commit and repo. Ids of another
+   * workspace or unknown ids are left out. */
+  async listWithRepoInWorkspace(workspaceId: string, runIds: readonly string[]) {
+    if (runIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select({ run: schema.runs, commit: schema.commits, repo: schema.repos })
+      .from(schema.runs)
+      .innerJoin(schema.commits, eq(schema.runs.commitId, schema.commits.id))
+      .innerJoin(schema.repos, eq(schema.commits.repoId, schema.repos.id))
+      .where(and(eq(schema.runs.workspaceId, workspaceId), inArray(schema.runs.id, [...runIds])));
   }
 
   /** A run by its own id, workspace-agnostic — the callback funnel has no workspace

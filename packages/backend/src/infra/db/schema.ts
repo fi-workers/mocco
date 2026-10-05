@@ -33,6 +33,7 @@ import {
   ComponentImpacts,
   ComponentStatuses,
   IncidentPolicies,
+  IncidentRunRelations,
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
@@ -56,6 +57,7 @@ import {
   smallint,
   integer,
   date,
+  real,
   jsonb,
   index,
   uniqueIndex,
@@ -129,6 +131,7 @@ import type {
   ComponentImpact,
   ComponentStatus,
   IncidentPolicy,
+  IncidentRunRelation,
   IncidentSeverity,
   IncidentStatus,
   IncidentVisibility,
@@ -3638,6 +3641,41 @@ export const statusIncidentMonitors = pgTable(
       foreignColumns: [statusMonitors.id, statusMonitors.workspaceId],
       name: 'mocco_status_incident_monitors_monitor_fk',
     }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * The runs linked to an incident (#154), both ways: the incident lists its deploys, and the run's
+ * page lists its incidents through the `run_id` index. Mocco suggests `suspected` and
+ * `before_window` links (with a `score`, `linked_by_user_id` null) when the incident opens; a
+ * person adds `manual` or `fix` links. Deleting the incident or the run deletes the link.
+ */
+export const statusIncidentRuns = pgTable(
+  'mocco_status_incident_runs',
+  {
+    incidentId: uuid('incident_id').notNull(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull(),
+    relation: text().$type<IncidentRunRelation>().notNull(),
+    score: real(),
+    // Null when Mocco suggested the link; SET NULL keeps a person's link after they leave.
+    linkedByUserId: uuid('linked_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    primaryKey({ name: 'mocco_status_incident_runs_pk', columns: [t.incidentId, t.runId] }),
+    index('mocco_status_incident_runs_run_idx').on(t.runId),
+    foreignKey({
+      columns: [t.incidentId, t.workspaceId],
+      foreignColumns: [statusIncidents.id, statusIncidents.workspaceId],
+      name: 'mocco_status_incident_runs_incident_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_incident_runs_relation_check',
+      sql`${t.relation} IN (${sqlInList(Object.values(IncidentRunRelations))})`,
+    ),
   ],
 );
 
