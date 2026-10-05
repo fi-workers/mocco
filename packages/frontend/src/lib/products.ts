@@ -179,73 +179,94 @@ export const projectNav: readonly NavEntry<ProjectSection, (workspaceId: string,
 
 /** How each product is presented on the Products page. `available` = it has screens today. */
 export const productCatalog: Readonly<
-  Record<Product, { label: string; description: string; available: boolean; group: SectionGroup }>
+  Record<
+    Product,
+    {
+      label: string;
+      description: string;
+      available: boolean;
+      group: SectionGroup;
+      /** The customer guide that starts using it; null until it has one. */
+      guide: string | null;
+    }
+  >
 > = {
   [Products.governance]: {
     label: 'Deploy governance',
     description: 'Gates, approvals and credential gating for your pipelines. Always on.',
     available: true,
     group: SectionGroups.release,
+    guide: Routes.guide('governance', 'overview'),
   },
   [Products.ota]: {
     label: 'OTA and force update',
     description: 'Minimum and recommended app versions with gated changes, and gated publishing for your OTA tool.',
     available: true,
     group: SectionGroups.release,
+    guide: Routes.guide('ota', 'overview'),
   },
   [Products.flags]: {
     label: 'Feature flags',
     description: 'Governed flag changes with OpenFeature SDKs.',
     available: true,
     group: SectionGroups.release,
+    guide: Routes.guide('flags', 'quickstart'),
   },
   [Products.status]: {
     label: 'Status page',
     description: 'Uptime monitors, incidents and a public status page.',
     available: true,
     group: SectionGroups.operate,
+    guide: Routes.guide('status', 'status-page'),
   },
   [Products.reviews]: {
     label: 'App reviews',
     description: 'Store reviews analyzed and tied to releases.',
     available: false,
     group: SectionGroups.operate,
+    guide: null,
   },
   [Products.feedback]: {
     label: 'Feedback board',
     description: 'Public feedback, roadmap and changelog.',
     available: false,
     group: SectionGroups.support,
+    guide: null,
   },
   [Products.messenger]: {
     label: 'Messenger',
     description: 'Let your signed-in users contact you from your app, and answer them from one inbox.',
     available: true,
     group: SectionGroups.support,
+    guide: Routes.guide('messenger', 'contact-us'),
   },
   [Products.helpcenter]: {
     label: 'Help center',
     description: 'A public help site for your product, written in Markdown and published per language.',
     available: true,
     group: SectionGroups.support,
+    guide: Routes.guide('help', 'help-center'),
   },
   [Products.forum]: {
     label: 'Forum',
     description: 'A community forum for your product.',
     available: false,
     group: SectionGroups.support,
+    guide: null,
   },
   [Products.links]: {
     label: 'Deep links',
     description: 'Smart links with deferred deep linking.',
     available: false,
     group: SectionGroups.platform,
+    guide: null,
   },
   [Products.identity]: {
     label: 'End-user identity',
     description: 'Sign-in for your customers’ users.',
     available: false,
     group: SectionGroups.platform,
+    guide: null,
   },
 };
 

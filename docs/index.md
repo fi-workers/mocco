@@ -15,7 +15,7 @@ related:
 
 # Mocco Wiki — Top-level MOC
 
-> Everything a product needs to be built and run, except the code: release, operations and support in one workspace that shares one team, one set of roles and one history ([ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)). Shipped: deploy governance, OTA and force update, feature flags, notifications, messenger, help center; the rest are on the [roadmap](./reference/roadmap.md).
+> Everything a product needs to be built and run, except the code: release, operations and support in one workspace that shares one team, one set of roles and one history ([ADR 0029](./adr/0029-mocco-is-everything-a-product-needs-except-the-code.md)). Shipped: deploy governance, OTA and force update, feature flags, status page, notifications, messenger, help center; the rest are on the [roadmap](./reference/roadmap.md).
 > For usage, see the [README](./README.md).
 
 ## Product core — deploy governance (first product line)
