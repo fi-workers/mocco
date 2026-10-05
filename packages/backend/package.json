@@ -13,6 +13,7 @@
     "./helpcenter/instance": "./src/domain/helpcenter/instance.ts",
     "./integration/instance": "./src/domain/integration/instance.ts",
     "./mcp/handler": "./src/transport/mcp/handler.ts",
+    "./og/instance": "./src/domain/og/instance.ts",
     "./ota/instance": "./src/domain/ota/instance.ts",
     "./project/instance": "./src/domain/project/instance.ts",
     "./seo/handler": "./src/transport/seo/handler.ts",

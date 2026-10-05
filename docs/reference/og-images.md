@@ -21,7 +21,7 @@ code_refs:
 
 # OG images
 
-The renderer foundation of the OG images epic (#368, slice #370), per [ADR 0030](../adr/0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md). Pages don't use it yet: the landing and `/docs` adopt it in #371, help center articles in #372.
+The renderer foundation of the OG images epic (#368, slice #370), per [ADR 0030](../adr/0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md). Every customer guide and the `/docs` index carry their own card (#371); the landing keeps its designed static card (`public/og/mocco.png`); help center articles come with #372.
 
 ## Issuing an image
 
@@ -32,6 +32,8 @@ Server code asks `getOgImages().issue(template, fields)` (`domain/og/instance.ts
 ```
 
 `data` is the fields, validated by the template's schema, as base64url JSON. `signature` is the first 32 base64url characters of HMAC-SHA256 over `<template>@<version>\n<data>`, keyed by a secret derived from `AUTH_SECRET` (`HMAC(AUTH_SECRET, "mocco-og-images")`). Without `AUTH_SECRET` there is no service and the route answers 404. The path is relative: a page prefixes its own origin, so a help center's card is served from the help center's domain.
+
+Mocco's pages issue their cards in `getStaticProps` through `lib/og-card.ts` (`moccoArticleCard`, `moccoSimpleCard`; texts are cut at a word to the templates’ limits): a guide gets the `article` template (its set, title and description), the `/docs` index the `simple` one, and `SeoHead`'s `image` puts the path on the page's origin in `og:image` and `twitter:image`. Issuing reads only the secret — the store is a getter used when an image is served — so a build needs `AUTH_SECRET` and nothing else; without it they return null and the page keeps Mocco's static card.
 
 ## Serving it
 

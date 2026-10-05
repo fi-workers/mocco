@@ -40,7 +40,7 @@ One `<urlset>` holds the whole site; a sitemap index is only needed past 50,000 
 
 Every page starts out of search: `_app.tsx` sets `<meta name="robots" content="noindex">`, so the console and auth screens are never indexed by default. A public page opts in by rendering `SeoHead` (`components/seo-head.tsx`), which replaces that tag (every tag carries a `key`, so a page's value wins over `_app`'s) and adds the title, description, an absolute canonical URL, Open Graph (`og:type`, `og:site_name`, `og:title`, `og:description`, `og:url`, `og:locale`, `og:image` with width, height and alt) and a `summary_large_image` Twitter card. Absolute URLs use `NEXT_PUBLIC_SITE_HOST`, which `next.config.ts` fills from `SERVICE_DOMAIN` (else `VERCEL_URL`, a preview's own host) at build time.
 
-The share image is `public/og/mocco.png` (1200×630) on every page until per-page images are generated (#368).
+The share image is the page's own card where it has one — each customer guide and the `/docs` index ([OG images](./og-images.md)) — and `public/og/mocco.png` (1200×630) otherwise, the landing included.
 
 JSON-LD (`lib/seo.ts`, one `@graph` per page, `<` escaped so it can't end the script):
 

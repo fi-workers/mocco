@@ -28,13 +28,13 @@ const setUp = () => {
       renders += 1;
       return await render(element, size);
     },
-    store: {
+    store: () => ({
       get: async key => await Promise.resolve((stored.get(key) as Uint8Array<ArrayBuffer> | undefined) ?? null),
       put: async (key, body) => {
         stored.set(key, body);
         return await Promise.resolve({ etag: 'e' });
       },
-    },
+    }),
   });
   return { og, stored, missing, renders: () => renders };
 };
