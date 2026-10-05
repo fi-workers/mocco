@@ -296,10 +296,11 @@ describe('mocco_notifications_* (pglite, over HTTP)', () => {
     await t.close();
   });
 
-  it('declares every notification tool read-only', async () => {
+  it('declares every notification read tool read-only', async () => {
     const listed = await rpc(bob, 'tools/list', {});
 
-    const tools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_notifications_')) ?? [];
+    // The tools that change settings are tested in notifications-write.test.ts.
+    const tools = listed.result?.tools?.filter(tool => NOTIFICATION_TOOLS.includes(tool.name)) ?? [];
     expect(new Set(tools.map(tool => tool.name))).toEqual(new Set(NOTIFICATION_TOOLS));
     expect(tools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
   });

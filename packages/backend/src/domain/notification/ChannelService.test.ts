@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
+import { AuditActions } from '@mocco/common/audit';
 import { ChannelStatuses, DeliveryStatuses } from '@mocco/common/notification';
 import { RulePresets, rulePresetRules } from '@mocco/common/notification-presets';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
@@ -35,7 +36,14 @@ import {
 } from '@backend/domain/notification/testing/channel-service';
 import { jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedWorkspace } from '@backend/domain/notification/testing/seed';
-import { discordRateLimits, notificationDeliveries, notificationRules } from '@backend/infra/db/schema';
+import { expectOne } from '@backend/infra/db/rows';
+import {
+  auditLog,
+  discordRateLimits,
+  notificationDeliveries,
+  notificationRules,
+  users,
+} from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
 const ALERTS = { id: '700000000000000001', name: 'alerts' };
@@ -45,11 +53,19 @@ describe('ChannelService (pglite, fake Discord)', () => {
   let t: TestDb;
   let workspaceId: string;
   let guild: DiscordGuildRow;
+  /** Who makes every change: the audit names them. */
+  let actor: string;
 
   beforeEach(async () => {
     t = await createTestDb();
     workspaceId = await seedWorkspace(t.db);
-    guild = await seedGuild(t.db, workspaceId);
+    actor = expectOne(
+      await t.db
+        .insert(users)
+        .values({ email: `${randomUUID()}@example.com` })
+        .returning(),
+    ).id;
+    guild = await seedGuild(t.db, workspaceId, undefined, actor);
   });
 
   afterEach(async () => {
@@ -63,7 +79,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       guildChannelsReply(ALERTS, DEPLOYS),
       ...sendReplies,
     );
-    const created = await service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id });
+    const created = await service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: ALERTS.id });
     return { service, requests, ...created };
   };
 
@@ -104,6 +120,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
         rules: new RuleRepo(t.db),
         deliveries: new DeliveryRepo(t.db),
         rateLimits: new DiscordRateLimitRepo(t.db),
+        audit: { record: async () => await Promise.resolve() },
         discord: undefined,
         now: () => TEST_NOW,
       });
@@ -173,7 +190,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const { service, requests } = createTestChannelService(t.db);
 
       await expect(
-        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+        service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: ALERTS.id }),
       ).rejects.toBeInstanceOf(DiscordRequestFailedError);
       expect(requests).toHaveLength(0);
     });
@@ -198,7 +215,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const { service } = createTestChannelService(t.db, ...botInGuild(rejoined));
 
       await expect(
-        service.createChannel(workspaceId, { guildId: guild.id, channelId: DEPLOYS.id }),
+        service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: DEPLOYS.id }),
       ).rejects.toBeInstanceOf(DiscordReinstallRequiredError);
       expect(await service.listGuilds(workspaceId)).toEqual([]);
       expect(await service.listChannels(workspaceId)).toEqual([]);
@@ -212,7 +229,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       );
 
       await expect(
-        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+        service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: ALERTS.id }),
       ).rejects.toBeInstanceOf(DiscordReinstallRequiredError);
       expect(await service.listGuilds(workspaceId)).toEqual([]);
     });
@@ -221,7 +238,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const { service } = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(DEPLOYS));
 
       await expect(
-        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+        service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: ALERTS.id }),
       ).rejects.toBeInstanceOf(DiscordChannelNotInGuildError);
       expect(await service.listChannels(workspaceId)).toEqual([]);
     });
@@ -230,9 +247,9 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const other = await seedWorkspace(t.db, 'Other');
       const { service, requests } = createTestChannelService(t.db);
 
-      await expect(service.createChannel(other, { guildId: guild.id, channelId: ALERTS.id })).rejects.toBeInstanceOf(
-        DiscordGuildNotFoundError,
-      );
+      await expect(
+        service.createChannel(other, actor, { guildId: guild.id, channelId: ALERTS.id }),
+      ).rejects.toBeInstanceOf(DiscordGuildNotFoundError);
       expect(requests).toHaveLength(0);
     });
 
@@ -241,7 +258,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const { service } = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(ALERTS));
 
       await expect(
-        service.createChannel(workspaceId, { guildId: guild.id, channelId: ALERTS.id }),
+        service.createChannel(workspaceId, actor, { guildId: guild.id, channelId: ALERTS.id }),
       ).rejects.toBeInstanceOf(NotificationChannelExistsError);
     });
 
@@ -256,7 +273,7 @@ describe('ChannelService (pglite, fake Discord)', () => {
         guildChannelsReply(ALERTS),
         jsonResponse(403, { message: 'Missing Permissions', code: DiscordJsonErrorCodes.MissingPermissions }),
       );
-      const retried = await stillBroken.service.reenableChannel(workspaceId, channel.id);
+      const retried = await stillBroken.service.reenableChannel(workspaceId, actor, channel.id);
       expect(retried.test).toMatchObject({ sent: false, channelDisabled: true });
       expect(retried.channel).toMatchObject({
         status: ChannelStatuses.disabled,
@@ -264,27 +281,57 @@ describe('ChannelService (pglite, fake Discord)', () => {
       });
 
       const gone = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(DEPLOYS));
-      await expect(gone.service.reenableChannel(workspaceId, channel.id)).rejects.toBeInstanceOf(
+      await expect(gone.service.reenableChannel(workspaceId, actor, channel.id)).rejects.toBeInstanceOf(
         DiscordChannelNotInGuildError,
       );
 
       const fixed = createTestChannelService(t.db, ...botInGuild(), guildChannelsReply(ALERTS), messageCreated());
-      const reenabled = await fixed.service.reenableChannel(workspaceId, channel.id);
+      const reenabled = await fixed.service.reenableChannel(workspaceId, actor, channel.id);
       expect(reenabled.test).toEqual({ sent: true, reason: null, channelDisabled: false });
       expect(reenabled.channel).toMatchObject({ status: ChannelStatuses.active, disabledReason: null });
+    });
+
+    it('records every change as the person who made it, and a no-op preset not at all', async () => {
+      const { service, channel } = await createAlerts(messageCreated());
+      const rule = await service.addRule(workspaceId, actor, channel.id, { eventType: 'gate.pending', sourceId: null });
+      await service.removeRule(workspaceId, actor, rule.id);
+      await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.mocco);
+      await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.mocco);
+      await service.deleteChannel(workspaceId, actor, channel.id);
+
+      const entries = await t.db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.workspaceId, workspaceId))
+        .orderBy(asc(auditLog.seq));
+
+      expect(entries.map(entry => [entry.action, entry.actorUserId])).toEqual([
+        [AuditActions.notificationChannelConnected, actor],
+        [AuditActions.notificationRuleAdded, actor],
+        [AuditActions.notificationRuleRemoved, actor],
+        [AuditActions.notificationPresetApplied, actor],
+        [AuditActions.notificationChannelDeleted, actor],
+      ]);
+      expect(entries[0]?.payload).toEqual({
+        name: '#alerts',
+        guildName: 'Acme HQ',
+        discordChannelId: ALERTS.id,
+        testSent: true,
+        channelDisabled: false,
+      });
     });
 
     it('deletes a channel with its rules', async () => {
       const { service, channel } = await createAlerts(messageCreated());
 
-      await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco);
-      await service.deleteChannel(workspaceId, channel.id);
+      await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.mocco);
+      await service.deleteChannel(workspaceId, actor, channel.id);
       expect(await service.listChannels(workspaceId)).toEqual([]);
       expect(await t.db.select().from(notificationRules)).toEqual([]);
-      await expect(service.deleteChannel(workspaceId, channel.id)).rejects.toBeInstanceOf(
+      await expect(service.deleteChannel(workspaceId, actor, channel.id)).rejects.toBeInstanceOf(
         NotificationChannelNotFoundError,
       );
-      await expect(service.reenableChannel(workspaceId, channel.id)).rejects.toBeInstanceOf(
+      await expect(service.reenableChannel(workspaceId, actor, channel.id)).rejects.toBeInstanceOf(
         NotificationChannelNotFoundError,
       );
     });
@@ -294,15 +341,15 @@ describe('ChannelService (pglite, fake Discord)', () => {
     it('adds exact catalog and inbound types and prefix wildcards; rejects unknown exact types', async () => {
       const { service, channel } = await createAlerts(messageCreated());
 
-      await service.addRule(workspaceId, channel.id, { eventType: 'gate.pending', sourceId: null });
-      await service.addRule(workspaceId, channel.id, {
+      await service.addRule(workspaceId, actor, channel.id, { eventType: 'gate.pending', sourceId: null });
+      await service.addRule(workspaceId, actor, channel.id, {
         eventType: 'vercel.deployment.succeeded',
         sourceId: randomUUID(),
         filter: { target: 'production' },
       });
-      await service.addRule(workspaceId, channel.id, { eventType: 'github.*', sourceId: null });
+      await service.addRule(workspaceId, actor, channel.id, { eventType: 'github.*', sourceId: null });
       await expect(
-        service.addRule(workspaceId, channel.id, { eventType: 'gate.unknown', sourceId: null }),
+        service.addRule(workspaceId, actor, channel.id, { eventType: 'gate.unknown', sourceId: null }),
       ).rejects.toBeInstanceOf(UnknownRuleEventTypeError);
 
       const rules = await service.listRules(workspaceId, channel.id);
@@ -313,19 +360,23 @@ describe('ChannelService (pglite, fake Discord)', () => {
 
     it('refuses a duplicate rule and removes rules by id within the workspace', async () => {
       const { service, channel } = await createAlerts(messageCreated());
-      const rule = await service.addRule(workspaceId, channel.id, {
+      const rule = await service.addRule(workspaceId, actor, channel.id, {
         eventType: 'run.failed',
         sourceId: null,
         filter: { repo: 'a/b' },
       });
 
       await expect(
-        service.addRule(workspaceId, channel.id, { eventType: 'run.failed', sourceId: null, filter: { repo: 'a/b' } }),
+        service.addRule(workspaceId, actor, channel.id, {
+          eventType: 'run.failed',
+          sourceId: null,
+          filter: { repo: 'a/b' },
+        }),
       ).rejects.toBeInstanceOf(NotificationRuleExistsError);
 
       const other = await seedWorkspace(t.db, 'Other');
-      await expect(service.removeRule(other, rule.id)).rejects.toBeInstanceOf(NotificationRuleNotFoundError);
-      await service.removeRule(workspaceId, rule.id);
+      await expect(service.removeRule(other, actor, rule.id)).rejects.toBeInstanceOf(NotificationRuleNotFoundError);
+      await service.removeRule(workspaceId, actor, rule.id);
       expect(await service.listRules(workspaceId, channel.id)).toEqual([]);
     });
 
@@ -333,20 +384,20 @@ describe('ChannelService (pglite, fake Discord)', () => {
       const { service, channel } = await createAlerts(messageCreated());
       const sourceId = randomUUID();
 
-      const mocco = await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco, sourceId);
+      const mocco = await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.mocco, sourceId);
       expect(mocco.map(rule => rule.eventType)).toEqual(rulePresetRules.mocco.map(rule => rule.eventType));
       expect(mocco.every(rule => rule.sourceId === null)).toBe(true);
-      expect(await service.applyDefaultRules(workspaceId, channel.id, RulePresets.mocco)).toEqual([]);
+      expect(await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.mocco)).toEqual([]);
 
-      const vercel = await service.applyDefaultRules(workspaceId, channel.id, RulePresets.vercel, sourceId);
+      const vercel = await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.vercel, sourceId);
       expect(vercel).toHaveLength(3);
       expect(vercel.find(rule => rule.eventType === 'vercel.deployment.succeeded')).toMatchObject({
         sourceId,
         filter: { target: 'production' },
       });
-      const github = await service.applyDefaultRules(workspaceId, channel.id, RulePresets.github);
+      const github = await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.github);
       expect(github.find(rule => rule.eventType === 'github.push')?.filter).toEqual({ hasCommits: true });
-      expect(await service.applyDefaultRules(workspaceId, channel.id, RulePresets.sentry)).toHaveLength(1);
+      expect(await service.applyDefaultRules(workspaceId, actor, channel.id, RulePresets.sentry)).toHaveLength(1);
     });
 
     it("never reads or writes rules of another workspace's channel", async () => {
@@ -355,9 +406,9 @@ describe('ChannelService (pglite, fake Discord)', () => {
 
       await expect(service.listRules(other, channel.id)).rejects.toBeInstanceOf(NotificationChannelNotFoundError);
       await expect(
-        service.addRule(other, channel.id, { eventType: 'gate.pending', sourceId: null }),
+        service.addRule(other, actor, channel.id, { eventType: 'gate.pending', sourceId: null }),
       ).rejects.toBeInstanceOf(NotificationChannelNotFoundError);
-      await expect(service.applyDefaultRules(other, channel.id, RulePresets.mocco)).rejects.toBeInstanceOf(
+      await expect(service.applyDefaultRules(other, actor, channel.id, RulePresets.mocco)).rejects.toBeInstanceOf(
         NotificationChannelNotFoundError,
       );
     });

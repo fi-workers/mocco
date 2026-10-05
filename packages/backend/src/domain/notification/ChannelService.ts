@@ -1,3 +1,4 @@
+import { AuditActions } from '@mocco/common/audit';
 import { isDomainEventType } from '@mocco/common/events';
 import { inboundEventTypeSchema } from '@mocco/common/inbound';
 import { ChannelKinds, DELIVERY_LIST_MAX, Severities } from '@mocco/common/notification';
@@ -26,6 +27,7 @@ import {
 import { MOCCO_FOOTER } from '@backend/domain/notification/templates';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { ChannelRepo, ChannelRow } from '@backend/domain/notification/repos/channel.repo';
 import type { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import type { DiscordGuildRepo, DiscordGuildRow } from '@backend/domain/notification/repos/discord-guild.repo';
@@ -40,6 +42,9 @@ import type {
 import type { ChannelTestResult, DeliveryStatus, NeutralMessage, RuleFilter } from '@mocco/common/notification';
 import type { RulePreset } from '@mocco/common/notification-presets';
 
+/** Audit subjects of this service's entries. */
+const AuditSubjects = { channel: 'notification_channel', rule: 'notification_rule' } as const;
+
 /** The Discord calls channel management makes with the Mocco bot. */
 export type DiscordChannelApi = Pick<DiscordApi, 'listTextChannels' | 'sendMessage' | 'getBotMember'>;
 
@@ -49,6 +54,8 @@ export interface ChannelServiceDeps {
   rules: RuleRepo;
   deliveries: DeliveryRepo;
   rateLimits: DiscordRateLimitRepo;
+  /** Every change is recorded as the person who made it, from the console or an agent. */
+  audit: Pick<AuditService, 'record'>;
   /** Undefined without DISCORD_BOT_TOKEN: reads still work, Discord calls throw. */
   discord: DiscordChannelApi | undefined;
   /** Whether the bot install routes are configured (the Discord OAuth pair and the bot
@@ -250,6 +257,7 @@ export class ChannelService {
    */
   async createChannel(
     workspaceId: string,
+    actorUserId: string,
     input: { guildId: string; channelId: string; name?: string },
   ): Promise<{ channel: ChannelRow; test: ChannelTestResult }> {
     const guild = await this.requireGuild(workspaceId, input.guildId);
@@ -270,14 +278,36 @@ export class ChannelService {
       }
       throw error;
     }
-    return await this.sendTest(channel);
+    const tested = await this.sendTest(channel);
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.notificationChannelConnected,
+      subjectType: AuditSubjects.channel,
+      subjectId: channel.id,
+      payload: {
+        name: channel.name,
+        guildName: guild.guildName,
+        discordChannelId: discordChannel.id,
+        testSent: tested.test.sent,
+        channelDisabled: tested.test.channelDisabled,
+      },
+    });
+    return tested;
   }
 
   /** Delete a channel and its rules; its delivery history stays (without the channel). */
-  async deleteChannel(workspaceId: string, channelId: string): Promise<void> {
+  async deleteChannel(workspaceId: string, actorUserId: string, channelId: string): Promise<void> {
+    const channel = await this.requireChannel(workspaceId, channelId);
     if (!(await this.deps.channels.delete(workspaceId, channelId))) {
       throw new NotificationChannelNotFoundError(channelId);
     }
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.notificationChannelDeleted,
+      subjectType: AuditSubjects.channel,
+      subjectId: channelId,
+      payload: { name: channel.name },
+    });
   }
 
   /**
@@ -288,6 +318,7 @@ export class ChannelService {
    */
   async reenableChannel(
     workspaceId: string,
+    actorUserId: string,
     channelId: string,
   ): Promise<{ channel: ChannelRow; test: ChannelTestResult }> {
     const existing = await this.requireChannel(workspaceId, channelId);
@@ -300,7 +331,15 @@ export class ChannelService {
     if (channel === undefined) {
       throw new NotificationChannelNotFoundError(channelId);
     }
-    return await this.sendTest(channel);
+    const tested = await this.sendTest(channel);
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.notificationChannelReenabled,
+      subjectType: AuditSubjects.channel,
+      subjectId: channelId,
+      payload: { name: channel.name, testSent: tested.test.sent, channelDisabled: tested.test.channelDisabled },
+    });
+    return tested;
   }
 
   async listRules(workspaceId: string, channelId: string): Promise<RuleRow[]> {
@@ -311,6 +350,7 @@ export class ChannelService {
   /** Add a rule. An exact type must be one Mocco publishes; a `prefix.*` may name future types. */
   async addRule(
     workspaceId: string,
+    actorUserId: string,
     channelId: string,
     input: { eventType: string; sourceId: string | null; filter?: RuleFilter },
   ): Promise<RuleRow> {
@@ -335,13 +375,27 @@ export class ChannelService {
     if (rule === undefined) {
       throw new NotificationRuleExistsError(input.eventType);
     }
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.notificationRuleAdded,
+      subjectType: AuditSubjects.rule,
+      subjectId: rule.id,
+      payload: { channelId, eventType: rule.eventType, sourceId: rule.sourceId, filter: rule.filter },
+    });
     return rule;
   }
 
-  async removeRule(workspaceId: string, ruleId: string): Promise<void> {
+  async removeRule(workspaceId: string, actorUserId: string, ruleId: string): Promise<void> {
     if (!(await this.deps.rules.delete(workspaceId, ruleId))) {
       throw new NotificationRuleNotFoundError(ruleId);
     }
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.notificationRuleRemoved,
+      subjectType: AuditSubjects.rule,
+      subjectId: ruleId,
+      payload: {},
+    });
   }
 
   /**
@@ -352,13 +406,14 @@ export class ChannelService {
    */
   async applyDefaultRules(
     workspaceId: string,
+    actorUserId: string,
     channelId: string,
     preset: RulePreset,
     sourceId?: string | null,
   ): Promise<RuleRow[]> {
     await this.requireChannel(workspaceId, channelId);
     const source = preset === RulePresets.mocco ? null : (sourceId ?? null);
-    return await this.deps.rules.insertMany(
+    const added = await this.deps.rules.insertMany(
       rulePresetRules[preset].map(rule => ({
         workspaceId,
         channelId,
@@ -367,6 +422,17 @@ export class ChannelService {
         filter: rule.filter,
       })),
     );
+    // Applying a preset twice adds nothing the second time, and there is nothing to record.
+    if (added.length > 0) {
+      await this.deps.audit.record(workspaceId, {
+        actorUserId,
+        action: AuditActions.notificationPresetApplied,
+        subjectType: AuditSubjects.channel,
+        subjectId: channelId,
+        payload: { preset, sourceId: source, ruleIds: added.map(rule => rule.id) },
+      });
+    }
+    return added;
   }
 
   /** Recent deliveries of the workspace, newest first. */

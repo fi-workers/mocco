@@ -230,6 +230,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/storage.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-static-snapshot` (#149)
 
+## 2026-10-05 — Agents can change where notifications go
+
+- The connect guide lists `mocco_notifications_channels_connect`, `_channels_reenable`, `_rules_add`, `_rules_remove`
+  and `_presets_apply` with the deciding tools, and `mocco_notifications_discord_channels_search` with the reads; it
+  says what each confirmation shows, that only owners and admins may change notification settings, and what stays
+  in the console. The MCP spec gains "How the notification changes are built" (issue #246 part 2). The notifications
+  reference lists the new audit actions and the MCP tools; the workspace reference says the opt-in now covers
+  notification changes too.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `reference/notifications.md`,
+  `reference/workspace.md`, `log.md`
+- Source: branch `feat/mcp-notifications-write`
+
 ## 2026-10-05 — Agents can read notifications
 
 - The connect guide lists `mocco_notifications_channels_search`, `mocco_notifications_rules_search`,

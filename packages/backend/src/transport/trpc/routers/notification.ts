@@ -133,7 +133,7 @@ export const notificationRouter = router({
     .output(z.object({ channel: notificationChannelSchema, test: channelTestResultSchema }))
     .mutation(
       async ({ ctx, input }) =>
-        await ctx.notifications.createChannel(input.workspaceId, {
+        await ctx.notifications.createChannel(input.workspaceId, ctx.session.user.id, {
           guildId: input.guildId,
           channelId: input.channelId,
           name: input.name,
@@ -141,13 +141,16 @@ export const notificationRouter = router({
     ),
 
   deleteChannel: adminNotificationProcedure.input(channelInput).mutation(async ({ ctx, input }) => {
-    await ctx.notifications.deleteChannel(input.workspaceId, input.channelId);
+    await ctx.notifications.deleteChannel(input.workspaceId, ctx.session.user.id, input.channelId);
   }),
 
   reenableChannel: adminNotificationProcedure
     .input(channelInput)
     .output(z.object({ channel: notificationChannelSchema, test: channelTestResultSchema }))
-    .mutation(async ({ ctx, input }) => await ctx.notifications.reenableChannel(input.workspaceId, input.channelId)),
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.notifications.reenableChannel(input.workspaceId, ctx.session.user.id, input.channelId),
+    ),
 
   rules: protectedNotificationProcedure
     .input(channelInput)
@@ -166,7 +169,7 @@ export const notificationRouter = router({
     )
     .output(z.object({ rule: notificationRuleSchema }))
     .mutation(async ({ ctx, input }) => ({
-      rule: await ctx.notifications.addRule(input.workspaceId, input.channelId, {
+      rule: await ctx.notifications.addRule(input.workspaceId, ctx.session.user.id, input.channelId, {
         eventType: input.eventType,
         sourceId: input.sourceId ?? null,
         filter: input.filter,
@@ -176,7 +179,7 @@ export const notificationRouter = router({
   removeRule: adminNotificationProcedure
     .input(workspaceScopedInput.extend({ ruleId: z.uuid() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.notifications.removeRule(input.workspaceId, input.ruleId);
+      await ctx.notifications.removeRule(input.workspaceId, ctx.session.user.id, input.ruleId);
     }),
 
   applyDefaultRules: adminNotificationProcedure
@@ -185,6 +188,7 @@ export const notificationRouter = router({
     .mutation(async ({ ctx, input }) => ({
       rules: await ctx.notifications.applyDefaultRules(
         input.workspaceId,
+        ctx.session.user.id,
         input.channelId,
         input.preset,
         input.sourceId,

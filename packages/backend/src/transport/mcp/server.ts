@@ -4,9 +4,10 @@
 // one domain service with the caller's own identity, and that service's checks are the
 // only authority. Composition is `runtime/mcp.ts`, above the domains.
 //
-// Two tools decide (`mocco_approvals_vote`, `mocco_gates_resume`); each is gated by
-// scope, by the workspace's opt-in and by a confirmation round trip whose signed state is
-// verified here, before any tool sees it.
+// Two tools decide (`mocco_approvals_vote`, `mocco_gates_resume`) and five change
+// notification settings (`tools/notifications-write.ts`); each is gated by scope, by the
+// workspace's opt-in and by a confirmation round trip whose signed state is verified
+// here, before any tool sees it.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
@@ -14,6 +15,10 @@ import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/too
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
+import {
+  registerNotificationWriteTools,
+  type NotificationWriteToolDeps,
+} from '@backend/transport/mcp/tools/notifications-write';
 import { registerOtaTools, type OtaToolDeps } from '@backend/transport/mcp/tools/ota';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
@@ -27,6 +32,7 @@ export type McpToolDeps = RunToolDeps &
   OtaToolDeps &
   StatusToolDeps &
   NotificationToolDeps &
+  NotificationWriteToolDeps &
   InboundToolDeps;
 
 /** The server name and version a client sees in `initialize`. */
@@ -48,6 +54,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerOtaTools(server, deps);
   registerStatusTools(server, deps);
   registerNotificationTools(server, deps);
+  registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);
   return server;
 }
