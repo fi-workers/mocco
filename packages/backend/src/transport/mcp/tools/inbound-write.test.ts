@@ -122,6 +122,7 @@ describe('mocco_inbound_sources_* changes (pglite, over HTTP)', () => {
     statusLocations: { list: refuse },
     statusCorrelation: { list: refuse },
     helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+    helpFeedback: { helpfulness: refuse },
     notifications: undefined,
     notificationActivity: { list: refuse },
     inbound: sources,

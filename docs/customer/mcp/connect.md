@@ -55,7 +55,7 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_status_monitors_get` | One monitor: its latest state changes and why, its latest rounds, and the incident it opened that is still open |
 | `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
 | `mocco_help_articles_search` | Which published help center articles match a question (every word, or any word for a customer's message), or every article in order, in a language where translated |
-| `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, and the languages it is published in |
+| `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, the languages it is published in, and how readers answered "Was this helpful?" in the last 30 days (with their newest comments when detailed) |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |

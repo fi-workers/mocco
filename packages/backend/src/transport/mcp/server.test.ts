@@ -35,6 +35,7 @@ describe('createMcpServer', () => {
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+      helpFeedback: { helpfulness: refuse },
       confirmations: undefined,
     });
 

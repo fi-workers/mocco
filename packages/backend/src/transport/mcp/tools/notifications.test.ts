@@ -109,6 +109,7 @@ const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'notifications' | '
   statusLocations: { list: refuse },
   statusCorrelation: { list: refuse },
   helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+  helpFeedback: { helpfulness: refuse },
   scope,
   projects: { resolve: refuse, resolveWorkspace: refuse },
   settings: { agentsMayDecide: refuse },

@@ -190,18 +190,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
-## 2026-10-05 — Messenger PDF attachments and content sniffing
+## 2026-10-05 — Agents see an article's helpfulness
 
-- The messenger reference's Attachments section covers PDFs (served only as downloads), the bytes' signature check
-  on send, the `filename` on served attachments, that an attachment can't move across conversations or users,
-  and that unsent uploads go with `storage.gc` after 24 hours. The storage reference gains "Downloads"
-  (`download(…, { asAttachment })` and the signed disposition) and the shared `sniffContentType` check; the
-  feature map row lists PDFs and the signature check.
-- The customer guide says how to attach a PDF and that the inbox shows it as a file to download, with a
-  screenshot of the file chip.
-- Docs touched: `reference/messenger.md`, `reference/storage.md`, `reference/feature-map.md`,
-  `customer/messenger/contact-us.md`, `customer/messenger/images/messenger-attachment-pdf.png`, `log.md`
-- Source: branch `feat/messenger-pdf-attachments` (#200)
+- The help center reference's "MCP tools" says `mocco_help_articles_get` carries the console's 30-day "Was this
+  helpful?" read (`helpful`, `notHelpful`, `share`, with the newest comments when detailed) and that visitor hashes
+  never leave the service; the connect guide and the MCP spec's tool table mention it.
+- Docs touched: `reference/help-center.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `log.md`
+- Source: branch `feat/mcp-help-helpfulness` (#216)
 
 ## 2026-10-05 — Agents can read the help center
 
@@ -249,6 +245,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/help/help-center.md`, `customer/help/images/helpful-widget.png`, `customer/help/images/helpfulness.png`,
   `log.md`
 - Source: branch `feat/help-feedback` (#216)
+
+## 2026-10-05 — Messenger PDF attachments and content sniffing
+
+- The messenger reference's Attachments section covers PDFs (served only as downloads), the bytes' signature check
+  on send, the `filename` on served attachments, that an attachment can't move across conversations or users,
+  and that unsent uploads go with `storage.gc` after 24 hours. The storage reference gains "Downloads"
+  (`download(…, { asAttachment })` and the signed disposition) and the shared `sniffContentType` check; the
+  feature map row lists PDFs and the signature check.
+- The customer guide says how to attach a PDF and that the inbox shows it as a file to download, with a
+  screenshot of the file chip.
+- Docs touched: `reference/messenger.md`, `reference/storage.md`, `reference/feature-map.md`,
+  `customer/messenger/contact-us.md`, `customer/messenger/images/messenger-attachment-pdf.png`, `log.md`
+- Source: branch `feat/messenger-pdf-attachments` (#200)
 
 ## 2026-10-05 — Help center editor: images and autosave
 
