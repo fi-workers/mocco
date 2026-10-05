@@ -135,6 +135,7 @@ describe('mocco_notifications_* changes (pglite, over HTTP)', () => {
     statusLocations: { list: refuse },
     statusCorrelation: { list: refuse },
     helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+    helpFeedback: { helpfulness: refuse },
     notifications,
     notificationActivity: { list: refuse },
     inbound: undefined,

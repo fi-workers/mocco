@@ -192,6 +192,7 @@ describe('mocco_flags_* (pglite, over HTTP)', () => {
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+      helpFeedback: { helpfulness: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

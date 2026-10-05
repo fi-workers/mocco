@@ -270,6 +270,7 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
       statusLocations: status.statusLocations,
       statusCorrelation: status.statusCorrelation,
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
+      helpFeedback: { helpfulness: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings: { agentsMayDecide: refuse },

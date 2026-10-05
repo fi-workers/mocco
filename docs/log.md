@@ -190,6 +190,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
 
+## 2026-10-05 — Agents see an article's helpfulness
+
+- The help center reference's "MCP tools" says `mocco_help_articles_get` carries the console's 30-day "Was this
+  helpful?" read (`helpful`, `notHelpful`, `share`, with the newest comments when detailed) and that visitor hashes
+  never leave the service; the connect guide and the MCP spec's tool table mention it.
+- Docs touched: `reference/help-center.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `log.md`
+- Source: branch `feat/mcp-help-helpfulness` (#216)
+
 ## 2026-10-05 — Agents can read the help center
 
 - The connect guide and the MCP spec list `mocco_help_articles_search` and `mocco_help_articles_get`; the help center

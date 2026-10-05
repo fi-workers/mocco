@@ -227,6 +227,8 @@ export class HelpPublicReadService {
       }),
     );
     return {
+      /** Internal: for in-process readers (the MCP tools); the public surfaces don't show it. */
+      articleId: article.id,
       shortId: article.shortId,
       slug: article.slug,
       locale: served,

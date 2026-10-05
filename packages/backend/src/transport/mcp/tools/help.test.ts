@@ -16,7 +16,7 @@ import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
-import { members, users, workspaces } from '@backend/infra/db/schema';
+import { helpFeedback, members, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createMcpHttpHandler } from '@backend/transport/mcp/server';
 import { MCP_USER_ID } from '@backend/transport/mcp/tools/runs';
@@ -145,7 +145,10 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
 
   beforeEach(async () => {
     t = await createTestDb();
-    help = createHelpDomain(t.db, { audit: new AuditService({ audit: new AuditRepo(t.db) }) });
+    help = createHelpDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      feedbackSecret: () => 'test-feedback-secret',
+    });
     project = createProjectDomain(t.db);
     ada = expectOne(
       await t.db
@@ -193,6 +196,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
       helpPublic: help.helpPublic,
+      helpFeedback: help.helpFeedback,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings: { agentsMayDecide: refuse },
@@ -273,6 +277,36 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       expect(detailed.isTruncated).toBeUndefined();
       expect(korean).toMatchObject({ locale: 'ko', title: '위젯 추가하기', body: '홈 화면을 길게 누르세요.' });
       expect(untranslated).toMatchObject({ locale: 'en', title: 'Camera settings' });
+    });
+
+    it('adds readers’ answers from the last 30 days, and comments only when detailed, never who answered', async () => {
+      const vote = async (isHelpful: boolean, visitorId: string, comment?: string) =>
+        await help.helpFeedback.recordInProject(
+          mine.workspaceId,
+          mine.projectId,
+          widget,
+          { helpful: isHelpful, ...(comment !== undefined && { comment }) },
+          { visitorId },
+        );
+      await vote(true, 'visitor-aaaa');
+      await vote(true, 'visitor-bbbb');
+      await vote(false, 'visitor-cccc', 'Missing Android steps');
+
+      const concise = bodyOf(await call('mocco_help_articles_get', { articleId: widget }));
+      const detailed = bodyOf(await call('mocco_help_articles_get', { articleId: widget, responseFormat: 'detailed' }));
+      const unanswered = bodyOf(await call('mocco_help_articles_get', { articleId: camera }));
+      const stored = await t.db.select().from(helpFeedback);
+      const hashes = stored.map(row => row.visitorHash);
+
+      expect(concise.helpfulness).toEqual({ days: 30, helpful: 2, notHelpful: 1, share: 0.67 });
+      expect(detailed.helpfulness).toMatchObject({
+        helpful: 2,
+        notHelpful: 1,
+        comments: [{ helpful: false, comment: 'Missing Android steps', locale: 'en' }],
+      });
+      expect(unanswered.helpfulness).toEqual({ days: 30, helpful: 0, notHelpful: 0, share: null });
+      const text = JSON.stringify([concise, detailed]);
+      expect(hashes.some(hash => text.includes(hash)) || /visitor/u.test(text)).toBe(false);
     });
 
     it('reads a draft, an unpublished article and another workspace’s like ones that do not exist', async () => {
