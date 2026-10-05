@@ -13,6 +13,7 @@ related:
   - ./project.md
 code_refs:
   - packages/backend/src/domain/helpcenter/HelpAuthoringService.ts
+  - packages/backend/src/domain/helpcenter/HelpImageService.ts
   - packages/backend/src/domain/helpcenter/HelpPublicReadService.ts
   - packages/common/src/help.ts
 ---
@@ -33,9 +34,9 @@ An article has a stable `short_id` (6 characters, unique in the project) and a c
 
 ## Revisions and publishing
 
-Text lives in `mocco_help_revisions`, append-only, one row per save: locale, title, Markdown body, a `content_hash` (sha256 of the normalized title and body; translations will compare against it) and a `kind` (`source_edit`, `restore`, `import`). The article points at its `draft_revision_id` and its `published_revision_id`.
+Text lives in `mocco_help_revisions`: locale, title, Markdown body, a `content_hash` (sha256 of the normalized title and body; translations compare against it) and a `kind` (`source_edit`, `restore`, `import`). The article points at its `draft_revision_id` and its `published_revision_id`.
 
-- **Save** writes a new revision and makes it the draft. The public site keeps the published one.
+- **Save** (`saveDraft`) makes the text the draft. The public site keeps the published one. Text equal to the draft's writes nothing. Within an editing session it rewrites the draft revision instead of adding one: the draft is a `source_edit` by the same person, not the published revision, and started less than `EDIT_SESSION_MS` (10 minutes) ago. Anything else (a published, restored or imported draft, another author, an older session) gets a new revision, so a revision is never changed once it is published, restored or superseded. The service sets `created_at` from its own clock, which the session check compares against.
 - **Publish** makes the draft the published revision (`help.article.published`, audited). Publishing with no draft is a CONFLICT.
 - **Unpublish** takes the article off the public site; text and history stay (`help.article.unpublished`).
 - **Restore** copies an old revision into a new `restore` revision that becomes the draft, so history stays append-only.
@@ -57,7 +58,11 @@ Pages carry a canonical URL on the site's own origin, hreflang alternates for th
 
 ## Console
 
-The project's **Help center** tab (shown once the product is on) sets the site up (address, source language, offered languages), lists collections → sections → articles with their state (Draft, Published, Unpublished changes), and adds each level. The article editor shows the Markdown beside a live preview rendered by the same tree as the public site (`lib/help-markdown.ts`), with Save draft, Publish (only with no unsaved changes), Unpublish, Delete and the revision history with Restore ([customer guide](../customer/help/help-center.md)).
+The project's **Help center** tab (shown once the product is on) sets the site up (address, source language, offered languages), lists collections → sections → articles with their state (Draft, Published, Unpublished changes), and adds each level. The article editor shows the Markdown beside a live preview rendered by the same tree as the public site (`lib/help-markdown.ts`), with Publish (which saves unsaved text first), Unpublish, Delete and the revision history with Restore ([customer guide](../customer/help/help-center.md)). The draft autosaves 2.5 seconds after the last keystroke (never while one save is in flight, and a failed save waits for new text or Try again), shown as Saving… / All changes saved / Couldn't save; leaving with unsaved text asks first. A restore remounts the editor with the restored text; a save doesn't, so typing during a save isn't interrupted.
+
+## Images
+
+Article images are public objects of the project's help center in [object storage](./storage.md) (`HelpImageService`): `createImageUpload` checks the help center's storage policy (PNG, JPEG, WebP, GIF; 10 MB, also enforced by the input schema) and the workspace quota and returns a presigned PUT; `completeImage` completes only an upload reserved by that project's help center (`completeUpload` with an owner: project, product and visibility; anything else is not found), reads the bytes and deletes them if their signature isn't the declared image type (`HelpImageNotAnImageError`), and returns the stable public URL. An image the project already stored (same sha256) comes back as its URL without an upload. The editor uploads pasted, dropped and picked images this way and inserts `![name](public URL)` where the cursor was (a placeholder holds the place during the upload); the Mintlify import uses the same calls. Markdown refers to images by that URL, so the preview and the public site render them with no lookup, and `mocco_objects` records who owns each one. There is no per-article image table: an image removed from every article stays stored until a cleanup for unreferenced images lands.
 
 ## Translation
 

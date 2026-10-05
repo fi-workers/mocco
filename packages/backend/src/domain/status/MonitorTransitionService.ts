@@ -18,7 +18,6 @@ import {
   IncidentSeverities,
   IncidentStatuses,
   IncidentVisibilities,
-  MonitorKinds,
   MonitorStates,
 } from '@mocco/common/status';
 import { z } from 'zod';
@@ -26,6 +25,7 @@ import { z } from 'zod';
 import { publishBestEffort } from '@backend/domain/events/ports';
 import { monitorImpact } from '@backend/domain/status/component-status';
 import { transitionIncident } from '@backend/domain/status/IncidentService';
+import { monitorTargetOf } from '@backend/domain/status/monitor-target';
 import { ComponentMonitorRepo } from '@backend/domain/status/repos/component-monitor.repo';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { IncidentMonitorRepo } from '@backend/domain/status/repos/incident-monitor.repo';
@@ -282,8 +282,11 @@ function alertInput(
   opts: { isDuringMaintenance: boolean; opened: IncidentRow | undefined; appOrigin: string | undefined },
 ): PublishInput {
   const { verb, severity } = ALERT_LOOK[type];
-  const target =
-    monitor.spec.kind === MonitorKinds.http ? monitor.spec.url : `${monitor.spec.host}:${monitor.spec.port}`;
+  // Only the host and port: the URL's credentials, path and query can hold secrets, and an
+  // alert is read by everyone in the channel.
+  const target = monitorTargetOf(monitor.spec);
+  // eslint-disable-next-line sonarjs/null-dereference -- target is narrowed to a string on this branch
+  const checksField = target === null ? [] : [{ name: 'Checks', value: target.slice(0, 1024), inline: false }];
   const tally = tallySchema.safeParse(change.reason);
   const base = `/workspaces/${monitor.workspaceId}/p/${monitor.projectId}/status`;
   const path = opts.opened === undefined ? base : `${base}/incidents/${opts.opened.id}`;
@@ -314,12 +317,7 @@ function alertInput(
             description: `${tally.data.failCount} failing, ${tally.data.okCount} passing, ${tally.data.noDataCount} without data in the last round.`,
           }),
         severity,
-        fields: [
-          // eslint-disable-next-line sonarjs/null-dereference -- target is a string on both branches
-          { name: 'Checks', value: target.slice(0, 1024), inline: false },
-          { name: 'Was', value: change.fromState, inline: true },
-          ...incidentField,
-        ],
+        fields: [...checksField, { name: 'Was', value: change.fromState, inline: true }, ...incidentField],
         footer: 'Mocco status',
       },
     },

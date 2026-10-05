@@ -114,12 +114,12 @@ export type DraftInput = z.infer<typeof draftInputSchema>;
 
 /** Images an article may embed; uploaded to storage and served publicly. */
 export const HELP_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export type HelpImageType = (typeof HELP_IMAGE_TYPES)[number];
+/** The largest image an article may embed (the help center's storage policy). */
+export const HELP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const helpImageInputSchema = z.object({
   contentType: z.enum(HELP_IMAGE_TYPES),
-  sizeBytes: z
-    .int()
-    .min(1)
-    .max(10 * 1024 * 1024),
+  sizeBytes: z.int().min(1).max(HELP_IMAGE_MAX_BYTES),
   filename: z.string().min(1).max(120),
   /** Hex SHA-256 of the bytes: an image the project already stored is reused. */
   sha256: z

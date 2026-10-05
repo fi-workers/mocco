@@ -161,6 +161,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/notifications.md`, `reference/events.md`, `log.md`
 - Source: branch `fix/notification-fanout-coverage`
 
+## 2026-10-05 — Monitor alerts show only the host and port
+
+- A monitor alert's "Checks" field carried the monitor's full URL, so credentials (`user:pass@`) or a token in the
+  path or query reached every Discord channel the alert was routed to and the stored event. The status reference
+  now says the alert shows only the host and port, and lists what else keeps the spec out (incident text, audit
+  payloads, the public snapshot); the events reference says the same for the `status.monitor.*` payloads.
+- Docs touched: `reference/status.md`, `reference/events.md`, `log.md`
+- Source: branch `fix/status-alert-target-redaction`
+
 ## 2026-10-05 — Agents can read monitors, locations and linked deploys
 
 - The connect guide lists `mocco_status_monitors_search`, `mocco_status_monitors_get` and
@@ -180,6 +189,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/status/status-page.md`, `customer/status/images/recent-deploys.png`,
   `reference/status.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-correlation-ui` (#154)
+
+## 2026-10-05 — Help center editor: images and autosave
+
+- The help center reference gains "Images": `HelpImageService` (moved out of the import service), uploads completed
+  only for the project's own help center objects, the byte-signature check, and Markdown referring to the public
+  URL with `mocco_objects` as the ownership record (no per-article image table). Revisions now say how saves within
+  an editing session (same author, unpublished `source_edit`, under 10 minutes) rewrite the draft instead of adding
+  one, and the console section describes autosave. The storage reference notes `completeUpload`'s owner check.
+- The customer guide replaces Save draft with autosave, adds "Add images" with a screenshot, and retakes the editor
+  screenshot; the feature map's help center rows follow.
+- Docs touched: `reference/help-center.md`, `reference/storage.md`, `reference/feature-map.md`,
+  `customer/help/help-center.md`, `customer/help/images/editor.png`, `customer/help/images/editor-images.png`, `log.md`
+- Source: branch `feat/help-editor-images` (#208)
 
 ## 2026-10-05 — Status deploy correlation
 

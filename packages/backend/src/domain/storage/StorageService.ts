@@ -53,6 +53,19 @@ export interface ObjectInput {
   createdByUserId?: string;
 }
 
+/** Who an object belongs to beyond its workspace: the project, product and visibility it was reserved for. */
+export interface ObjectOwner {
+  projectId: string | null;
+  product: Product;
+  visibility: Visibility;
+}
+
+function isOwnedBy(object: StoredObjectRow, owner: ObjectOwner): boolean {
+  return (
+    object.projectId === owner.projectId && object.product === owner.product && object.visibility === owner.visibility
+  );
+}
+
 const EDGE_CHARS = new Set(['-', '.']);
 
 /** Drop leading and trailing dots and dashes (no regex: a linear scan). */
@@ -173,10 +186,15 @@ export class StorageService {
   /**
    * Verify an upload and mark it ready. The stored bytes must exist, be exactly the
    * declared size and have the declared content type; otherwise they are deleted, the
-   * row is marked deleted and StorageUploadMismatchError is thrown.
+   * row is marked deleted and StorageUploadMismatchError is thrown. With `owner`, an object
+   * of another project, product or visibility is not found, so a client-supplied id can
+   * only complete what that product reserved.
    */
-  async completeUpload(workspaceId: string, objectId: string): Promise<StoredObjectRow> {
+  async completeUpload(workspaceId: string, objectId: string, owner?: ObjectOwner): Promise<StoredObjectRow> {
     const object = await this.requireObject(workspaceId, objectId);
+    if (owner !== undefined && !isOwnedBy(object, owner)) {
+      throw new StoredObjectNotFoundError(objectId);
+    }
     if (object.status === ObjectStatuses.ready) {
       return object;
     }

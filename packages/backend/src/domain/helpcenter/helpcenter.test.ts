@@ -11,6 +11,7 @@ import {
   HelpSlugTakenError,
   HelpStorageNotConfiguredError,
 } from '@backend/domain/helpcenter/errors';
+import { EDIT_SESSION_MS } from '@backend/domain/helpcenter/HelpAuthoringService';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
@@ -196,26 +197,108 @@ describe('help center (pglite)', () => {
     ]);
   });
 
-  it('keeps every save in history and restores an old one as the draft', async () => {
+  /** The help domain on a clock the test moves, to step past an editing session. */
+  const withClock = () => {
+    const clock = { now: new Date() };
+    const domain = createHelpDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      now: () => clock.now,
+    });
+    const later = () => {
+      clock.now = new Date(clock.now.getTime() + EDIT_SESSION_MS + 1000);
+    };
+    return { domain, later };
+  };
+
+  const save = async (domain: HelpDomain, articleId: string, body: string, actor = authorId) =>
+    await domain.helpAuthoring.saveDraft(workspaceId, projectId, actor, { articleId, title: 'Widget', body });
+  /** The article's revision bodies, newest first. */
+  const bodies = async (domain: HelpDomain, articleId: string) => {
+    const history = await domain.helpAuthoring.history(workspaceId, projectId, articleId);
+    return history.map(revision => revision.body);
+  };
+
+  it('keeps each editing session in history and restores an old one as the draft', async () => {
     const { article } = await setUp();
-    await help.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {
+    const { domain, later } = withClock();
+    later();
+    await domain.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {
       articleId: article.id,
       title: 'v2',
       body: 'two',
     });
-    await help.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {
+    later();
+    await domain.helpAuthoring.saveDraft(workspaceId, projectId, authorId, {
       articleId: article.id,
       title: 'v3',
       body: 'three',
     });
-    const history = await help.helpAuthoring.history(workspaceId, projectId, article.id);
+    const history = await domain.helpAuthoring.history(workspaceId, projectId, article.id);
     const v2 = history.find(revision => revision.title === 'v2');
 
-    const restored = await help.helpAuthoring.restore(workspaceId, projectId, authorId, article.id, v2?.id ?? '');
+    const restored = await domain.helpAuthoring.restore(workspaceId, projectId, authorId, article.id, v2?.id ?? '');
 
     expect(history.map(revision => revision.title)).toEqual(['v3', 'v2', 'Widget features']);
     expect(restored.draft).toMatchObject({ title: 'v2', body: 'two', kind: 'restore' });
-    expect(await help.helpAuthoring.history(workspaceId, projectId, article.id)).toHaveLength(4);
+    expect(await domain.helpAuthoring.history(workspaceId, projectId, article.id)).toHaveLength(4);
+  });
+
+  describe('saving as you type', () => {
+    it('lands consecutive saves of one session in the same draft revision', async () => {
+      const { article } = await setUp();
+      const { domain } = withClock();
+
+      const first = await save(domain, article.id, 'H');
+      const second = await save(domain, article.id, 'Hello');
+      const third = await save(domain, article.id, 'Hello, widget');
+
+      expect(new Set([first.draft?.id, second.draft?.id, third.draft?.id]).size).toBe(1);
+      expect(third.draft).toMatchObject({ body: 'Hello, widget', kind: 'source_edit' });
+      // The new article's empty first revision was the session's start.
+      expect(await bodies(domain, article.id)).toEqual(['Hello, widget']);
+    });
+
+    it('writes nothing when the text is unchanged', async () => {
+      const { article } = await setUp();
+      const { domain, later } = withClock();
+      const saved = await save(domain, article.id, 'Hello');
+      later();
+
+      const again = await save(domain, article.id, 'Hello');
+
+      expect(again.draft?.id).toBe(saved.draft?.id);
+      expect(await bodies(domain, article.id)).toEqual(['Hello']);
+    });
+
+    it('starts a new revision after the session, after publishing, after a restore, and for another author', async () => {
+      const { article } = await setUp();
+      const otherAuthor = expectOne(
+        await t.db
+          .insert(users)
+          .values({ email: `${randomUUID()}@acme.test`, name: 'Grace' })
+          .returning(),
+      ).id;
+      const { domain, later } = withClock();
+      await save(domain, article.id, 'one');
+      later();
+      await save(domain, article.id, 'two');
+      await domain.helpAuthoring.publish(workspaceId, projectId, authorId, article.id);
+      await save(domain, article.id, 'three');
+      const history = await domain.helpAuthoring.history(workspaceId, projectId, article.id);
+      await domain.helpAuthoring.restore(
+        workspaceId,
+        projectId,
+        authorId,
+        article.id,
+        history.find(revision => revision.body === 'one')?.id ?? '',
+      );
+      await save(domain, article.id, 'four');
+      await save(domain, article.id, 'five', otherAuthor);
+      const published = await domain.helpPublic.article('showyourtime', 'ko', article.shortId);
+
+      expect(await bodies(domain, article.id)).toEqual(['five', 'four', 'one', 'three', 'two', 'one']);
+      expect(published?.body).toBe('two');
+    });
   });
 
   it("never reaches another workspace's article, and redirects an imported path", async () => {
@@ -294,6 +377,10 @@ describe('help center (pglite)', () => {
           });
         },
         completeUpload: async () => await Promise.resolve({} as never),
+        read: async () => await Promise.resolve(null),
+        delete: async () => {
+          await Promise.resolve();
+        },
         downloadUrl: async (_workspaceId: string, id: string) => await Promise.resolve(`https://cdn.test/${id}`),
       };
       const withStorage = createHelpDomain(t.db, { audit: new AuditService({ audit: new AuditRepo(t.db) }), storage });
@@ -304,11 +391,11 @@ describe('help center (pglite)', () => {
       });
       const image = { contentType: 'image/png' as const, sizeBytes: 10, filename: 'a.png' };
 
-      const known = await withStorage.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+      const known = await withStorage.helpImages.createImageUpload(workspaceId, projectId, authorId, {
         ...image,
         sha256: 'a'.repeat(64),
       });
-      const fresh = await withStorage.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+      const fresh = await withStorage.helpImages.createImageUpload(workspaceId, projectId, authorId, {
         ...image,
         sha256: 'b'.repeat(64),
       });
@@ -322,7 +409,7 @@ describe('help center (pglite)', () => {
       await help.helpSites.enable(workspaceId, projectId, authorId, { slug: 'syt', sourceLocale: 'ko', locales: [] });
 
       await expect(
-        help.helpImport.createImageUpload(workspaceId, projectId, authorId, {
+        help.helpImages.createImageUpload(workspaceId, projectId, authorId, {
           contentType: 'image/png',
           sizeBytes: 10,
           filename: 'a.png',

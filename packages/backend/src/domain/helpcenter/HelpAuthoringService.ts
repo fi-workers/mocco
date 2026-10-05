@@ -1,6 +1,11 @@
 // Writing a help center (#96): collections → sections → articles, drafts saved as
-// append-only revisions, publishing, unpublishing and restoring. Callers are workspace
-// members, checked by the tRPC procedure; every query is scoped by workspace and project.
+// revisions, publishing, unpublishing and restoring. Callers are workspace members,
+// checked by the tRPC procedure; every query is scoped by workspace and project.
+//
+// The editor saves as you type (#208). Saves by the same person within an editing session
+// land in the current draft revision instead of a new one each time, so history reads
+// as one entry per session. A revision that is published, restored or imported, or
+// written by someone else, is never changed: the next save starts a new one.
 
 import { AuditActions } from '@mocco/common/audit';
 import { ArticleStatuses, RevisionKinds, slugify } from '@mocco/common/help';
@@ -37,6 +42,8 @@ export interface HelpAuthoringDeps {
 }
 
 const HISTORY_LIMIT = 50;
+/** How long saves keep landing in the same draft revision, from when it was started. */
+export const EDIT_SESSION_MS = 10 * 60 * 1000;
 const SHORT_ID_ATTEMPTS = 5;
 
 const revisionDto = (revision: HelpRevisionRow) => ({
@@ -64,6 +71,16 @@ export class HelpAuthoringService {
     return article;
   }
 
+  /** Whether a save by `actorUserId` may rewrite `draft` rather than add a revision. */
+  private isOpenSession(article: HelpArticleRow, draft: HelpRevisionRow, actorUserId: string): boolean {
+    return (
+      draft.kind === RevisionKinds.sourceEdit &&
+      draft.authorUserId === actorUserId &&
+      draft.id !== article.publishedRevisionId &&
+      this.now().getTime() - draft.createdAt.getTime() < EDIT_SESSION_MS
+    );
+  }
+
   private async writeRevision(
     article: HelpArticleRow,
     locale: string,
@@ -79,6 +96,8 @@ export class HelpAuthoringService {
       contentHash: contentHashOf(input.title, input.body),
       kind: input.kind,
       authorUserId: input.authorUserId,
+      // The service's clock, which the editing-session check compares against.
+      createdAt: this.now(),
     });
     await repo.update(article.id, { draftRevisionId: revision.id });
     return revision;
@@ -224,15 +243,30 @@ export class HelpAuthoringService {
   }
 
   /** Save the draft as a new revision. The public site keeps the published text until publish. */
+  /**
+   * Save the article's text as its draft. Text equal to the draft's writes nothing; within
+   * the author's editing session it rewrites the draft revision; otherwise it adds one.
+   */
   async saveDraft(workspaceId: string, projectId: string, actorUserId: string, input: DraftInput) {
     const site = await this.deps.sites.require(workspaceId, projectId);
     const article = await this.requireArticle(workspaceId, projectId, input.articleId);
-    await this.writeRevision(article, site.sourceLocale, {
-      title: input.title,
-      body: input.body,
-      kind: RevisionKinds.sourceEdit,
-      authorUserId: actorUserId,
-    });
+    const repo = new HelpArticleRepo(this.deps.db);
+    const [draft] = article.draftRevisionId === null ? [] : await repo.revisionsByIds([article.draftRevisionId]);
+    const contentHash = contentHashOf(input.title, input.body);
+    const isSourceDraft = draft?.locale === site.sourceLocale;
+    if (isSourceDraft && draft.contentHash === contentHash) {
+      return await this.article(workspaceId, projectId, article.id);
+    }
+    if (isSourceDraft && this.isOpenSession(article, draft, actorUserId)) {
+      await repo.updateRevisionText(workspaceId, draft.id, { title: input.title, bodyMd: input.body, contentHash });
+    } else {
+      await this.writeRevision(article, site.sourceLocale, {
+        title: input.title,
+        body: input.body,
+        kind: RevisionKinds.sourceEdit,
+        authorUserId: actorUserId,
+      });
+    }
     return await this.article(workspaceId, projectId, article.id);
   }
 
