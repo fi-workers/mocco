@@ -19,8 +19,12 @@ const config: NextConfig = {
   // The app's sitemap lists the customer guides, read from docs/customer at request time.
   outputFileTracingIncludes: {
     '/api/seo/sitemap': ['../../docs/customer/**/*.md'],
-    // OG images (ADR 0030) render with the Pretendard fonts kept beside the renderer.
-    '/api/ext/**': ['../backend/src/domain/og/fonts/*.ttf'],
+    // OG images (ADR 0030) render with the fonts and the emoji pack kept beside the renderer.
+    '/api/ext/**': [
+      '../backend/src/domain/og/fonts/*.ttf',
+      '../backend/src/domain/og/fonts/*.otf',
+      '../backend/src/domain/og/emoji/*.br',
+    ],
   },
   // The OG renderer (ADR 0030) loads from node_modules at runtime instead of being bundled: resvg is
   // a native addon, and satori reads its wasm (yoga, harfbuzz) from beside its own files.

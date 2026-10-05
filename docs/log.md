@@ -317,6 +317,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `customer/status/images/heartbeat-ping-url.png`, `customer/status/images/heartbeat.png`, `log.md`
 - Source: branch `feat/status-heartbeat-console` (#153)
 
+## 2026-10-06 — OG cards draw emoji, Hanja and kana
+
+- The OG images reference's "Rendering" covers the fallbacks: Twemoji 17.0.3 for emoji (one brotli pack, CC-BY 4.0)
+  and Noto Sans CJK KR 2.004 at 400 and 600 for kana and the 7,159 Hanja of KS X 1001 and JIS X 0208 (OFL), both
+  bundled and read on the first card that needs them; what still renders as boxes and is reported; why they're
+  bundled rather than fetched; and the scripts under `scripts/og-assets/` that rebuild them.
+- Docs touched: `reference/og-images.md`, `log.md`
+- Source: branch `feat/og-fallback-fonts` (#412)
+
 ## 2026-10-05 — Status 90-day bars and monitor latency
 
 - The status reference's "Public page" gains "The 90-day bars": each component's `uptime` (90 UTC days from its
