@@ -609,6 +609,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/feature-map.md`, `index.md`, `log.md`
 - Source: branch `feat/status-model` (issue #148)
 
+## 2026-10-06 — Backend tests migrate once per run
+
+- The [PR workflow](./guides/pr-workflow.md) has a new section on pre-push on a shared machine. The hook still runs
+  the full `yarn verify`. The backend's pglite suites now boot each test database from one migrated template per
+  run, so they pass at a high load average. If a test fails anyway, rerun verify; don't push with `--no-verify`.
+  The [backend conventions](./reference/backend-conventions.md) name the global setup. The 1500-delivery capacity
+  test gets a 20-minute hang guard, because it runs on an injected clock.
+- Docs touched: `guides/pr-workflow.md`, `reference/backend-conventions.md`, `log.md`
+- Source: branch `chore/verify-under-load` (issue #420)
+
 ## 2026-10-05 — Status incidents and maintenance
 
 - Extended the [status page model](./reference/status.md) with the rest of #148: incidents with their timeline,
