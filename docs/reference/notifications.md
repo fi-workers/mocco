@@ -182,9 +182,14 @@ trace, e.g. ``rule `vercel.deployment.succeeded` needs target = "production" (th
 ## Fan-out
 
 The bus subscriptions live in `createEventBus` (`domain/events/subscriptions.ts`), registered by
-`registerNotificationSubscribers`: `gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*` and `status.*`, under the
-permanent names in `NotificationSubscribers` (`notification.fan-out.<family>`). The inbound
-families receive nothing until their types join the catalog (#243).
+`registerNotificationSubscribers`, one `<family>.*` subscription per event family of the catalog:
+`gate.*`, `run.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`,
+under the permanent names in `NotificationSubscribers` (`notification.fan-out.<family>`). A rule can
+name any catalog type, so every family must reach the fan-out: `NotificationSubscribers` satisfies
+a type keyed by every family in `DomainEventTypes`, so a family added to the catalog without its
+entry fails the type check, and a test publishes each rendered event of the `mocco` preset and
+expects a delivery. Before this was checked, `flags.*` and `messenger.*` had no subscription, so
+their rules never fired.
 
 For each event, `NotificationService.handle`:
 
