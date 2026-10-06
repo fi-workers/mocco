@@ -74,6 +74,8 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/help/${articleId}`;
     return review === undefined ? path : `${path}?review=${encodeURIComponent(review)}`;
   },
+  /** The help center's glossary (#214): kept terms and fixed translations. */
+  projectHelpGlossary: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help/glossary`,
   /**
    * The translations dashboard (#213): every published article × language. `filter` is a
    * TranslationFilter, `locale` narrows to one language, `page` counts from 1.
