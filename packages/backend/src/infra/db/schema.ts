@@ -3580,6 +3580,9 @@ export const statusLocations = pgTable(
     lastSeenAt: timestamp('last_seen_at'),
     agentVersion: text('agent_version'),
     disabledAt: timestamp('disabled_at'),
+    /** Set by the location health sweep (#151) when the probe went silent, cleared when it polls
+     * again. Rounds don't wait for a silent location; its missing results are `no_data`. */
+    unhealthySince: timestamp('unhealthy_since'),
     createdAt,
     updatedAt,
   },
@@ -3641,6 +3644,9 @@ export const statusMonitors = pgTable(
     lastPingAt: timestamp('last_ping_at'),
     lastStartAt: timestamp('last_start_at'),
     lastDurationMs: integer('last_duration_ms'),
+    /** The lowest TLS warning threshold (days) already alerted for the certificate (#151); null
+     * when none is crossed, so the next crossing alerts. */
+    tlsWarnedDays: integer('tls_warned_days'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,

@@ -44,9 +44,13 @@ MOCCO_URL=https://www.mocco.work MOCCO_PROBE_TOKEN=mpl_... npx @mocco/probe
 
 Until the package and image are published, run it from a checkout of Mocco: `yarn workspace @mocco/probe build`, then `node packages/probe/dist/cli.js` with the same two variables.
 
+The probe starts every exchange itself: it asks Mocco for work and posts what it saw, and Mocco never connects to it. So it runs behind NAT or a firewall as long as the machine can make outbound HTTPS calls (port 443) to Mocco. It needs no inbound port and no public address.
+
 Once it is polling, the location shows **Seen just now** and the probe's version. Two probes with one token share that location's work.
 
 ![The workspace's locations: the private one seen just now](./images/locations.png)
+
+If a probe stops polling for three minutes while a monitor runs there, the location shows **Silent** and Mocco sends a **Location silent** alert (`status.location.unhealthy`) through your notification rules. Its monitors stop waiting for it: the other locations decide their rounds, and a round only this location runs stays unknown, which never counts as downtime. When the probe polls again you get a **Location back** alert.
 
 **Rotate token** issues a new token and stops the old one at once: the probe running with it exits, so restart it with the new token. **Disable** stops the location for good; no monitor can use it after that.
 
@@ -60,10 +64,11 @@ Open **Monitors** and choose **New monitor**.
 - **Expected status codes**: the answers that pass, such as `200, 204`. Leave it empty to accept any 2xx.
 - **Keyword**: optionally, the body must contain a word, or must not.
 - **Slow above (ms)**: optionally, an answer slower than this still passes but makes the monitor **degraded**.
+- **Warn before certificate expiry (days)**: optionally, for an `https` URL, how many days before the TLS certificate expires to warn you. Mocco warns once at that many days left, and again at 7, 3 and 1 day.
 - **Timeout**: how long one check may take, up to 30 seconds.
 - **Every (s)**: how often it runs, at least every 60 seconds.
 - **Down after** and **Up after**: how many rounds in a row must fail before the monitor is down, and pass before it is up again. The default is 2, so one bad answer doesn't page anyone.
-- **Locations**: where it runs. With several, **Locations that must agree** decides how many of those that reported must fail (or pass) for the round to count; a location that sent nothing never counts as a failure.
+- **Locations**: where it runs. With several, **Locations that must agree** decides how many of those that reported must fail (or pass) for the round to count; a location that sent nothing never counts as a failure. Unless you choose **Any one**, a monitor at several locations needs at least two of them failing to go down, so one location's network trouble never takes it down.
 - **While down**: what each component shows while the monitor is down, or **Not affected**.
 - **When it goes down**: open no incident, a **draft** incident (the default), or a **published** one.
 
@@ -82,6 +87,8 @@ When a round fails, the monitor is **Suspect** and checks again right away. If i
 ![The monitor down after two failed rounds, with the draft incident it opened](./images/monitor-down.png)
 
 When checks pass again the monitor is **Recovering**, and the incident gets a **Monitoring** update. After **Up after** passing rounds it is **Up**: the incident is **Resolved**, the components go back, and a **Recovered** alert is sent. A false alarm (Suspect, then Up) sends nothing. A slow answer makes it **Degraded** and sends a **Degraded** alert.
+
+A certificate running out is a warning, not an outage: when its days left fall below the number you set, Mocco sends a **Certificate expires in N days** alert (`status.monitor.tls_expiring`) once for each threshold, and the monitor stays **Up**. Renewing the certificate resets the warnings. A certificate that has already expired fails the check, and the monitor goes down like any failure.
 
 The monitor's page lists its latest rounds and every state change. Use **Pause** to stop checking it (for example while you move the service) and **Resume** to start again; **Edit** changes its settings and keeps its state.
 

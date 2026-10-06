@@ -4,6 +4,7 @@ import { ComponentStatusService } from '@backend/domain/status/ComponentStatusSe
 import { CorrelationService } from '@backend/domain/status/CorrelationService';
 import { HeartbeatService } from '@backend/domain/status/HeartbeatService';
 import { IncidentService } from '@backend/domain/status/IncidentService';
+import { LocationHealthService } from '@backend/domain/status/LocationHealthService';
 import { LocationService } from '@backend/domain/status/LocationService';
 import { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import { MonitorService } from '@backend/domain/status/MonitorService';
@@ -33,6 +34,7 @@ export interface StatusDomain {
   statusMaintenances: MaintenanceService;
   statusMonitors: MonitorService;
   statusLocations: LocationService;
+  statusLocationHealth: LocationHealthService;
   statusProbes: ProbeService;
   statusVerdicts: VerdictEvaluator;
   statusHeartbeats: HeartbeatService;
@@ -87,7 +89,10 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
   const onStateChange = async (...args: Parameters<MonitorTransitionService['react']>) => {
     await transitions.react(...args);
   };
-  const statusVerdicts = new VerdictEvaluator({ db, onStateChange, ...now });
+  const onTlsWarning = async (...args: Parameters<MonitorTransitionService['warnTls']>) => {
+    await transitions.warnTls(...args);
+  };
+  const statusVerdicts = new VerdictEvaluator({ db, onStateChange, onTlsWarning, ...now });
   return {
     statusPages,
     statusVerdicts,
@@ -116,6 +121,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
     }),
     statusMonitors: new MonitorService({ db, audit: deps.audit, ...now }),
     statusLocations: new LocationService({ db, audit: deps.audit, ...now }),
+    statusLocationHealth: new LocationHealthService({ db, ...(deps.events !== undefined && { events: deps.events }) }),
     statusProbes: new ProbeService({ db, verdicts: statusVerdicts, ...now }),
     statusRollups: new RollupService({ db, snapshots }),
     statusSubscribers:

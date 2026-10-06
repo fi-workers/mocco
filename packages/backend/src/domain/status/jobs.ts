@@ -7,6 +7,7 @@ import { defineJob, handleJob, type JobHandler } from '@backend/domain/jobs/hand
 import { maintenanceStatusSchema } from '@backend/domain/status/subscriber-mail';
 
 import type { SystemSchedule } from '@backend/domain/jobs/repos/job-schedule.repo';
+import type { LocationHealthService } from '@backend/domain/status/LocationHealthService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
 import type { RollupService } from '@backend/domain/status/RollupService';
 import type { SnapshotService } from '@backend/domain/status/SnapshotService';
@@ -35,7 +36,8 @@ export const publishSnapshot = defineJob(StatusJobKinds.snapshotPublish, z.objec
  * delete hourly rollups past theirs. */
 export const runRetention = defineJob(StatusJobKinds.retention, z.object({}));
 
-/** Close the monitor rounds that are due, decide them, and move the monitors' states. */
+/** Mark silent probe locations (and clear the ones back), then close the monitor rounds that are
+ * due, decide them, and move the monitors' states. */
 export const evaluateRounds = defineJob(StatusJobKinds.evaluate, z.object({}));
 
 /** Roll the round verdicts and state changes up into hours, days and component days. */
@@ -93,6 +95,7 @@ export function createStatusHandlers(deps: {
   snapshots: Pick<SnapshotService, 'publish' | 'sweep'> | undefined;
   retention: Pick<TimeSeriesRetention, 'run'>;
   verdicts: Pick<VerdictEvaluator, 'evaluate'>;
+  locationHealth: Pick<LocationHealthService, 'sweep'>;
   rollups: Pick<RollupService, 'run'>;
   /** Undefined without a signing key (AUTH_SECRET): notices are then dropped. */
   subscribers: Pick<SubscriberService, 'fanOut' | 'deliver' | 'prune'> | undefined;
@@ -112,7 +115,10 @@ export function createStatusHandlers(deps: {
       await deps.retention.run(deps.now());
     }),
     handleJob(evaluateRounds, async () => {
-      await deps.verdicts.evaluate({ now: deps.now() });
+      // Health first, so this run's rounds already stop waiting for a location that went silent.
+      const now = deps.now();
+      await deps.locationHealth.sweep(now);
+      await deps.verdicts.evaluate({ now });
     }),
     handleJob(runRollup, async () => {
       await deps.rollups.run(deps.now());

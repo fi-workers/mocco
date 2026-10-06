@@ -44,8 +44,19 @@ function median(values: readonly number[]): number | null {
 }
 
 /**
- * The verdict of one round. `fail` when at least a quorum of the reporting locations failed
- * (checked first, so a tie under `majority` is a failure); `ok` when a quorum passed, or
+ * How many failing locations a `fail` verdict needs: the quorum, and never only one location of a
+ * monitor that runs at several unless the mode is `any` (#151). So one region's blip, or one
+ * region failing while the others are silent, never takes a `majority` or `all` monitor down.
+ */
+export function failQuorumFor(mode: QuorumMode, reporting: number, assigned: number): number {
+  const quorum = quorumFor(mode, reporting);
+  return mode === QuorumModes.any ? quorum : Math.max(quorum, Math.min(2, assigned));
+}
+
+/**
+ * The verdict of one round. `fail` when at least the fail quorum of the reporting locations
+ * failed (checked first, so a tie of four or more under `majority` is a failure, but one failing
+ * location of several never is); `ok` when a quorum passed, or
  * `degraded` when a quorum of passing checks was slower than the threshold; `unknown` otherwise,
  * including when nobody reported. `assigned` counts the locations that owed a result: those
  * that sent none are `no_data`.
@@ -65,7 +76,7 @@ export function tallyRound(
     return { verdict: RoundVerdicts.unknown, ...tally };
   }
   const quorum = quorumFor(opts.quorumMode, reporting);
-  if (failCount >= quorum) {
+  if (failCount >= failQuorumFor(opts.quorumMode, reporting, opts.assigned)) {
     return { verdict: RoundVerdicts.fail, ...tally };
   }
   if (okCount < quorum) {

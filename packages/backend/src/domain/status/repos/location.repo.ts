@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { MonitorStates } from '@mocco/common/status';
+import { and, asc, eq, exists, gte, inArray, isNotNull, isNull, lt, ne, or } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne } from '@backend/infra/db/rows';
@@ -76,6 +77,47 @@ export class LocationRepo {
         .from(l)
         .where(and(isNull(l.workspaceId), eq(l.code, row.code))),
     );
+  }
+
+  /**
+   * Mark silent the enabled locations last seen before `cutoff` that some unpaused monitor
+   * runs at and that aren't marked yet; the rows marked. A location never seen isn't silent: it
+   * hasn't started.
+   */
+  async markSilent(cutoff: Date, now: Date): Promise<LocationRow[]> {
+    const ml = schema.statusMonitorLocations;
+    const m = schema.statusMonitors;
+    const isInUse = exists(
+      this.db
+        .select({ one: ml.locationId })
+        .from(ml)
+        .innerJoin(m, eq(m.id, ml.monitorId))
+        .where(and(eq(ml.locationId, l.id), ne(m.state, MonitorStates.paused))),
+    );
+    return await this.db
+      .update(l)
+      .set({ unhealthySince: now })
+      .where(and(isNull(l.disabledAt), isNull(l.unhealthySince), lt(l.lastSeenAt, cutoff), isInUse))
+      .returning();
+  }
+
+  /** The silent locations seen at or after `cutoff`: their probes are back. */
+  async listHeardSince(cutoff: Date): Promise<LocationRow[]> {
+    return await this.db
+      .select()
+      .from(l)
+      .where(and(isNotNull(l.unhealthySince), gte(l.lastSeenAt, cutoff)));
+  }
+
+  /** Clear the silent mark of `ids`. */
+  async clearSilent(ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    await this.db
+      .update(l)
+      .set({ unhealthySince: null })
+      .where(and(inArray(l.id, [...ids]), isNotNull(l.unhealthySince)));
   }
 
   async insert(row: typeof l.$inferInsert): Promise<LocationRow> {

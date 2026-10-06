@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -23,14 +23,17 @@ export class MonitorLocationRepo {
       .where(and(eq(ml.workspaceId, workspaceId), inArray(ml.monitorId, [...monitorIds])));
   }
 
-  /** How many enabled locations the monitor runs at: the results a round waits for. */
-  async countEnabled(workspaceId: string, monitorId: string): Promise<number> {
+  /**
+   * The enabled locations the monitor runs at (each owes a result, or is `no_data`), and how many of
+   * them a round waits for: the ones not silent (`unhealthy_since` null, #151).
+   */
+  async countForRound(workspaceId: string, monitorId: string): Promise<{ enabled: number; awaited: number }> {
     const [row] = await this.db
-      .select({ value: count() })
+      .select({ enabled: count(), awaited: count(sql`CASE WHEN ${loc.unhealthySince} IS NULL THEN 1 END`) })
       .from(ml)
       .innerJoin(loc, eq(loc.id, ml.locationId))
       .where(and(eq(ml.workspaceId, workspaceId), eq(ml.monitorId, monitorId), isNull(loc.disabledAt)));
-    return row?.value ?? 0;
+    return { enabled: row?.enabled ?? 0, awaited: row?.awaited ?? 0 };
   }
 
   /** Replace the monitor's locations. Call inside a transaction. */
