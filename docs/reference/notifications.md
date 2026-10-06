@@ -4,7 +4,7 @@ description: The notification model (channels, rules, deliveries, Discord guilds
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: medium
 owner: andrea
 tags: [reference, notifications, discord, events, jobs]
@@ -33,6 +33,9 @@ code_refs:
   - packages/backend/src/domain/notification/repos/discord-rate-limit.repo.ts
   - packages/common/src/notification.ts
   - packages/common/src/notification-presets.ts
+  - packages/backend/src/domain/notification/senders/email.ts
+  - packages/backend/src/domain/notification/senders/smtp.ts
+  - packages/backend/src/domain/notification/email-config.ts
 ---
 
 # Notifications
@@ -310,6 +313,15 @@ the job runner free of domain callbacks.
 
 `timestamp` columns here, as everywhere in the schema, are `timestamp without time zone` written
 by the app in UTC (the repo convention, [DB conventions](./db-conventions.md)), not `timestamptz`.
+
+## Email
+
+The foundation's email sender is a neutral `EmailSender` port (`senders/email.ts`: `send(message)` answers `sent`,
+`transient` or `permanent`), with one driver per leaf: `SmtpEmailSender` (`senders/smtp.ts`, the only nodemailer
+importer; an SMTP 5xx reply is permanent, anything else transient) and `LogEmailSender`, the development sink.
+`createEmailSenderFromEnv` picks one from `EMAIL_DRIVER` ([env](./env.md#email-vars)). Its first user is status page
+subscribers ([status](./status.md#subscribers)), which keep their own per-recipient deliveries; channels and rules
+here stay Discord-only.
 
 ## Env
 

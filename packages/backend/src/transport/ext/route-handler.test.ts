@@ -20,7 +20,17 @@ describe('the ext route handler (frontend app/api/ext)', () => {
     expect(exported).toEqual(new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT']));
 
     // Every method a /v1 route answers, with every product mounted (the routes are only built).
-    const mounted = { status: {}, ota: {}, flags: {}, messenger: {}, runs: {}, help: {}, probe: {}, heartbeats: {} };
+    const mounted = {
+      status: {},
+      ota: {},
+      flags: {},
+      messenger: {},
+      runs: {},
+      help: {},
+      probe: {},
+      heartbeats: {},
+      statusSubscribers: {},
+    };
     const deps = { apiKeys: {}, limiter: new MemoryRateLimiter(), ...mounted } as unknown as V1Deps;
     const served = new Set(
       createV1Routes(deps)

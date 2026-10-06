@@ -716,3 +716,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/approvals.md`, `reference/ota-version-policy.md`, `customer/mcp/connect.md`,
   `customer/start/workspace-and-projects.md`, `log.md`
 - Source: branch `feat/approval-labels-app-version` (#451)
+
+## 2026-10-06 — Status: email subscribers
+
+- Documented status page subscribers (#156) in the [status page model](./reference/status.md#subscribers): email
+  sign-ups on `POST /v1/status-pages/{slug}/subscribers` with double opt-in, a honeypot, limits per client and per
+  address and the same answer whoever signs up; signed, single-purpose confirm and unsubscribe links (one-click
+  `List-Unsubscribe`); the fan-out of published incident updates and maintenance changes with one delivery per
+  subscriber and notice (migration 0071), sent at most once; English and Korean mail. The
+  [public API](./reference/public-api.md#routes) lists the routes, [env](./reference/env.md#email-vars) the
+  `EMAIL_DRIVER`, `EMAIL_FROM` and `EMAIL_SMTP_URL` vars, [notifications](./reference/notifications.md#email) the new
+  email sender, and the feature map's Subscribers row is a prototype. Signed webhooks, the form on the public page and
+  its customer guide are the next slice.
+- Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/env.md`, `reference/notifications.md`,
+  `reference/feature-map.md`, `log.md`
+- Source: branch `feat/status-subscribers` (issue #156)

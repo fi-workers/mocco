@@ -20,6 +20,7 @@ import type { OtaUploadDeps } from '@backend/transport/ext/v1/ota-uploads';
 import type { ProbeProtocolDeps } from '@backend/transport/ext/v1/probe';
 import type { RunReadDeps } from '@backend/transport/ext/v1/runs';
 import type { StatusApiDeps } from '@backend/transport/ext/v1/status';
+import type { StatusSubscriberDeps } from '@backend/transport/ext/v1/status-subscribers';
 import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { Context } from 'hono';
 
@@ -43,6 +44,8 @@ export interface V1Deps {
   status?: StatusApiDeps;
   /** Heartbeat pings (the token in the path, no key); undefined leaves /v1/ping/:token unmounted. */
   heartbeats?: HeartbeatPingDeps;
+  /** Status page sign-ups and their links (no key); undefined leaves /v1/status-pages unmounted. */
+  statusSubscribers?: StatusSubscriberDeps;
 }
 
 export interface V1Env {

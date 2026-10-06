@@ -47,6 +47,7 @@
     "drizzle-orm": "0.45.2",
     "hono": "4.12.30",
     "jose": "6.2.3",
+    "nodemailer": "10.0.14",
     "pg": "8.22.0",
     "satori": "0.35.0",
     "superjson": "2.2.6",

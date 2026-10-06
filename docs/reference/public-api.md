@@ -22,6 +22,7 @@ code_refs:
   - packages/backend/src/transport/ext/v1/status.ts
   - packages/backend/src/transport/ext/v1/status-openapi.ts
   - packages/common/src/status-v1.ts
+  - packages/backend/src/transport/ext/v1/status-subscribers.ts
 ---
 
 # Public /v1 API
@@ -61,7 +62,7 @@ Origins are compared normalised (`https://APP.acme.test:443` equals `https://app
 
 ## Rate limits
 
-Per key: 600 requests a minute for publishable keys and 1,200 for secret keys. Per client IP (hashed) and route, for routes without a key: 120 a minute. Heartbeat pings have their own limits (per token and per client address, [below](#routes)). Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds). Over the limit, the answer is `429 rate_limited` with `Retry-After`.
+Per key: 600 requests a minute for publishable keys and 1,200 for secret keys. Per client IP (hashed) and route, for routes without a key: 120 a minute. Heartbeat pings and status page sign-ups have their own limits (per token or address and per client address, [below](#routes)). Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds). Over the limit, the answer is `429 rate_limited` with `Retry-After`.
 
 The default driver is Postgres (`mocco_rate_limit_counters`, one upsert per request, fixed windows, pruned hourly by `ratelimit.prune`). Hot cacheable reads (flag rulesets, OTA manifests, version checks) are served from the CDN and limited at the edge instead.
 
@@ -95,6 +96,8 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/locations` · `/v1/monitors` · `/v1/monitors/{id}` · `/v1/pages` · `/v1/pages/{id}/components` · `/v1/incidents?pageId=` · `/v1/incidents/{id}` · `/v1/maintenances?pageId=` | secret, `status:read` | The project's status resources as explicit DTOs: a monitor's `target` is its host and port, never its URL's credentials, path or query, its body or its token hash. `404` for another project's page, monitor or incident; see [Status: the /v1 management API](./status.md#the-v1-management-api) |
 | `PUT /v1/monitors/by-key/{key}` | secret, `status:write` | Monitors as code: create or change the project's monitor with this key to match the body (the console's monitor input). `201 { outcome: "created", monitor, heartbeatToken }` once, then `200` with `updated`, or `unchanged` (no write, no audit entry) when it already matches; `409` for a switch between a heartbeat and a probe kind |
 | `POST /v1/monitors/{id}/pause` · `…/resume` · `DELETE /v1/monitors/{id}` · `PATCH /v1/components/{id}` · `POST /v1/incidents` · `…/{id}/updates` · `PUT /v1/incidents/{id}/components` · `POST /v1/maintenances` · `…/{id}/cancel` | secret, `status:write` | Pause, resume and delete a monitor, set a component's status, open an incident and post its updates, replace its components, schedule and cancel maintenance; `409` for a change the state doesn't allow |
+| `POST /v1/status-pages/{slug}/subscribers` | none: the page's slug is public | A visitor signs up for a status page's updates by email, as JSON or a form post: `{ email, componentIds?, locale? ("en", "ko"), website? }`. `202 { status: "pending_confirmation" }` whether the address is new, pending or already subscribed, and when `website` (a honeypot) is filled; a confirmation mail follows. `400` for a bad address or a component not on the page, `404` for an unknown page, `503 subscriptions_unavailable` when the server sends no email. 10 per 10 minutes per client address and 3 an hour per page and address; `Access-Control-Allow-Origin: *`; see [Status: subscribers](./status.md#subscribers) |
+| `GET /v1/status-pages/{slug}/subscribers/confirm?token=` · `GET`/`POST …/unsubscribe?token=` | none: the signed token from the mail | The pages the mail's links open (HTML): confirm the sign-up; ask before unsubscribing, then unsubscribe from the form or a one-click `POST` (RFC 8058). An invalid, expired or wrong-purpose token is a `400` page. 30 a minute per client address |
 | `GET /v1/status/openapi.json` | none | The OpenAPI 3.1 description of the status routes, generated from their zod schemas |
 | `GET` or `POST /v1/ping/{token}` · `…/{token}/start` · `…/{token}/fail` · `…/{token}/{exitCode}` | none: the heartbeat's `mhb_` token in the path is the credential | A [heartbeat monitor](./status.md#heartbeat-monitors)'s job reports that it finished, started, failed, or exited with a code (0 to 255; 0 is a success). `200 OK` (text). A token of the wrong shape, one that matches no heartbeat (unknown, rotated, or its monitor deleted) and an exit code over 255 get the same `404` as a route that doesn't exist (plain text, not problem+json), so a ping can't tell them apart. A body is ignored. 5 every 5 seconds per token (counted before the token is looked up) and 600 a minute per client address; over either, `429 rate_limited` |
 | `GET /v1/runs/{id}` | secret, `runs:read` | One run with its steps and gates — enough to say why it is paused and on what. `404` for a run the project does not link, including one in the same workspace |

@@ -498,6 +498,13 @@
       "when": 1791236582254,
       "tag": "0070_condemned_katie_power",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791240833894,
+      "tag": "0071_black_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

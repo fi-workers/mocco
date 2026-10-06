@@ -34,6 +34,14 @@ export class IncidentUpdateRepo {
       .orderBy(asc(u.createdAt));
   }
 
+  async find(workspaceId: string, id: string): Promise<IncidentUpdateRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(u)
+      .where(and(eq(u.workspaceId, workspaceId), eq(u.id, id)));
+    return row;
+  }
+
   async insert(row: typeof u.$inferInsert): Promise<IncidentUpdateRow> {
     return expectOne(await this.db.insert(u).values(row).returning());
   }

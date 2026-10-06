@@ -61,6 +61,12 @@ export class StatusPageRepo {
     return row;
   }
 
+  /** A page by its public address, for the public subscriber routes (slugs are global). */
+  async findBySlug(slug: string): Promise<StatusPageRow | undefined> {
+    const [row] = await this.db.select().from(p).where(eq(p.slug, slug));
+    return row;
+  }
+
   /** Mark the pages changed, so the publish job builds a new version. Run it in the change's transaction. */
   async markDirty(ids: readonly string[], now: Date): Promise<void> {
     if (ids.length === 0) {
