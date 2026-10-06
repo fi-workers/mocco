@@ -331,6 +331,13 @@ export default function HelpCenter({ workspaceId, projectId }: Props) {
             Translations
           </Link>
         )}
+        {site.locales.length === 0 ? null : (
+          <Link
+            href={Routes.projectHelpGlossary(workspaceId, projectId)}
+            className="text-foreground underline underline-offset-2">
+            Glossary
+          </Link>
+        )}
       </div>
       <Tree workspaceId={workspaceId} projectId={projectId} />
       <ImportMintlify workspaceId={workspaceId} projectId={projectId} />

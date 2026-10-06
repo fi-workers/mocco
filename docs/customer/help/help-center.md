@@ -1,6 +1,6 @@
 ---
 title: Publish a help center
-description: Set up a public help site for a project, write articles in Markdown with a live preview, import from Mintlify, publish, translate into other languages, and restore an earlier version — and how readers reach the site.
+description: Set up a public help site for a project, write articles in Markdown with a live preview, import from Mintlify, publish, translate into other languages with a glossary, and restore an earlier version — and how readers reach the site.
 type: guide
 status: active
 created: 2026-10-02
@@ -125,6 +125,25 @@ A machine translation nobody has reviewed says **Automatically translated** unde
 When you publish the article again, a translation made from the earlier version keeps being shown until it's updated, with a note at the top: the original changed since it was translated, and a link to the article in the language you write in. A machine translation loses the note as soon as Mocco translates the new version; a reviewed one keeps it until you review it again.
 
 ![A Japanese machine translation on the public site: the note that the original changed with a link to the English article, "Automatically translated" under the title, and the language switcher at the top right](./images/public-translation-notices.png)
+
+### Keep names and words the same in every language
+
+The **Help center** page also links to **Glossary**: the words every translation follows. Add a term and choose its rule:
+
+- **Keep as written** for your product's name, a feature's name or a button label. It stays exactly as you wrote it in every language; Mocco never sends it to be translated.
+- **Fixed translation** for a word that must always be translated the same way. Type its translation for each language you offer. A machine translation that doesn't use it is refused and asked for again; if it still doesn't, the language keeps its previous text and shows **Failed**.
+
+A note says why, for whoever edits the term next.
+
+![The Glossary page: adding "home screen" with a fixed Japanese translation, and the terms already there, one kept as written and two with fixed translations](./images/glossary.png)
+
+When you add, change or remove a term, Mocco translates again only the sentences that contain it, in the languages it changes; every other sentence stays as it is. A language someone reviewed keeps its text and gets a machine draft with the new term, to accept or edit in its review.
+
+To add many terms at once, import a CSV file, for example a sheet exported from a spreadsheet. The first row names the columns: `term`, `rule` (`keep` or `fixed`; left empty, a row with a translation is fixed), `note`, and one column per language, named by its code (`ja`, `ko`, `de`, …). Mocco shows how many terms it read and the lines it couldn't, before you import. A term already in the glossary is updated, whatever its capitalization, and terms not in the file stay. **Download the glossary as CSV** gives you the current glossary in the same shape, to edit and import again.
+
+![Importing a CSV: three terms ready, and line 5 refused because a fixed term needs a translation](./images/glossary-import.png)
+
+Agents connected over [MCP](../mcp/connect.md) can read the glossary; changing it stays in the console.
 
 ## Use your own domain
 

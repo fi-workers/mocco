@@ -1052,3 +1052,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`,
   `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/feedback-public-v1-identify` (issue #174)
+
+## 2026-10-06 — Help center: glossary console and CSV import
+
+- Finished #214 with the console: the **Glossary** page (linked from the Help center page once the site offers a
+  language) adds, edits and removes terms, and imports a CSV parsed in the browser (`parseGlossaryCsv` in
+  `@mocco/common/help-glossary-csv`, rows that fail listed by line) as one `help.importGlossary`; `glossaryCsv` downloads
+  it back. No backend change, no migration.
+- The [customer guide](./customer/help/help-center.md#keep-names-and-words-the-same-in-every-language) explains kept and
+  fixed terms, what a change re-translates and the CSV shape, with two screenshots; the
+  [reference](./reference/help-center.md#glossary) and the feature map say the console is live.
+- Docs touched: `customer/help/help-center.md`, `reference/help-center.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/help-glossary-ui` (issue #214)
