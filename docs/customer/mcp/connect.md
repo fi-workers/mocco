@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving feedback posts to another status. The plan is in the
+> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -62,6 +62,8 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_feedback_boards_list` | Which feedback boards a project has, whether each is public, and their categories in order |
 | `mocco_feedback_posts_search` | A board's posts by status (under review, planned, in progress, shipped, closed) or newest first, by status or category, a page at a time |
 | `mocco_feedback_post_get` | One feedback post, and every status it took and when |
+| `mocco_feedback_votes_list` | Who voted for a feedback post (your app's id for each end user), and whether each vote counts yet or waits for an email confirmation |
+| `mocco_feedback_comments_list` | A feedback post's comments as your team sees them: end users' comments, your official response, and internal notes, marked |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -137,6 +139,9 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
 | `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
+| `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
+| `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
+| `mocco_feedback_post_merge` | Merges a duplicate feedback post into the post it repeats, as you; votes and followers move over |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -193,8 +198,24 @@ status the post had when you were asked: if anyone moves the post before you ans
 answer is refused and you are asked afresh, and answering the same confirmation twice moves
 it once. Asking for the status a post has already answers without asking you. It follows the
 same rules as the other changes, needs the workspace to allow agents to make changes, and
-needs its own permission, asked for the first time it is used: **Move your feedback posts to
-another status, as you**. Any member of the workspace may move posts, as on the board.
+needs its own permission, asked for the first time it is used: **Move, comment on, vote on and merge your feedback posts, as you**. Any member
+of the workspace may move posts, as on the board.
+
+**Commenting, voting and merging on feedback.** The same permission and the same workspace
+switch cover three more changes, each confirmed in your client first:
+
+- `mocco_feedback_comment_create` shows the post, what kind of comment it is (public, the
+  official response, or an internal note) and the exact text. An official response can't also
+  be internal.
+- `mocco_feedback_post_vote` records a vote for one of your app's users, by the id your app
+  knows them by, for when someone asked by email or on a call. It counts at once and they
+  follow the post. A vote that counts already answers without asking. If the person votes
+  themselves before you answer, the answer is refused and you are asked afresh.
+- `mocco_feedback_post_merge` names both posts and their votes. The duplicate's votes and
+  followers move to the other post (someone who voted on both counts once), and the duplicate
+  is closed, keeping its comments and history. A merge can't be undone. If either post gets a
+  vote before you answer, you are asked again with the new counts; if either is merged
+  elsewhere, the merge is refused.
 
 Webhook source changes follow the same rules, and a signing secret never passes through
 your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the
@@ -333,9 +354,12 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not reply in the messenger in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… isn't a member of this workspace" | A conversation can only go to a member of the workspace. `mocco_messenger_conversations_search` names the people who have conversations now |
 | "Conversation … was not found" | It is in another project or workspace, or the id is wrong. Search the inbox first |
-| "This connection may not change feedback statuses" | The app was never allowed to move posts. Reconnect it and allow the feedback permission when asked |
-| "Agents may not change feedback statuses in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "This connection may not change feedback statuses" (or comment, record votes, merge feedback posts) | The app was never allowed to change feedback. Reconnect it and allow the feedback permission when asked |
+| "Agents may not change feedback statuses in this workspace" (or comment, record votes, merge) | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "That confirmation was for a different change" after moving a post | Someone moved the post before you answered. Call again to be asked about the move from its status now |
+| "That confirmation was for a different change" after a vote or a merge | The end user voted, or one of the posts got a vote, before you answered. Call again to be asked with the counts as they are now |
+| "… was merged into … already" | A merged post can't be merged again, merged into, or voted on. Use the post it was merged into |
+| "Posts can only be merged on the same board" | Move the posts to one board first, or merge within each board |
 | "Feedback board … was not found" or "Feedback post … was not found" | It is in another project or workspace, or the id is wrong. `mocco_feedback_boards_list` and `mocco_feedback_posts_search` give the ids |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
 | "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |

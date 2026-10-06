@@ -297,7 +297,7 @@ The core slice (#172) ships the services and the `feedback` tRPC router; the nex
 - `mocco_feedback_post_get`: one post with its status history.
 - `mocco_feedback_post_set_status`: acts as the caller, behind a `feedback:write` scope, the workspace's opt-in and the confirmation round trip.
 
-Voting, merging and accepting a ship suggestion get their tools in the slices that build them. Votes, comments, subscriptions and merging (#173) are built; the slice after them adds `mocco_feedback_votes_list`, `mocco_feedback_comments_list`, and the changing `mocco_feedback_comment_create`, `mocco_feedback_post_vote` and `mocco_feedback_post_merge`, behind `feedback:write`, the opt-in and the confirmation round trip.
+Voting, merging and accepting a ship suggestion get their tools in the slices that build them. Votes, comments, subscriptions and merging (#173) are built, and their tools shipped in #473: `mocco_feedback_votes_list`, `mocco_feedback_comments_list`, and the changing `mocco_feedback_comment_create`, `mocco_feedback_post_vote` and `mocco_feedback_post_merge`, behind `feedback:write`, the opt-in and the confirmation round trip.
 
 ## 7. External vendors and self-host story
 

@@ -46,15 +46,15 @@ const MAX_LIMIT = FeedbackLimits.listMax - 1;
 /** How much of a post's body a concise read (and a detailed search) shows. */
 const EXCERPT_CHARS = 500;
 
-const projectArg = z
+export const projectArg = z
   .uuid()
   .optional()
   .describe('The project the boards belong to. Omit it when the workspace has exactly one.');
 
-const responseFormatArg = (concise: string, detailed: string) =>
+export const responseFormatArg = (concise: string, detailed: string) =>
   z.enum(['concise', 'detailed']).default('concise').describe(`\`concise\` is ${concise}; \`detailed\` ${detailed}.`);
 
-const postArg = z.uuid().describe('The post id, as `mocco_feedback_posts_search` returns it.');
+export const postArg = z.uuid().describe('The post id, as `mocco_feedback_posts_search` returns it.');
 
 const boardsInput = z.object({
   workspaceId: workspaceArg,
@@ -111,11 +111,14 @@ export type SearchPostsArgs = z.infer<typeof searchInput>;
 export type GetPostArgs = z.infer<typeof readInput>;
 export type SetStatusArgs = z.infer<typeof moveInput>;
 
-const resolveFeedbackProject = async (deps: FeedbackToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
-  await deps.projects.resolve(userId, asked, Products.feedback);
+export const resolveFeedbackProject = async (
+  deps: Pick<FeedbackToolDeps, 'projects'>,
+  userId: string,
+  asked: Partial<ProjectInScope>,
+) => await deps.projects.resolve(userId, asked, Products.feedback);
 
 /** The start of a body, and whether there is more of it. */
-function excerptOf(post: Pick<FeedbackPostRow, 'body'>): { body: string; isBodyCut: boolean } {
+export function excerptOf(post: { body: string }): { body: string; isBodyCut: boolean } {
   const isBodyCut = post.body.length > EXCERPT_CHARS;
   return { body: isBodyCut ? `${post.body.slice(0, EXCERPT_CHARS)}…` : post.body, isBodyCut };
 }
@@ -208,13 +211,13 @@ export async function getPost(deps: FeedbackToolDeps, args: GetPostArgs, userId:
 const moveWords: DecisionWords = {
   verb: 'change feedback statuses',
   doing: "Changing a feedback post's status",
-  scope: { name: McpScopes.feedbackWrite, allows: 'move your feedback posts to another status' },
+  scope: { name: McpScopes.feedbackWrite, allows: 'move, comment on, vote on and merge your feedback posts' },
   instead: 'change it from the board in the Mocco console',
 };
 
 /** The refusals the model reads (not found, which another tenant's post reads as too, a
  * workspace or project to pick, the product off, a post that moved); anything else is rethrown. */
-function feedbackRefusal(error: unknown): CallToolResult {
+export function feedbackRefusal(error: unknown): CallToolResult {
   if (
     error instanceof NotFoundError ||
     error instanceof BadRequestError ||
@@ -226,7 +229,7 @@ function feedbackRefusal(error: unknown): CallToolResult {
   throw error;
 }
 
-const postLabel = (post: FeedbackPostRow) => `#${String(post.number)} "${post.title}"`;
+export const postLabel = (post: Pick<FeedbackPostRow, 'number' | 'title'>) => `#${String(post.number)} "${post.title}"`;
 
 /** Move a post to another status as the caller, once they confirm the move from its status now. */
 export async function setStatus(

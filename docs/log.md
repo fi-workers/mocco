@@ -946,3 +946,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
   `log.md`
 - Source: branch `feat/feedback-merge` (issue #173)
+
+## 2026-10-06 — MCP: feedback votes, comments and merging
+
+- Documented #473 in the [feedback board model](./reference/feedback.md#mcp-tools): `mocco_feedback_votes_list` and
+  `mocco_feedback_comments_list` over `VoteService` and `CommentService`, and the changing
+  `mocco_feedback_comment_create`, `mocco_feedback_post_vote` and `mocco_feedback_post_merge` over
+  `CommentService.createAsStaff`, `VoteService.vote` and `MergeService.merge`, in `tools/feedback-engagement.ts`.
+- The changes share `feedback:write` with the status tool; its consent line now says all four changes. Each
+  confirmation is bound to what it showed: a comment to its text and kind, a vote to the end user's vote when asked, a
+  merge to both posts and their vote counts. A merged post, a post into itself or across boards is refused before
+  asking. `VoteService.find` is new; no migration.
+- The [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md#how-the-feedback-votes-comments-and-merges-are-built-issue-473),
+  the [connect guide](./customer/mcp/connect.md), the feature map and the
+  [feedback design](./specs/2026-09-24-feedback-design.md#61-mcp-tools-adr-0025) say the same.
+- Docs touched: `reference/feedback.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
+  `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/mcp-feedback-votes-merge` (issue #473)

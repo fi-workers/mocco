@@ -117,6 +117,12 @@ export class VoteService {
     });
   }
 
+  /** The end user's vote on the post, or undefined when they have none. */
+  async find(scope: FeedbackScope, postId: string, endUserId: string): Promise<FeedbackVoteRow | undefined> {
+    await this.deps.posts.requirePost(scope, postId);
+    return await new FeedbackVoteRepo(this.deps.db).find(scope.workspaceId, postId, endUserId);
+  }
+
   /** The post's votes, newest first, pending ones included. */
   async list(scope: FeedbackScope, postId: string, page: FeedbackPage): Promise<FeedbackVoteRow[]> {
     await this.deps.posts.requirePost(scope, postId);
