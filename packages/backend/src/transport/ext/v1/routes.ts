@@ -16,6 +16,7 @@ import { createProbeRoutes } from '@backend/transport/ext/v1/probe';
 import { createRunReadRoutes } from '@backend/transport/ext/v1/runs';
 import { createStatusApiRoutes } from '@backend/transport/ext/v1/status';
 import { createStatusOpenApiRoutes } from '@backend/transport/ext/v1/status-openapi';
+import { createStatusSubscriberRoutes } from '@backend/transport/ext/v1/status-subscribers';
 
 export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   const app = new Hono<V1Env>();
@@ -61,6 +62,11 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
   // Heartbeat pings (#153): the path's token is the credential, no key.
   if (deps.heartbeats !== undefined) {
     app.route('/ping', createHeartbeatPingRoutes(deps, deps.heartbeats));
+  }
+
+  // Status page subscribers (#156): the public slug and signed links, no key.
+  if (deps.statusSubscribers !== undefined) {
+    app.route('/status-pages', createStatusSubscriberRoutes(deps, deps.statusSubscribers));
   }
 
   if (deps.probe !== undefined) {

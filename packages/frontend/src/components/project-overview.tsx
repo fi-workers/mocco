@@ -1,4 +1,4 @@
-import { AppPlatforms, webOriginsSchema } from '@mocco/common/project';
+import { AppPlatforms, appPlatformLabels, webOriginsSchema } from '@mocco/common/project';
 import { useState } from 'react';
 
 import {
@@ -19,13 +19,6 @@ interface Props {
   projectId: string;
 }
 
-const platformLabels: Record<AppPlatform, string> = {
-  [AppPlatforms.ios]: 'iOS',
-  [AppPlatforms.android]: 'Android',
-  [AppPlatforms.web]: 'Web',
-  [AppPlatforms.reactNative]: 'React Native',
-  [AppPlatforms.server]: 'Server',
-};
 const bundleLabels: Partial<Record<AppPlatform, string>> = {
   [AppPlatforms.ios]: 'Bundle ID',
   [AppPlatforms.android]: 'Application ID',
@@ -99,7 +92,7 @@ function AddAppForm({ workspaceId, projectId, onDone }: Props & { onDone: () => 
             className={inputClass}>
             {Object.values(AppPlatforms).map(value => (
               <option key={value} value={value}>
-                {platformLabels[value]}
+                {appPlatformLabels[value]}
               </option>
             ))}
           </select>
@@ -273,7 +266,7 @@ function AppsSection({ workspaceId, projectId, isArchived }: Props & { isArchive
             <span className="flex items-center justify-between gap-3">
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-medium">
-                  {app.name} <span className="text-xs text-muted-foreground">· {platformLabels[app.platform]}</span>
+                  {app.name} <span className="text-xs text-muted-foreground">· {appPlatformLabels[app.platform]}</span>
                 </span>
                 <span className="truncate font-mono text-xs text-muted-foreground">
                   {[app.bundleId, app.storeAppId, ...(app.webOrigins ?? [])].filter(Boolean).join(' · ') || '—'}

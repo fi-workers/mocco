@@ -90,6 +90,7 @@ describe('job runtime composition (pglite)', () => {
         StatusJobKinds.retention,
         StatusJobKinds.evaluate,
         StatusJobKinds.rollup,
+        StatusJobKinds.subscribersPrune,
       ]),
     );
     expect(schedules.every(schedule => schedule.workspaceId === null)).toBe(true);

@@ -106,7 +106,7 @@ describe('mocco_inbound_sources_* changes (pglite, over HTTP)', () => {
 
   const deps = (sources: McpToolDeps['inbound']): McpToolDeps => ({
     runs: { searchInWorkspace: refuse, get: refuse },
-    approvals: { list: refuse, get: refuse, vote: refuse },
+    approvals: { listLabeled: refuse, get: refuse, vote: refuse },
     gates: { getPending: refuse, resume: refuse },
     flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
     otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },

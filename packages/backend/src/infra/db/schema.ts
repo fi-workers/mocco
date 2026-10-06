@@ -45,6 +45,9 @@ import {
   MonitorStates,
   QuorumModes,
   RoundVerdicts,
+  SubscriberChannels,
+  SubscriberLocales,
+  SubscriberMailKinds,
 } from '@mocco/common/status';
 import { ObjectStatuses, Visibilities } from '@mocco/common/storage';
 import { sql } from 'drizzle-orm';
@@ -146,6 +149,9 @@ import type {
   QuorumMode,
   RoundVerdict,
   StoredMonitorSpec,
+  SubscriberChannel,
+  SubscriberLocale,
+  SubscriberMailKind,
 } from '@mocco/common/status';
 import type { ObjectStatus, Visibility } from '@mocco/common/storage';
 
@@ -4010,5 +4016,109 @@ export const statusComponentDays = pgTable(
       'mocco_status_component_days_worst_status_check',
       sql`${t.worstStatus} IN (${sqlInList(Object.values(ComponentStatuses))})`,
     ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Status subscribers (#156): visitors who follow a page by email (and, next, by signed
+// webhook). A subscriber is confirmed by double opt-in; each mail it is sent is one delivery,
+// unique per subscriber and notice, so an incident update reaches a subscriber at most once.
+// ─────────────────────────────────────────────────────────────
+
+/** A visitor following a page. Email addresses are stored lowercased. The signed links in each
+ * mail identify the subscriber, so it stores no token of its own. */
+export const statusSubscribers = pgTable(
+  'mocco_status_subscribers',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    pageId: uuid('page_id').notNull(),
+    channel: text().$type<SubscriberChannel>().notNull().default(SubscriberChannels.email),
+    email: text(),
+    webhookUrl: text('webhook_url'),
+    // The webhook's signing secret (SecretBox); webhooks land in the next slice.
+    webhookSecretSealed: text('webhook_secret_sealed'),
+    // The components to hear about; null for the whole page.
+    componentIds: uuid('component_ids').array(),
+    locale: text().$type<SubscriberLocale>().notNull().default(SubscriberLocales.en),
+    confirmedAt: timestamp('confirmed_at'),
+    unsubscribedAt: timestamp('unsubscribed_at'),
+    // When the last confirmation mail was queued, to throttle repeated sign-ups.
+    confirmationSentAt: timestamp('confirmation_sent_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_status_subscribers_page_email_uq').on(t.pageId, t.email),
+    uniqueIndex('mocco_status_subscribers_page_webhook_uq').on(t.pageId, t.webhookUrl),
+    // The fan-out reads a page's confirmed, subscribed followers.
+    index('mocco_status_subscribers_active_idx')
+      .on(t.pageId)
+      .where(sql`${t.confirmedAt} IS NOT NULL AND ${t.unsubscribedAt} IS NULL`),
+    // A UNIQUE CONSTRAINT so deliveries' composite FK can reference (id, workspace_id).
+    unique('mocco_status_subscribers_scope_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.pageId, t.workspaceId, t.projectId],
+      foreignColumns: [statusPages.id, statusPages.workspaceId, statusPages.projectId],
+      name: 'mocco_status_subscribers_page_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_subscribers_channel_check',
+      sql`${t.channel} IN (${sqlInList(Object.values(SubscriberChannels))})`,
+    ),
+    check(
+      'mocco_status_subscribers_locale_check',
+      sql`${t.locale} IN (${sqlInList(Object.values(SubscriberLocales))})`,
+    ),
+    // An email subscriber has a lowercased address and no webhook; a webhook one the reverse, with its secret.
+    check(
+      'mocco_status_subscribers_target_check',
+      sql`(${t.channel} = 'email' AND ${t.email} IS NOT NULL AND ${t.email} = lower(${t.email}) AND ${t.webhookUrl} IS NULL AND ${t.webhookSecretSealed} IS NULL) OR (${t.channel} = 'webhook' AND ${t.webhookUrl} IS NOT NULL AND ${t.webhookSecretSealed} IS NOT NULL AND ${t.email} IS NULL)`,
+    ),
+  ],
+);
+
+/** One mail to one subscriber: the confirmation, an incident update or a maintenance change.
+ * `dedupe_key` names the notice (`incident_update:<update id>`, `maintenance:<id>:<status>`,
+ * `confirmation:<time>`); unique per subscriber, so a repeated fan-out sends nothing new. */
+export const statusSubscriberDeliveries = pgTable(
+  'mocco_status_subscriber_deliveries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    subscriberId: uuid('subscriber_id').notNull(),
+    kind: text().$type<SubscriberMailKind>().notNull(),
+    dedupeKey: text('dedupe_key').notNull(),
+    // What the mail says, captured at fan-out; its links are signed when it is sent.
+    content: jsonb().notNull(),
+    status: text().$type<DeliveryStatus>().notNull().default(DeliveryStatuses.queued),
+    // Sends tried (calls to the sender).
+    attempts: integer().notNull().default(0),
+    error: text(),
+    // When a run claimed it (status `sending`).
+    sendingAt: timestamp('sending_at'),
+    sentAt: timestamp('sent_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_status_subscriber_deliveries_dedupe_uq').on(t.subscriberId, t.dedupeKey),
+    // The prune of old deliveries.
+    index('mocco_status_subscriber_deliveries_created_at_idx').on(t.createdAt),
+    foreignKey({
+      columns: [t.subscriberId, t.workspaceId],
+      foreignColumns: [statusSubscribers.id, statusSubscribers.workspaceId],
+      name: 'mocco_status_subscriber_deliveries_subscriber_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_status_subscriber_deliveries_kind_check',
+      sql`${t.kind} IN (${sqlInList(Object.values(SubscriberMailKinds))})`,
+    ),
+    check(
+      'mocco_status_subscriber_deliveries_status_check',
+      sql`${t.status} IN (${sqlInList(Object.values(DeliveryStatuses))})`,
+    ),
+    check('mocco_status_subscriber_deliveries_attempts_check', sql`${t.attempts} >= 0`),
   ],
 );

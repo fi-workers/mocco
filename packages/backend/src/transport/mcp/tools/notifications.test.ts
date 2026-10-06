@@ -93,7 +93,7 @@ const BOT_TOKEN = 'bot-token-secret';
 /** Every tool that reads the workspace's notifications must refuse without the services. */
 const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'notifications' | 'notificationActivity' | 'inbound'> => ({
   runs: { searchInWorkspace: refuse, get: refuse },
-  approvals: { list: refuse, get: refuse, vote: refuse },
+  approvals: { listLabeled: refuse, get: refuse, vote: refuse },
   gates: { getPending: refuse, resume: refuse },
   flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
   otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },

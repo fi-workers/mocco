@@ -70,6 +70,14 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1).optional(),
   /** The Mocco bot's token; every Discord REST call sends it. */
   DISCORD_BOT_TOKEN: z.string().min(1).optional(),
+  // Email (platform foundations §12): `smtp` sends through EMAIL_SMTP_URL; `log` is the
+  // development sink, which prints each mail to the server log. Unset: no email is sent,
+  // and status page subscriptions answer "not available".
+  EMAIL_DRIVER: z.enum(['smtp', 'log']).optional(),
+  /** The From address, e.g. `Acme Status <status@acme.example>`. Required with `smtp`. */
+  EMAIL_FROM: z.string().min(1).optional(),
+  /** `smtp://user:pass@host:587` or `smtps://…:465`. Required with `smtp`. */
+  EMAIL_SMTP_URL: z.string().min(1).optional(),
   /** The public API host (ADR 0017), a bare authority such as `api.mocco.club`. Device-facing
    * OTA URLs are built on it when set; also read by next.config.ts for the /v1 rewrite. */
   PUBLIC_API_DOMAIN: z.string().min(1).optional(),

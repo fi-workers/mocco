@@ -61,6 +61,7 @@ import { createRateLimitHandlers, rateLimitPruneSchedule } from '@backend/domain
 import { RateLimitCounterRepo } from '@backend/domain/ratelimit/repos/rate-limit-counter.repo';
 import { createSnapshotService, createStatusDomain } from '@backend/domain/status/compose';
 import { createStatusHandlers, snapshotSafetySchedule, statusSchedules } from '@backend/domain/status/jobs';
+import { subscriberDepsFromEnv } from '@backend/domain/status/subscriber-config';
 import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { createObjectStoreFromEnv } from '@backend/domain/storage/config';
 import { createStorageHandlers, storageGcSchedule } from '@backend/domain/storage/jobs';
@@ -74,6 +75,7 @@ import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
+import type { SubscriberEnvDeps } from '@backend/domain/status/subscriber-config';
 import type { Db } from '@backend/infra/db/types';
 
 /** Upper bound on jobs one tick runs; the time budget usually stops it first. */
@@ -99,6 +101,8 @@ export interface JobRunnerRuntimeDeps {
   helpIndexNow?: HelpIndexNow;
   /** Days of raw status check results kept (`STATUS_RAW_RETENTION_DAYS`); the policy's default without it. */
   statusRawRetentionDays?: number;
+  /** Status subscriber links' signing key and the email sender; without it subscriber jobs do nothing. */
+  statusSubscribers?: SubscriberEnvDeps;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -148,7 +152,14 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     appOrigin: deps.appOrigin,
   });
   // Add each domain's handler factory here: `...createXHandlers({ …repos/services })`.
-  const status = createStatusDomain(db, { audit, queue, events: bus, appOrigin: deps.appOrigin, now: deps.now });
+  const status = createStatusDomain(db, {
+    audit,
+    queue,
+    events: bus,
+    appOrigin: deps.appOrigin,
+    ...(deps.statusSubscribers !== undefined && { subscribers: deps.statusSubscribers }),
+    now: deps.now,
+  });
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
     ...createEventHandlers({ bus, events: new DomainEventRepo(db) }),
@@ -186,6 +197,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       }),
       verdicts: status.statusVerdicts,
       rollups: status.statusRollups,
+      subscribers: status.statusSubscribers,
       now: deps.now,
     }),
     ...createOtaHandlers({
@@ -249,6 +261,7 @@ export function getJobRunner(): JobRunner {
       translator: translatorFromEnv(env),
       helpIndexNow: helpIndexNowFromEnv(getDb(), env),
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
+      statusSubscribers: subscriberDepsFromEnv(env),
     });
   }
   return state.runner;

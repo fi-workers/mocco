@@ -2553,6 +2553,7 @@ __metadata:
     eslint: "npm:10.6.0"
     hono: "npm:4.12.30"
     jose: "npm:6.2.3"
+    nodemailer: "npm:10.0.14"
     pg: "npm:8.22.0"
     satori: "npm:0.35.0"
     superjson: "npm:2.2.6"
@@ -11012,6 +11013,13 @@ __metadata:
   version: 2.0.51
   resolution: "node-releases@npm:2.0.51"
   checksum: 10/9d08dbc740bb2fa40b2234108dd9dec333d76b8dd22435ab10c9b1c7d8813885449ba36033b5303158d1ff8f66cc8db2d35a74eef42f4f65f540790cd377584b
+  languageName: node
+  linkType: hard
+
+"nodemailer@npm:10.0.14":
+  version: 10.0.14
+  resolution: "nodemailer@npm:10.0.14"
+  checksum: 10/18bd677a8719990f8fd84e187ea8b0b38e92f1aa07f2ea8eb89dcab96abc63a65e396cbf1159b06bf2fce05d5d72f4db09e62ed61a1d053f57c8bcb1d9ea16fe
   languageName: node
   linkType: hard
 

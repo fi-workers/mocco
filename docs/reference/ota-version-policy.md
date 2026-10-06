@@ -4,7 +4,7 @@ description: Per-store-app minimum, recommended and blocked versions; how each c
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, ota, version-policy, force-update, approvals]
@@ -64,7 +64,7 @@ A policy belongs to one project app whose platform is `ios` or `android` (a stor
 
 `ota.versionPolicy.get | change | history`, each taking `workspaceId`, `projectId`, `appId`. `change` takes the full new `rules`, an optional `reason`, and `storeLiveAttested`, and returns `{ outcome, policy, requestId }` where `requestId` is the pre-approval (`pending_approval`) or the post-hoc review (a relaxing change).
 
-Agents read policies over MCP with `mocco_ota_version_policies_search` (`transport/mcp/tools/ota.ts`), a read-only adapter over `get` and `listChanges` for every iOS and Android app of the project, or one of them. A pending pre-approval is found with `mocco_approvals_search` (`subjectType: ota.version_policy`; the subject is the app). See [Connect Mocco to your agent](../customer/mcp/connect.md).
+Agents read policies over MCP with `mocco_ota_version_policies_search` (`transport/mcp/tools/ota.ts`), a read-only adapter over `get` and `listChanges` for every iOS and Android app of the project, or one of them. A pending pre-approval is found with `mocco_approvals_search` (`subjectType: ota.version_policy`; the subject is the app, and `subjectLabel` names it: `Shopper (iOS)`). See [Connect Mocco to your agent](../customer/mcp/connect.md).
 
 ## Console
 

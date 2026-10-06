@@ -126,6 +126,12 @@ export class ProjectService {
     }
   }
 
+  /** The workspace's apps among `ids`, in any project, read in one query; ids it doesn't
+   * own are left out. For naming apps in bulk (an approval queue), never for access. */
+  async listAppsByIds(workspaceId: string, ids: readonly string[]) {
+    return await this.deps.apps.listByIds(workspaceId, ids);
+  }
+
   /** A project's apps, name-ordered. */
   async listApps(workspaceId: string, projectId: string) {
     await this.requireProject(workspaceId, projectId);

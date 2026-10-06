@@ -401,6 +401,7 @@ export async function extHandler(request: Request): Promise<Response> {
   const services = getServices();
   const discordInstall = getNotification().install;
   const storageStore = getStorageDomain()?.store;
+  const { statusSubscribers } = getStatusDomain();
   const app = createExtApp({
     auth: services.auth,
     connection: integration?.connection,
@@ -460,6 +461,7 @@ export async function extHandler(request: Request): Promise<Response> {
       probe: { probes: getStatusDomain().statusProbes },
       status: statusApiDepsOf(getStatusDomain()),
       heartbeats: { heartbeats: getStatusDomain().statusHeartbeats },
+      ...(statusSubscribers !== undefined && { statusSubscribers: { subscribers: statusSubscribers } }),
     },
     og: getOgImages(),
     storage:

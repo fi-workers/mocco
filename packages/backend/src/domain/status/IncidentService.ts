@@ -2,7 +2,7 @@
 // investigating → identified → monitoring → resolved, the components it affects and its
 // postmortem. Every change is appended to the audit log after its transaction commits.
 import { AuditActions } from '@mocco/common/audit';
-import { INCIDENT_TRANSITIONS, IncidentStatuses } from '@mocco/common/status';
+import { INCIDENT_TRANSITIONS, IncidentStatuses, SubscriberMailKinds } from '@mocco/common/status';
 
 import { IncidentTransitionError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
@@ -16,6 +16,7 @@ import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { StatusActor, StatusScope } from '@backend/domain/status/scope';
 import type { SnapshotScheduler } from '@backend/domain/status/SnapshotScheduler';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
+import type { SubscriberNotices } from '@backend/domain/status/SubscriberNotices';
 import type { Db } from '@backend/infra/db/types';
 import type { AffectedComponent, IncidentCreateInput, IncidentStatus, IncidentUpdateInput } from '@mocco/common/status';
 
@@ -27,6 +28,8 @@ export interface IncidentDeps {
   snapshots: Pick<SnapshotScheduler, 'change'>;
   /** Called after an incident is opened and audited (deploy correlation); must not throw. */
   onOpened?: (incident: IncidentRow) => Promise<void>;
+  /** Asks for the subscriber fan-out of each update, in its transaction; without it subscribers hear nothing. */
+  notices?: Pick<SubscriberNotices, 'request'>;
   now?: () => Date;
 }
 
@@ -110,7 +113,7 @@ export class IncidentService {
         identifiedAt: input.status === IncidentStatuses.identified ? now : null,
         createdByUserId: userId,
       });
-      await new IncidentUpdateRepo(tx).insert({
+      const first = await new IncidentUpdateRepo(tx).insert({
         workspaceId: scope.workspaceId,
         incidentId: created.id,
         status: input.status,
@@ -118,6 +121,9 @@ export class IncidentService {
         authorUserId: userId,
       });
       await new IncidentComponentRepo(tx).replace(scope.workspaceId, created.id, input.components);
+      await this.deps.notices?.request(tx, [
+        { kind: SubscriberMailKinds.incidentUpdate, ...scope, updateId: first.id },
+      ]);
       return created;
     });
     await this.deps.audit.record(scope.workspaceId, {
@@ -156,6 +162,9 @@ export class IncidentService {
         bodyMd: input.body,
         authorUserId: userId,
       });
+      await this.deps.notices?.request(tx, [
+        { kind: SubscriberMailKinds.incidentUpdate, ...scope, updateId: posted.id },
+      ]);
       return { incident: updated, from: current.status, update: posted };
     });
     await this.deps.audit.record(scope.workspaceId, {

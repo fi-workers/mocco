@@ -33,6 +33,15 @@ export const AppPlatforms = {
 export type AppPlatform = (typeof AppPlatforms)[keyof typeof AppPlatforms];
 export const appPlatformSchema = z.enum(Object.values(AppPlatforms) as [AppPlatform, ...AppPlatform[]]);
 
+/** How each platform is named to people: `iOS`, `React Native`. */
+export const appPlatformLabels: Record<AppPlatform, string> = {
+  [AppPlatforms.ios]: 'iOS',
+  [AppPlatforms.android]: 'Android',
+  [AppPlatforms.web]: 'Web',
+  [AppPlatforms.reactNative]: 'React Native',
+  [AppPlatforms.server]: 'Server',
+};
+
 /** A url-safe project handle: lowercase alphanumerics and inner hyphens, 1–40 chars.
  * Mirrors the DB CHECK on `mocco_projects.handle`. */
 export const PROJECT_HANDLE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;

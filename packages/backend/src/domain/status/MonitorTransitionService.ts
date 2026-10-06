@@ -26,6 +26,7 @@ import {
   IncidentVisibilities,
   MonitorStates,
   StatusRunEventTypes,
+  SubscriberMailKinds,
 } from '@mocco/common/status';
 import { z } from 'zod';
 
@@ -46,10 +47,12 @@ import type { AuditRecordInput, AuditService } from '@backend/domain/audit/Audit
 import type { PublishInput } from '@backend/domain/events/EventBus';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { RunTimeline } from '@backend/domain/status/ports';
+import type { IncidentUpdateRow } from '@backend/domain/status/repos/incident-update.repo';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
 import type { SnapshotScheduler, TouchPage } from '@backend/domain/status/SnapshotScheduler';
+import type { SubscriberNotices } from '@backend/domain/status/SubscriberNotices';
 import type { Db } from '@backend/infra/db/types';
 import type { ComponentImpact, IncidentSeverity, IncidentStatus, MonitorState } from '@mocco/common/status';
 
@@ -66,6 +69,8 @@ export interface MonitorTransitionDeps {
   onIncidentOpened?: (incident: IncidentRow) => Promise<void>;
   /** Where a failure during a deploy watch is added to the run's timeline; without it, it isn't. */
   runTimeline?: RunTimeline;
+  /** Asks for the subscriber fan-out of each incident update; without it subscribers hear nothing. */
+  notices?: Pick<SubscriberNotices, 'request'>;
   now?: () => Date;
 }
 
@@ -191,6 +196,8 @@ interface Reaction {
   opened?: IncidentRow;
   /** The monitor's incident when the change is a failure during a deploy watch. */
   watched?: { incident: IncidentRow; isOpened: boolean };
+  /** The incident update the change posted, for the page's subscribers. */
+  update?: IncidentUpdateRow;
 }
 
 /** Post a system update to the monitor's incident, moving it to `step.status`. */
@@ -199,7 +206,7 @@ async function postSystemUpdate(
   touch: TouchPage,
   incident: IncidentRow,
   step: { status: IncidentStatus; body: string; monitorId: string; now: Date },
-): Promise<AuditRecordInput> {
+): Promise<{ audit: AuditRecordInput; update: IncidentUpdateRow }> {
   const scope = { workspaceId: incident.workspaceId, projectId: incident.projectId };
   touch({ workspaceId: scope.workspaceId, pageId: incident.pageId });
   await new IncidentRepo(tx).update(scope, incident.id, transitionIncident(incident, step.status, step.now));
@@ -211,10 +218,13 @@ async function postSystemUpdate(
     authorUserId: null,
   });
   return {
-    actorUserId: null,
-    action: AuditActions.statusIncidentUpdated,
-    ...subject(incident.id),
-    payload: { updateId: update.id, from: incident.status, to: step.status, monitorId: step.monitorId },
+    update,
+    audit: {
+      actorUserId: null,
+      action: AuditActions.statusIncidentUpdated,
+      ...subject(incident.id),
+      payload: { updateId: update.id, from: incident.status, to: step.status, monitorId: step.monitorId },
+    },
   };
 }
 
@@ -261,7 +271,7 @@ async function openMonitorIncident(
     opts.watch === undefined
       ? `The monitor "${monitor.name}" is failing its checks.`
       : `The monitor "${monitor.name}" started failing within ${String(opts.watch.minutesAfterRelease)} min of a deploy.`;
-  await new IncidentUpdateRepo(tx).insert({
+  const update = await new IncidentUpdateRepo(tx).insert({
     workspaceId: scope.workspaceId,
     incidentId: incident.id,
     status: IncidentStatuses.investigating,
@@ -276,6 +286,7 @@ async function openMonitorIncident(
   });
   return {
     opened: incident,
+    update,
     ...(opts.watch !== undefined && { watched: { incident, isOpened: true } }),
     audits: [
       {
@@ -325,11 +336,11 @@ async function followIncident(
   if (step === undefined) {
     return { audits: [], ...watched };
   }
-  const audit = await postSystemUpdate(tx, touch, open, { ...step, monitorId: monitor.id, now: opts.now });
+  const { audit, update } = await postSystemUpdate(tx, touch, open, { ...step, monitorId: monitor.id, now: opts.now });
   if (step.status === IncidentStatuses.resolved) {
     await incidentMonitors.close(monitor.workspaceId, open.id, monitor.id, opts.now);
   }
-  return { audits: [audit], ...watched };
+  return { audits: [audit], update, ...watched };
 }
 
 /** The event for a change's alert: a rendered message, with the facts rules filter on. */
@@ -443,7 +454,14 @@ export class MonitorTransitionService {
           monitorImpact(change.fromState, link.impactWhenDown) !== monitorImpact(change.toState, link.impactWhenDown),
       );
       touch(...shows.map(link => ({ workspaceId: scope.workspaceId, pageId: link.pageId })));
-      return await followIncident(tx, touch, current, change, { links, isDuringMaintenance, now, watch });
+      const followed = await followIncident(tx, touch, current, change, { links, isDuringMaintenance, now, watch });
+      if (followed.update !== undefined) {
+        // A draft's updates are dropped by the fan-out, which reads the incident's visibility.
+        await this.deps.notices?.request(tx, [
+          { kind: SubscriberMailKinds.incidentUpdate, ...scope, updateId: followed.update.id },
+        ]);
+      }
+      return followed;
     });
     // One at a time: each append extends the workspace's hash chain.
     await reaction.audits.reduce(async (previous, entry) => {
