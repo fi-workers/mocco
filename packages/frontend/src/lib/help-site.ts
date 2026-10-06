@@ -76,6 +76,10 @@ export async function loadHelpArticle(site: string, locale: string, ref: string)
         locale: served,
         path: articlePath(served, article.shortId, article.slug),
       })),
+      // The article in the site's source language, for the "source changed" banner.
+      sourcePath: articlePath(article.sourceLocale, article.shortId, article.slug),
+      sourceLocale: article.sourceLocale,
+      translation: article.translation,
       description: excerptOf(blocks),
       publishedAt: article.publishedAt?.toISOString() ?? null,
       modifiedAt: article.modifiedAt?.toISOString() ?? null,

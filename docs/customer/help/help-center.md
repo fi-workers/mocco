@@ -93,6 +93,12 @@ Readers who pick a language see its translation, and the article list shows tran
 
 ![The English translation of an article on the public site](./images/public-translated.png)
 
+A machine translation nobody has reviewed says **Automatically translated** under its title, in the reader's language. Once you save a translation yourself, the label goes away.
+
+When you publish the article again, a translation made from the earlier version keeps being shown until it's updated, with a note at the top: the original changed since it was translated, and a link to the article in the language you write in. A machine translation loses the note as soon as Mocco translates the new version; a reviewed one keeps it until you review it again.
+
+![A Japanese machine translation on the public site: the note that the original changed with a link to the English article, "Automatically translated" under the title, and the language switcher at the top right](./images/public-translation-notices.png)
+
 ## Use your own domain
 
 Your help center is at `<address>.help.mocco.club` from the start. To serve it on your own domain, such as `help.example.com`, ask the Mocco team to add the domain, then point it at Mocco with a DNS record (a `CNAME` to the target they give you). Once the record resolves, the site and every old address of an imported site answer on your domain. The **Help center** page then links your domain.
@@ -111,7 +117,7 @@ AI companies also send crawlers that collect text to train their models. They're
 
 ## 5. What readers see
 
-The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change, an unpublished or deleted article, and a new translation appear on the article and the site's home right away; the article lists on other pages catch up within a minute.
+The site lists your collections and their articles in the language the reader picked, with a language switcher at the top. On an article, the switcher goes to the same article in each language it's translated into, and to that language's home otherwise. Each article has its own address, `/<language>/articles/<id>-<name>`. The `<id>` part never changes, so links keep working if you rename an article. A published change, an unpublished or deleted article, and a new translation appear on the article and the site's home right away; the article lists on other pages catch up within a minute.
 
 Readers can search from the box at the top of every page. Every word they type has to appear in an article's title or text, in the language they're reading (or yours, for articles not translated yet); articles whose title matches come first. The search box and results speak the reader's language.
 

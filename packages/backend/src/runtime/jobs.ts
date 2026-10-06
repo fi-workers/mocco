@@ -21,10 +21,12 @@ import { ApprovalService } from '@backend/domain/governance/ApprovalService';
 import { ApprovalRequestRepo } from '@backend/domain/governance/repos/approval-request.repo';
 import { ApprovalVoteRepo } from '@backend/domain/governance/repos/approval-vote.repo';
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
+import { helpPublicRefresh } from '@backend/domain/helpcenter/compose';
 import { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
 import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { createHelpHandlers } from '@backend/domain/helpcenter/jobs';
+import { helpRevalidatorFromEnv } from '@backend/domain/helpcenter/revalidate-http';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
@@ -75,6 +77,7 @@ import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
 import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
+import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
@@ -105,6 +108,8 @@ export interface JobRunnerRuntimeDeps {
   helpTranslationMonthlyCharacters?: number;
   /** Submits changed help pages to IndexNow; undefined outside production. */
   helpIndexNow?: HelpIndexNow;
+  /** Rebuilds help pages a finished translation shows on; without one they refresh within a minute. */
+  helpRevalidator?: HelpPageRevalidator;
   /** Days of raw status check results kept (`STATUS_RAW_RETENTION_DAYS`); the policy's default without it. */
   statusRawRetentionDays?: number;
   /** Status subscriber links' signing key and the email sender; without it subscriber jobs do nothing. */
@@ -209,6 +214,12 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         ...(deps.helpTranslationMonthlyCharacters !== undefined && {
           monthlyCharacters: deps.helpTranslationMonthlyCharacters,
         }),
+        // The same refresh as the request path's: a translation a job finishes shows at once.
+        onTranslated: helpPublicRefresh(db, {
+          queue,
+          indexNow: deps.helpIndexNow !== undefined,
+          ...(deps.helpRevalidator !== undefined && { revalidator: deps.helpRevalidator }),
+        }),
       }),
       ...(deps.helpIndexNow !== undefined && { indexNow: deps.helpIndexNow }),
     }),
@@ -295,6 +306,7 @@ export function getJobRunner(): JobRunner {
       translator: translatorFromEnv(env),
       helpTranslationMonthlyCharacters: env.HELP_TRANSLATION_MONTHLY_CHARACTERS,
       helpIndexNow: helpIndexNowFromEnv(getDb(), env),
+      helpRevalidator: helpRevalidatorFromEnv(env),
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
       statusSubscribers: subscriberDepsFromEnv(env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.

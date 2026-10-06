@@ -194,6 +194,40 @@ describe('help center translation (pglite)', () => {
     expect(unpublished.articles).toEqual([]);
   });
 
+  it('tells the public page whether a translation is the machine’s and whether its source moved on', async () => {
+    const help = domainWith(new FakeTranslator());
+    const article = await published(help);
+    await help.drain();
+
+    const source = await help.helpPublic.article('syt', 'ko', article.shortId);
+    const machine = await help.helpPublic.article('syt', 'ja', article.shortId);
+    await help.helpTranslations.saveTranslation(workspaceId, projectId, authorId, {
+      articleId: article.id,
+      locale: 'en',
+      title: 'Widget (reviewed)',
+      body: BODY,
+    });
+    const reviewed = await help.helpPublic.article('syt', 'en', article.shortId);
+    // A source edit: the reviewed text keeps being served, now stale, until a person accepts a draft.
+    await republish(help, article.id, `${BODY}\n\nNew line.`);
+    const staleReviewed = await help.helpPublic.article('syt', 'en', article.shortId);
+    // Before its re-translation lands, the machine text is stale too.
+    const staleMachine = await help.helpPublic.article('syt', 'ja', article.shortId);
+    await help.drain();
+    const retranslated = await help.helpPublic.article('syt', 'ja', article.shortId);
+
+    expect(source).toMatchObject({ locale: 'ko', sourceLocale: 'ko', translation: null });
+    expect(machine).toMatchObject({
+      locale: 'ja',
+      sourceLocale: 'ko',
+      translation: { isMachine: true, isStale: false },
+    });
+    expect(reviewed?.translation).toEqual({ isMachine: false, isStale: false });
+    expect(staleReviewed?.translation).toEqual({ isMachine: false, isStale: true });
+    expect(staleMachine?.translation).toEqual({ isMachine: true, isStale: true });
+    expect(retranslated?.translation).toEqual({ isMachine: true, isStale: false });
+  });
+
   it('re-sends only the segments a source edit changed; the rest come from translation memory', async () => {
     const translator = new FakeTranslator();
     const help = domainWith(translator);

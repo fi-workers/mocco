@@ -12,7 +12,7 @@ import { HelpRevalidation } from '@backend/domain/helpcenter/revalidate';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { HelpImageStorage } from '@backend/domain/helpcenter/HelpImageService';
-import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
+import type { HelpPageRevalidator, RevalidatedArticle } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -25,6 +25,34 @@ export interface HelpDomain {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
+}
+
+/**
+ * What runs after a public change to an article (a publish, a new translation): rebuild
+ * the pages it shows on and, in production, queue an IndexNow submission. The request path
+ * (createHelpDomain) and the job runner (runtime/jobs.ts) both build it here, so a
+ * translation a background job finishes refreshes the site exactly like one saved in the console.
+ */
+export function helpPublicRefresh(
+  db: Db,
+  deps: { revalidator?: HelpPageRevalidator; queue?: Pick<JobQueue, 'enqueue'>; indexNow?: boolean },
+): (workspaceId: string, projectId: string, article: RevalidatedArticle) => Promise<void> {
+  const revalidation = new HelpRevalidation({
+    db,
+    ...(deps.revalidator !== undefined && { revalidator: deps.revalidator }),
+  });
+  return async (workspaceId, projectId, article) => {
+    await revalidation.article(workspaceId, projectId, article);
+    if (deps.indexNow === true && deps.queue !== undefined) {
+      // A background job: a failed or slow submission never holds up the change itself.
+      // One queued submission per article: changes in quick succession ride the same job.
+      await deps.queue.enqueue(
+        submitHelpArticleToIndexNow,
+        { workspaceId, projectId, shortId: article.shortId, slug: article.slug },
+        { dedupeKey: `${projectId}:${article.shortId}`, workspaceId, kick: true },
+      );
+    }
+  };
 }
 
 export function createHelpDomain(
@@ -46,22 +74,7 @@ export function createHelpDomain(
   },
 ): HelpDomain {
   const helpSites = new HelpSiteService({ db, audit: deps.audit });
-  const revalidation = new HelpRevalidation({
-    db,
-    ...(deps.revalidator !== undefined && { revalidator: deps.revalidator }),
-  });
-  const refresh = async (workspaceId: string, projectId: string, article: { shortId: string; slug: string }) => {
-    await revalidation.article(workspaceId, projectId, article);
-    if (deps.indexNow === true && deps.queue !== undefined) {
-      // A background job: a failed or slow submission never holds up the change itself.
-      // One queued submission per article: changes in quick succession ride the same job.
-      await deps.queue.enqueue(
-        submitHelpArticleToIndexNow,
-        { workspaceId, projectId, shortId: article.shortId, slug: article.slug },
-        { dedupeKey: `${projectId}:${article.shortId}`, workspaceId, kick: true },
-      );
-    }
-  };
+  const refresh = helpPublicRefresh(db, deps);
   const helpTranslations = new HelpTranslationService({
     db,
     sites: helpSites,
