@@ -59,7 +59,7 @@ const SENTRY_SECRET = 'sentry-client-secret-do-not-leak';
 
 const otherDeps = (scope: WorkspaceScope): Omit<McpToolDeps, 'inbound'> => ({
   runs: { searchInWorkspace: refuse, get: refuse },
-  approvals: { list: refuse, get: refuse, vote: refuse },
+  approvals: { listLabeled: refuse, get: refuse, vote: refuse },
   gates: { getPending: refuse, resume: refuse },
   flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
   otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },

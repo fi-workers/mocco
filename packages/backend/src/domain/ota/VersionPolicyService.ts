@@ -8,7 +8,7 @@ import {
   VersionPolicyOutcomes,
   versionPolicyRulesSchema,
 } from '@mocco/common/ota';
-import { AppPlatforms } from '@mocco/common/project';
+import { AppPlatforms, appPlatformLabels } from '@mocco/common/project';
 import { z } from 'zod';
 
 import {
@@ -224,5 +224,24 @@ export class VersionPolicyService {
         payload: { approvalRequestId: request.id, expectedRevision: change.expectedRevision },
       });
     }
+  }
+
+  /** The approval labeler for `ota.version_policy` (#451): the app each request is about,
+   * as "<name> (<platform>)", read for the whole batch in one query through the project
+   * domain, which owns the apps. */
+  async labelApprovalSubjects(
+    workspaceId: string,
+    requests: readonly ApprovalRequestRow[],
+  ): Promise<ReadonlyMap<string, string>> {
+    const apps = await this.deps.projects.listAppsByIds(workspaceId, [
+      ...new Set(requests.map(request => request.subjectId)),
+    ]);
+    const labels = new Map(apps.map(app => [app.id, `${app.name} (${appPlatformLabels[app.platform]})`]));
+    return new Map(
+      requests.flatMap(request => {
+        const label = labels.get(request.subjectId);
+        return label === undefined ? [] : [[request.id, label] as const];
+      }),
+    );
   }
 }

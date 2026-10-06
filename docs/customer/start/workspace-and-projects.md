@@ -27,7 +27,7 @@ On the sign-up page, enter your name, email and a password of at least 8 charact
 
 ## 2. Create a workspace
 
-A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens its **Home**: the approvals waiting for your team in every product (a deploy paused at a gate, a flag change in a protected environment, a raised minimum app version, a release on a protected OTA channel), the latest entries of the audit log, and your projects. Each waiting approval names its project and, for flags and OTA channels, the environment or channel ("QA App · Production"), and links to the screen where you approve it.
+A new account has no workspace, so Mocco asks you to create your first one. Give it a name, usually your company or team, and choose **Create workspace**. You become its owner, and Mocco opens its **Home**: the approvals waiting for your team in every product (a deploy paused at a gate, a flag change in a protected environment, a raised minimum app version, a release on a protected OTA channel), the latest entries of the audit log, and your projects. Each waiting approval names its project and what in it the approval is about: the environment of a flag change, the OTA channel, or the app of a minimum version ("QA App · Production"). It links to the screen where you approve it.
 
 ![Home: a channel rule change and a flag change waiting for approval, the latest audit entries, and the projects](./images/home.png)
 

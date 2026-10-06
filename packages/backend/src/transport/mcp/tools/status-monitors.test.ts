@@ -251,7 +251,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(t.db) });
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
-      approvals: { list: refuse, get: refuse, vote: refuse },
+      approvals: { listLabeled: refuse, get: refuse, vote: refuse },
       gates: { getPending: refuse, resume: refuse },
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
       otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },

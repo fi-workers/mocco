@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -38,7 +38,7 @@ you belong to — never more, because the server has no privileges of its own.
 |---|---|
 | `mocco_runs_search` | Which runs are running, waiting or failed. Filter by `awaiting_gate` for "what is blocked" |
 | `mocco_runs_get` | One run: its steps, and the gate holding it (with its `itemIndex`) and what would release it |
-| `mocco_approvals_search` | What is waiting on a human right now |
+| `mocco_approvals_search` | What is waiting on a human right now, each request with a short label of what it is about ("Production", "production channel", "Shopper (iOS)") |
 | `mocco_approvals_get` | One request: the change it pins, the requirements, and the votes so far |
 | `mocco_flags_search` | Which feature flags a project has, by key or description text, lifecycle, or whether the repository defines them, and where each is on |
 | `mocco_flags_get` | One flag: its variants, what it serves in each environment, and whether `.mocco/flags.yml` manages it |

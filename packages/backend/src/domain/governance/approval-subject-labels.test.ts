@@ -59,8 +59,9 @@ describe('approval subject labels (pglite)', () => {
     queries.length = 0;
   });
 
-  /** A project with a flag environment and an OTA channel, and a pending request on each. */
-  const seedProject = async (handle: string, environmentName: string, channelName: string) => {
+  /** A project with a flag environment, an OTA channel and a store app, and a pending
+   * request on each. */
+  const seedProject = async (handle: string, environmentName: string, channelName: string, storeAppName: string) => {
     const project = await createProjectDomain(t.db).projects.create(workspaceId, { name: handle, handle });
     const environment = await new FlagEnvironmentRepo(t.db).insert({
       workspaceId,
@@ -81,6 +82,12 @@ describe('approval subject labels (pglite)', () => {
       assetBaseUrl: 'https://assets.mocco.test',
     });
     const channel = await new OtaChannelRepo(t.db).insert({ workspaceId, appId: app.id, name: channelName });
+    const storeApp = expectOne(
+      await t.db
+        .insert(projectApps)
+        .values({ workspaceId, projectId: project.id, platform: AppPlatforms.ios, name: storeAppName })
+        .returning(),
+    );
     const open = async (subjectType: string, subjectId: string, action: Record<string, unknown>) =>
       await approvals.request(workspaceId, {
         projectId: project.id,
@@ -96,7 +103,7 @@ describe('approval subject labels (pglite)', () => {
       changeGate: await open(FlagApprovalSubjects.changeGate, environment.id, { environmentId: environment.id, gate }),
       channelChange: await open(OtaHostingApprovalSubjects.channelChange, channel.id, { channelId: channel.id }),
       channelPolicy: await open(OtaHostingApprovalSubjects.channelPolicy, channel.id, { channelId: channel.id }),
-      versionPolicy: await open(OtaApprovalSubjects.versionPolicy, projectApp.id, { appId: projectApp.id }),
+      versionPolicy: await open(OtaApprovalSubjects.versionPolicy, storeApp.id, { appId: storeApp.id }),
     };
   };
 
@@ -106,9 +113,9 @@ describe('approval subject labels (pglite)', () => {
     return { labels: new Map(listed.map(request => [request.id, request.subjectLabel])), queries: queries.length };
   };
 
-  it('names the environment or channel of each request across projects', async () => {
-    const qa = await seedProject('qa-app', 'Production', 'production');
-    const shop = await seedProject('shop', 'Staging', 'beta');
+  it('names the environment, channel or app of each request across projects', async () => {
+    const qa = await seedProject('qa-app', 'Production', 'production', 'QA App');
+    const shop = await seedProject('shop', 'Staging', 'beta', 'Shopper');
 
     const { labels } = await listPending();
 
@@ -118,21 +125,24 @@ describe('approval subject labels (pglite)', () => {
     expect(labels.get(qa.channelPolicy.id)).toBe('production channel');
     expect(labels.get(shop.changeset.id)).toBe('Staging');
     expect(labels.get(shop.channelChange.id)).toBe('beta channel');
-    // No product names this subject yet: the request is listed without a label.
-    expect(labels.get(qa.versionPolicy.id)).toBeNull();
+    // A minimum or recommended version is about a store app, which the project domain owns.
+    expect(labels.get(qa.versionPolicy.id)).toBe('QA App (iOS)');
+    expect(labels.get(shop.versionPolicy.id)).toBe('Shopper (iOS)');
   });
 
   it('takes the same number of queries however many projects the queue spans', async () => {
-    await seedProject('qa-app', 'Production', 'production');
+    await seedProject('qa-app', 'Production', 'production', 'QA App');
     const one = await listPending();
-    await seedProject('shop', 'Staging', 'beta');
-    await seedProject('admin', 'Canary', 'internal');
+    await seedProject('shop', 'Staging', 'beta', 'Shopper');
+    await seedProject('admin', 'Canary', 'internal', 'Admin');
     const three = await listPending();
 
     expect(three.labels.size).toBe(3 * one.labels.size);
-    // The requests, then one read per labelling product (flag environments, OTA channels).
-    expect(one.queries).toBe(3);
-    expect(three.queries).toBe(3);
+    expect(new Set(three.labels.values()).has(null)).toBe(false);
+    // The requests, then one read per labelling product (flag environments, OTA channels,
+    // project apps).
+    expect(one.queries).toBe(4);
+    expect(three.queries).toBe(4);
   });
 
   it('leaves out a subject from another workspace', async () => {
@@ -157,9 +167,24 @@ describe('approval subject labels (pglite)', () => {
       requirements: gate,
       requestedByUserId: null,
     });
+    const foreignApp = expectOne(
+      await t.db
+        .insert(projectApps)
+        .values({ workspaceId: otherWorkspace, projectId: otherProject.id, platform: AppPlatforms.ios, name: 'Other' })
+        .returning(),
+    );
+    const versionPolicy = await approvals.request(workspaceId, {
+      kind: ApprovalKinds.preApproval,
+      subjectType: OtaApprovalSubjects.versionPolicy,
+      subjectId: foreignApp.id,
+      action: { appId: foreignApp.id },
+      requirements: gate,
+      requestedByUserId: null,
+    });
 
     const { labels } = await listPending();
 
     expect(labels.get(request.id)).toBeNull();
+    expect(labels.get(versionPolicy.id)).toBeNull();
   });
 });
