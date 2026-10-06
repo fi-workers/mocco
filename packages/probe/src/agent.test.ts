@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { Server as NetServer, type AddressInfo } from 'node:net';
 
 import { CheckOutcomes, type MonitorSpec } from '@mocco/common/status';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,9 +14,10 @@ import { ProbeClient } from './client';
 import { ProbeAuthError } from './errors';
 
 import type { CheckReport } from './check-report';
-import type { AddressInfo } from 'node:net';
 
 interface Call {
+  method: string | undefined;
+  url: string | undefined;
   path: string;
   body: Record<string, unknown>;
   at: number;
@@ -62,6 +64,8 @@ async function startMocco(routes: Partial<Record<'/lease' | '/results' | '/heart
     request.on('end', () => {
       const path = (request.url ?? '').replace('/api/ext/v1/probe', '');
       const call: Call = {
+        method: request.method,
+        url: request.url,
         path,
         body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>,
         at: Date.now(),
@@ -194,6 +198,33 @@ describe('ProbeAgent', { timeout: 30_000 }, () => {
       ],
     });
     expect(mocco.callsTo('/heartbeat')[0]?.body).toMatchObject({ agentVersion: '9.9.9', inflight: expect.any(Number) });
+  });
+
+  it('needs only outbound calls to Mocco: it opens no listener, so it works behind NAT (#151)', async () => {
+    const lease = leaseOf();
+    const { mocco, stop } = await setup({
+      '/lease': (_call, calls) =>
+        calls.length === 1 ? { status: 200, body: { leases: [lease], pollAfterMs: 30 } } : empty,
+    });
+    // The fake Mocco is already listening; from here on, nothing may.
+    const listen = vi.spyOn(NetServer.prototype, 'listen');
+    cleanups.push(async () => {
+      listen.mockRestore();
+      await Promise.resolve();
+    });
+
+    await eventually(() => {
+      expect(mocco.callsTo('/results')).toHaveLength(1);
+      expect(mocco.callsTo('/heartbeat').length).toBeGreaterThan(0);
+    });
+    await stop();
+
+    expect(listen).not.toHaveBeenCalled();
+    // Every exchange is a request the agent started: a POST to a probe route on MOCCO_URL, which a
+    // firewall allowing only outbound HTTPS (443) lets through.
+    expect(new Set(mocco.calls.map(call => `${call.method ?? ''} ${call.url ?? ''}`))).toEqual(
+      new Set(['POST /api/ext/v1/probe/lease', 'POST /api/ext/v1/probe/results', 'POST /api/ext/v1/probe/heartbeat']),
+    );
   });
 
   it('runs a check at its round time, not when it was leased', async () => {

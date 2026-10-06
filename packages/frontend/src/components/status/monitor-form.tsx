@@ -84,6 +84,7 @@ interface Fields {
   keywordMode: KeywordMode | typeof NO_KEYWORD;
   keyword: string;
   latencyThresholdMs: string;
+  tlsWarnDays: string;
   timeoutSeconds: string;
   followRedirects: boolean;
   host: string;
@@ -114,6 +115,7 @@ function fieldsOf(monitor: Monitor | undefined): Fields {
     keywordMode: http?.keyword === undefined ? NO_KEYWORD : http.keywordMode,
     keyword: http?.keyword ?? '',
     latencyThresholdMs: http?.latencyThresholdMs === undefined ? '' : String(http.latencyThresholdMs),
+    tlsWarnDays: http?.tlsWarnDays === undefined ? '' : String(http.tlsWarnDays),
     timeoutSeconds: String(((http ?? tcp)?.timeoutMs ?? MonitorLimits.defaultTimeoutMs) / 1000),
     followRedirects: http?.followRedirects ?? true,
     host: tcp?.host ?? '',
@@ -160,6 +162,7 @@ function specOf(fields: Fields) {
           .map(Number),
         ...(fields.keywordMode !== NO_KEYWORD && { keyword: fields.keyword, keywordMode: fields.keywordMode }),
         ...(fields.latencyThresholdMs.trim() !== '' && { latencyThresholdMs: numberOf(fields.latencyThresholdMs) }),
+        ...(fields.tlsWarnDays.trim() !== '' && { tlsWarnDays: numberOf(fields.tlsWarnDays) }),
         timeoutMs,
         followRedirects: fields.followRedirects,
       };
@@ -370,6 +373,16 @@ function HttpFields({ fields, set }: { fields: Fields; set: (patch: Partial<Fiel
           hint="Optional. Slower answers make the monitor degraded."
           onChange={value => {
             set({ latencyThresholdMs: value });
+          }}
+        />
+        <NumberField
+          label="Warn before certificate expiry (days)"
+          value={fields.tlsWarnDays}
+          min={1}
+          max={365}
+          hint="Optional, https only. Warns once at this many days left, and again at 7, 3 and 1."
+          onChange={value => {
+            set({ tlsWarnDays: value });
           }}
         />
         <label className="flex items-center gap-2 self-center text-sm">

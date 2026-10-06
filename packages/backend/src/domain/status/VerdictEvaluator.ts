@@ -3,7 +3,8 @@
 // monitors a probe just reported on, right after ingest.
 //
 // A round is the monitor's `next_round_at`. It closes once every enabled location assigned to the
-// monitor has reported, or once its deadline (the round, the check's timeout and the result grace,
+// monitor has reported (a silent one, `unhealthy_since` set by LocationHealthService, isn't waited
+// for), or once its deadline (the round, the check's timeout and the result grace,
 // the same moment its leases expire) has passed; a location that sent nothing is `no_data`. Each
 // close is one transaction under the monitor's advisory lock, which pause and resume take too:
 // the verdict, the new state and streaks, the next round, and a state change row when the state
@@ -15,6 +16,10 @@
 //
 // A heartbeat (#153) has no rounds: its `next_round_at` is its silence deadline, and when it passes
 // the evaluator takes the heartbeat down (heartbeat.ts) under the same lock, with no verdict row.
+//
+// An HTTP monitor with `tlsWarnDays` also gets its TLS expiry checked when a round closes
+// (tls-expiry.ts): the threshold it has warned at is stored under the same lock, and the
+// `onTlsWarning` port publishes the warning after the commit, once per threshold crossing.
 //
 // After a change commits, the `onStateChange` port (bound in compose.ts to the
 // MonitorTransitionService) handles what it means for pages, incidents and alerts; the
@@ -29,10 +34,13 @@ import { MonitorLocationRepo } from '@backend/domain/status/repos/monitor-locati
 import { MonitorStateChangeRepo } from '@backend/domain/status/repos/monitor-state-change.repo';
 import { MonitorRepo } from '@backend/domain/status/repos/monitor.repo';
 import { RoundVerdictRepo } from '@backend/domain/status/repos/round-verdict.repo';
+import { earliestExpiry, tlsWarningOf } from '@backend/domain/status/tls-expiry';
 import { utcDayOf } from '@backend/infra/db/day-partitions';
 
+import type { CheckResultRow } from '@backend/domain/status/repos/check-result.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
+import type { TlsWarning } from '@backend/domain/status/tls-expiry';
 import type { Db } from '@backend/infra/db/types';
 import type { MonitorSpec } from '@mocco/common/status';
 
@@ -59,15 +67,21 @@ export async function reactToStateChange(
   }
 }
 
+/** What happens after a TLS warning's threshold is stored: the alert. */
+export type TlsWarningHandler = (monitor: MonitorRow, warning: TlsWarning) => Promise<void>;
+
 interface Decision {
   outcome: RoundClose;
   change?: { monitor: MonitorRow; row: MonitorStateChangeRow };
+  tlsWarning?: { monitor: MonitorRow; warning: TlsWarning };
 }
 
 export interface VerdictEvaluatorDeps {
   db: Db;
   /** Called once per committed change, in order; a failure is logged and never undoes the change. */
   onStateChange?: MonitorStateChangeHandler;
+  /** Called once per TLS threshold crossing, after the commit; a failure is logged. */
+  onTlsWarning?: TlsWarningHandler;
   now?: () => Date;
 }
 
@@ -80,6 +94,22 @@ type RoundClose = (typeof RoundCloses)[keyof typeof RoundCloses];
 /** Whether the monitor's current round is inside a deploy watch: it started before `watch_until`. */
 export function isWatchedRound(monitor: Pick<MonitorRow, 'nextRoundAt' | 'watchUntil'>): boolean {
   return monitor.watchUntil !== null && monitor.nextRoundAt < monitor.watchUntil;
+}
+
+/** The TLS threshold to store for the round's certificate, and the warning to send, if the
+ * monitor watches its certificate and a location reported one; undefined leaves it as it was. */
+// eslint-disable-next-line sonarjs/function-return-type -- undefined is the "leave it" answer
+function tlsOf(
+  monitor: MonitorRow,
+  reports: readonly CheckResultRow[],
+  now: Date,
+): ReturnType<typeof tlsWarningOf> | undefined {
+  const warnDays = monitor.spec.kind === MonitorKinds.http ? monitor.spec.tlsWarnDays : undefined;
+  const expiresAt = earliestExpiry(reports);
+  if (warnDays === undefined || expiresAt === undefined) {
+    return undefined;
+  }
+  return tlsWarningOf({ warnDays, expiresAt, now, warnedDays: monitor.tlsWarnedDays });
 }
 
 /** The next round: one interval after this one (the watch interval inside a deploy watch), or
@@ -101,6 +131,13 @@ export class VerdictEvaluator {
       : await this.decideSilence(candidate, now);
     if (result.change !== undefined) {
       await reactToStateChange(this.deps.onStateChange, result.change.monitor, result.change.row);
+    }
+    if (result.tlsWarning !== undefined && this.deps.onTlsWarning !== undefined) {
+      try {
+        await this.deps.onTlsWarning(result.tlsWarning.monitor, result.tlsWarning.warning);
+      } catch (error) {
+        console.error('[status] sending a TLS expiry warning failed', { monitorId: candidate.id, error });
+      }
     }
     return result.outcome;
   }
@@ -138,10 +175,10 @@ export class VerdictEvaluator {
     const roundAt = candidate.nextRoundAt;
     const [reports, assigned] = await Promise.all([
       new CheckResultRepo(this.deps.db).listForRound(candidate.workspaceId, candidate.id, roundAt),
-      new MonitorLocationRepo(this.deps.db).countEnabled(candidate.workspaceId, candidate.id),
+      new MonitorLocationRepo(this.deps.db).countForRound(candidate.workspaceId, candidate.id),
     ]);
     const deadline = leaseExpiry({ roundAt, spec });
-    if (reports.length < assigned && now <= deadline) {
+    if (reports.length < assigned.awaited && now <= deadline) {
       return { outcome: RoundCloses.open };
     }
     return await this.deps.db.transaction(async tx => {
@@ -158,7 +195,7 @@ export class VerdictEvaluator {
       const tally = tallyRound(
         reports.map(report => ({ outcome: report.outcome, latencyMs: report.latencyMs })),
         {
-          assigned,
+          assigned: assigned.enabled,
           quorumMode: monitor.quorumMode,
           latencyThresholdMs: monitor.spec.kind === MonitorKinds.http ? monitor.spec.latencyThresholdMs : undefined,
         },
@@ -174,6 +211,7 @@ export class VerdictEvaluator {
       const isMoved = next.state !== monitor.state;
       // The first round at or past `watch_until` ends the watch: the normal interval resumes.
       const isWatchOver = monitor.watchUntil !== null && !isWatchedRound(monitor);
+      const tls = tlsOf(monitor, reports, now);
       const updated = await monitors.setState(
         scope,
         monitor.id,
@@ -184,11 +222,13 @@ export class VerdictEvaluator {
           nextRoundAt: nextRoundOf(monitor, now, next.recheck),
           ...(isMoved && { stateChangedAt: now }),
           ...(isWatchOver && { watchUntil: null, watchIntervalSeconds: null, watchRunId: null }),
+          ...(tls !== undefined && { tlsWarnedDays: tls.warnedDays }),
         },
         now,
       );
+      const tlsWarning = tls?.warning === undefined ? {} : { tlsWarning: { monitor: updated, warning: tls.warning } };
       if (!isMoved) {
-        return { outcome: RoundCloses.closed };
+        return { outcome: RoundCloses.closed, ...tlsWarning };
       }
       const row = await new MonitorStateChangeRepo(tx).append({
         workspaceId: monitor.workspaceId,
@@ -205,7 +245,7 @@ export class VerdictEvaluator {
           noDataCount: tally.noDataCount,
         },
       });
-      return { outcome: RoundCloses.changed, change: { monitor: updated, row } };
+      return { outcome: RoundCloses.changed, change: { monitor: updated, row }, ...tlsWarning };
     });
   }
 

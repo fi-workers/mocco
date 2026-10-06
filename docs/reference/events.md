@@ -51,13 +51,15 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `ota.promotion.requested`, `ota.promotion.approved`, `ota.promotion.rejected` | `OtaChannelService`, when a change to a protected OTA channel is requested, applied after approval, or rejected | `approval_request` / request id |
 | `ota.emergency_launch.spike` | `OtaMetricsService` (the `ota.rollupMetrics` job), when a release's emergency launches today cross the threshold | `ota_update` / update id |
 | `status.monitor.down`, `status.monitor.degraded`, `status.monitor.recovered` | `MonitorTransitionService`, after the verdict evaluator moves a monitor to `down`, to `degraded`, or to `up` after an outage or a degradation ([status](./status.md#what-a-state-change-does)) | `status_monitor_state_change` / state change id |
+| `status.monitor.tls_expiring` | The verdict evaluator, through `MonitorTransitionService.warnTls`, once per threshold an HTTP monitor's certificate crosses ([status](./status.md#tls-expiry-warnings)) | `status_monitor` / monitor id |
+| `status.location.unhealthy`, `status.location.recovered` | `LocationHealthService` (the `status.evaluate` job), once when a private location's probe goes silent and once when it polls again ([status](./status.md#location-health)) | `status_location` / location id |
 | `status.maintenance.overran` | `MaintenanceService` (the `status.maintenance.tick` job), once, when a window a resumed gate started is still in progress after its expected minutes ([status](./status.md#maintenance-from-gated-runs)) | `status_maintenance` / window id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
 
 ### Status payloads
 
-The `status.monitor.*` types carry a rendered message (`{ facts, message }`, like the OTA and flag types) with the
+The `status.monitor.down`, `status.monitor.degraded` and `status.monitor.recovered` types carry a rendered message (`{ facts, message }`, like the OTA and flag types) with the
 facts `monitor` (its name), `state` (the new state) and `duringMaintenance` (a window in progress covers one of the
 monitor's components; the title then ends "(during maintenance)"). The message shows the monitor's target as host
 and port only, never the URL's credentials, path or query ([status](./status.md#what-a-state-change-does)). Each has
@@ -67,6 +69,16 @@ the dedupe key
 `status.maintenance.overran` carries the same rendered shape with the fact `maintenance` (the window's title): the
 title "Maintenance overran: <title>", the expected minutes, a warning severity and a link to the page's maintenance
 view. Its dedupe key is `status.maintenance.overran:<window id>`.
+
+`status.monitor.tls_expiring` has the facts `monitor`, `daysLeft` and `thresholdDays` (strings): the title
+"Certificate expires in N days: <monitor>", the expiry, the target as host and port, a warning severity (error at 3
+days or fewer) and a link to the monitor. Its dedupe key is
+`status.monitor.tls_expiring:<monitor id>:<expiry>:<threshold>`, one per certificate and threshold.
+
+`status.location.unhealthy` and `status.location.recovered` have the fact `location` (the location's code), the
+titles "Location silent: <name>" and "Location back: <name>", the last time the probe was seen, and no project or
+link, since locations belong to the workspace. Their dedupe key is `<type>:<location id>:<when it went silent>`.
+Only private locations publish them; a shared location's silence is logged for Mocco's operator instead.
 
 ### Governance payloads
 

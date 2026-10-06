@@ -505,6 +505,13 @@
       "when": 1791240833894,
       "tag": "0071_black_thaddeus_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1791253543057,
+      "tag": "0072_glossy_kabuki",
+      "breakpoints": true
     }
   ]
 }

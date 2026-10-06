@@ -35,6 +35,10 @@ code_refs:
   - packages/backend/src/transport/ext/v1/heartbeat-ping.ts
   - packages/backend/src/domain/status/repos/incident-monitor.repo.ts
   - packages/backend/src/domain/status/consensus.ts
+  - packages/backend/src/domain/status/tls-expiry.ts
+  - packages/backend/src/domain/status/LocationHealthService.ts
+  - infra/probe/fly.toml
+  - infra/probe/README.md
   - packages/backend/src/transport/ext/v1/probe.ts
   - packages/probe/src/agent.ts
   - packages/probe/src/client.ts
@@ -155,8 +159,8 @@ after a deploy** with the run while `watch_until` is ahead, and edit, pause or r
 time) instead of rounds and locations, and **Replace ping URL** (`rotateHeartbeatToken`, after a confirmation) shows
 the new URL once. It doesn't chart
 the monitor's uptime and p50/p95 latency yet, though the read returns them (`history`, [tRPC](#trpc)). **Locations**
-(`?tab=locations`, `locations.tsx`) lists the workspace's locations (kind, code, last seen, agent version, disabled)
-to every member; owners and admins (`useWorkspaceAdmin`) create a private location, rotate its token and disable it.
+(`?tab=locations`, `locations.tsx`) lists the workspace's locations (kind, code, last seen, agent version, disabled,
+and **Silent** while `unhealthy_since` is set, [below](#location-health)) to every member; owners and admins (`useWorkspaceAdmin`) create a private location, rotate its token and disable it.
 A new or rotated token is shown once, kept only in component state, with the `docker run` and `npx @mocco/probe`
 commands that use it and the page's origin as `MOCCO_URL`. The customer guide is
 [Monitor your service](../customer/status/monitor-your-service.md).
@@ -178,8 +182,10 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_gate_maintenances` | A gate that announces maintenance on a page: `gate_name` (unique per page), `title`, `expected_minutes` (1 to 1440, DB-checked) and `component_ids` |
 | `mocco_status_maintenance_components` | The components a window covers |
 | `mocco_status_page_snapshots` | A published version of the public page: `version` (per page, from 1), `etag`, the snapshot `body` (jsonb), `built_at`, `uploaded_at` and `upload_error`. The last 20 versions are kept |
-| `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`. `workspace_id` is set for a private location and null otherwise (DB-checked) |
-| `mocco_status_monitors` | A check of a project: `key` (the caller's name for a monitor made through the [`/v1` API](#the-v1-management-api), unique in the project and null for one made in the console; lowercase letters, digits and inner dots, underscores and hyphens, 1 to 100 characters, DB-checked; migration 0069), `name`, `kind` (`http`, `tcp`, `heartbeat`), `spec` (jsonb; a heartbeat's holds only its kind), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id`; for a [heartbeat](#heartbeat-monitors), `heartbeat_token_hash` (unique), `heartbeat_period_s`, `heartbeat_grace_s`, `last_ping_at`, `last_start_at` and `last_duration_ms`. A DB check (`mocco_status_monitors_heartbeat_check`, migration 0068) requires a heartbeat to have the token hash, a period and a grace of 60 seconds or more and both confirmations at 1, and a probe kind to have no token, period, grace or pings |
+| `mocco_status_locations` | Where probes run: `code`, `name`, `kind` (`hosted`, `private`, `embedded`), `token_hash`, `last_seen_at`, `agent_version`, `disabled_at`, and `unhealthy_since` (set while its probe is
+[silent](#location-health); migration 0072). `workspace_id` is set for a private location and null otherwise (DB-checked) |
+| `mocco_status_monitors` | A check of a project: `key` (the caller's name for a monitor made through the [`/v1` API](#the-v1-management-api), unique in the project and null for one made in the console; lowercase letters, digits and inner dots, underscores and hyphens, 1 to 100 characters, DB-checked; migration 0069), `name`, `kind` (`http`, `tcp`, `heartbeat`), `spec` (jsonb; a heartbeat's holds only its kind), `interval_s` (60 or more, DB-checked), `confirmations`, `recovery_confirmations`, `quorum_mode`, `incident_policy` (`none`, `draft`, `publish`; default `draft`), `state`, `state_changed_at`, `next_round_at`, the streaks `consecutive_fails` and `consecutive_oks`, and the [deploy watch](#the-deploy-watch) `watch_until`, `watch_interval_s` (30 or more; both set or both null, DB-checked) and `watch_run_id`; for a [heartbeat](#heartbeat-monitors), `heartbeat_token_hash` (unique), `heartbeat_period_s`, `heartbeat_grace_s`, `last_ping_at`, `last_start_at` and `last_duration_ms`; and `tls_warned_days`, the lowest
+[TLS warning](#tls-expiry-warnings) threshold already alerted (migration 0072). A DB check (`mocco_status_monitors_heartbeat_check`, migration 0068) requires a heartbeat to have the token hash, a period and a grace of 60 seconds or more and both confirmations at 1, and a probe kind to have no token, period, grace or pings |
 | `mocco_status_monitor_locations` | The locations a monitor runs at |
 | `mocco_status_component_monitors` | The components a monitor reports on, with `impact_when_down` |
 | `mocco_status_incident_runs` | The runs linked to an incident ([deploy correlation](#deploy-correlation)): `relation` (`suspected`, `before_window`, `fix`, `manual`), `score` (a suggestion's), `linked_by_user_id` (null for a suggestion). Keyed by (incident, run), with an index on `run_id` for the run's side; deleting the incident or the run deletes the link |
@@ -567,13 +573,15 @@ A monitor is an HTTP or TCP check of a project, run by `@mocco/probe` agents at 
 agents lease and report rounds over the [probe protocol](#probe-protocol); the
 [verdict evaluator](#verdicts-and-the-state-machine) closes each round and moves the monitor's state and schedule. The
 [probe agent](#the-probe-agent) runs the checks at private locations, or inside a single-node self-hosted server as
-[the embedded probe](#the-embedded-probe); there is no hosted fleet yet.
+[the embedded probe](#the-embedded-probe), or at Mocco's hosted locations, which run the same agent on Fly.io
+machines configured in `infra/probe/` (its README lists the regions and how an operator adds one; nothing is
+deployed by the code).
 
 **Spec.** `monitorSpecSchema` in `@mocco/common/status` is a union by `kind`:
 
 | Kind | Fields |
 |---|---|
-| `http` | `url` (http or https), `method` (`GET`, `HEAD`, `POST`), `body`, `expectedStatus` (empty means any 2xx), `keyword` with `keywordMode` (`contains`, `absent`), `latencyThresholdMs`, `timeoutMs` (1 to 30 seconds, default 10), `followRedirects` (default on), `tlsWarnDays` |
+| `http` | `url` (http or https), `method` (`GET`, `HEAD`, `POST`), `body`, `expectedStatus` (empty means any 2xx), `keyword` with `keywordMode` (`contains`, `absent`), `latencyThresholdMs`, `timeoutMs` (1 to 30 seconds, default 10), `followRedirects` (default on), `tlsWarnDays` (1 to 365, [TLS expiry warnings](#tls-expiry-warnings)) |
 | `tcp` | `host`, `port`, `timeoutMs` |
 
 `monitorInputSchema` also takes `{ kind: 'heartbeat', periodSeconds, graceSeconds }`; it isn't part of
@@ -589,7 +597,8 @@ each with the impact it has while the monitor is down, and an `incidentPolicy` (
 on a one-box install) and its own private ones. An owner or admin creates a private location with a `code` unique in
 the workspace; the answer carries its token (`mpl_` and 43 base64url characters) once, and only the token's SHA-256
 hash is stored. Rotating issues a new token and the old one stops working. A disabled location isn't offered to new
-monitors. Shared locations are provisioned with the hosted fleet and the embedded probe, not through the console.
+monitors. Shared locations are provisioned with the hosted fleet (an operator inserts the row and its token hash,
+`infra/probe/README.md`) and the embedded probe, not through the console.
 A monitor may use enabled shared locations and its workspace's own; any other location id is `NOT_FOUND`, so a
 monitor can't be pointed at another tenant's private network. Every linked component must be on one of the
 project's pages.
@@ -636,6 +645,10 @@ After storing results, the report runs the evaluator for those monitors, so a ro
 closes at once; a failure there is logged and never fails the report.
 
 **Seen.** Every lease call and heartbeat sets the location's `last_seen_at` and `agent_version`.
+
+**Behind NAT.** Every exchange is a request the agent starts: three `POST` routes on `MOCCO_URL`. Mocco never
+connects to a probe, and the agent opens no listener, so a private location works behind NAT or a firewall that
+allows only outbound HTTPS (port 443) to Mocco (`agent.test.ts` checks both).
 
 ### The probe agent
 
@@ -740,14 +753,17 @@ code the `/v1/probe` routes run.
 
 The `status.evaluate` job runs every minute (`VerdictEvaluator`), and the results route runs it for the monitors it
 just stored results for. A monitor's current round is its `next_round_at`. It closes when every enabled location
-assigned to the monitor has reported, or once the round's deadline (its time, the check's timeout and the 15-second
-grace, when its leases expire) has passed. A location that sent nothing is `no_data`. The evaluator handles at most 500
+assigned to the monitor has reported (a [silent](#location-health) one isn't waited for), or once the round's
+deadline (its time, the check's timeout and the 15-second grace, when its leases expire) has passed. A location that
+sent nothing is `no_data`. The evaluator handles at most 500
 rounds a run, oldest first.
 
 The round's verdict comes from the pure `tallyRound` in `consensus.ts`. Only the locations that reported count:
 the quorum is half of them rounded up for `majority`, one for `any`, all of them for `all`, and never less than one,
-so a single location goes through the same rule. `fail` when at least a quorum failed (checked first, so a tie under
-`majority` fails); `ok` when a quorum passed, or `degraded` when a quorum of passing checks was slower than the HTTP
+so a single location goes through the same rule. `fail` when at least a quorum failed (checked first, so a tie of
+four or more under `majority` fails), and, for `majority` and `all`, at least two locations failed when the monitor
+runs at two or more (`failQuorumFor`, #151): one failing region, even beside silent ones, is never an outage, and with
+two locations one failing and one passing is `ok`. `any` keeps one. `ok` when a quorum passed, or `degraded` when a quorum of passing checks was slower than the HTTP
 spec's `latencyThresholdMs`; otherwise `unknown`, including when nobody reported.
 
 `nextState` then moves the monitor:
@@ -766,6 +782,39 @@ streaks, and moves `next_round_at` to one interval after the round (`watch_inter
 [deploy watch](#the-deploy-watch)), or to now when that is already past or when the monitor just became `suspect` (the
 recheck). When the state moved, it appends a state change with the round and a
 `reason` carrying the verdict and counts. Probes then lease the next round as usual.
+
+`consensus.test.ts` plays whole rounds region by region through `tallyRound` and `nextState`, a table covering a
+partial region outage, flapping and all-`no_data` rounds for each mode, and `evaluator.test.ts` runs six rounds of one
+failing region of three (from the fourth with a second region silent) over pglite without the monitor leaving `up`.
+
+### Location health
+
+A location whose probe stops polling is silent (`LocationHealthService`, #151). Each `status.evaluate` run first
+sweeps: an enabled location that some unpaused monitor runs at and whose `last_seen_at` is more than
+`ProbeProtocol.silentAfterSeconds` (180, several missed polls and heartbeats) old gets `unhealthy_since`. A location
+never seen hasn't started, and one no monitor uses isn't anyone's problem, so neither is marked. Rounds stop waiting
+for a silent location; its missing results are still `no_data`, which never counts either way, so the other
+locations decide. When it polls again the next sweep clears the mark.
+
+Each mark and each clear alerts once. A private location publishes `status.location.unhealthy` or
+`status.location.recovered` to its workspace ([events](./events.md)), deduped on the location and the moment it went
+silent, with the location's code as the `location` fact and no link (locations are workspace-wide). A shared
+location (hosted or embedded) is Mocco's own, so it logs `[status] shared location silent` (or `back`) at error level
+for the operator's log alerting instead of notifying a customer.
+
+### TLS expiry warnings
+
+An HTTP monitor with `tlsWarnDays` watches its certificate as a separate, non-outage signal (`tls-expiry.ts`, #151).
+When a round closes, the evaluator takes the earliest `tlsExpiresAt` any location reported and, under the monitor's
+lock, compares it with the thresholds: `tlsWarnDays` and each of `TLS_WARN_STEPS_DAYS` (7, 3 and 1) below it, so a
+monitor set to 14 warns at 14, 7, 3 and 1 day left. `tls_warned_days` holds the lowest threshold already warned.
+A round whose remaining time is under a lower threshold warns (several crossed at once are one warning, at the
+lowest); a certificate renewed above a threshold re-arms it without a warning, and the next crossing warns again.
+After the commit, `status.monitor.tls_expiring` is published (`MonitorTransitionService.warnTls`): the title
+"Certificate expires in N days: <monitor>", the expiry date, the target as host and port, warning severity (error at
+3 days or fewer), the facts `monitor`, `daysLeft` and `thresholdDays`, and a link to the monitor. It is deduped on the
+monitor, the certificate's expiry and the threshold. A warning never moves the monitor's state; an expired
+certificate fails the handshake (`tls`) and goes through the state machine like any failure.
 
 ### Heartbeat monitors
 
@@ -1056,16 +1105,15 @@ Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface
 
 ## Not built yet
 
-An `api` incident origin, and changing an incident's title or severity through `/v1`; hosted
-locations, publishing `@mocco/probe` to npm and its image to
+An `api` incident origin, and changing an incident's title or severity through `/v1`; deploying the hosted
+locations (`infra/probe/` holds their config, and their rows are inserted by an operator), publishing `@mocco/probe` to npm and its image to
 GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in the console), a heartbeat that goes down when a
-`/start` isn't followed by a finish within a time limit, a location-unhealthy
-alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
+`/start` isn't followed by a finish within a time limit, a per-component `status_source` switch, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; the console's subscriber list with its MCP tool, a language choice on
 the page's form, and webhook sign-ups from the page; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
-`origin` and `suspected_run_id` in the console (MCP shows both); `tlsWarnDays` in the monitor form; a
+`origin` and `suspected_run_id` in the console (MCP shows both); the certificate's expiry in the console; a
 latency chart in the console's monitor view (the series is `history` on `status.monitor`); and a per-window
 `suppress_alerts` switch for gate-linked maintenance. Each arrives with its slice as an additive column or table.
 
