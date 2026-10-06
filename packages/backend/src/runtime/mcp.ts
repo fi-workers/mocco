@@ -13,6 +13,7 @@ import { getInbound } from '@backend/domain/inbound/instance';
 import { getMcpSettings } from '@backend/domain/mcp/instance';
 import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
+import { getMessengerDomain } from '@backend/domain/messenger/instance';
 import { getNotification } from '@backend/domain/notification/instance';
 import { getOtaDomain } from '@backend/domain/ota/instance';
 import { getProjectDomain } from '@backend/domain/project/instance';
@@ -53,6 +54,7 @@ export function getMcpHandler(): McpHttpHandler {
       statusCorrelation: status.statusCorrelation,
       helpPublic: getHelpDomain().helpPublic,
       helpFeedback: getHelpDomain().helpFeedback,
+      messengerInbox: getMessengerDomain().inbox,
       notifications: getNotification().channels,
       notificationActivity: getNotification().activity,
       inbound: getInbound(),

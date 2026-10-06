@@ -81,6 +81,8 @@ export const AuditActions = {
   /** Someone joined or left a project's round-robin rotation. */
   messengerInboxMemberAdded: 'messenger.inbox_member.added',
   messengerInboxMemberRemoved: 'messenger.inbox_member.removed',
+  /** Someone gave a conversation to a team member, or to no one, by hand. */
+  messengerConversationAssigned: 'messenger.conversation.assigned',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
   /** A workspace turned the MCP deciding tools on or off. */
@@ -204,6 +206,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.messengerGuestsChanged]: 'Messenger guest access changed',
   [AuditActions.messengerInboxMemberAdded]: 'Added to a messenger inbox',
   [AuditActions.messengerInboxMemberRemoved]: 'Removed from a messenger inbox',
+  [AuditActions.messengerConversationAssigned]: 'Messenger conversation assigned',
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
   [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',

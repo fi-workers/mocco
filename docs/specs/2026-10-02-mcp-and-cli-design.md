@@ -180,6 +180,8 @@ has several servers loaded.
 | `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
 | `mocco_help_articles_search` | A project's published help articles matching text (all or any word), or all in order; in a language where translated |
 | `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages and 30-day helpfulness |
+| `mocco_messenger_conversations_search` | A project's inbox, newest activity first (status, assignee or unassigned, contact) |
+| `mocco_messenger_conversation_get` | One conversation's thread, notes marked, attachments as metadata only (never a signed link) |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -197,6 +199,9 @@ has several servers loaded.
 | `mocco_notifications_presets_apply` | Add a preset's rules to a channel (owner or admin) |
 | `mocco_inbound_sources_create` | Add a GitHub webhook source, never returning its secret (owner or admin) |
 | `mocco_inbound_sources_pause` / `_resume` / `_delete` | Pause, resume or delete a webhook source (owner or admin) |
+| `mocco_monitors_check` | Run a monitor's next round now (`status:write`) |
+| `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
+| `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
 
 ### Search, not list
 
@@ -245,6 +250,7 @@ still refuses what the role refuses.
 | `approvals:read` | List and read approval requests and their votes |
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
+| `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -373,6 +379,12 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    them issue #246's MCP surface is complete; what remains of it is moving the Discord
    relay's routing onto Mocco through these tools.
 
+   The messenger's tools follow (*shipped*, issue #462; see *How the messenger changes are
+   built* below): `mocco_messenger_conversations_search` and `mocco_messenger_conversation_get`
+   over `InboxService.list` / `get` behind `ProjectScope` with `Products.messenger`, and
+   `mocco_messenger_reply` and `mocco_messenger_assign` over `InboxService.write` / `assign`.
+   Still to come: attaching a file, internal notes, closing and blocking from an agent.
+
 ### How the vote is built (slice 6b)
 
 - **Scope.** The authorization server knows `approvals:write` alongside the sign-in
@@ -476,6 +488,27 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   the console and an agent alike: `inbound.source.created`, `.renamed`, `.paused`,
   `.resumed`, `.secret_rotated` and `.deleted`. A pause or resume that changes nothing
   records nothing. No entry carries a secret.
+
+### How the messenger changes are built (issue #462)
+
+- **Their own scope.** `mocco_messenger_reply` and `mocco_messenger_assign` go through
+  `openDecision` with `messenger:write` rather than `approvals:write`: writing to a customer
+  is a different permission from approving a deploy, and the consent line says exactly what
+  it allows (**Reply to and assign your messenger conversations, as you**). The opt-in and
+  the confirmation round trip are the ones every change uses.
+- **No code path the console lacks.** Round robin was the only way a conversation got an
+  assignee, so `InboxService.assign` and the console's `messenger.assign` (the conversation
+  header's **Assigned to** picker) land in the same slice as the tool. It is audited as
+  `messenger.conversation.assigned`, from the console and an agent alike.
+- **Once.** A confirmation lives five minutes and can be answered twice. The reply's change
+  records the conversation's `last_message_seq` when asked, so after the reply (or a new
+  message from the contact) the same confirmation no longer matches; and the message's
+  `client_message_id` is derived from the person, the conversation, that seq and the text,
+  so two concurrent answers still write one message through the existing unique index. The
+  assignment's change records who had it, so a reassignment in between asks again; assigning
+  to whoever has it already answers without asking.
+- **No links out.** `InboxService.get` signs a short-lived download link per attachment for
+  the console; the read tool keeps only the id, file name, type and size.
 
 ## Evaluating it
 

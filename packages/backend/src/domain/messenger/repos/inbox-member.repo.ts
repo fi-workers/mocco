@@ -43,6 +43,16 @@ export class MessengerInboxMemberRepo {
     return rows.length > 0;
   }
 
+  /** A member of the workspace with their name and email; undefined for anyone else. */
+  async findWorkspaceMember(workspaceId: string, userId: string) {
+    const [row] = await this.db
+      .select({ userId: schema.users.id, name: schema.users.name, email: schema.users.email })
+      .from(schema.members)
+      .innerJoin(schema.users, eq(schema.users.id, schema.members.userId))
+      .where(and(eq(schema.members.organizationId, workspaceId), eq(schema.members.userId, userId)));
+    return row;
+  }
+
   /** Add a member (available). Undefined when they already are one. */
   async add(row: { workspaceId: string; projectId: string; userId: string; createdAt: Date }) {
     const [inserted] = await this.db.insert(im).values(row).onConflictDoNothing().returning();

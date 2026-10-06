@@ -82,7 +82,9 @@ Each new conversation is assigned to one team member when it starts (#204, migra
 - **Joining.** A member who joins or comes back from away has an old turn, so the next conversation is theirs. Removing someone from the rotation leaves the conversations they already have with them. Deleting the user unassigns their conversations (`ON DELETE SET NULL`).
 - **Audit.** Adding and removing members are audited (`messenger.inbox_member.added`, `.removed`, payload `{ userId }`). Availability isn't: people switch it often, and it changes no access.
 
-Assignment happens only when a conversation starts. A contact writing again, or reopening a closed conversation, keeps its assignee.
+Round robin assigns only when a conversation starts. A contact writing again, or reopening a closed conversation, keeps its assignee.
+
+**By hand.** `InboxService.assign` (#462) gives a conversation to any member of the workspace, or to no one (`assigneeUserId: null`), from the console's conversation header or `mocco_messenger_assign`. Someone outside the workspace is `NotWorkspaceMemberError` (`BAD_REQUEST`). It doesn't take a turn or touch the rotation. Giving it to whoever has it already changes nothing; any other change is audited as `messenger.conversation.assigned` (subject `messenger_conversation`, payload `{ projectId, from, to }`).
 
 ## /v1/messenger
 
@@ -122,7 +124,7 @@ A team member attaches up to 3 files to a reply or an internal note from the inb
 
 The uploader is what keeps the two sides apart: a contact can only send uploads with no `created_by_user_id`, and a team member only their own. So a contact can't send what the team reserved, one team member can't send another's, and an upload reserved in one project's conversation can't go into another project's (a different contact) or be reached through another workspace. The contact's app receives a reply's attachments like any other, through `GET /v1/messenger/conversations/{id}/messages`. A note's attachments stay in the inbox, because `/v1` only serves public messages. Erasing the contact erases the team's files in their conversations too.
 
-No `mocco_messenger_*` MCP tool exists yet, so attaching from an agent waits for the messenger's tools. No migration: the attachment row keeps the contact it was reserved for, and the uploader is on the storage object.
+No migration: the attachment row keeps the contact it was reserved for, and the uploader is on the storage object. The MCP tools send text only (see [MCP tools](#mcp-tools)), so attaching from an agent is still to come.
 
 ## Push
 
@@ -136,11 +138,24 @@ A team **reply** (never an internal note) enqueues `messenger.push.reply` `{ con
 
 ## Inbox (tRPC)
 
-The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `setContactBlocked`, `eraseContact`, and the rotation: `inboxMembers` (each member's name, email, availability and last assignment), `addInboxMember` (workspace members only, else `BAD_REQUEST`), `removeInboxMember`, `setAvailability({ userId, available })` (an id not in the rotation is `NOT_FOUND`). `inbox` rows and `conversation` carry `assignee: { userId, name } | null`.
+The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `assign({ conversationId, assigneeUserId | null })` (by hand, audited; see [round robin](#round-robin)), `setContactBlocked`, `eraseContact`, and the rotation: `inboxMembers` (each member's name, email, availability and last assignment), `addInboxMember` (workspace members only, else `BAD_REQUEST`), `removeInboxMember`, `setAvailability({ userId, available })` (an id not in the rotation is `NOT_FOUND`). `inbox` rows and `conversation` carry `assignee: { userId, name } | null`.
 
 ## Console
 
-The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations with each one's assignee and holds the settings; a conversation is `…/inbox/:conversationId` and shows who it is assigned to. A bar over the list is the viewer's own rotation switch: **Join the rotation**, then **Available** or away. The settings' **Round robin** section lists the members with their availability and last assignment, adds workspace members and removes them. Both poll every 15 s. The composer's **Attach** picks up to 3 images or PDFs (checked for type and size before uploading, then again by the server), uploads them when the reply is sent, and shows the server's refusal if one fails the byte check. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
+The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations with each one's assignee and holds the settings; a conversation is `…/inbox/:conversationId`, and its header's **Assigned to** picker shows who has it and hands it to any workspace member or to no one. A bar over the list is the viewer's own rotation switch: **Join the rotation**, then **Available** or away. The settings' **Round robin** section lists the members with their availability and last assignment, adds workspace members and removes them. Both poll every 15 s. The composer's **Attach** picks up to 3 images or PDFs (checked for type and size before uploading, then again by the server), uploads them when the reply is sent, and shows the server's refusal if one fails the byte check. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
+
+## MCP tools
+
+Agents reach the inbox through four tools in `transport/mcp/tools/messenger.ts` (#462, ADR 0025), thin adapters over `InboxService` behind `ProjectScope` with `Products.messenger`, so a conversation of another project or workspace reads exactly like one that does not exist. Customer setup is in [Connect Mocco to your agent](../customer/mcp/connect.md).
+
+| Tool | Service call | Notes |
+|---|---|---|
+| `mocco_messenger_conversations_search` | `list` | `status` `open` (default), `closed` or `all`; `assignee` `me`, a user id or `unassigned`; `contact` matches a contact's id, email (any case) or `external_user_id` exactly; `limit` up to 50, keyset-paged by `before` (`nextBefore`, a `last_message_at`); concise or detailed |
+| `mocco_messenger_conversation_get` | `get` | The latest `limit` messages (default 50) oldest first, notes marked, with `earlierMessages`; each attachment as id, file name, type and size. The signed download link `get` makes for the console is dropped. Detailed adds the contact's email, user id, traits and last context, and each message's context |
+| `mocco_messenger_reply` | `write` (`internal: false`) | Text only. The confirmation shows the contact and the exact text; the signed state records the conversation's `last_message_seq` when asked, so once the reply is sent (or the contact writes again) the same confirmation no longer matches. The message's `client_message_id` is `mcp:` plus a hash of the person, conversation, that seq and the text, so two concurrent answers to one confirmation still write one message |
+| `mocco_messenger_assign` | `assign` | `assignee` `me`, a user id or `unassigned`. The confirmation shows who has it and who takes it, and the state records both, so a reassignment in between asks again. Someone outside the workspace is refused before asking, and an assignment that changes nothing answers without asking |
+
+Reply and assign are behind the same locks as every changing tool: the `messenger:write` OAuth scope (stepped up for per tool), the workspace's `agents_may_decide` opt-in and a server able to sign the confirmation (`openDecision`, `confirmThenApply`). Both act as the caller, and any workspace member may use them, as in the inbox. Notes, attachments, closing, blocking, erasing and the rotation stay in the console.
 
 ## Events
 
