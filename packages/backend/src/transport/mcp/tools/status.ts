@@ -12,10 +12,15 @@
 // id reads exactly like one that does not exist. The filtering and paging here only
 // narrow what the services returned; they decide nothing, and every status shown is the
 // one the service derived.
+//
+// An incident says where it came from (`origin`: opened by hand, by a monitor, or by a
+// deploy watch) and, when a deploy watch opened it, the run it suspects, with a link to that
+// run in the console.
 import { Products } from '@mocco/common/project';
 import { IncidentSeverities, IncidentStatuses, MaintenanceStatuses } from '@mocco/common/status';
 import { z } from 'zod';
 
+import { runPagePath } from '@backend/domain/execution/run-event-subject';
 import { StatusPageUnclearError } from '@backend/domain/mcp/errors';
 import { StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
@@ -24,6 +29,7 @@ import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectSc
 import type { CorrelationService } from '@backend/domain/status/CorrelationService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { IncidentRunDto, IncidentSeverity, IncidentStatus, MaintenanceStatus } from '@mocco/common/status';
@@ -92,8 +98,8 @@ const incidentsInput = z.object({
   limit: limitArg,
   before: beforeArg,
   responseFormat: responseFormatArg(
-    'id, page, title, status, severity and when it started and resolved',
-    'adds the affected components with their impact and the latest update',
+    'id, page, title, status, severity, origin (`manual`, `monitor` or `deploy_watch`) and when it started and resolved',
+    'adds the run a deploy watch suspects, the affected components with their impact and the latest update',
   ),
 });
 
@@ -102,7 +108,7 @@ const incidentInput = z.object({
   workspaceId: workspaceArg,
   projectId: projectArg,
   responseFormat: responseFormatArg(
-    'the incident, its affected components and every update, oldest first',
+    'the incident with its origin and the run a deploy watch suspects, its affected components and every update, oldest first',
     "adds the postmortem, who posted each update, what each affected component shows now, and the deploys linked to it (Mocco's suggestions and a person's links)",
   ),
 });
@@ -236,7 +242,30 @@ const isOpenOnlyFor = (filter: IncidentFilter) =>
 const isIncidentInFilter = (filter: IncidentFilter, status: IncidentStatus) =>
   [IncidentFilters.open, IncidentFilters.all, status].includes(filter);
 
-export async function searchStatusIncidents(deps: StatusToolDeps, args: SearchStatusIncidentsArgs, userId: string) {
+/**
+ * The console's origin. The MCP endpoint is served by the app itself, so the resource URL a
+ * token is bound to is on the console's host; without one, links stay app-relative.
+ */
+export const appOriginOf = (ctx: { http?: { authInfo?: { resource?: URL } } }) => ctx.http?.authInfo?.resource?.origin;
+
+/** A run and where to open it in the console. */
+function runLinkOf(workspaceId: string, runId: string, appOrigin: string | undefined) {
+  const path = runPagePath(workspaceId, runId);
+  return { runId, url: appOrigin === undefined ? path : `${appOrigin}${path}` };
+}
+
+/** The run whose deploy watch opened the incident; null for any other incident. */
+const suspectedRunOf = (
+  incident: Pick<IncidentRow, 'workspaceId' | 'suspectedRunId'>,
+  appOrigin: string | undefined,
+) => (incident.suspectedRunId === null ? null : runLinkOf(incident.workspaceId, incident.suspectedRunId, appOrigin));
+
+export async function searchStatusIncidents(
+  deps: StatusToolDeps,
+  args: SearchStatusIncidentsArgs,
+  userId: string,
+  appOrigin: string | undefined,
+) {
   const scope = await resolveStatusProject(deps, userId, args);
   const pages = await pagesToRead(deps, scope, args.pageId);
   const isOpenOnly = isOpenOnlyFor(args.status);
@@ -271,9 +300,11 @@ export async function searchStatusIncidents(deps: StatusToolDeps, args: SearchSt
         title: incident.title,
         status: incident.status,
         severity: incident.severity,
+        origin: incident.origin,
         startedAt: incident.startedAt,
         resolvedAt: incident.resolvedAt,
         ...(detail !== undefined && {
+          suspectedRun: suspectedRunOf(incident, appOrigin),
           identifiedAt: incident.identifiedAt,
           affectedComponents: detail.components.map(each => ({
             componentId: each.componentId,
@@ -309,7 +340,12 @@ const deployOf = (link: IncidentRunDto) => ({
         },
 });
 
-export async function getStatusIncident(deps: StatusToolDeps, args: GetStatusIncidentArgs, userId: string) {
+export async function getStatusIncident(
+  deps: StatusToolDeps,
+  args: GetStatusIncidentArgs,
+  userId: string,
+  appOrigin: string | undefined,
+) {
   const scope = await resolveStatusProject(deps, userId, args);
   const { incident, updates, components: affected } = await deps.statusIncidents.get(scope, args.incidentId);
   const isDetailed = args.responseFormat === 'detailed';
@@ -323,6 +359,9 @@ export async function getStatusIncident(deps: StatusToolDeps, args: GetStatusInc
       title: incident.title,
       status: incident.status,
       severity: incident.severity,
+      origin: incident.origin,
+      // Set only when a deploy watch opened it; the linked deploys (detailed) say more.
+      suspectedRun: suspectedRunOf(incident, appOrigin),
       startedAt: incident.startedAt,
       identifiedAt: incident.identifiedAt,
       resolvedAt: incident.resolvedAt,
@@ -415,11 +454,11 @@ export function registerStatusTools(server: McpServer, deps: StatusToolDeps): vo
     {
       title: 'Find status incidents',
       description:
-        "A project's status page incidents, newest first: open ones unless asked otherwise, by status, severity, page or title text. Looks at each page's 200 most recent incidents. Read-only.",
+        "A project's status page incidents, newest first: open ones unless asked otherwise, by status, severity, page or title text, each with where it came from (by hand, a monitor or a deploy watch). Looks at each page's 200 most recent incidents. Read-only.",
       inputSchema: incidentsInput,
       annotations: { readOnlyHint: true },
     },
-    async (args, ctx) => asJson(await searchStatusIncidents(deps, args, userIdOf(ctx))),
+    async (args, ctx) => asJson(await searchStatusIncidents(deps, args, userIdOf(ctx), appOriginOf(ctx))),
   );
 
   server.registerTool(
@@ -427,11 +466,11 @@ export function registerStatusTools(server: McpServer, deps: StatusToolDeps): vo
     {
       title: 'Read a status incident',
       description:
-        'One status page incident: every update posted to it, oldest first, the components it affects and how badly, and whether it has a postmortem; detailed adds the deploys linked to it, best suggestion first. Read-only.',
+        "One status page incident: where it came from (by hand, a monitor or a deploy watch) and, for a deploy watch's, the run it suspects with a link to it, every update posted to it, oldest first, the components it affects and how badly, and whether it has a postmortem; detailed adds the deploys linked to it, best suggestion first. Read-only.",
       inputSchema: incidentInput,
       annotations: { readOnlyHint: true },
     },
-    async (args, ctx) => asJson(await getStatusIncident(deps, args, userIdOf(ctx))),
+    async (args, ctx) => asJson(await getStatusIncident(deps, args, userIdOf(ctx), appOriginOf(ctx))),
   );
 
   server.registerTool(
