@@ -829,7 +829,7 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   inline code, URLs, `asset://` refs, `{{variables}}`, emoji and keep terms as `⟦n⟧` placeholders (formatting and link
   text as `⟦n⟧…⟦/n⟧`), reassembles translations into the source's own tree, and validates placeholders, new URLs and
   the heading, code and link structure. `translate/validate.ts` moved to `markdown/validate.ts` and now compares parsed
-  trees. Migration 0073 adds `mocco_help_revisions.segments` (`[{hash, kind}]`), written on every revision. A golden
+  trees. Migration 0074 adds `mocco_help_revisions.segments` (`[{hash, kind}]`), written on every revision. A golden
   corpus with Korean and Japanese and seeded fast-check property tests check the identity round trip. The translation
   job still sends whole articles; segment-level jobs are #212.
 - Docs touched: `reference/help-center.md`, `log.md`
