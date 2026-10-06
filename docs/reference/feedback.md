@@ -44,7 +44,7 @@ Migration 0076 adds four tables. Every row carries `workspace_id`. Children reac
 |---|---|
 | `mocco_feedback_boards` | A board of a project: `slug` (unique within the project, same pattern as a project handle), `name`, `is_public` (default true; the public surface reads it later), and `next_post_number` |
 | `mocco_feedback_categories` | A board's categories: `slug` (unique within the board), `name`, `position` |
-| `mocco_feedback_posts` | A post: `number` (unique within the board), `title`, `body` (Markdown), `status`, `category_id` (a category of the same board, or null), `shipped_at`, and its author: `author_user_id` (a staff member) or `author_end_user_id` (an end user, from `/v1`; migration 0079), never both (DB-checked) |
+| `mocco_feedback_posts` | A post: `number` (unique within the board), `title`, `body` (Markdown), `status`, `category_id` (a category of the same board, or null), `shipped_at`, and its author: `author_user_id` (a staff member) or `author_end_user_id` (an end user, from `/v1`; migration 0080), never both (DB-checked) |
 | `mocco_feedback_status_changes` | Append-only history: `from_status` (null on the row written when the post is created), `to_status`, `reason`, `actor_user_id` |
 
 Migration 0077 (#173) adds two more tables and two counters on posts, `vote_count` and `comment_count` (see [Votes](#votes) and [Comments](#comments)). Both tables reach their post through a composite FK on `(post_id, workspace_id)`.
@@ -56,7 +56,7 @@ Migration 0077 (#173) adds two more tables and two counters on posts, `vote_coun
 
 Migration 0078 (#173) adds `mocco_feedback_subscriptions` (`end_user_id`, `unsubscribed_at`; unique on `(post_id, end_user_id)`, the same composite FK) and two columns on posts: `merged_into_post_id` (an FK on `(merged_into_post_id, workspace_id)`, so a post can only be merged into one of its own workspace) and `merged_at`. A check holds both set or both null, and a post never merged into itself (see [Merging duplicates](#merging-duplicates)).
 
-Migration 0079 (#174) adds `author_end_user_id` to posts (see the table above) and a partial index on votes `(workspace_id, end_user_id) WHERE state = 'pending'`, which an email voter's confirmation reads ([voting by email](#voting-by-email)).
+Migration 0080 (#174) adds `author_end_user_id` to posts (see the table above) and a partial index on votes `(workspace_id, end_user_id) WHERE state = 'pending'`, which an email voter's confirmation reads ([voting by email](#voting-by-email)).
 
 An end user is the id the project's app knows them by: the user id it signs, the same id space as a messenger contact's `external_user_id`. End-user identity (#100) isn't built yet. When it gives these ids a directory, votes, comments and subscriptions point into it; until then the column carries the id itself (1 to 255 characters).
 

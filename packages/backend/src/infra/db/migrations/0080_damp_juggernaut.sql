@@ -1,0 +1,3 @@
+ALTER TABLE "mocco_feedback_posts" ADD COLUMN "author_end_user_id" text;--> statement-breakpoint
+CREATE INDEX "mocco_feedback_votes_pending_end_user_idx" ON "mocco_feedback_votes" USING btree ("workspace_id","end_user_id") WHERE "mocco_feedback_votes"."state" IN ('pending');--> statement-breakpoint
+ALTER TABLE "mocco_feedback_posts" ADD CONSTRAINT "mocco_feedback_posts_author_check" CHECK (("mocco_feedback_posts"."author_user_id" IS NULL OR "mocco_feedback_posts"."author_end_user_id" IS NULL) AND ("mocco_feedback_posts"."author_end_user_id" IS NULL OR char_length("mocco_feedback_posts"."author_end_user_id") BETWEEN 1 AND 255));
