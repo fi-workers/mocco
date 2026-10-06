@@ -22,6 +22,20 @@ export class HelpTranslationRepo {
     return row;
   }
 
+  /** The translation and the name (or email) of the person who last reviewed it, null when unknown. */
+  async findWithReviewer(
+    workspaceId: string,
+    articleId: string,
+    locale: string,
+  ): Promise<{ row: HelpTranslationRow; reviewer: string | null } | undefined> {
+    const [found] = await this.db
+      .select({ row: t, name: schema.users.name, email: schema.users.email })
+      .from(t)
+      .leftJoin(schema.users, eq(t.reviewedByUserId, schema.users.id))
+      .where(and(eq(t.workspaceId, workspaceId), eq(t.articleId, articleId), eq(t.locale, locale)));
+    return found === undefined ? undefined : { row: found.row, reviewer: found.name ?? found.email };
+  }
+
   async forArticle(workspaceId: string, articleId: string): Promise<HelpTranslationRow[]> {
     return await this.db
       .select()

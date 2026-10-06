@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-06
 confidence: medium
 owner: andrea
 tags: [spec, design, help-center]
@@ -266,6 +266,19 @@ type HelpSearchHit = {
 ```
 
 In-process for the messenger AI (no HTTP): `helpSearchService.search({ siteId, locale, query, limit })`, and later `retrieveChunks(...)` for RAG.
+
+### MCP tools for translation review
+
+Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translation review (#213) ships these tools, thin adapters over `HelpTranslationService` behind `ProjectScope` with `Products.helpcenter`. None is built in the review slice; the read tool lands with the translations dashboard.
+
+| Tool | Kind | Over |
+| --- | --- | --- |
+| `mocco_help_translations_list` | Read: per-language counts by state and stale, and the stale or failed articles, filtered by language and state, paged, concise or detailed | the dashboard's grid read |
+| `mocco_help_translation_get` | Read: one article in one language, with the segment diff and whether a machine draft waits | `review` |
+| `mocco_help_translation_accept` | Change: accept the machine draft by its revision id | `acceptProposal` |
+| `mocco_help_translation_retranslate` | Change: ask the machine again; on a reviewed language the confirmation names that it replaces a person's text | `retranslate` |
+
+The two changing tools need a person's token, their own `help:write` scope, the workspace's opt-in and the confirmation round trip (`openDecision` / `confirmThenApply` in `transport/mcp/tools/deciding.ts`, as `mocco_feedback_post_set_status` uses them). The confirmation is bound to what the reviewer was shown: the proposal's revision id for accept, the translation's state for retranslate, so a draft or review that lands in between makes the answer no longer match. Saving a person's text stays in the console: an agent's text is a machine's, not a review.
 
 Post-v1 management API (workspace API key): `PUT /v1/help/articles/{externalKey}` (upsert from Markdown), `POST /v1/help/import` (Zendesk/Intercom export), enabling a `mocco help sync ./docs` CLI or GitHub Action for docs-as-code.
 

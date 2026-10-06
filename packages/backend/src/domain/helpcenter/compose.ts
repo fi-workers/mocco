@@ -77,6 +77,7 @@ export function createHelpDomain(
   const refresh = helpPublicRefresh(db, deps);
   const helpTranslations = new HelpTranslationService({
     db,
+    audit: deps.audit,
     sites: helpSites,
     ...(deps.translator !== undefined && { translator: deps.translator }),
     ...(deps.queue !== undefined && { queue: deps.queue }),

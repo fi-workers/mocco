@@ -1,19 +1,12 @@
 // An article's translations (#96): each language the site offers, with its state —
 // machine-translated, reviewed by a person, out of date with the source, or failed —
-// and an editor to review one (a person's text is never overwritten by the machine).
-import { HELP_LOCALE_NAMES } from '@mocco/common/help';
+// and the review editor for one (translation-review.tsx; a person's text is never
+// overwritten by the machine unless they confirm it).
 import { useState } from 'react';
 
-import DocContent from '@frontend/components/doc-content';
-import {
-  errorMessage,
-  inputClass,
-  Spinner,
-  StatusBadge,
-  Tones,
-} from '@frontend/components/notifications/notification-ui';
+import TranslationReview, { languageName } from '@frontend/components/help/translation-review';
+import { errorMessage, Spinner, StatusBadge, Tones } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
-import { helpArticleBlocks } from '@frontend/lib/help-markdown';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { HelpLocale } from '@mocco/common/help';
@@ -36,8 +29,6 @@ interface Entry {
   body: string | null;
 }
 
-const languageName = (locale: string) => (HELP_LOCALE_NAMES as Record<string, string>)[locale] ?? locale;
-
 function StateBadges({ entry }: { entry: Entry }) {
   return (
     <>
@@ -50,71 +41,6 @@ function StateBadges({ entry }: { entry: Entry }) {
       {entry.isStale ? <StatusBadge tone={Tones.warn}>Source changed</StatusBadge> : null}
       {entry.hasProposal ? <StatusBadge tone={Tones.neutral}>Machine draft ready</StatusBadge> : null}
     </>
-  );
-}
-
-function TranslationEditor({
-  workspaceId,
-  projectId,
-  articleId,
-  entry,
-  source,
-  onDone,
-}: Omit<Props, 'source'> & { entry: Entry; source: { title: string; body: string }; onDone: () => void }) {
-  const utils = trpc.useUtils();
-  const [title, setTitle] = useState(entry.title ?? source.title);
-  const [body, setBody] = useState(entry.body ?? source.body);
-  const save = trpc.help.saveTranslation.useMutation({
-    onSuccess: async () => {
-      await utils.help.translations.invalidate({ workspaceId, projectId, articleId });
-      onDone();
-    },
-  });
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-medium">{languageName(entry.locale)}</h3>
-        <span className="text-xs text-muted-foreground">
-          Saving marks it reviewed: the machine won&apos;t replace it.
-        </span>
-      </div>
-      <input
-        aria-label={`Title in ${languageName(entry.locale)}`}
-        className={`${inputClass} text-base font-medium`}
-        value={title}
-        onChange={event => {
-          setTitle(event.target.value);
-        }}
-      />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <textarea
-          aria-label={`Article in ${languageName(entry.locale)} (Markdown)`}
-          className={`${inputClass} min-h-80 font-mono text-xs leading-6`}
-          value={body}
-          onChange={event => {
-            setBody(event.target.value);
-          }}
-        />
-        <div className="flex min-h-80 flex-col gap-4 rounded-xl border border-border p-5" aria-label="Preview">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <DocContent blocks={helpArticleBlocks(body)} />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          className="text-sm"
-          pending={save.isPending}
-          onClick={() => {
-            save.mutate({ workspaceId, projectId, articleId, locale: entry.locale as HelpLocale, title, body });
-          }}>
-          Save translation
-        </Button>
-        <Button variant="outline" className="text-sm" onClick={onDone}>
-          Cancel
-        </Button>
-      </div>
-      {save.error ? <p className="text-sm text-destructive">{errorMessage(save.error)}</p> : null}
-    </div>
   );
 }
 
@@ -205,7 +131,13 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
                         className="h-7 text-xs"
                         onClick={() => {
                           setConfirming(null);
-                          retranslate.mutate({ workspaceId, projectId, articleId, locale: entry.locale as HelpLocale });
+                          retranslate.mutate({
+                            workspaceId,
+                            projectId,
+                            articleId,
+                            locale: entry.locale as HelpLocale,
+                            confirm: true,
+                          });
                         }}>
                         Replace
                       </Button>
@@ -228,12 +160,9 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
                 <p className="text-xs text-muted-foreground">{entry.lastError}</p>
               ) : null}
               {editing === entry.locale ? (
-                <TranslationEditor
-                  workspaceId={workspaceId}
-                  projectId={projectId}
-                  articleId={articleId}
-                  entry={entry}
-                  source={source}
+                <TranslationReview
+                  scope={{ workspaceId, projectId, articleId }}
+                  locale={entry.locale}
                   onDone={() => {
                     setEditing(null);
                   }}

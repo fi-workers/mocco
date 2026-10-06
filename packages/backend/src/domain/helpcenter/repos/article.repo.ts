@@ -123,6 +123,29 @@ export class HelpArticleRepo {
       .where(inArray(r.id, [...ids]));
   }
 
+  /** The newest revision of an article in one language with this content hash (the source a translation was made from). */
+  async findByContentHash(
+    workspaceId: string,
+    articleId: string,
+    locale: string,
+    contentHash: string,
+  ): Promise<HelpRevisionRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(r)
+      .where(
+        and(
+          eq(r.workspaceId, workspaceId),
+          eq(r.articleId, articleId),
+          eq(r.locale, locale),
+          eq(r.contentHash, contentHash),
+        ),
+      )
+      .orderBy(desc(r.createdAt))
+      .limit(1);
+    return row;
+  }
+
   /** An article's revisions in one language, newest first. */
   async history(workspaceId: string, articleId: string, locale: string, limit: number): Promise<HelpRevisionRow[]> {
     return await this.db
