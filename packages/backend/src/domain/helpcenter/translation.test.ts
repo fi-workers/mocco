@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
-import { structureProblem } from '@backend/domain/helpcenter/translate/validate';
+import { structureProblem } from '@backend/domain/helpcenter/markdown/validate';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
 import { users, workspaces } from '@backend/infra/db/schema';

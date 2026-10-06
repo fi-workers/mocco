@@ -99,7 +99,7 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
-import type { ArticleStatus, RevisionKind, TranslationState } from '@mocco/common/help';
+import type { ArticleStatus, RevisionKind, SegmentRef, TranslationState } from '@mocco/common/help';
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
@@ -3108,6 +3108,9 @@ export const helpRevisions = pgTable(
     bodyMd: text('body_md').notNull(),
     // sha256 of the normalized title and body; translations compare against it later.
     contentHash: text('content_hash').notNull(),
+    // Each translatable segment's hash and kind, in order (domain/helpcenter/markdown/segment.ts):
+    // translation memory's keys, so a source edit re-translates only what it changed.
+    segments: jsonb().$type<SegmentRef[]>().notNull().default([]),
     kind: text().$type<RevisionKind>().notNull(),
     authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
     createdAt,

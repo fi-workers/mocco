@@ -94,7 +94,7 @@ export class HelpArticleRepo {
   async updateRevisionText(
     workspaceId: string,
     revisionId: string,
-    text: Pick<typeof r.$inferInsert, 'title' | 'bodyMd' | 'contentHash'>,
+    text: Pick<typeof r.$inferInsert, 'title' | 'bodyMd' | 'contentHash' | 'segments'>,
   ): Promise<HelpRevisionRow> {
     return expectOne(
       await this.db

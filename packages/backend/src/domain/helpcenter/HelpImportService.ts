@@ -6,7 +6,7 @@
 
 import { ArticleStatuses, RevisionKinds } from '@mocco/common/help';
 
-import { contentHashOf, newShortId } from '@backend/domain/helpcenter/content';
+import { contentHashOf, newShortId, revisionText } from '@backend/domain/helpcenter/content';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
@@ -74,9 +74,7 @@ export class HelpImportService {
       workspaceId,
       articleId: article.id,
       locale: target.locale,
-      title: input.title,
-      bodyMd: input.body,
-      contentHash,
+      ...revisionText(input.title, input.body),
       kind: RevisionKinds.import,
       authorUserId: target.actorUserId,
     });

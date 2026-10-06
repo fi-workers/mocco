@@ -1,6 +1,8 @@
-// Small pure helpers for help center text: the content hash revisions carry and the
-// short public ids of articles.
+// Small pure helpers for help center text: the content hash and segment hashes revisions
+// carry, and the short public ids of articles.
 import { createHash, randomBytes } from 'node:crypto';
+
+import { segmentRefsOf } from '@backend/domain/helpcenter/markdown/segment';
 
 /** sha256 of the normalized title and body (line endings and trailing space don't count). */
 export function contentHashOf(title: string, body: string): string {
@@ -12,6 +14,11 @@ export function contentHashOf(title: string, body: string): string {
     .trim()}`;
   /* eslint-enable sonarjs/null-dereference */
   return createHash('sha256').update(normalized).digest('hex');
+}
+
+/** The text columns of a revision: title, body, content hash and segment hashes. */
+export function revisionText(title: string, body: string) {
+  return { title, bodyMd: body, contentHash: contentHashOf(title, body), segments: segmentRefsOf(title, body) };
 }
 
 const ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
