@@ -60,6 +60,9 @@ interface Strings {
     unsubscribeButton: string;
     unsubscribed: (page: string) => string;
     invalid: string;
+    pending: string;
+    failed: string;
+    back: string;
   };
 }
 
@@ -92,6 +95,9 @@ const STRINGS: Record<SubscriberLocale, Strings> = {
       unsubscribeButton: 'Unsubscribe',
       unsubscribed: page => `You won't get updates from ${page} any more.`,
       invalid: "This link isn't valid any more. Subscribe again from the status page.",
+      pending: 'Check your inbox: we sent you a link to confirm your subscription.',
+      failed: "We couldn't sign you up right now. Check the address and try again later.",
+      back: 'Back to the status page',
     },
   },
   [SubscriberLocales.ko]: {
@@ -122,6 +128,9 @@ const STRINGS: Record<SubscriberLocale, Strings> = {
       unsubscribeButton: '구독 해지',
       unsubscribed: page => `더 이상 ${page} 알림을 보내지 않습니다.`,
       invalid: '더 이상 유효하지 않은 링크입니다. 상태 페이지에서 다시 구독해 주세요.',
+      pending: '메일함을 확인해 주세요. 구독을 확인하는 링크를 보내 드렸습니다.',
+      failed: '지금은 구독할 수 없습니다. 주소를 확인하고 잠시 후 다시 시도해 주세요.',
+      back: '상태 페이지로 돌아가기',
     },
   },
 };
@@ -228,6 +237,10 @@ export const SubscriberPageKinds = {
   unsubscribeAsk: 'unsubscribe_ask',
   unsubscribed: 'unsubscribed',
   invalid: 'invalid',
+  /** A sign-up from the form without its script: check your inbox. */
+  pending: 'pending',
+  /** That sign-up didn't go through: try again later. */
+  failed: 'failed',
 } as const;
 export type SubscriberPageKind = (typeof SubscriberPageKinds)[keyof typeof SubscriberPageKinds];
 
@@ -235,7 +248,7 @@ export type SubscriberPageKind = (typeof SubscriberPageKinds)[keyof typeof Subsc
  * that POSTs back, so a mail scanner fetching links doesn't unsubscribe anyone. */
 export function renderSubscriberPage(
   kind: SubscriberPageKind,
-  opts: { locale: SubscriberLocale; pageTitle: string; formAction?: string },
+  opts: { locale: SubscriberLocale; pageTitle: string; formAction?: string; backUrl?: string },
 ): string {
   const strings = STRINGS[opts.locale].pages;
   const message = {
@@ -243,11 +256,15 @@ export function renderSubscriberPage(
     [SubscriberPageKinds.unsubscribeAsk]: strings.unsubscribeAsk(opts.pageTitle),
     [SubscriberPageKinds.unsubscribed]: strings.unsubscribed(opts.pageTitle),
     [SubscriberPageKinds.invalid]: strings.invalid,
+    [SubscriberPageKinds.pending]: strings.pending,
+    [SubscriberPageKinds.failed]: strings.failed,
   }[kind];
+  const back =
+    opts.backUrl === undefined ? '' : `<p><a href="${escapeHtml(opts.backUrl)}">${escapeHtml(strings.back)}</a></p>`;
   const form =
     kind === SubscriberPageKinds.unsubscribeAsk && opts.formAction !== undefined
       ? `<form method="post" action="${escapeHtml(opts.formAction)}"><button type="submit">${escapeHtml(strings.unsubscribeButton)}</button></form>`
       : '';
   const title = escapeHtml(opts.pageTitle);
-  return `<!doctype html><html lang="${opts.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5}button{font:inherit;padding:.5rem 1rem}</style></head><body><h1>${title}</h1><p>${escapeHtml(message)}</p>${form}</body></html>`;
+  return `<!doctype html><html lang="${opts.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5}button{font:inherit;padding:.5rem 1rem}</style></head><body><h1>${title}</h1><p>${escapeHtml(message)}</p>${form}${back}</body></html>`;
 }

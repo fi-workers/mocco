@@ -114,3 +114,11 @@ export class DiscordInstallFailedError extends Error {
     this.name = 'DiscordInstallFailedError';
   }
 }
+
+/** A webhook host that resolves to an address the policy refuses: never connected to. */
+export class BlockedAddressError extends Error {
+  constructor(host: string, address: string, options?: ErrorOptions) {
+    super(`${host} resolves to ${address}, which is not a public address`, options);
+    this.name = 'BlockedAddressError';
+  }
+}

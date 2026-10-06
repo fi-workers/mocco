@@ -1,7 +1,7 @@
 // Check contexts for tests: a lookup answered from a table (no DNS), and the two policies.
 import { isIP } from 'node:net';
 
-import { isPublicAddress, type AddressPolicy } from '../address-policy';
+import { isPublicAddress, type AddressPolicy } from '@mocco/common/address-policy';
 
 import type { CheckContext } from '../check-report';
 import type { Lookup, ResolvedAddress } from '../resolve';

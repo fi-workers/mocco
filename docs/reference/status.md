@@ -41,7 +41,10 @@ code_refs:
   - packages/probe/src/config.ts
   - packages/probe/src/http-check.ts
   - packages/probe/src/tcp-check.ts
+  - packages/common/src/address-policy.ts
   - packages/probe/src/address-policy.ts
+  - packages/backend/src/domain/status/subscriber-webhook.ts
+  - packages/backend/src/domain/notification/senders/webhook.ts
   - packages/probe/src/resolve.ts
   - packages/probe/Dockerfile
   - packages/probe/src/create-agent.ts
@@ -187,7 +190,7 @@ Every table is `mocco_status_*`, carries `workspace_id`, and belongs to a projec
 | `mocco_status_rollups_daily` | One monitor's UTC day: `rounds`, `ok_rounds`, `down_seconds`, `maintenance_seconds`, `uptime_ratio` (numeric(7,6), null when nothing could be measured), `latency_hist` and `p95_ms`. Key (monitor, day); kept forever |
 | `mocco_status_component_days` | One component's UTC day, for the 90-day bars: `worst_status`, `down_seconds`, `uptime_ratio` (null when no monitor reports on it) and `incident_ids`. Key (component, day); kept forever |
 | `mocco_status_probe_leases` | One check a location owes for one round: `monitor_id`, `location_id`, `round_at`, `leased_at`, `expires_at`, `reported_at`. Unique on (monitor, location, round) |
-| `mocco_status_subscribers` | A visitor following a page ([subscribers](#subscribers)): `channel` (`email`; `webhook` comes next, with `webhook_url` and `webhook_secret_sealed`, DB-checked to exclude each other), `email` (lowercased, DB-checked), `component_ids` (null for the whole page), `locale` (`en`, `ko`), `confirmed_at`, `unsubscribed_at` and `confirmation_sent_at`. Unique on (page, email) and (page, webhook URL); a partial index on the page's active subscribers. References its page like the other page rows (migration 0071) |
+| `mocco_status_subscribers` | A visitor following a page ([subscribers](#subscribers)): `channel` (`email`, or `webhook` with `webhook_url` and `webhook_secret_sealed`, the SecretBox-sealed signing secret; DB-checked to exclude each other), `email` (lowercased, DB-checked), `component_ids` (null for the whole page), `locale` (`en`, `ko`), `confirmed_at`, `unsubscribed_at` and `confirmation_sent_at`. Unique on (page, email) and (page, webhook URL); a partial index on the page's active subscribers. References its page like the other page rows (migration 0071) |
 | `mocco_status_subscriber_deliveries` | One mail to one subscriber: `kind` (`confirmation`, `incident_update`, `maintenance`), `dedupe_key` (the notice), the `content` captured at fan-out, `status` (the notification `queued`, `sending`, `sent`, `failed`, `suppressed`), `attempts`, `error`, `sending_at`, `sent_at`. Unique on (subscriber, dedupe key); deleted with its subscriber |
 | `mocco_status_check_results` | Raw results, one per (monitor, round, location): `outcome`, `error_kind`, `status_code`, `latency_ms`, `timings`, `tls_expires_at`, `detail` (512 characters at most), `lease_id`, `received_at`. Partitioned by UTC day on `round_at` ([below](#time-series-and-their-partitions)); no uuid key and no foreign keys, like the audit log's exception |
 
@@ -446,13 +449,17 @@ changed in the meantime. Posting an incident while the app is down needs the bre
 
 ## Subscribers
 
-A visitor of a public page follows it by email (#156): the address signs up, confirms from the mail it is sent (double
-opt-in), and from then on gets each published incident update and each maintenance change of the page, in English or
-Korean. Signed webhooks, the sign-up form on the public page and its customer guide come in the next slice.
+A visitor of a public page follows it by email, from the page's form, or with a signed webhook (#156): the address or
+URL signs up, confirms (double opt-in: the link in the mail, or the `confirm` link of the webhook's first event), and
+from then on gets each published incident update and each maintenance change of the page; mail is in English or Korean.
+The customer guide is [Let visitors subscribe](../customer/status/subscribers.md).
 
 **Signing up.** `POST /v1/status-pages/{slug}/subscribers` ([public API](./public-api.md#routes)) takes
-`{ email, componentIds?, locale?, website? }` as JSON or as a plain form post (repeated `componentIds` fields), parsed by
-`statusSubscribeInputSchema` in `@mocco/common/status`. No key: the slug is public. `SubscriberService.subscribe`:
+`{ email, componentIds?, locale?, website? }` or `{ channel: "webhook", url, componentIds? }` as JSON or as a plain form
+post (repeated `componentIds` fields), parsed by `statusSubscribeInputSchema` in `@mocco/common/status`. No key: the slug
+is public. A form post that asks for HTML (the page's form without its script) is answered with a page ("Check your
+inbox", or "We couldn't sign you up right now", with a link back to the page the browser came from) instead of JSON.
+`SubscriberService.subscribe`:
 
 - an unknown page is `404`, and a component that isn't on the page `400` (`SubscriberComponentError`);
 - a new address is stored pending (`confirmed_at` null) with its components (none means the whole page) and language
@@ -466,6 +473,26 @@ follows a page. `website` is a honeypot the form hides from people: when it is f
 is stored. Sign-ups are limited to 10 per 10 minutes per client address and 3 an hour per page and address (hashed);
 over either, `429`. Without an email sender (`EMAIL_DRIVER` unset) the route answers `503 subscriptions_unavailable`; the
 links in mail already sent keep working.
+
+**Webhooks.** `SubscriberService.subscribeWebhook` refuses a URL the webhook sender would never call (`refusalOf`: not
+`https`, or a literal address that isn't public; `SubscriberWebhookUrlError`, `400`; credentials in the URL are refused
+by the schema). It stores the URL pending with a new `whsec_` secret sealed by SecretBox (additional data
+`status-subscriber-webhook:<page id>`) and answers `202 { status, secret }`: the only time the secret is shown. A pending
+or unsubscribed URL starts over with a new secret; a URL already following the page is `409`, so a stranger can't
+replace its secret. Without SecretBox (`SECRETS_ENCRYPTION_KEYS`) webhook sign-ups answer `503`. The confirmation is the
+`subscription.confirmation` event, whose `links.confirm` the receiver opens.
+
+Each delivery is one event (`subscriber-webhook.ts`): `{ type, sentAt, page: { slug, title }, data, links }`, `type`
+`subscription.confirmation`, `incident.updated` or `maintenance.updated`, `data` the delivery's captured content and
+`links.unsubscribe` on every event. `WebhookSender` (`domain/notification/senders/webhook.ts`) POSTs it signed the
+Standard Webhooks way: `webhook-id` (the delivery id, the same on every retry), `webhook-timestamp` and
+`webhook-signature: v1,<base64 HMAC-SHA256 of id.timestamp.body>` keyed by the secret's bytes. SSRF: only `https`; a
+literal IP must pass the address policy (`isPublicAddress`, shared with the probe in `@mocco/common/address-policy`); a
+name is resolved in the socket's own `lookup`, every address it resolves to must pass, and the socket connects to the
+address that was checked, so there is no second lookup to rebind. Redirects are never followed (a `3xx` is a permanent
+failure), the body of the answer is never read, and a call times out after 10 seconds. A `2xx` is sent; `408`, `429`,
+`5xx`, a timeout or a network error are retried; another `4xx` fails; `410 Gone` fails the delivery and unsubscribes the
+subscriber.
 
 **Links.** Every mail's links are signed tokens (`subscriber-token.ts`): `<subscriber id>.<expiry>.<HMAC-SHA256>` under
 a key derived from `AUTH_SECRET` (`subscriber-config.ts`), with the purpose (`confirm` or `unsubscribe`) inside the MAC.
@@ -489,7 +516,7 @@ hand, by the tick, or by its run) ask for a notice in the change's own transacti
 (`incident_update:<update id>` or `maintenance:<id>:<status>`). The job (`SubscriberService.fanOut`):
 
 1. reads the notice's incident or window; a draft incident sends nothing, and neither does one deleted since;
-2. picks the page's confirmed, not unsubscribed email subscribers who want it: no component filter, a notice about no
+2. picks the page's confirmed, not unsubscribed subscribers (email and webhook) who want it: no component filter, a notice about no
    component in particular, or one of the notice's components among theirs;
 3. per batch of 200, in one transaction, inserts a delivery each with `ON CONFLICT (subscriber_id, dedupe_key) DO
    NOTHING` and enqueues a `status.subscribers.deliver` job for each delivery inserted, kicked after the commit.
@@ -506,9 +533,10 @@ a second time; while the claim is fresh another run waits for it. At send time:
 
 - an unsubscribed subscriber, a subscriber that hasn't confirmed (for anything but the confirmation), and a confirmation
   to an address already confirmed are `suppressed`;
-- a deployment without an email sender fails the delivery;
-- the relay's answer settles it: `sent`; `failed` for a permanent refusal (an SMTP 5xx) or on the job's final attempt;
-  otherwise back to `queued` and the job backs off (8 attempts).
+- a deployment without an email sender (or, for a webhook, without SecretBox or the webhook sender) fails the delivery;
+- the answer settles it: `sent`; `failed` for a permanent refusal (an SMTP 5xx, a webhook's `4xx` or `3xx`) or on the
+  job's final attempt; `failed` and unsubscribed for a webhook's `410`; otherwise back to `queued` and the job backs off
+  (8 attempts).
 
 **Mail.** `subscriber-mail.ts` renders text and HTML (every customer string escaped; times in UTC) in English or Korean:
 the confirmation ("Confirm your subscription to Acme status", its link and nothing else), an incident update
@@ -516,6 +544,18 @@ the confirmation ("Confirm your subscription to Acme status", its link and nothi
 ("[Acme status] Scheduled maintenance: DB upgrade", its window and components). Every mail but the confirmation ends
 with the unsubscribe link and carries it in `List-Unsubscribe`, with `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 Mail goes through the notifications foundation's email sender ([notifications](./notifications.md#email)).
+
+**The form on the page.** When the deployment sends mail, the job runtime gives the snapshot service the app origin,
+and the snapshot carries `subscribe: { url }` (null otherwise, and for versions built before it). The page then shows
+**Get updates** under its components ([public page](#public-page)): an email field, **Only some components** (a checkbox
+per component, when there are two or more), a `website` honeypot moved off screen, and a status line. It is a plain
+`<form method="post">` to the sign-up route, so it works without the script. With the script, a submit posts the form
+as `application/x-www-form-urlencoded` with `Accept: application/json` (a CORS-simple request, answered with
+`Access-Control-Allow-Origin: *`) and writes the outcome into the status line: "Check your inbox…" on `202`, "Check the
+address and try again." on `400`, and "We couldn't sign you up right now. Try again later." for anything else, a network
+failure included. A browser without `fetch` keeps the plain post. Nothing else on the page depends on the form, and the
+poll that swaps in a new version waits while someone is typing an address. `snapshot/subscribe-form.test.ts` runs the
+page's script against a minimal DOM for each of these cases.
 
 **Prune.** `status.subscribers.prune` runs daily: it deletes sign-ups never confirmed whose confirmation went out more
 than 7 days ago (their link has expired), and settled deliveries older than 90 days, the window the dedupe holds for.
@@ -638,7 +678,8 @@ The spec's `timeoutMs` bounds the whole check, name resolution included (`timeou
 0.0.0.0/8, 10/8, 100.64/10 (CGNAT), 127/8, 169.254/16 (link-local, with the metadata address 169.254.169.254),
 172.16/12, 192.168/16, 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 192.88.99/24, multicast and
 240/4; ::, ::1, fc00::/7 (with fd00::/8 and fd00:ec2::254), fe80::/10, fec0::/10, ff00::/8, 64:ff9b:1::/48, 100::/64,
-2001::/32 (Teredo), 2001:db8::/32 and 2002::/16 (6to4), and IPv4-mapped forms of the IPv4 ranges (`address-policy.ts`).
+2001::/32 (Teredo), 2001:db8::/32 and 2002::/16 (6to4), and IPv4-mapped forms of the IPv4 ranges (`isPublicAddress` in `@mocco/common/address-policy`, which the probe
+bundles; subscriber webhooks use the same list).
 Every connection resolves its host first, refuses it if any address it resolves to is blocked, and connects to the
 address it checked, never to the name again; redirects are followed by the agent, so every hop goes through the same
 step. A name that resolves to a public address for the check and a private one a moment later (DNS rebinding) never
@@ -1021,8 +1062,8 @@ GHCR, the `hb.mocco.club` ping host (and a ping URL on the public API host in th
 `/start` isn't followed by a finish within a time limit, a location-unhealthy
 alert, a per-component `status_source` switch, TLS expiry warnings, and a reconcile of state changes whose reaction was
 lost; page `visibility`, `locale` and `theme`; the CDN host mapping
-(`<slug>.status.mocco.club`) and custom domains; subscriber webhooks, the sign-up form on the public page, and the
-console's subscriber list with its MCP tool; a way to publish a draft incident
+(`<slug>.status.mocco.club`) and custom domains; the console's subscriber list with its MCP tool, a language choice on
+the page's form, and webhook sign-ups from the page; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
 `origin` and `suspected_run_id` in the console (MCP shows both); `tlsWarnDays` in the monitor form; a
 latency chart in the console's monitor view (the series is `history` on `status.monitor`); and a per-window

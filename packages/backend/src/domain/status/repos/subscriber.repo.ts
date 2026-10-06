@@ -50,6 +50,39 @@ export class SubscriberRepo {
     return subscriber;
   }
 
+  /**
+   * Record a webhook sign-up as pending confirmation, with its sealed signing secret. A URL that
+   * never confirmed or has unsubscribed starts over with the new secret and components; a URL
+   * already following the page is left as it is (undefined is returned), so a stranger can't
+   * replace its secret.
+   */
+  async upsertPendingWebhook(row: {
+    workspaceId: string;
+    projectId: string;
+    pageId: string;
+    webhookUrl: string;
+    webhookSecretSealed: string;
+    componentIds: string[] | null;
+  }): Promise<SubscriberRow | undefined> {
+    const [subscriber] = await this.db
+      .insert(s)
+      .values({ ...row, channel: SubscriberChannels.webhook })
+      .onConflictDoUpdate({
+        target: [s.pageId, s.webhookUrl],
+        set: {
+          webhookSecretSealed: row.webhookSecretSealed,
+          componentIds: row.componentIds,
+          confirmedAt: null,
+          unsubscribedAt: null,
+          confirmationSentAt: null,
+          updatedAt: new Date(),
+        },
+        setWhere: or(isNull(s.confirmedAt), isNotNull(s.unsubscribedAt)),
+      })
+      .returning();
+    return subscriber;
+  }
+
   /** Take the right to send a confirmation now: only when none was queued since `before`. */
   async claimConfirmation(id: string, now: Date, before: Date): Promise<boolean> {
     const claimed = await this.db
@@ -85,12 +118,12 @@ export class SubscriberRepo {
     return row;
   }
 
-  /** The page's email subscribers who confirmed and haven't unsubscribed. */
-  async listActiveEmail(pageId: string): Promise<SubscriberRow[]> {
+  /** The page's subscribers, by email or webhook, who confirmed and haven't unsubscribed. */
+  async listActive(pageId: string): Promise<SubscriberRow[]> {
     return await this.db
       .select()
       .from(s)
-      .where(and(eq(s.pageId, pageId), eq(s.channel, SubscriberChannels.email), isActive))
+      .where(and(eq(s.pageId, pageId), isActive))
       .orderBy(s.createdAt, s.id);
   }
 

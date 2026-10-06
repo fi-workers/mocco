@@ -2,10 +2,10 @@
 // directly, after a redirect, and when a public-looking name resolves to a private address.
 // The fixture server listens on 127.0.0.1, so these tests allow exactly that address and hold
 // everything else to the real block list.
+import { isPublicAddress } from '@mocco/common/address-policy';
 import { httpMonitorSpecSchema, tcpMonitorSpecSchema } from '@mocco/common/status';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { isPublicAddress } from './address-policy';
 import { runHttpCheck } from './http-check';
 import { runTcpCheck } from './tcp-check';
 import { hostedExcept, tableLookup, testContext } from './testing/context';
