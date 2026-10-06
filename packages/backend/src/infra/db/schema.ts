@@ -18,7 +18,7 @@ import {
   StaleKinds,
 } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
-import { ArticleStatuses, RevisionKinds, SegmentOrigins, TranslationStates } from '@mocco/common/help';
+import { ArticleStatuses, GlossaryRules, RevisionKinds, SegmentOrigins, TranslationStates } from '@mocco/common/help';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { AuthorKinds, ConversationStatuses, MessageVisibilities } from '@mocco/common/messenger';
@@ -114,7 +114,15 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
-import type { ArticleStatus, RevisionKind, SegmentOrigin, SegmentRef, TranslationState } from '@mocco/common/help';
+import type {
+  ArticleStatus,
+  GlossaryRule,
+  HelpLocale,
+  RevisionKind,
+  SegmentOrigin,
+  SegmentRef,
+  TranslationState,
+} from '@mocco/common/help';
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
@@ -3018,6 +3026,8 @@ export const helpSites = pgTable(
     // Whether robots.txt lets AI companies' training crawlers read the site (#363). Search
     // crawlers, AI search included, are always allowed.
     allowAiTraining: boolean('allow_ai_training').notNull().default(true),
+    // sha256 of the glossary's terms (#214), recomputed on every change; '' while it has none.
+    glossaryHash: text('glossary_hash').notNull().default(''),
     createdAt,
     updatedAt,
   },
@@ -3159,6 +3169,11 @@ export const helpTranslations = pgTable(
     // A stale reviewed translation's machine draft (a `proposal` revision) and the source hash it drafts.
     proposalRevisionId: uuid('proposal_revision_id'),
     proposalSourceHash: text('proposal_source_hash'),
+    // The hash of the glossary terms that apply to the article in this language (#214), for
+    // the text and for the proposal; '' when none applies. A glossary edit that changes it
+    // makes a run translate again (a proposal beside reviewed text).
+    glossaryHash: text('glossary_hash').notNull().default(''),
+    proposalGlossaryHash: text('proposal_glossary_hash'),
     // A job run holds the translation until then (claimed under an advisory lock); null when free.
     claimedUntil: timestamp('claimed_until'),
     createdAt,
@@ -3202,6 +3217,35 @@ export const helpSegmentMemory = pgTable(
       name: 'mocco_help_segment_memory_site_fk',
     }).onDelete('cascade'),
     check('mocco_help_segment_memory_origin_check', sql`${t.origin} IN (${sqlInList(Object.values(SegmentOrigins))})`),
+  ],
+);
+
+/**
+ * A help center's glossary (#214): a term kept as written in every language (`keep`), or
+ * translated one fixed way per language (`fixed`, `translations` by locale). One per term
+ * per site, whatever its case.
+ */
+export const helpGlossaryTerms = pgTable(
+  'mocco_help_glossary_terms',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    term: text().notNull(),
+    rule: text().$type<GlossaryRule>().notNull(),
+    translations: jsonb().$type<Partial<Record<HelpLocale, string>>>().notNull().default({}),
+    note: text().notNull().default(''),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_glossary_terms_term_uq').on(t.projectId, sql`lower(${t.term})`),
+    foreignKey({
+      columns: [t.projectId],
+      foreignColumns: [helpSites.projectId],
+      name: 'mocco_help_glossary_terms_site_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_glossary_terms_rule_check', sql`${t.rule} IN (${sqlInList(Object.values(GlossaryRules))})`),
   ],
 );
 

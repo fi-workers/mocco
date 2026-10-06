@@ -39,6 +39,7 @@ import type { GateService } from '@backend/domain/governance/GateService';
 import type { RoleService } from '@backend/domain/governance/RoleService';
 import type { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
 import type { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
+import type { HelpGlossaryService } from '@backend/domain/helpcenter/HelpGlossaryService';
 import type { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import type { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
@@ -107,6 +108,7 @@ export interface TrpcDeps extends Services {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
+  helpGlossary: HelpGlossaryService;
   feedbackBoards: BoardService;
   feedbackPosts: PostService;
   feedbackVotes: VoteService;
@@ -176,6 +178,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         helpImages: deps.helpImages,
         helpTranslations: deps.helpTranslations,
         helpFeedback: deps.helpFeedback,
+        helpGlossary: deps.helpGlossary,
         feedbackBoards: deps.feedbackBoards,
         feedbackPosts: deps.feedbackPosts,
         feedbackVotes: deps.feedbackVotes,
@@ -239,6 +242,7 @@ export function productionServices(): TrpcDeps {
     helpImages: getHelpDomain().helpImages,
     helpTranslations: getHelpDomain().helpTranslations,
     helpFeedback: getHelpDomain().helpFeedback,
+    helpGlossary: getHelpDomain().helpGlossary,
     ...getFeedbackDomain(),
     ...getStatusDomain(),
     inbound: getInbound(),

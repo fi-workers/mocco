@@ -28,13 +28,14 @@ const SYSTEM_PROMPT = [
   'Placeholders like ⟦0⟧ stand for code, links, images and formatting: copy each one exactly once, unchanged.',
   'A pair like ⟦1⟧text⟦/1⟧ wraps text: translate the text inside and keep the pair around it, in the same nesting.',
   'Never add a URL. Keep product names and quoted button labels unless the target language has an established term.',
+  'When a glossary is given, translate each of its terms exactly as its target, in every segment that contains it.',
   'Write naturally for a reader of the target language.',
   'Answer with JSON only: {"segments": [{"id": "...", "text": "..."}]}, one entry per segment, with the same ids.',
 ].join(' ');
 
 const RETRY_NOTE = [
-  'Your previous answer for these segments was refused: a placeholder was lost, repeated or changed, or a URL was added.',
-  'Copy every placeholder exactly.',
+  'Your previous answer for these segments was refused: a placeholder was lost, repeated or changed, a URL was added, or a glossary term was not translated as its target.',
+  'Copy every placeholder exactly and use every glossary target as given.',
 ].join(' ');
 
 export class AiGatewayTranslator implements Translator {
@@ -59,6 +60,7 @@ export class AiGatewayTranslator implements Translator {
               sourceLanguage: input.sourceLocale,
               targetLanguage: input.targetLocale,
               segments: input.segments.map(({ id, text }) => ({ id, text })),
+              ...(input.glossary !== undefined && { glossary: input.glossary }),
             }),
           },
         ],

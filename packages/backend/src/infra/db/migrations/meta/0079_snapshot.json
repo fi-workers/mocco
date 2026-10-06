@@ -1,5 +1,5 @@
 {
-  "id": "a5aceafa-e674-4307-81b1-f505a26200ad",
+  "id": "c555efd5-ca99-4112-b1cc-8b9ef943019b",
   "prevId": "5f3a1473-c713-4219-a525-f369b64cb0c1",
   "version": "7",
   "dialect": "postgresql",
@@ -2178,12 +2178,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "author_end_user_id": {
-          "name": "author_end_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "vote_count": {
           "name": "vote_count",
           "type": "integer",
@@ -2406,10 +2400,6 @@
         "mocco_feedback_posts_comment_count_check": {
           "name": "mocco_feedback_posts_comment_count_check",
           "value": "\"mocco_feedback_posts\".\"comment_count\" >= 0"
-        },
-        "mocco_feedback_posts_author_check": {
-          "name": "mocco_feedback_posts_author_check",
-          "value": "(\"mocco_feedback_posts\".\"author_user_id\" IS NULL OR \"mocco_feedback_posts\".\"author_end_user_id\" IS NULL) AND (\"mocco_feedback_posts\".\"author_end_user_id\" IS NULL OR char_length(\"mocco_feedback_posts\".\"author_end_user_id\") BETWEEN 1 AND 255)"
         },
         "mocco_feedback_posts_merged_check": {
           "name": "mocco_feedback_posts_merged_check",
@@ -2739,28 +2729,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mocco_feedback_votes_pending_end_user_idx": {
-          "name": "mocco_feedback_votes_pending_end_user_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "end_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"mocco_feedback_votes\".\"state\" IN ('pending')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4733,6 +4701,119 @@
       },
       "isRLSEnabled": false
     },
+    "public.mocco_help_glossary_terms": {
+      "name": "mocco_help_glossary_terms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "term": {
+          "name": "term",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rule": {
+          "name": "rule",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "translations": {
+          "name": "translations",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mocco_help_glossary_terms_term_uq": {
+          "name": "mocco_help_glossary_terms_term_uq",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"term\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mocco_help_glossary_terms_site_fk": {
+          "name": "mocco_help_glossary_terms_site_fk",
+          "tableFrom": "mocco_help_glossary_terms",
+          "tableTo": "mocco_help_sites",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "project_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "mocco_help_glossary_terms_rule_check": {
+          "name": "mocco_help_glossary_terms_rule_check",
+          "value": "\"mocco_help_glossary_terms\".\"rule\" IN ('keep','fixed')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.mocco_help_node_translations": {
       "name": "mocco_help_node_translations",
       "schema": "",
@@ -5384,6 +5465,13 @@
           "notNull": true,
           "default": true
         },
+        "glossary_hash": {
+          "name": "glossary_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5567,6 +5655,19 @@
         },
         "proposal_source_hash": {
           "name": "proposal_source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "glossary_hash": {
+          "name": "glossary_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "proposal_glossary_hash": {
+          "name": "proposal_glossary_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": false

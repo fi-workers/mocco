@@ -5,6 +5,8 @@ import {
   articleCreateInputSchema,
   collectionInputSchema,
   draftInputSchema,
+  GlossaryLimits,
+  glossaryTermInputSchema,
   helpImageInputSchema,
   helpSiteInputSchema,
   helpLocaleSchema,
@@ -217,5 +219,45 @@ export const helpRouter = router({
     .mutation(
       async ({ ctx, input }) =>
         await ctx.helpTranslations.retranslate(input.workspaceId, input.projectId, ctx.session.user.id, input),
+    ),
+
+  /** The glossary: terms kept as written, and terms with a fixed translation per language. */
+  glossary: helpProcedure
+    .input(projectInput)
+    .query(async ({ ctx, input }) => await ctx.helpGlossary.list(input.workspaceId, input.projectId)),
+
+  addGlossaryTerm: helpProcedure
+    .input(projectInput.extend({ term: glossaryTermInputSchema }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpGlossary.addTerm(input.workspaceId, input.projectId, ctx.session.user.id, input.term),
+    ),
+
+  updateGlossaryTerm: helpProcedure
+    .input(projectInput.extend({ termId: z.uuid(), term: glossaryTermInputSchema }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpGlossary.updateTerm(
+          input.workspaceId,
+          input.projectId,
+          ctx.session.user.id,
+          input.termId,
+          input.term,
+        ),
+    ),
+
+  removeGlossaryTerm: helpProcedure
+    .input(projectInput.extend({ termId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.helpGlossary.removeTerm(input.workspaceId, input.projectId, ctx.session.user.id, input.termId);
+      return { ok: true } as const;
+    }),
+
+  /** Add or update many terms (a CSV import, parsed in the console); terms left out stay. */
+  importGlossary: helpProcedure
+    .input(projectInput.extend({ terms: z.array(glossaryTermInputSchema).min(1).max(GlossaryLimits.termsMax) }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpGlossary.importTerms(input.workspaceId, input.projectId, ctx.session.user.id, input.terms),
     ),
 });

@@ -2,6 +2,7 @@
 // binds the production deps, tests bind pglite.
 import { HelpAuthoringService } from '@backend/domain/helpcenter/HelpAuthoringService';
 import { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
+import { HelpGlossaryService } from '@backend/domain/helpcenter/HelpGlossaryService';
 import { HelpImageService } from '@backend/domain/helpcenter/HelpImageService';
 import { HelpImportService } from '@backend/domain/helpcenter/HelpImportService';
 import { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
@@ -25,6 +26,7 @@ export interface HelpDomain {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
+  helpGlossary: HelpGlossaryService;
 }
 
 /**
@@ -105,9 +107,18 @@ export function createHelpDomain(
     sites: helpSites,
     ...(deps.storage !== undefined && { storage: deps.storage }),
   });
+  const helpGlossary = new HelpGlossaryService({
+    db,
+    audit: deps.audit,
+    sites: helpSites,
+    onChanged: async (workspaceId, projectId, glossaryHash) => {
+      await helpTranslations.onGlossaryChanged(workspaceId, projectId, glossaryHash);
+    },
+  });
   return {
     helpSites,
     helpAuthoring,
+    helpGlossary,
     helpPublic: new HelpPublicReadService({ db }),
     helpImport,
     helpImages,

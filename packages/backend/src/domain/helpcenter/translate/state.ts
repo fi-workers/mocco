@@ -9,6 +9,10 @@
 // Invariant: a result never replaces the text of a `reviewed` translation. A person who
 // saves while a run is out wins; the run's text becomes a proposal, or is dropped when
 // the person's text already follows the current source.
+//
+// "Made from" is a pair: the published source's content hash and the article's glossary
+// hash in that language (translate/glossary.ts). A glossary edit that changes the second
+// makes a translation out of date the same way a source edit does.
 import { TranslationStates } from '@mocco/common/help';
 
 import type { TranslationState } from '@mocco/common/help';
@@ -18,8 +22,22 @@ export interface TranslationSnapshot {
   readonly state: TranslationState;
   readonly sourceHash: string | null;
   readonly proposalSourceHash: string | null;
+  readonly glossaryHash: string;
+  readonly proposalGlossaryHash: string | null;
   readonly claimedUntil: Date | null;
 }
+
+/** What a run translates from: the published source's hash and the article's glossary hash. */
+export interface TranslationBasis {
+  readonly sourceHash: string;
+  readonly glossaryHash: string;
+}
+
+const isTextFrom = (row: TranslationSnapshot, basis: TranslationBasis) =>
+  row.sourceHash === basis.sourceHash && row.glossaryHash === basis.glossaryHash;
+
+const isProposalFrom = (row: TranslationSnapshot, basis: TranslationBasis) =>
+  row.proposalSourceHash === basis.sourceHash && row.proposalGlossaryHash === basis.glossaryHash;
 
 export const ClaimDecisions = {
   /** Machine text replaces the current text: becomes `translating`, then `auto` or `failed`. */
@@ -33,10 +51,10 @@ export const ClaimDecisions = {
 } as const;
 export type ClaimDecision = (typeof ClaimDecisions)[keyof typeof ClaimDecisions];
 
-/** What a job run should do with a translation, given the published source's hash. */
+/** What a job run should do with a translation, given what it would translate from. */
 export function decideClaim(
   row: TranslationSnapshot | undefined,
-  sourceHash: string,
+  basis: TranslationBasis,
   now: Date,
   opts: { fresh?: boolean } = {},
 ): ClaimDecision {
@@ -47,11 +65,9 @@ export function decideClaim(
     return ClaimDecisions.translate;
   }
   if (row.state === TranslationStates.reviewed) {
-    return row.sourceHash === sourceHash || row.proposalSourceHash === sourceHash
-      ? ClaimDecisions.upToDate
-      : ClaimDecisions.propose;
+    return isTextFrom(row, basis) || isProposalFrom(row, basis) ? ClaimDecisions.upToDate : ClaimDecisions.propose;
   }
-  if (row.state === TranslationStates.auto && row.sourceHash === sourceHash && opts.fresh !== true) {
+  if (row.state === TranslationStates.auto && isTextFrom(row, basis) && opts.fresh !== true) {
     return ClaimDecisions.upToDate;
   }
   return ClaimDecisions.translate;
@@ -68,11 +84,11 @@ export const ResultTargets = {
 export type ResultTarget = (typeof ResultTargets)[keyof typeof ResultTargets];
 
 /** Where a finished run's text goes, given the row as it is now (a person may have saved meanwhile). */
-export function resultTarget(rowNow: TranslationSnapshot | undefined, sourceHash: string): ResultTarget {
+export function resultTarget(rowNow: TranslationSnapshot | undefined, basis: TranslationBasis): ResultTarget {
   if (rowNow?.state !== TranslationStates.reviewed) {
     return ResultTargets.current;
   }
-  return rowNow.sourceHash === sourceHash ? ResultTargets.discard : ResultTargets.proposal;
+  return isTextFrom(rowNow, basis) ? ResultTargets.discard : ResultTargets.proposal;
 }
 
 /** The state a run leaves behind when it stops without a result: an outage, the allowance, or a refused segment. */

@@ -286,6 +286,7 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
       helpTranslations: { grid: refuse, reviewByShortId: refuse },
+      helpGlossary: { list: refuse },
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },

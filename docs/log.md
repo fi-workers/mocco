@@ -1018,6 +1018,21 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/messenger.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/feedback-public-v1` (issue #174)
 
+## 2026-10-06 — Help center: glossary in the translation pipeline
+
+- Added the [glossary](./reference/help-center.md#glossary) (#214, backend and pipeline; the console page and CSV import
+  come next): `mocco_help_glossary_terms` (migration 0079) with `keep` and `fixed` rules, `HelpGlossaryService`, the
+  `help.*Glossary*` procedures and `mocco_help_sites.glossary_hash`. Kept terms are placeholders, so the validator refuses an
+  answer that drops one; fixed terms go to the translator with their batch and are checked in every answer.
+- Fixed #465's caveat: translation memory is now keyed with the fixed terms a segment contains, and a translation
+  records the article's glossary hash in its language. A glossary edit queues `help.retranslate-glossary`, which
+  re-translates only the segments containing a changed term, as a proposal on reviewed languages.
+- MCP: `mocco_help_glossary_list` (read-only); the changing `mocco_help_glossary_set` is named in the
+  [design](./specs/2026-09-24-help-center-design.md#mcp-tools-for-translation-review).
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
+  `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/help-glossary` (issue #214)
+
 ## 2026-10-06 — Feedback: posting, follows, similar posts, voting by email and unsubscribe links
 
 - Documented the second PR of #174 in the [feedback board model](./reference/feedback.md#the-public-v1-surface):
@@ -1030,7 +1045,7 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - [Unsubscribe links](./reference/feedback.md#unsubscribe-links): signed, in every feedback mail and its
   `List-Unsubscribe` header; `GET` asks, `POST` (the form or one click) unsubscribes, as the status subscribers' links
   do.
-- Migration 0079 adds `mocco_feedback_posts.author_end_user_id` (never with `author_user_id`, DB-checked) and a
+- Migration 0080 adds `mocco_feedback_posts.author_end_user_id` (never with `author_user_id`, DB-checked) and a
   partial index on pending votes.
 - The [public API reference](./reference/public-api.md#routes), the feature map and the
   [feedback design](./specs/2026-09-24-feedback-design.md#6-public-api--sdk-surface) say the same.

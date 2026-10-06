@@ -277,6 +277,8 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translatio
 | `mocco_help_translation_get` | Read: one article in one language, with the segment diff and whether a machine draft waits | `review` |
 | `mocco_help_translation_accept` | Change: accept the machine draft by its revision id | `acceptProposal` |
 | `mocco_help_translation_retranslate` | Change: ask the machine again; on a reviewed language the confirmation names that it replaces a person's text | `retranslate` |
+| `mocco_help_glossary_list` | Read: the glossary's terms, rules and translations, filtered by text, rule and language, paged, concise or detailed | `HelpGlossaryService.list` (#214, shipped with the glossary) |
+| `mocco_help_glossary_set` | Change: add, change or remove one term; the confirmation names the articles and languages it re-translates | `HelpGlossaryService.addTerm` / `updateTerm` / `removeTerm` |
 
 The two changing tools need a person's token, their own `help:write` scope, the workspace's opt-in and the confirmation round trip (`openDecision` / `confirmThenApply` in `transport/mcp/tools/deciding.ts`, as `mocco_feedback_post_set_status` uses them). The confirmation is bound to what the reviewer was shown: the proposal's revision id for accept, the translation's state for retranslate, so a draft or review that lands in between makes the answer no longer match. Saving a person's text stays in the console: an agent's text is a machine's, not a review.
 

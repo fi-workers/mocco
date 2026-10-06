@@ -1,3 +1,4 @@
+import { ArticleStatuses } from '@mocco/common/help';
 import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
@@ -52,6 +53,15 @@ export class HelpArticleRepo {
       .from(a)
       .where(and(eq(a.workspaceId, workspaceId), inArray(a.sectionId, [...sectionIds])))
       .orderBy(asc(a.position), asc(a.createdAt));
+  }
+
+  /** The project's published articles (with a published revision). */
+  async published(workspaceId: string, projectId: string): Promise<HelpArticleRow[]> {
+    const rows = await this.db
+      .select()
+      .from(a)
+      .where(and(eq(a.workspaceId, workspaceId), eq(a.projectId, projectId), eq(a.status, ArticleStatuses.published)));
+    return rows.filter(row => row.publishedRevisionId !== null);
   }
 
   /** An article placed last in its section. A clashing short id throws (unique index). */

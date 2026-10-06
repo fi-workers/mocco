@@ -89,6 +89,8 @@ export class HelpTranslationRepo {
           | 'reviewedByUserId'
           | 'proposalRevisionId'
           | 'proposalSourceHash'
+          | 'glossaryHash'
+          | 'proposalGlossaryHash'
           | 'claimedUntil'
         >
       >,
@@ -101,6 +103,8 @@ export class HelpTranslationRepo {
       ...(row.reviewedByUserId !== undefined && { reviewedByUserId: row.reviewedByUserId }),
       ...(row.proposalRevisionId !== undefined && { proposalRevisionId: row.proposalRevisionId }),
       ...(row.proposalSourceHash !== undefined && { proposalSourceHash: row.proposalSourceHash }),
+      ...(row.glossaryHash !== undefined && { glossaryHash: row.glossaryHash }),
+      ...(row.proposalGlossaryHash !== undefined && { proposalGlossaryHash: row.proposalGlossaryHash }),
       ...(row.claimedUntil !== undefined && { claimedUntil: row.claimedUntil }),
     };
     return expectOne(

@@ -83,6 +83,8 @@ export const AuditActions = {
   helpTranslationProposalAccepted: 'help.translation.proposal_accepted',
   /** A person asked the machine to translate a language again (confirmed when it replaces a reviewed one). */
   helpTranslationRetranslated: 'help.translation.retranslated',
+  /** A person added, changed, removed or imported help center glossary terms (#214). */
+  helpGlossaryChanged: 'help.glossary.changed',
   messengerGuestsChanged: 'messenger.guests.changed',
   /** Someone joined or left a project's round-robin rotation. */
   messengerInboxMemberAdded: 'messenger.inbox_member.added',
@@ -218,6 +220,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.helpTranslationReviewed]: 'Help translation reviewed',
   [AuditActions.helpTranslationProposalAccepted]: 'Help translation machine draft accepted',
   [AuditActions.helpTranslationRetranslated]: 'Help translation requested again',
+  [AuditActions.helpGlossaryChanged]: 'Help center glossary changed',
   [AuditActions.messengerGuestsChanged]: 'Messenger guest access changed',
   [AuditActions.messengerInboxMemberAdded]: 'Added to a messenger inbox',
   [AuditActions.messengerInboxMemberRemoved]: 'Removed from a messenger inbox',
