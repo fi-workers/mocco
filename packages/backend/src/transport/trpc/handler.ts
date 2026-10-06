@@ -25,7 +25,9 @@ import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
+import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
+import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
@@ -109,6 +111,8 @@ export interface TrpcDeps extends Services {
   feedbackPosts: PostService;
   feedbackVotes: VoteService;
   feedbackComments: CommentService;
+  feedbackSubscriptions: SubscriptionService;
+  feedbackMerges: MergeService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
@@ -176,6 +180,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         feedbackPosts: deps.feedbackPosts,
         feedbackVotes: deps.feedbackVotes,
         feedbackComments: deps.feedbackComments,
+        feedbackSubscriptions: deps.feedbackSubscriptions,
+        feedbackMerges: deps.feedbackMerges,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,
         statusMaintenances: deps.statusMaintenances,

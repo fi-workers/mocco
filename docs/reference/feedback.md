@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes and comments — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools with those planned next.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools with those planned next.
 type: reference
 status: active
 created: 2026-10-06
@@ -17,6 +17,8 @@ code_refs:
   - packages/backend/src/domain/feedback/PostService.ts
   - packages/backend/src/domain/feedback/VoteService.ts
   - packages/backend/src/domain/feedback/CommentService.ts
+  - packages/backend/src/domain/feedback/SubscriptionService.ts
+  - packages/backend/src/domain/feedback/MergeService.ts
   - packages/backend/src/domain/feedback/errors.ts
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
@@ -24,7 +26,7 @@ code_refs:
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes and comments, and the team's official responses and internal notes (#173). Subscriptions, merging duplicates, GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173). GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -43,6 +45,8 @@ Migration 0077 (#173) adds two more tables and two counters on posts, `vote_coun
 |---|---|
 | `mocco_feedback_votes` | A vote: `end_user_id`, `state` (`pending` or `counted`), `source` (`web`, `widget`, `staff`, `intake`, `merge`), `recorded_by_user_id` (the team member who recorded it for the end user), `counted_at` (set exactly when counted, DB-checked). Unique on `(post_id, end_user_id)` |
 | `mocco_feedback_comments` | A comment: `author_kind` (`staff` or `end_user`), `author_user_id` or `author_end_user_id`, `body` (up to 8,000 characters), `is_official`, `is_internal` |
+
+Migration 0078 (#173) adds `mocco_feedback_subscriptions` (`end_user_id`, `unsubscribed_at`; unique on `(post_id, end_user_id)`, the same composite FK) and two columns on posts: `merged_into_post_id` (an FK on `(merged_into_post_id, workspace_id)`, so a post can only be merged into one of its own workspace) and `merged_at`. A check holds both set or both null, and a post never merged into itself (see [Merging duplicates](#merging-duplicates)).
 
 An end user is the id the project's app knows them by: the user id it signs, the same id space as a messenger contact's `external_user_id`. End-user identity (#100) isn't built yet. When it gives these ids a directory, votes, comments and subscriptions point into it; until then the column carries the id itself (1 to 255 characters).
 
@@ -81,6 +85,14 @@ Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 
 Votes aren't audited: there are many, and they are the end users' own. The public `/v1` surface will take votes from the board and the widget, with the email confirmation flow; for now the team records a vote on an end user's behalf (`source: staff`).
 
+## Subscriptions
+
+`SubscriptionService` keeps who follows a post, to be told when it moves (the notification fan-out comes with the ship detector):
+
+- **Voting subscribes.** `VoteService.vote` inserts a subscription in the vote's transaction unless the end user has a row already.
+- **Opting out sticks.** `unsubscribe` sets `unsubscribed_at` and keeps the row, so voting again later doesn't resubscribe; `subscribe` clears it. Both are idempotent.
+- `list` returns a post's current subscribers, oldest first.
+
 ## Comments
 
 `CommentService` writes two kinds of comment:
@@ -90,13 +102,26 @@ Votes aren't audited: there are many, and they are the end users' own. The publi
 
 Reads come in two projections. `listForStaff` returns every comment, oldest first, internal notes included. `listForPublic` leaves internal notes out and returns only the id, the author kind, the end user's id on their own comments, the body, `isOfficial` and when, so no team member's id reaches the public board. `comment_count` counts public comments only, so the public count never gives away that a note exists.
 
+## Merging duplicates
+
+`MergeService.merge(source, target)` folds a duplicate into the post it repeats, both on one board:
+
+- **Votes move without double counting.** The source's votes are copied to the target as `merge` votes with `INSERT … ON CONFLICT (post_id, end_user_id)`: an end user who voted on both keeps one vote, counted if either of theirs was. The target's `vote_count` is then recounted from its rows.
+- **Subscribers move** the same way. A row the end user already has on the target wins, and opt-outs copy as opt-outs.
+- **No chains.** Posts merged into the source earlier now point at the target, so `merged_into_post_id` is always a post that isn't merged itself.
+- **The history stays.** The source keeps its own votes, comments, subscriptions and status history. It is closed, with a status-change row of reason `merge` (none when it was closed already), and `merged_into_post_id` and `merged_at` are set.
+- **Refusals.** Merging a merged post, or into one, is `FeedbackPostMergedError` (CONFLICT; it carries `intoPostId`). A post into itself, or into a post on another board, is `FeedbackMergeInvalidError` (BAD_REQUEST). Another project's post is NOT_FOUND.
+- **A merged post takes no more votes or subscriptions** (`FeedbackPostMergedError` with `intoPostId`, so the public surface can send the end user to the target). Comments and staff status changes still work.
+
+**Concurrency.** One transaction takes the `feedbackPost` advisory lock (`AdvisoryLockNamespaces.feedbackPost`) for both posts, then both rows `FOR UPDATE`, each in id order, so two merges sharing a post apply one after another and never deadlock. Votes and subscriptions lock their post row first (`lockLivePost`), so none can land on a post while its votes are being moved. Tests run four merges into one target at once (each voter counted once) and two crossing merges with votes arriving together (one merge wins, the other is refused, and the live post's count equals its counted votes).
+
 ## Audit
 
-`feedback.board.created`, `feedback.board.deleted`, and `feedback.post.status_changed` (with `from`, `to`, the board and the post number) are appended after their transaction commits. Category and post edits aren't audited.
+`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits. Category and post edits aren't audited.
 
 ## The feedback router
 
-`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError` and `FeedbackVoteNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError`, `FeedbackStatusUnchangedError` and `FeedbackStatusMovedError` are CONFLICT; `FeedbackOfficialInternalError` is BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
+`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError` and `FeedbackVoteNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError`, `FeedbackStatusUnchangedError`, `FeedbackStatusMovedError` and `FeedbackPostMergedError` are CONFLICT; `FeedbackOfficialInternalError` and `FeedbackMergeInvalidError` are BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
 
 | Procedure | Does |
 |---|---|
@@ -108,6 +133,8 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `setPostStatus` | The status change above; returns the post and the history row |
 | `votes`, `vote`, `unvote` | A post's votes, newest first, pending ones included; record an end user's vote on their behalf (it counts at once); take one back |
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
+| `subscribers` | A post's current subscribers, oldest first |
+| `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
 
 ## MCP tools
 
@@ -122,11 +149,10 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), four tools
 
 `mocco_feedback_post_set_status` has the locks of every changing MCP tool: the `feedback:write` scope (a token without it is challenged for it), the workspace's **Settings → Agents** opt-in, and a confirmation round trip that names the post, its status now and the status it would get. The signed confirmation records that `from` status, so a post moved by anyone before the answer is refused as a different change, and the tool passes `from` to `setStatus` so the service re-checks it under the post's lock. A second answer to the same confirmation finds the post moved already and writes nothing; asking for the status a post already has answers without asking. The change is the console's: a history row with reason `manual` and a `feedback.post.status_changed` audit entry naming the caller.
 
-Votes and comments (#173) get their tools in the next slice, over `VoteService` and `CommentService`:
+The rest of #173 gets its tools in the next slice, over `VoteService`, `CommentService` and `MergeService`:
 
 - `mocco_feedback_votes_list`: a post's votes, paged, concise or detailed.
 - `mocco_feedback_comments_list`: a post's comments as the team sees them, internal notes included, paged.
 - `mocco_feedback_comment_create`: comment as the caller, plainly, as the official response or as an internal note. It changes data, so it sits behind `feedback:write`, the opt-in and the confirmation round trip.
 - `mocco_feedback_post_vote`: record an end user's vote on their behalf, behind the same locks.
-
-Merging duplicates adds `mocco_feedback_post_merge`, a changing tool, in the slice after the merge itself.
+- `mocco_feedback_post_merge`: merge a duplicate into another post as the caller, behind the same locks, with a confirmation bound to both posts being unmerged when it was asked.

@@ -547,6 +547,13 @@
       "when": 1791273303831,
       "tag": "0077_chunky_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791276539909,
+      "tag": "0078_smart_the_twelve",
+      "breakpoints": true
     }
   ]
 }
