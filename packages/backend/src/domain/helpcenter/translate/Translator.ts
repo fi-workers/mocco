@@ -13,6 +13,11 @@ export interface TranslateSegmentsInput {
   sourceLocale: string;
   targetLocale: string;
   segments: readonly TranslatableSegment[];
+  /**
+   * Glossary terms these segments contain, each to be translated exactly as `target` (#214).
+   * Kept terms never appear: they are placeholders already.
+   */
+  glossary?: readonly { readonly term: string; readonly target: string }[];
   /** These segments' last answers were refused (a placeholder lost or a link added): ask more strictly. */
   isRetry?: boolean;
 }

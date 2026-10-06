@@ -317,6 +317,46 @@ describe('help router on pglite', () => {
     });
   });
 
+  describe('glossary', () => {
+    it('adds, changes, imports and removes terms for the project, and to no one else', async () => {
+      const owner = await setup('owner@example.com', 'acme');
+      const intruder = await setup('intruder@example.com', 'intruder');
+
+      const term = await owner.api.help.addGlossaryTerm({
+        ...owner.scope,
+        term: { term: 'widget', rule: 'fixed', translations: { de: 'Steuerelement' } },
+      });
+      await expect(
+        owner.api.help.addGlossaryTerm({ ...owner.scope, term: { term: 'Widget', rule: 'keep' } }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      await expect(
+        owner.api.help.addGlossaryTerm({ ...owner.scope, term: { term: 'gate', rule: 'fixed' } }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await owner.api.help.updateGlossaryTerm({
+        ...owner.scope,
+        termId: term.id,
+        term: { term: 'widget', rule: 'fixed', translations: { de: 'Anzeige' } },
+      });
+      await expect(
+        owner.api.help.importGlossary({ ...owner.scope, terms: [{ term: 'Mocco', rule: 'keep' }] }),
+      ).resolves.toEqual({ added: 1, changed: 0, unchanged: 0 });
+      const { terms } = await owner.api.help.glossary(owner.scope);
+
+      expect(terms.map(entry => [entry.term, entry.translations])).toEqual([
+        ['Mocco', {}],
+        ['widget', { de: 'Anzeige' }],
+      ]);
+      // Another workspace's member, with the owner's ids or their own project's.
+      await expect(intruder.api.help.glossary(owner.scope)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(intruder.api.help.removeGlossaryTerm({ ...intruder.scope, termId: term.id })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await owner.api.help.removeGlossaryTerm({ ...owner.scope, termId: term.id });
+      const after = await owner.api.help.glossary(owner.scope);
+      expect(after.terms).toHaveLength(1);
+    });
+  });
+
   describe('article images', () => {
     it('uploads a pasted PNG as a public help center object and returns its public URL', async () => {
       const { api, scope } = await setup('owner@example.com', 'acme');

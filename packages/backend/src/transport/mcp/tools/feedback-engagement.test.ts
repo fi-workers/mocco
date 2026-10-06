@@ -248,6 +248,7 @@ describe('mocco_feedback votes, comments and merging (pglite, over HTTP)', () =>
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
       helpTranslations: { grid: refuse, reviewByShortId: refuse },
+      helpGlossary: { list: refuse },
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: feedback.feedbackBoards,
       feedbackPosts: feedback.feedbackPosts,

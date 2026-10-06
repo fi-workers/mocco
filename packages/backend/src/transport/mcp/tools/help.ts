@@ -9,7 +9,11 @@
 // through `ProjectScope` — membership, the help center product, the project in that
 // workspace — with the caller's own id, and the service then reads only that project's
 // site. The paging here only narrows what the service returned; it decides nothing.
+//
+// `mocco_help_glossary_list` reads the glossary the translations follow (#214), over
+// `HelpGlossaryService.list`; changing it stays in the console.
 import {
+  GlossaryRules,
   HELP_LOCALES,
   helpLocaleSchema,
   SegmentChanges,
@@ -24,6 +28,7 @@ import { HelpNodeNotFoundError } from '@backend/domain/helpcenter/errors';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 
 import type { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
+import type { HelpGlossaryService } from '@backend/domain/helpcenter/HelpGlossaryService';
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
 import type { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
 import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectScope';
@@ -35,6 +40,8 @@ export interface HelpToolDeps {
   helpFeedback: Pick<HelpFeedbackService, 'helpfulness'>;
   /** The translations dashboard and one language's review: the console's reads. */
   helpTranslations: Pick<HelpTranslationService, 'grid' | 'reviewByShortId'>;
+  /** The glossary translations follow: the console's read. */
+  helpGlossary: Pick<HelpGlossaryService, 'list'>;
   projects: Pick<ProjectScope, 'resolve'>;
 }
 
@@ -140,10 +147,36 @@ const translationInput = z.object({
   ),
 });
 
+const glossaryInput = z.object({
+  workspaceId: workspaceArg,
+  projectId: projectArg,
+  query: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Only terms containing this text (case-insensitive), in the term or a translation.'),
+  rule: z
+    .enum([GlossaryRules.keep, GlossaryRules.fixed])
+    .optional()
+    .describe('`keep`: terms kept as written in every language. `fixed`: terms with one translation per language.'),
+  locale: helpLocaleSchema
+    .optional()
+    .describe('Only this language’s fixed translations (`ko`, `ja`, …); kept terms are listed either way.'),
+  limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_TRANSLATIONS_LIMIT),
+  offset: z.number().int().min(0).default(0).describe("Paging: the previous answer's `nextOffset`, as it was given."),
+  responseFormat: responseFormatArg(
+    'each term, its rule and its fixed translations',
+    "adds each term's id, note and when it last changed",
+  ),
+});
+
 export type SearchHelpArticlesArgs = z.infer<typeof searchInput>;
 export type GetHelpArticleArgs = z.infer<typeof readInput>;
 export type ListHelpTranslationsArgs = z.infer<typeof translationsInput>;
 export type GetHelpTranslationArgs = z.infer<typeof translationInput>;
+export type ListHelpGlossaryArgs = z.infer<typeof glossaryInput>;
 
 const resolveHelpProject = async (deps: HelpToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
   await deps.projects.resolve(userId, asked, Products.helpcenter);
@@ -304,7 +337,54 @@ export async function getHelpTranslation(deps: HelpToolDeps, args: GetHelpTransl
   };
 }
 
+export async function listHelpGlossary(deps: HelpToolDeps, args: ListHelpGlossaryArgs, userId: string) {
+  const scope = await resolveHelpProject(deps, userId, args);
+  const { terms } = await deps.helpGlossary.list(scope.workspaceId, scope.projectId);
+  const query = args.query?.toLowerCase();
+  const { locale } = args;
+  const matching = terms
+    .map(term => ({
+      ...term,
+      translations:
+        locale === undefined
+          ? term.translations
+          : Object.fromEntries(Object.entries(term.translations).filter(([key]) => key === locale)),
+    }))
+    .filter(
+      term =>
+        (args.rule === undefined || term.rule === args.rule) &&
+        (locale === undefined || term.rule === GlossaryRules.keep || Object.keys(term.translations).length > 0) &&
+        (query === undefined ||
+          [term.term, ...Object.values(term.translations)].join('\n').toLowerCase().includes(query)),
+    );
+  const page = matching.slice(args.offset, args.offset + args.limit);
+  const isDetailed = args.responseFormat === 'detailed';
+  return {
+    total: matching.length,
+    terms: page.map(term => ({
+      term: term.term,
+      rule: term.rule,
+      ...(term.rule === GlossaryRules.fixed && { translations: term.translations }),
+      ...(isDetailed && { id: term.id, note: term.note, updatedAt: term.updatedAt }),
+    })),
+    // Present when there is more: pass it back as `offset`.
+    ...(args.offset + page.length < matching.length && { nextOffset: args.offset + page.length }),
+  };
+}
+
 export function registerHelpTools(server: McpServer, deps: HelpToolDeps): void {
+  server.registerTool(
+    'mocco_help_glossary_list',
+    {
+      title: 'List the help center glossary',
+      description:
+        "A project's help center glossary, which every translation follows: terms kept as written in every language (product names, UI labels) and terms translated one fixed way per language, filtered by text, rule and language, paged. Read-only: changing the glossary stays in the console.",
+      inputSchema: glossaryInput,
+      annotations: { readOnlyHint: true },
+    },
+    async (args, ctx) => asJson(await listHelpGlossary(deps, args, userIdOf(ctx))),
+  );
+
   server.registerTool(
     'mocco_help_translations_list',
     {

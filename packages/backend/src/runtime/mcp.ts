@@ -56,6 +56,7 @@ export function getMcpHandler(): McpHttpHandler {
       helpPublic: getHelpDomain().helpPublic,
       helpFeedback: getHelpDomain().helpFeedback,
       helpTranslations: getHelpDomain().helpTranslations,
+      helpGlossary: getHelpDomain().helpGlossary,
       messengerInbox: getMessengerDomain().inbox,
       feedbackBoards: getFeedbackDomain().feedbackBoards,
       feedbackPosts: getFeedbackDomain().feedbackPosts,

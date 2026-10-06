@@ -2,11 +2,14 @@
 // translator in batches. Each answer is checked per segment (markdown/validate.ts); a
 // refused segment is asked again, more strictly, a bounded number of times. Accepted
 // translations are handed back after every batch, so a run that stops halfway (an
-// outage, a timeout) keeps what it already paid for.
+// outage, a timeout) keeps what it already paid for. The glossary's fixed terms go with
+// each batch, and an answer that doesn't use one is refused like a broken placeholder.
 import { segmentProblem } from '@backend/domain/helpcenter/markdown/validate';
+import { fixedIn, fixedProblem } from '@backend/domain/helpcenter/translate/glossary';
 import { TranslationRejectedError } from '@backend/domain/helpcenter/translate/Translator';
 
 import type { Segment } from '@backend/domain/helpcenter/markdown/segment';
+import type { LocaleGlossary } from '@backend/domain/helpcenter/translate/glossary';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 
 /** Tries per segment: the first ask and two stricter retries. */
@@ -61,7 +64,20 @@ interface TranslateRequest {
   translator: Translator;
   sourceLocale: string;
   targetLocale: string;
+  /** The target language's glossary; its fixed terms are checked in every answer. */
+  glossary?: LocaleGlossary;
 }
+
+/** The fixed terms a batch contains, each once. */
+const glossaryOf = (batch: readonly Segment[], glossary: LocaleGlossary | undefined) => {
+  if (glossary === undefined) {
+    return [];
+  }
+  // Only fixed terms are listed, so the glossary's own order dedupes them.
+  return glossary.fixed.filter(fixed =>
+    batch.some(({ text }) => fixedIn({ keep: [], fixed: [fixed] }, text).length > 0),
+  );
+};
 
 /** One call: each answer of the batch accepted or refused. Throws an outage. */
 async function askBatch(
@@ -70,11 +86,13 @@ async function askBatch(
   isRetry: boolean,
 ): Promise<{ accepted: { hash: string; text: string }[]; refused: Refusal[] }> {
   let answers: Map<string, string>;
+  const glossary = glossaryOf(batch, request.glossary);
   try {
     const answered = await request.translator.translateSegments({
       sourceLocale: request.sourceLocale,
       targetLocale: request.targetLocale,
       segments: batch.map(({ id, text }) => ({ id, text })),
+      ...(glossary.length > 0 && { glossary }),
       ...(isRetry && { isRetry: true }),
     });
     answers = new Map(answered.map(({ id, text }) => [id, text]));
@@ -84,9 +102,12 @@ async function askBatch(
     }
     return { accepted: [], refused: batch.map(segment => ({ segment, problem: error.message })) };
   }
+  const problemOf = (segment: Segment, text: string) =>
+    segmentProblem(segment, text) ??
+    (request.glossary === undefined ? null : fixedProblem(segment, text, request.glossary));
   const checked = batch.map(segment => {
     const text = answers.get(segment.id);
-    return { segment, text, problem: text === undefined ? 'no translation came back' : segmentProblem(segment, text) };
+    return { segment, text, problem: text === undefined ? 'no translation came back' : problemOf(segment, text) };
   });
   return {
     accepted: checked.flatMap(({ segment, text, problem }) =>
