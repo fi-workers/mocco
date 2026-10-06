@@ -706,3 +706,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   build output as the trade-off and the options not taken.
 - Docs touched: `reference/env.md`, `log.md`
 - Source: branch `perf/cold-start` (issue #419)
+
+## 2026-10-06 — App-version approvals are labeled, and agents see the labels
+
+- The approvals reference's "Subject labels" table names the `ota.version_policy` labeler: the store app, as
+  "<name> (<platform>)", read through the project domain in one query, so Home shows "QA App · Shopper (iOS)" and a
+  listing stays at a fixed number of queries. A new "MCP surface" section says `mocco_approvals_search` returns
+  `subjectLabel` too. The version policy reference, the MCP connect guide's tool table and the customer Home guide say so.
+- Docs touched: `reference/approvals.md`, `reference/ota-version-policy.md`, `customer/mcp/connect.md`,
+  `customer/start/workspace-and-projects.md`, `log.md`
+- Source: branch `feat/approval-labels-app-version` (#451)

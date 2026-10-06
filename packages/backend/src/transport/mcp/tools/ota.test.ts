@@ -173,7 +173,7 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(f.t.db) });
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
-      approvals: { list: refuse, get: refuse, vote: refuse },
+      approvals: { listLabeled: refuse, get: refuse, vote: refuse },
       gates: { getPending: refuse, resume: refuse },
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
       scope,

@@ -45,9 +45,11 @@ States: `pending` → `approved` \| `rejected` \| `expired` \| `superseded`. All
 |---|---|---|
 | `flags.changeset`, `flags.change_gate`, `flags.kill` | `FlagGovernanceService.labelApprovalSubjects` (`action.environmentId`) | the environment's name: `Production` |
 | `ota.channel_policy`, `ota.channel_change` | `OtaHostingService.labelApprovalSubjects` (`subject_id`) | `<name> channel`: `production channel` |
-| `ota.version_policy` | none yet | `null` |
+| `ota.version_policy` | `VersionPolicyService.labelApprovalSubjects` (`subject_id`, the store app, read through `ProjectService.listAppsByIds`) | `<name> (<platform>)`: `Shopper (iOS)` |
 
-Home shows the label after the project's name ("QA App · Production"). Only subjects in the request's own workspace are named.
+A labeler is registered by the composition root that owns the subject type, next to its handler, even when the subject's row belongs to another domain: the version policy's app is a project app, so the OTA labeler reads it through the project domain's service rather than its table.
+
+Home shows the label after the project's name ("QA App · Production"), and `mocco_approvals_search` returns it as `subjectLabel` (see [MCP surface](#mcp-surface)). Only subjects in the request's own workspace are named.
 
 ## Rules
 
@@ -71,3 +73,7 @@ Home shows the label after the project's name ("QA App · Production"). Only sub
 ## tRPC surface
 
 `approval.list | get | vote`, all workspace-scoped (a non-member gets `NOT_FOUND`). `list` returns each request with its `subjectLabel` (`listLabeled`). There is no `create`: requests are opened by product domains through `ApprovalService.request`, never directly by a client.
+
+## MCP surface
+
+`mocco_approvals_search | get | vote` (`transport/mcp/tools/approvals.ts`). `search` lists through `listLabeled`, like `approval.list`, so each request carries `subjectLabel` next to its opaque `subject: { type, id }` at the same fixed number of queries. `get` returns one request with its pinned `action`, requirements and votes; `vote` is the deciding tool. Customer setup: [Connect Mocco to your agent](../customer/mcp/connect.md).

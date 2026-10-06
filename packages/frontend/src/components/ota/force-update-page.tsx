@@ -1,6 +1,6 @@
 import { ApprovalKinds, ApprovalStates } from '@mocco/common/governance';
 import { OtaApprovalSubjects, VersionPolicyOutcomes } from '@mocco/common/ota';
-import { AppPlatforms } from '@mocco/common/project';
+import { AppPlatforms, appPlatformLabels } from '@mocco/common/project';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
@@ -25,10 +25,6 @@ interface Props {
 }
 
 const STORE_PLATFORMS = new Set<string>([AppPlatforms.ios, AppPlatforms.android]);
-const platformLabels: Partial<Record<string, string>> = {
-  [AppPlatforms.ios]: 'iOS',
-  [AppPlatforms.android]: 'Android',
-};
 
 /** The store link the version check answers with when the policy sets none (mirrors the server). */
 function defaultStoreUrl(app: ProjectAppDto): string | null {
@@ -219,7 +215,7 @@ export default function ForceUpdatePage({ workspaceId, projectId }: Props) {
                 ? 'border-foreground bg-foreground text-background'
                 : 'border-border text-muted-foreground hover:text-foreground',
             )}>
-            {app.name} <span className="opacity-70">· {platformLabels[app.platform]}</span>
+            {app.name} <span className="opacity-70">· {appPlatformLabels[app.platform]}</span>
           </Link>
         ))}
       </nav>

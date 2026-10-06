@@ -126,6 +126,10 @@ export function createOtaDomain(
   deps.approvals.registerHandler(OtaApprovalSubjects.versionPolicy, async request => {
     await versionPolicies.applyApproved(request);
   });
+  deps.approvals.registerLabeler(
+    [OtaApprovalSubjects.versionPolicy],
+    async (workspaceId, requests) => await versionPolicies.labelApprovalSubjects(workspaceId, requests),
+  );
   const hosting = new OtaHostingService({
     apps: new OtaAppRepo(db),
     channels: new OtaChannelRepo(db),

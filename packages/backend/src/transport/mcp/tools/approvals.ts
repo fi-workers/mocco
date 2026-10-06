@@ -37,7 +37,7 @@ import type { DecidingToolDeps } from '@backend/transport/mcp/tools/deciding';
 import type { CallToolResult, InputRequiredResult, McpServer, ServerContext } from '@modelcontextprotocol/server';
 
 export interface ApprovalToolDeps extends DecidingToolDeps {
-  approvals: Pick<ApprovalService, 'list' | 'get' | 'vote'>;
+  approvals: Pick<ApprovalService, 'listLabeled' | 'get' | 'vote'>;
 }
 
 const searchInput = z.object({
@@ -59,7 +59,7 @@ export type GetApprovalArgs = z.infer<typeof readInput>;
 
 export async function searchApprovals(deps: ApprovalToolDeps, args: SearchApprovalsArgs, userId: string) {
   const workspace = await deps.scope.resolve(userId, args.workspaceId);
-  const requests = await deps.approvals.list(workspace, {
+  const requests = await deps.approvals.listLabeled(workspace, {
     state: args.state,
     ...(args.subjectType !== undefined && { subjectType: args.subjectType }),
   });
@@ -69,6 +69,9 @@ export async function searchApprovals(deps: ApprovalToolDeps, args: SearchApprov
       kind: request.kind,
       projectId: request.projectId,
       subject: { type: request.subjectType, id: request.subjectId },
+      // What the subject is, named by the product that owns it ("Production", "production
+      // channel", "Shopper (iOS)"); null when none names it.
+      subjectLabel: request.subjectLabel,
       state: request.state,
       createdAt: request.createdAt,
       expiresAt: request.expiresAt,

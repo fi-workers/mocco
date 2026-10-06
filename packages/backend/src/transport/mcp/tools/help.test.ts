@@ -180,7 +180,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(t.db) });
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
-      approvals: { list: refuse, get: refuse, vote: refuse },
+      approvals: { listLabeled: refuse, get: refuse, vote: refuse },
       gates: { getPending: refuse, resume: refuse },
       flags: { listFlags: refuse, listEnvironments: refuse, history: refuse },
       otaHosting: { listApps: refuse, requireApp: refuse, listChannels: refuse },
