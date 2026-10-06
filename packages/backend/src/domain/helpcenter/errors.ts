@@ -85,3 +85,27 @@ export class TranslationOverwriteRequiresConfirmationError extends BadRequestErr
     this.name = 'TranslationOverwriteRequiresConfirmationError';
   }
 }
+
+/** A glossary term that isn't in the project's help center — NOT_FOUND. */
+export class HelpGlossaryTermNotFoundError extends NotFoundError {
+  constructor(termId: string, options?: ErrorOptions) {
+    super(`No glossary term ${termId}`, options);
+    this.name = 'HelpGlossaryTermNotFoundError';
+  }
+}
+
+/** The glossary already has the term, in some case — CONFLICT. */
+export class HelpGlossaryTermExistsError extends ConflictError {
+  constructor(term: string, options?: ErrorOptions) {
+    super(`The glossary already has "${term}"`, options);
+    this.name = 'HelpGlossaryTermExistsError';
+  }
+}
+
+/** The glossary would hold more terms than a help center may have — BAD_REQUEST. */
+export class HelpGlossaryFullError extends BadRequestError {
+  constructor(max: number, options?: ErrorOptions) {
+    super(`A help center's glossary holds up to ${String(max)} terms`, options);
+    this.name = 'HelpGlossaryFullError';
+  }
+}

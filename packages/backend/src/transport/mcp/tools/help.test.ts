@@ -58,6 +58,7 @@ type Row = Record<string, unknown>;
 const HELP_TOOLS = [
   'mocco_help_articles_get',
   'mocco_help_articles_search',
+  'mocco_help_glossary_list',
   'mocco_help_translation_get',
   'mocco_help_translations_list',
 ];
@@ -193,6 +194,12 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
 
     const other = await writeSite(theirs, `oth${randomUUID().slice(0, 6)}`);
     ({ shortId: theirArticle } = await other.write('Their secret widget', 'Shh.', true));
+    await help.helpGlossary.importTerms(mine.workspaceId, mine.projectId, ada, [
+      { term: 'ShowYourTime', rule: 'keep', note: 'The product name' },
+      { term: 'widget', rule: 'fixed', translations: { de: 'Steuerelement' } },
+      { term: 'workspace', rule: 'fixed', translations: { de: 'Arbeitsbereich' } },
+    ]);
+    await help.helpGlossary.addTerm(theirs.workspaceId, theirs.projectId, ada, { term: 'SecretName', rule: 'keep' });
 
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(t.db) });
     handler = createMcpHttpHandler({
@@ -215,6 +222,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       helpPublic: help.helpPublic,
       helpFeedback: help.helpFeedback,
       helpTranslations: help.helpTranslations,
+      helpGlossary: help.helpGlossary,
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
@@ -370,6 +378,36 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
         true,
       ]);
       expect([textOf(foreignList), textOf(foreignGet), textOf(crossed)].join(' ')).not.toContain('secret');
+    });
+  });
+
+  describe('mocco_help_glossary_list', () => {
+    it('lists the glossary concise or detailed, filtered by rule, language and text, paged', async () => {
+      const all = bodyOf(await call('mocco_help_glossary_list', {}));
+      const fixed = bodyOf(await call('mocco_help_glossary_list', { rule: 'fixed', limit: 1 }));
+      const found = bodyOf(await call('mocco_help_glossary_list', { query: 'steuer', responseFormat: 'detailed' }));
+
+      expect(all).toEqual({
+        total: 3,
+        terms: [
+          { term: 'ShowYourTime', rule: 'keep' },
+          { term: 'widget', rule: 'fixed', translations: { de: 'Steuerelement' } },
+          { term: 'workspace', rule: 'fixed', translations: { de: 'Arbeitsbereich' } },
+        ],
+      });
+      expect(fixed).toEqual({
+        total: 2,
+        terms: [{ term: 'widget', rule: 'fixed', translations: { de: 'Steuerelement' } }],
+        nextOffset: 1,
+      });
+      expect(found).toMatchObject({ total: 1, terms: [{ term: 'widget', id: expect.any(String), note: '' }] });
+    });
+
+    it('never reads another workspace’s glossary', async () => {
+      const foreign = await call('mocco_help_glossary_list', { ...theirs });
+
+      expect(foreign.result?.isError).toBe(true);
+      expect(textOf(foreign)).not.toContain('SecretName');
     });
   });
 

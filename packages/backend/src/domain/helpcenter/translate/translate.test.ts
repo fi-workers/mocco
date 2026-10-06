@@ -17,11 +17,15 @@ import type { TranslationState } from '@mocco/common/help';
 const NOW = new Date('2026-10-06T09:00:00Z');
 const LATER = new Date('2026-10-06T09:05:00Z');
 const EARLIER = new Date('2026-10-06T08:55:00Z');
+/** The published source a run translates from, with no glossary term in it. */
+const NEW = { sourceHash: 'new', glossaryHash: '' };
 
 const row = (state: TranslationState, extra: Partial<TranslationSnapshot> = {}): TranslationSnapshot => ({
   state,
   sourceHash: 'old',
   proposalSourceHash: null,
+  glossaryHash: '',
+  proposalGlossaryHash: null,
   claimedUntil: null,
   ...extra,
 });
@@ -35,16 +39,30 @@ describe('translation state machine', () => {
     ['auto, stale', row('auto'), ClaimDecisions.translate],
     ['reviewed, made from this source', row('reviewed', { sourceHash: 'new' }), ClaimDecisions.upToDate],
     ['reviewed, stale', row('reviewed'), ClaimDecisions.propose],
-    ['reviewed, stale, proposal ready', row('reviewed', { proposalSourceHash: 'new' }), ClaimDecisions.upToDate],
+    [
+      'reviewed, stale, proposal ready',
+      row('reviewed', { proposalSourceHash: 'new', proposalGlossaryHash: '' }),
+      ClaimDecisions.upToDate,
+    ],
+    [
+      'auto, made under another glossary',
+      row('auto', { sourceHash: 'new', glossaryHash: 'g0' }),
+      ClaimDecisions.translate,
+    ],
+    [
+      'reviewed, made under another glossary',
+      row('reviewed', { sourceHash: 'new', glossaryHash: 'g0' }),
+      ClaimDecisions.propose,
+    ],
     ['held by another run', row('auto', { claimedUntil: LATER }), ClaimDecisions.busy],
     ['held by a run that died', row('translating', { claimedUntil: EARLIER }), ClaimDecisions.translate],
   ])('claims %s → %s', (_name, snapshot, decision) => {
-    expect(decideClaim(snapshot, 'new', NOW)).toBe(decision);
+    expect(decideClaim(snapshot, NEW, NOW)).toBe(decision);
   });
 
   it('translates an up-to-date auto translation again only when asked to start fresh', () => {
-    expect(decideClaim(row('auto', { sourceHash: 'new' }), 'new', NOW, { fresh: true })).toBe(ClaimDecisions.translate);
-    expect(decideClaim(row('reviewed', { sourceHash: 'new' }), 'new', NOW, { fresh: true })).toBe(
+    expect(decideClaim(row('auto', { sourceHash: 'new' }), NEW, NOW, { fresh: true })).toBe(ClaimDecisions.translate);
+    expect(decideClaim(row('reviewed', { sourceHash: 'new' }), NEW, NOW, { fresh: true })).toBe(
       ClaimDecisions.upToDate,
     );
   });
@@ -53,8 +71,13 @@ describe('translation state machine', () => {
     ['still translating', row('translating'), ResultTargets.current],
     ['a person saved from this source meanwhile', row('reviewed', { sourceHash: 'new' }), ResultTargets.discard],
     ['reviewed and stale', row('reviewed'), ResultTargets.proposal],
+    [
+      'reviewed under another glossary',
+      row('reviewed', { sourceHash: 'new', glossaryHash: 'g0' }),
+      ResultTargets.proposal,
+    ],
   ])('lands a result when %s → %s (never over reviewed text)', (_name, snapshot, target) => {
-    expect(resultTarget(snapshot, 'new')).toBe(target);
+    expect(resultTarget(snapshot, NEW)).toBe(target);
   });
 
   it('leaves the state it found when a run stops without a result', () => {

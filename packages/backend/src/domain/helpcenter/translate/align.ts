@@ -4,12 +4,16 @@
 // what they hold: the same link target, the same code), and the pair is kept only if it
 // validates against the source segment. A reordered or restructured translation keeps
 // what lines up and drops the rest, so the machine never reuses a sentence it can't place.
+// Both sides are protected with the glossary's kept terms and keyed like the machine's
+// entries (translate/glossary.ts), so a run finds the person's sentence under the same key.
 import { PLACEHOLDER } from '@backend/domain/helpcenter/markdown/protect';
 import { segmentMarkdown, segmentTitle } from '@backend/domain/helpcenter/markdown/segment';
 import { segmentProblem } from '@backend/domain/helpcenter/markdown/validate';
+import { EMPTY_GLOSSARY, memoryKey } from '@backend/domain/helpcenter/translate/glossary';
 
 import type { Slot } from '@backend/domain/helpcenter/markdown/protect';
 import type { Segment } from '@backend/domain/helpcenter/markdown/segment';
+import type { LocaleGlossary } from '@backend/domain/helpcenter/translate/glossary';
 
 /** What a placeholder holds, minus anything a translation may change (wrapped text, alt text). */
 function slotKey(slot: Slot): string {
@@ -53,14 +57,16 @@ function renumbered(source: Segment, translated: Segment): string | null {
 export function alignedSegments(
   source: { title: string; body: string },
   translation: { title: string; body: string },
+  glossary: LocaleGlossary = EMPTY_GLOSSARY,
 ): { sourceHash: string; text: string }[] {
-  const sourceBody = segmentMarkdown(source.body);
-  const translatedBody = segmentMarkdown(translation.body);
+  const options = { keep: glossary.keep };
+  const sourceBody = segmentMarkdown(source.body, options);
+  const translatedBody = segmentMarkdown(translation.body, options);
   const isBodyAligned =
     sourceBody.length === translatedBody.length &&
     sourceBody.every((segment, i) => translatedBody[i]?.kind === segment.kind);
   const pairs: [Segment, Segment][] = [
-    [segmentTitle(source.title), segmentTitle(translation.title)],
+    [segmentTitle(source.title, options), segmentTitle(translation.title, options)],
     ...(isBodyAligned
       ? sourceBody.map((segment, i): [Segment, Segment] => [segment, translatedBody[i] ?? segment])
       : []),
@@ -70,6 +76,6 @@ export function alignedSegments(
     if (text === null || segmentProblem(from, text) !== null) {
       return [];
     }
-    return [{ sourceHash: from.hash, text }];
+    return [{ sourceHash: memoryKey(from, glossary), text }];
   });
 }

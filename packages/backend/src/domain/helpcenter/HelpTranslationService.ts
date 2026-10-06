@@ -16,6 +16,13 @@
 // the machine draft beside a stale reviewed one, or asks the machine again, which replaces a
 // reviewed text only when confirmed. Each is audited, and the text lands as a new revision,
 // so history keeps every person's and machine's version.
+//
+// Glossary (#214): kept terms are protected as placeholders, fixed terms go with each
+// batch and are checked in every answer, and translation memory is keyed with the fixed
+// terms a segment contains (translate/glossary.ts). A translation records the article's
+// glossary hash in its language; a glossary edit queues a run for each translation whose
+// hash it changed (`retranslateForGlossary`), and that run sends only the segments that
+// contain a changed term.
 import { AuditActions } from '@mocco/common/audit';
 import {
   ArticleStatuses,
@@ -33,10 +40,11 @@ import {
   HelpNothingToPublishError,
   TranslationOverwriteRequiresConfirmationError,
 } from '@backend/domain/helpcenter/errors';
-import { translateHelpArticle } from '@backend/domain/helpcenter/jobs';
+import { retranslateHelpGlossary, translateHelpArticle } from '@backend/domain/helpcenter/jobs';
 import { reassemble, reassembleTitle } from '@backend/domain/helpcenter/markdown/reassemble';
 import { segmentMarkdown, segmentTitle, TITLE_SEGMENT_ID } from '@backend/domain/helpcenter/markdown/segment';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
+import { HelpGlossaryTermRepo } from '@backend/domain/helpcenter/repos/glossary-term.repo';
 import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import { HelpSegmentMemoryRepo } from '@backend/domain/helpcenter/repos/segment-memory.repo';
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
@@ -45,6 +53,12 @@ import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translatio
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { alignedSegments } from '@backend/domain/helpcenter/translate/align';
 import { segmentDiff } from '@backend/domain/helpcenter/translate/diff';
+import {
+  articleGlossaryHash,
+  glossaryFor,
+  keyedSegments,
+  memoryKey,
+} from '@backend/domain/helpcenter/translate/glossary';
 import { translationGrid } from '@backend/domain/helpcenter/translate/grid';
 import { charactersOf, distinctByHash, translateMisses } from '@backend/domain/helpcenter/translate/pipeline';
 import {
@@ -62,9 +76,10 @@ import type { Segment } from '@backend/domain/helpcenter/markdown/segment';
 import type { HelpArticleRow, HelpRevisionRow } from '@backend/domain/helpcenter/repos/article.repo';
 import type { HelpNode } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import type { HelpTranslationRow } from '@backend/domain/helpcenter/repos/translation.repo';
+import type { LocaleGlossary } from '@backend/domain/helpcenter/translate/glossary';
 import type { GridArticle } from '@backend/domain/helpcenter/translate/grid';
 import type { MachineResult } from '@backend/domain/helpcenter/translate/pipeline';
-import type { TranslationOutcome } from '@backend/domain/helpcenter/translate/state';
+import type { TranslationBasis, TranslationOutcome } from '@backend/domain/helpcenter/translate/state';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
@@ -91,6 +106,12 @@ const textOf = (revision: HelpRevisionRow | undefined) =>
 
 /** A revision's segments: its title, then its body's, in order. */
 const segmentsOf = (revision: HelpRevisionRow) => [segmentTitle(revision.title), ...segmentMarkdown(revision.bodyMd)];
+
+/** What a run into a language translates from: the source, and the glossary terms that apply to it there. */
+const basisOf = (source: HelpRevisionRow, glossary: LocaleGlossary): TranslationBasis => ({
+  sourceHash: source.contentHash,
+  glossaryHash: articleGlossaryHash(glossary, segmentsOf(source)),
+});
 
 /** How long a run without a job deadline holds a translation. */
 const DEFAULT_CLAIM_MS = 10 * 60_000;
@@ -141,7 +162,7 @@ export class HelpTranslationService {
    */
   private async queueLocale(
     key: TranslationKey,
-    sourceHash: string,
+    basis: TranslationBasis,
     opts: { force?: boolean; fresh?: boolean } = {},
   ): Promise<void> {
     const { queue } = this.deps;
@@ -159,15 +180,21 @@ export class HelpTranslationService {
       translateHelpArticle,
       { ...key, ...(opts.fresh === true && { fresh: true }) },
       {
-        dedupeKey: `${key.articleId}:${key.locale}:${sourceHash}${opts.fresh === true ? ':fresh' : ''}`,
+        dedupeKey: `${key.articleId}:${key.locale}:${basis.sourceHash}:${basis.glossaryHash}${opts.fresh === true ? ':fresh' : ''}`,
         workspaceId: key.workspaceId,
       },
     );
     queue.kick(job.id);
   }
 
+  /** The project's glossary, as each language's runs follow it. */
+  private async glossaryOf(workspaceId: string, projectId: string): Promise<(locale: string) => LocaleGlossary> {
+    const terms = await new HelpGlossaryTermRepo(this.deps.db).list(workspaceId, projectId);
+    return locale => glossaryFor(terms, locale);
+  }
+
   /** The collection and section titles above the article that have no translation into `locale`, or an old one. */
-  private async nodeTitles(article: HelpArticleRow, locale: string): Promise<NodeTitle[]> {
+  private async nodeTitles(article: HelpArticleRow, locale: string, keep: readonly string[]): Promise<NodeTitle[]> {
     const { workspaceId } = article;
     const found = await new HelpTreeRepo(this.deps.db).findSection(workspaceId, article.projectId, article.sectionId);
     if (found === undefined) {
@@ -191,16 +218,20 @@ export class HelpTranslationService {
     ];
     return nodes
       .filter(({ title, current }) => current !== title)
-      .map(({ node, title }, i) => ({ node, title, segment: { ...segmentTitle(title), id: `node${String(i)}` } }));
+      .map(({ node, title }, i) => ({
+        node,
+        title,
+        segment: { ...segmentTitle(title, { keep }), id: `node${String(i)}` },
+      }));
   }
 
   /** Take the translation for a run, under its lock. */
-  private async claim(key: TranslationKey, sourceHash: string, until: Date, isFresh: boolean) {
+  private async claim(key: TranslationKey, basis: TranslationBasis, until: Date, isFresh: boolean) {
     return await this.deps.db.transaction(async tx => {
       const repo = new HelpTranslationRepo(tx);
       await repo.lock(key.articleId, key.locale);
       const row = await repo.find(key.workspaceId, key.articleId, key.locale);
-      const decision = decideClaim(row, sourceHash, this.now(), { fresh: isFresh });
+      const decision = decideClaim(row, basis, this.now(), { fresh: isFresh });
       if (decision === ClaimDecisions.translate || decision === ClaimDecisions.propose) {
         await repo.upsert({
           ...key,
@@ -234,14 +265,14 @@ export class HelpTranslationService {
   /** Store a finished run's text where the state machine says, under the lock. */
   private async land(
     key: TranslationKey,
-    source: HelpRevisionRow,
+    basis: TranslationBasis,
     text: { title: string; body: string },
   ): Promise<TranslationOutcome> {
     return await this.deps.db.transaction(async tx => {
       const repo = new HelpTranslationRepo(tx);
       await repo.lock(key.articleId, key.locale);
       const now = await repo.find(key.workspaceId, key.articleId, key.locale);
-      const target = resultTarget(now, source.contentHash);
+      const target = resultTarget(now, basis);
       if (target === ResultTargets.discard) {
         await repo.upsert({ ...key, state: TranslationStates.reviewed, claimedUntil: null });
         return TranslationOutcomes.upToDate;
@@ -257,7 +288,8 @@ export class HelpTranslationService {
           ...key,
           state: TranslationStates.reviewed,
           proposalRevisionId: revision.id,
-          proposalSourceHash: source.contentHash,
+          proposalSourceHash: basis.sourceHash,
+          proposalGlossaryHash: basis.glossaryHash,
           claimedUntil: null,
           lastError: null,
         });
@@ -267,9 +299,11 @@ export class HelpTranslationService {
         ...key,
         state: TranslationStates.auto,
         revisionId: revision.id,
-        sourceHash: source.contentHash,
+        sourceHash: basis.sourceHash,
+        glossaryHash: basis.glossaryHash,
         proposalRevisionId: null,
         proposalSourceHash: null,
+        proposalGlossaryHash: null,
         claimedUntil: null,
         lastError: null,
       });
@@ -278,7 +312,12 @@ export class HelpTranslationService {
   }
 
   /** Save the collection and section titles that came back; a refused one keeps showing the source title. */
-  private async storeNodeTitles(key: TranslationKey, nodes: readonly NodeTitle[], byHash: ReadonlyMap<string, string>) {
+  private async storeNodeTitles(
+    key: TranslationKey,
+    nodes: readonly NodeTitle[],
+    byHash: ReadonlyMap<string, string>,
+    keep: readonly string[],
+  ) {
     const repo = new HelpNodeTranslationRepo(this.deps.db);
     await Promise.all(
       nodes.map(async ({ node, title, segment }) => {
@@ -289,7 +328,7 @@ export class HelpTranslationService {
         await repo.upsert({
           workspaceId: key.workspaceId,
           locale: key.locale,
-          title: reassembleTitle(title, translated),
+          title: reassembleTitle(title, translated, { keep }),
           sourceTitle: title,
           ...node,
         });
@@ -327,6 +366,8 @@ export class HelpTranslationService {
     check?: (row: HelpTranslationRow | undefined) => void,
   ): Promise<string> {
     const { projectId, ...translation } = key;
+    const glossary = (await this.glossaryOf(key.workspaceId, projectId))(key.locale);
+    const basis = basisOf(source, glossary);
     const revisionId = await this.deps.db.transaction(async tx => {
       const repo = new HelpTranslationRepo(tx);
       await repo.lock(key.articleId, key.locale);
@@ -342,18 +383,20 @@ export class HelpTranslationService {
         ...translation,
         state: TranslationStates.reviewed,
         revisionId: revision.id,
-        sourceHash: source.contentHash,
+        sourceHash: basis.sourceHash,
+        glossaryHash: basis.glossaryHash,
         lastError: null,
         reviewedByUserId: actorUserId,
         proposalRevisionId: null,
         proposalSourceHash: null,
+        proposalGlossaryHash: null,
       });
       return revision.id;
     });
     await new HelpSegmentMemoryRepo(this.deps.db).put(
       { workspaceId: key.workspaceId, projectId, locale: key.locale },
       SegmentOrigins.human,
-      alignedSegments({ title: source.title, body: source.bodyMd }, text),
+      alignedSegments({ title: source.title, body: source.bodyMd }, text, glossary),
     );
     return revisionId;
   }
@@ -387,9 +430,66 @@ export class HelpTranslationService {
     if (source === undefined) {
       return;
     }
+    const glossary = await this.glossaryOf(workspaceId, projectId);
     await Promise.all(
-      site.locales.map(async locale => await this.queueLocale({ workspaceId, articleId, locale }, source.contentHash)),
+      site.locales.map(
+        async locale => await this.queueLocale({ workspaceId, articleId, locale }, basisOf(source, glossary(locale))),
+      ),
     );
+  }
+
+  /** After a glossary edit: queue the fan-out that re-translates what it touched (nothing without a translator). */
+  async onGlossaryChanged(workspaceId: string, projectId: string, glossaryHash: string): Promise<void> {
+    const { queue } = this.deps;
+    if (queue === undefined || this.deps.translator === undefined) {
+      return;
+    }
+    const { job } = await queue.enqueue(
+      retranslateHelpGlossary,
+      { workspaceId, projectId },
+      { dedupeKey: `${projectId}:${glossaryHash}`, workspaceId },
+    );
+    queue.kick(job.id);
+  }
+
+  /**
+   * The `help.retranslate-glossary` job: queue a run for every translation of a published
+   * article whose glossary hash in its language isn't the current one (and has no proposal
+   * made under it). Articles the edit doesn't touch keep theirs, so nothing is queued for
+   * them. Returns how many runs were queued.
+   */
+  async retranslateForGlossary(workspaceId: string, projectId: string): Promise<number> {
+    const site = await new HelpSiteRepo(this.deps.db).find(workspaceId, projectId);
+    if (site === undefined) {
+      return 0;
+    }
+    const articleRepo = new HelpArticleRepo(this.deps.db);
+    const articles = await articleRepo.published(workspaceId, projectId);
+    const sourceRows = await articleRepo.revisionsByIds(articles.flatMap(article => article.publishedRevisionId ?? []));
+    const sources = new Map(sourceRows.map(revision => [revision.id, revision]));
+    const publishedOf = new Map(articles.map(article => [article.id, article.publishedRevisionId ?? '']));
+    const rows = await new HelpTranslationRepo(this.deps.db).forArticles(
+      workspaceId,
+      articles.map(article => article.id),
+    );
+    const glossary = await this.glossaryOf(workspaceId, projectId);
+    const offered: readonly string[] = site.locales;
+    const due = rows.flatMap(row => {
+      const source = sources.get(publishedOf.get(row.articleId) ?? '');
+      if (source === undefined || !offered.includes(row.locale)) {
+        return [];
+      }
+      const basis = basisOf(source, glossary(row.locale));
+      const isProposed = row.proposalSourceHash === basis.sourceHash && row.proposalGlossaryHash === basis.glossaryHash;
+      return row.glossaryHash === basis.glossaryHash || isProposed ? [] : [{ row, basis }];
+    });
+    await Promise.all(
+      due.map(
+        async ({ row, basis }) =>
+          await this.queueLocale({ workspaceId, articleId: row.articleId, locale: row.locale }, basis),
+      ),
+    );
+    return due.length;
   }
 
   /**
@@ -413,8 +513,11 @@ export class HelpTranslationService {
       return { outcome: TranslationOutcomes.skipped };
     }
     const isFresh = input.fresh === true;
+    const glossary = (await this.glossaryOf(key.workspaceId, article.projectId))(key.locale);
+    const { keep } = glossary;
+    const basis = basisOf(source, glossary);
     const until = run.deadline ?? new Date(this.now().getTime() + DEFAULT_CLAIM_MS);
-    const claim = await this.claim(key, source.contentHash, until, isFresh);
+    const claim = await this.claim(key, basis, until, isFresh);
     if (claim.decision === ClaimDecisions.busy) {
       return { outcome: TranslationOutcomes.busy, retryAt: claim.claimedUntil ?? until };
     }
@@ -422,8 +525,16 @@ export class HelpTranslationService {
       return { outcome: TranslationOutcomes.upToDate };
     }
 
-    const articleSegments = [segmentTitle(source.title), ...segmentMarkdown(source.bodyMd)];
-    const nodes = await this.nodeTitles(article, key.locale);
+    // Each segment's hash is its translation memory key: the glossary's fixed terms in it count.
+    const articleSegments = keyedSegments(
+      [segmentTitle(source.title, { keep }), ...segmentMarkdown(source.bodyMd, { keep })],
+      glossary,
+    );
+    const titles = await this.nodeTitles(article, key.locale, keep);
+    const nodes = titles.map(node => ({
+      ...node,
+      segment: { ...node.segment, hash: memoryKey(node.segment, glossary) },
+    }));
     const segments = [...articleSegments, ...nodes.map(({ segment }) => segment)];
     const memoryScope = { workspaceId: key.workspaceId, projectId: article.projectId, locale: key.locale };
     const memory = new HelpSegmentMemoryRepo(this.deps.db);
@@ -457,7 +568,7 @@ export class HelpTranslationService {
     try {
       result = await translateMisses(
         misses,
-        { translator, sourceLocale: site.sourceLocale, targetLocale: key.locale },
+        { translator, sourceLocale: site.sourceLocale, targetLocale: key.locale, glossary },
         async batch => {
           // A checkpoint: a retried run finds these in memory instead of sending them again.
           await memory.put(
@@ -476,7 +587,7 @@ export class HelpTranslationService {
     }
 
     const byHash = new Map([...known, ...result.translated]);
-    await this.storeNodeTitles(key, nodes, byHash);
+    await this.storeNodeTitles(key, nodes, byHash, keep);
     const articleHashes = new Set(articleSegments.map(({ hash }) => hash));
     const refused = result.refused.filter(({ segment }) => articleHashes.has(segment.hash));
     const [first] = refused;
@@ -495,10 +606,12 @@ export class HelpTranslationService {
       }),
     );
     const text = {
-      title: reassembleTitle(source.title, byId.get(TITLE_SEGMENT_ID) ?? segmentTitle(source.title).text),
-      body: reassemble(source.bodyMd, byId),
+      title: reassembleTitle(source.title, byId.get(TITLE_SEGMENT_ID) ?? segmentTitle(source.title, { keep }).text, {
+        keep,
+      }),
+      body: reassemble(source.bodyMd, byId, { keep }),
     };
-    const outcome = await this.land(key, source, text);
+    const outcome = await this.land(key, basis, text);
     if (outcome === TranslationOutcomes.translated) {
       await this.deps.onTranslated?.(key.workspaceId, article.projectId, article);
     }
@@ -625,7 +738,8 @@ export class HelpTranslationService {
     if (isReviewed && input.confirm !== true) {
       throw new TranslationOverwriteRequiresConfirmationError(input.locale);
     }
-    await this.queueLocale({ workspaceId, articleId: article.id, locale: input.locale }, source.contentHash, {
+    const glossary = (await this.glossaryOf(workspaceId, projectId))(input.locale);
+    await this.queueLocale({ workspaceId, articleId: article.id, locale: input.locale }, basisOf(source, glossary), {
       force: true,
       fresh: true,
     });

@@ -10,6 +10,7 @@ import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 
 export const HelpJobKinds = {
   translate: 'help.translate',
+  retranslateGlossary: 'help.retranslate-glossary',
   indexNow: 'help.indexnow',
 } as const;
 
@@ -22,6 +23,16 @@ export const translateHelpArticle = defineJob(
     locale: z.string().min(2).max(10),
     fresh: z.boolean().optional(),
   }),
+);
+
+/**
+ * After a glossary edit (#214): queue a run for every translation whose article the edit
+ * touches (its glossary hash in that language changed). Each run sends only the segments
+ * containing a changed term; a reviewed language gets a proposal.
+ */
+export const retranslateHelpGlossary = defineJob(
+  HelpJobKinds.retranslateGlossary,
+  z.object({ workspaceId: z.uuid(), projectId: z.uuid() }),
 );
 
 /** Tell IndexNow the pages an article shows on changed (#367). */
@@ -49,6 +60,9 @@ export function createHelpHandlers(deps: {
         // Bounded by the other run's claim, which ends with its job's lock.
         throw new RetryAt(result.retryAt, 'another run is translating this language', { consumesAttempt: false });
       }
+    }),
+    handleJob(retranslateHelpGlossary, async payload => {
+      await deps.translations.retranslateForGlossary(payload.workspaceId, payload.projectId);
     }),
     ...(indexNow === undefined
       ? []

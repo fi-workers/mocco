@@ -125,6 +125,42 @@ export const translationInputSchema = z.object({
 });
 export type TranslationInput = z.infer<typeof translationInputSchema>;
 
+/**
+ * A glossary term's rule (#214). `keep` terms (product names, UI labels) stay as written in
+ * every language; a `fixed` term is translated one way per language, and a translation
+ * that doesn't use it is refused.
+ */
+export const GlossaryRules = { keep: 'keep', fixed: 'fixed' } as const;
+export type GlossaryRule = (typeof GlossaryRules)[keyof typeof GlossaryRules];
+
+export const GlossaryLimits = { termMax: 100, translationMax: 200, noteMax: 500, termsMax: 500 } as const;
+
+const glossaryTextSchema = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine(value => !/[⟦⟧]/u.test(value), 'The characters ⟦ and ⟧ are reserved');
+
+export const glossaryTermInputSchema = z
+  .object({
+    term: glossaryTextSchema(GlossaryLimits.termMax),
+    rule: z.enum([GlossaryRules.keep, GlossaryRules.fixed]),
+    /** For `fixed`: the term in each language that has a fixed translation. */
+    translations: z.partialRecord(helpLocaleSchema, glossaryTextSchema(GlossaryLimits.translationMax)).default({}),
+    note: z.string().trim().max(GlossaryLimits.noteMax).default(''),
+  })
+  .refine(input => input.rule === GlossaryRules.keep || Object.keys(input.translations).length > 0, {
+    message: 'A fixed term needs a translation in at least one language',
+    path: ['translations'],
+  })
+  .refine(input => input.rule === GlossaryRules.fixed || Object.keys(input.translations).length === 0, {
+    message: 'A kept term has no translations',
+    path: ['translations'],
+  });
+export type GlossaryTermInput = z.input<typeof glossaryTermInputSchema>;
+
 export const HelpLimits = {
   titleMax: 200,
   descriptionMax: 500,
