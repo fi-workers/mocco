@@ -1,6 +1,6 @@
 // The team's side of the messenger (#95): a project's inbox, a conversation with every
 // message (internal notes included), replies and notes (with attachments, #430),
-// open/closed, read positions, and blocking a contact. Callers are workspace members, checked by the tRPC procedure;
+// open/closed, read positions, assigning by hand, and blocking a contact. Callers are workspace members, checked by the tRPC procedure;
 // every query here is also scoped by workspace and project.
 import { AuditActions } from '@mocco/common/audit';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
@@ -26,6 +26,7 @@ import { MessengerInboxMemberRepo } from '@backend/domain/messenger/repos/inbox-
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
+import type { InboxFilter } from '@backend/domain/messenger/repos/conversation.repo';
 import type { Db } from '@backend/infra/db/types';
 import type { AttachmentCreateInput, ConversationStatus } from '@mocco/common/messenger';
 
@@ -67,16 +68,16 @@ export class InboxService {
     return conversation;
   }
 
-  /** The project's conversations with `status`, newest activity first, with unread state for `userId`. */
-  async list(
-    workspaceId: string,
-    projectId: string,
-    userId: string,
-    opts: { status: ConversationStatus; before?: Date },
-  ) {
+  /**
+   * The project's conversations, newest activity first, with unread state for `userId`:
+   * those with `status` (open and closed alike without one), and optionally only one
+   * assignee's, the unassigned, or one contact's. `limit` defaults to a page.
+   */
+  async list(workspaceId: string, projectId: string, userId: string, opts: InboxFilter & { limit?: number }) {
+    const { limit, ...filter } = opts;
     const rows = await new MessengerConversationRepo(this.deps.db).inbox(workspaceId, projectId, userId, {
-      ...opts,
-      limit: MessengerLimits.pageSize,
+      ...filter,
+      limit: limit ?? MessengerLimits.pageSize,
     });
     return rows.map(({ conversation, contact, lastReadSeq, assigneeName }) => ({
       id: conversation.id,
@@ -140,12 +141,19 @@ export class InboxService {
   }
 
   /** Reply to the contact (`internal: false`) or add a note only the team sees, with up to
-   * three of the caller's own attachments (checked as a contact's are; see `prepareAttachments`). */
+   * three of the caller's own attachments (checked as a contact's are; see `prepareAttachments`).
+   * A `clientMessageId` already in the conversation returns that message and sends nothing. */
   async write(
     workspaceId: string,
     projectId: string,
     userId: string,
-    input: { conversationId: string; body: string; internal: boolean; attachmentIds?: readonly string[] },
+    input: {
+      conversationId: string;
+      body: string;
+      internal: boolean;
+      attachmentIds?: readonly string[];
+      clientMessageId?: string;
+    },
   ) {
     const conversation = await this.require(workspaceId, projectId, input.conversationId);
     const attachmentIds = await prepareAttachments(
@@ -166,7 +174,7 @@ export class InboxService {
           authorUserId: userId,
           visibility: input.internal ? MessageVisibilities.internal : MessageVisibilities.public,
           body: input.body,
-          clientMessageId: null,
+          clientMessageId: input.clientMessageId ?? null,
           context: null,
         },
         now,
@@ -189,6 +197,47 @@ export class InboxService {
       this.deps.queue?.kick(pushJobId);
     }
     return message;
+  }
+
+  /** Who a conversation can be given to: a member of the workspace, with their name and email. */
+  async assignable(workspaceId: string, userId: string) {
+    const member = await new MessengerInboxMemberRepo(this.deps.db).findWorkspaceMember(workspaceId, userId);
+    if (member === undefined) {
+      throw new NotWorkspaceMemberError(userId);
+    }
+    return member;
+  }
+
+  /**
+   * Give a conversation to a workspace member, or to no one (`assigneeUserId: null`), by
+   * hand; round robin only assigns when a conversation starts. Audited as `actorUserId`.
+   * Giving it to whoever has it already changes and records nothing.
+   */
+  async assign(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { conversationId: string; assigneeUserId: string | null },
+  ) {
+    const conversation = await this.require(workspaceId, projectId, input.conversationId);
+    const assignee = input.assigneeUserId === null ? null : await this.assignable(workspaceId, input.assigneeUserId);
+    const summary = assignee === null ? null : { userId: assignee.userId, name: assignee.name };
+    if (conversation.assigneeUserId === input.assigneeUserId) {
+      return { conversationId: conversation.id, assignee: summary, changed: false };
+    }
+    await new MessengerConversationRepo(this.deps.db).setAssignee(
+      workspaceId,
+      input.conversationId,
+      input.assigneeUserId,
+    );
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.messengerConversationAssigned,
+      subjectType: 'messenger_conversation',
+      subjectId: conversation.id,
+      payload: { projectId, from: conversation.assigneeUserId, to: input.assigneeUserId },
+    });
+    return { conversationId: conversation.id, assignee: summary, changed: true };
   }
 
   async setStatus(workspaceId: string, projectId: string, conversationId: string, status: ConversationStatus) {

@@ -17,6 +17,7 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   offline_access: 'Stay signed in without asking you again',
   [McpScopes.approvalsWrite]: 'Approve or reject changes as you, in workspaces that allow agents to decide',
   [McpScopes.statusWrite]: "Run your status monitors' checks now, as you",
+  [McpScopes.messengerWrite]: 'Reply to and assign your messenger conversations, as you',
 };
 
 const scopesOf = (scope: unknown): string[] =>

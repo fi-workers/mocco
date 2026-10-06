@@ -197,6 +197,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: help.helpPublic,
       helpFeedback: help.helpFeedback,
+      messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings: { agentsMayDecide: refuse },

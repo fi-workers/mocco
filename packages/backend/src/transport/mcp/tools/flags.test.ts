@@ -193,6 +193,7 @@ describe('mocco_flags_* (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
+      messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

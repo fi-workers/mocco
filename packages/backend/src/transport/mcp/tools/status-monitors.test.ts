@@ -348,6 +348,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
+      messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings,

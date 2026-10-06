@@ -111,6 +111,7 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Attachments | Live | Up to 3 screenshots or PDFs (10 MB each) per message through object storage, verified on send (size, declared type and the bytes' signature), served with short-lived links, PDFs only as downloads; thumbnails and file chips in the inbox. The team attaches them to replies and notes from the inbox under the same checks |
 | Guests | Live | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
 | Push replies | Live | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
+| MCP tools | Live | Agents search the inbox (status, assignee, contact), read a thread with attachment metadata only, and reply (text) or assign by hand as the caller, behind `messenger:write`, the workspace's opt-in and a confirmation ([MCP tools](./messenger.md#mcp-tools)); the console's conversation header assigns by hand too |
 
 ### Help center (#96)
 

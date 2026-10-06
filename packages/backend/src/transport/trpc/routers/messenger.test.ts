@@ -235,6 +235,57 @@ describe('messenger router on pglite', () => {
     expect(await owner.api.messenger.inboxMembers(owner.scope)).toEqual({ members: [] });
   });
 
+  it('assigns a conversation by hand to a workspace member or to no one, audited, and nowhere else', async () => {
+    const owner = await setup();
+    await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.messenger });
+    const { identitySecret } = await owner.api.messenger.enable(owner.scope);
+    const session = await owner.ctx.contactMessenger.createSession(owner.scope, {
+      userId: 'u1',
+      userHash: createHmac('sha256', identitySecret).update('u1').digest('hex'),
+    });
+    const principal = await owner.ctx.contactMessenger.authenticate(session.sessionToken);
+    if (principal === undefined) {
+      throw new Error('no session');
+    }
+    const started = await owner.ctx.contactMessenger.startConversation(principal, {
+      body: 'hello',
+      clientMessageId: 'client-message-4',
+    });
+    const conversation = { ...owner.scope, conversationId: started.id };
+    const attacker = await setup('attacker@example.com');
+    await attacker.api.product.enable({ workspaceId: attacker.scope.workspaceId, product: Products.messenger });
+
+    expect(await owner.api.messenger.assign({ ...conversation, assigneeUserId: owner.userId })).toEqual({
+      conversationId: started.id,
+      assignee: { userId: owner.userId, name: 'fixture-user' },
+      changed: true,
+    });
+    const assigned = await owner.api.messenger.conversation(conversation);
+    expect(assigned.assignee).toMatchObject({ userId: owner.userId });
+    // Again changes nothing, and records nothing.
+    expect(await owner.api.messenger.assign({ ...conversation, assigneeUserId: owner.userId })).toMatchObject({
+      changed: false,
+    });
+    await expect(
+      owner.api.messenger.assign({ ...conversation, assigneeUserId: attacker.userId }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      attacker.api.messenger.assign({ ...attacker.scope, conversationId: started.id, assigneeUserId: null }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await owner.api.messenger.assign({ ...conversation, assigneeUserId: null });
+
+    const unassigned = await owner.api.messenger.conversation(conversation);
+    expect(unassigned.assignee).toBeNull();
+    const audit = await t.db
+      .select({ action: auditLog.action, payload: auditLog.payload })
+      .from(auditLog)
+      .where(eq(auditLog.action, AuditActions.messengerConversationAssigned));
+    expect(audit.map(row => row.payload)).toEqual([
+      { projectId: owner.scope.projectId, from: null, to: owner.userId },
+      { projectId: owner.scope.projectId, from: owner.userId, to: null },
+    ]);
+  });
+
   it("never reaches another workspace's conversations", async () => {
     const owner = await setup();
     await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.messenger });

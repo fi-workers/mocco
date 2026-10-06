@@ -1,5 +1,6 @@
 // One messenger conversation (#95): the thread with internal notes marked, a composer
-// that replies or adds a note (with images and PDFs attached, #430), open/closed, and a side panel with who the user is and
+// that replies or adds a note (with images and PDFs attached, #430), open/closed, who it is
+// assigned to (changed by hand from the header), and a side panel with who the user is and
 // what they were running when they wrote.
 import {
   ATTACHMENT_CONTENT_TYPES,
@@ -254,6 +255,13 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
       await utils.messenger.conversation.invalidate(input);
     },
   });
+  const membersQuery = trpc.workspace.members.useQuery({ workspaceId });
+  const assigning = trpc.messenger.assign.useMutation({
+    onSuccess: async () => {
+      await utils.messenger.conversation.invalidate(input);
+      await utils.messenger.inbox.invalidate();
+    },
+  });
   const router = useRouter();
   const [isConfirmingErase, setIsConfirmingErase] = useState(false);
   const erasing = trpc.messenger.eraseContact.useMutation({
@@ -300,9 +308,30 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
               <StatusBadge tone={Tones.neutral}>{category?.label ?? conversation.category}</StatusBadge>
             )}
             <StatusBadge tone={isOpen ? Tones.ok : Tones.neutral}>{isOpen ? 'Open' : 'Closed'}</StatusBadge>
-            <span className="text-xs text-muted-foreground">
-              {assignee === null ? 'Unassigned' : `Assigned to ${assignee.name ?? 'a former member'}`}
-            </span>
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              Assigned to
+              <select
+                aria-label="Assignee"
+                value={assignee?.userId ?? ''}
+                disabled={assigning.isPending}
+                onChange={event => {
+                  assigning.mutate({ ...input, assigneeUserId: event.target.value === '' ? null : event.target.value });
+                }}
+                className={cn(inputClass, 'h-7 py-0 text-xs')}>
+                <option value="">No one</option>
+                {/* Someone who has left the workspace keeps the conversation until it is reassigned. */}
+                {assignee === null ||
+                (membersQuery.data?.members ?? []).some(member => member.userId === assignee.userId) ? null : (
+                  <option value={assignee.userId}>{assignee.name ?? 'A former member'}</option>
+                )}
+                {(membersQuery.data?.members ?? []).map(member => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.user.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {assigning.error ? <span className="text-xs text-destructive">{errorMessage(assigning.error)}</span> : null}
             <Button
               variant="outline"
               className="ml-auto text-sm"

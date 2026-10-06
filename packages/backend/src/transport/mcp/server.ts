@@ -9,7 +9,8 @@
 // (`tools/inbound-write.ts`); each is gated by scope, by the
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
 // here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) has the
-// same locks under its own `status:write` scope.
+// same locks under its own `status:write` scope, and `mocco_messenger_reply` and
+// `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
@@ -18,6 +19,7 @@ import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/too
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
+import { registerMessengerTools, type MessengerToolDeps } from '@backend/transport/mcp/tools/messenger';
 import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
 import {
   registerNotificationWriteTools,
@@ -38,6 +40,7 @@ export type McpToolDeps = RunToolDeps &
   StatusToolDeps &
   StatusMonitorToolDeps &
   HelpToolDeps &
+  MessengerToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -63,6 +66,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerStatusTools(server, deps);
   registerStatusMonitorTools(server, deps);
   registerHelpTools(server, deps);
+  registerMessengerTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);
