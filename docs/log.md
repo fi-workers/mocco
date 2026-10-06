@@ -1033,6 +1033,26 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/help-glossary` (issue #214)
 
+## 2026-10-06 — Feedback: posting, follows, similar posts, voting by email and unsubscribe links
+
+- Documented the second PR of #174 in the [feedback board model](./reference/feedback.md#the-public-v1-surface):
+  signed-in end users post (`POST /v1/feedback/boards/{slug}/posts`, under review with their vote and subscription,
+  in one transaction) and follow posts (`POST`/`DELETE /posts/{id}/subscription`); `GET /boards/{slug}/similar` is
+  the non-LLM duplicate search, limited per client address.
+- [Voting by email](./reference/feedback.md#voting-by-email): `POST /identify/email` writes a pending vote and mails a
+  signed link through the notifications email sender (`EMAIL_DRIVER`, `log` in development); the link counts the
+  address's pending votes of the last 7 days. No sender or `AUTH_SECRET` → `503 email_unavailable`.
+- [Unsubscribe links](./reference/feedback.md#unsubscribe-links): signed, in every feedback mail and its
+  `List-Unsubscribe` header; `GET` asks, `POST` (the form or one click) unsubscribes, as the status subscribers' links
+  do.
+- Migration 0080 adds `mocco_feedback_posts.author_end_user_id` (never with `author_user_id`, DB-checked) and a
+  partial index on pending votes.
+- The [public API reference](./reference/public-api.md#routes), the feature map and the
+  [feedback design](./specs/2026-09-24-feedback-design.md#6-public-api--sdk-surface) say the same.
+- Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`,
+  `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/feedback-public-v1-identify` (issue #174)
+
 ## 2026-10-06 — Help center: glossary console and CSV import
 
 - Finished #214 with the console: the **Glossary** page (linked from the Help center page once the site offers a
