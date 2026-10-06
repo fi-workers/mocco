@@ -260,6 +260,8 @@ Mocco can give each new conversation to one person on your team, in turn, so the
 
 ![Round robin: the availability switch over the inbox, each conversation's assignee, and the rotation in the settings](./images/messenger-round-robin.png)
 
+![A conversation's header with the Assigned to picker set to a team member](./images/messenger-assign.png)
+
 ## 7. Get notified
 
 New conversations (`messenger.conversation.created`) and users writing again (`messenger.message.received`) are Mocco events. Apply the **Mocco** preset on a Discord channel's rules, or add rules for these two events, to hear about them where your team already is (see [Mocco events](../notifications/mocco-events.md#the-mocco-preset)). A new conversation's message says who it was assigned to.

@@ -835,7 +835,8 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   header's **Assigned to** picker ship with the tool, audited as `messenger.conversation.assigned`. No migration.
 - The [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md#how-the-messenger-changes-are-built-issue-462), the
   [connect guide](./customer/mcp/connect.md), the feature map and the
-  [customer messenger guide](./customer/messenger/contact-us.md#share-the-work-with-round-robin) say the same.
+  [customer messenger guide](./customer/messenger/contact-us.md#share-the-work-with-round-robin) (with a screenshot of
+  the picker) say the same.
 - Docs touched: `reference/messenger.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
   `reference/feature-map.md`, `customer/messenger/contact-us.md`, `log.md`
 - Source: branch `feat/mcp-messenger-tools` (issue #462)
