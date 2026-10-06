@@ -1052,3 +1052,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`,
   `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/feedback-public-v1-identify` (issue #174)
+
+## 2026-10-06 — Feedback: public board and post pages
+
+- [Public board pages](./reference/feedback.md#public-board-pages) (#175): `/feedback/<board>` and
+  `/feedback/<board>/<number>` on the project's help center site, ISR under `pages/_sites/[site]/feedback/**`
+  (ADR 0015), with canonical, Open Graph and JSON-LD tags; a merged duplicate's address redirects (308) to its target.
+- The browser calls `/api/ext/sites/{site}/feedback/*`: the `/v1/feedback` routes behind the site instead of a key,
+  so the projection, token checks and limits are shared. Apps link signed-in users with `?token=`.
+- `PublicBoardService.postOnBoard` finds a post by its number; `HelpPublicReadService.projectOf` names a site's project.
+- Customer guide: [Open a public feedback board](./customer/feedback/public-board.md), with screenshots.
+- No migration. The roadmap page and sitemap entries are the next slice.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-public-board` (issue #175)

@@ -149,3 +149,27 @@ export function helpArticleLd(
     publisher: { '@type': 'Organization', name: article.siteName, url: `${origin}/` },
   };
 }
+
+const interactionCounter = (action: string, count: number): JsonLd => ({
+  '@type': 'InteractionCounter',
+  interactionType: `https://schema.org/${action}`,
+  userInteractionCount: count,
+});
+
+/** A post on a public feedback board (#175): a discussion, with its votes and comments counted. */
+export function feedbackPostLd(
+  origin: string,
+  post: { path: string; title: string; text: string; createdAt: string; voteCount: number; commentCount: number },
+): JsonLd {
+  return {
+    '@type': 'DiscussionForumPosting',
+    headline: post.title,
+    text: post.text,
+    url: `${origin}${post.path}`,
+    datePublished: post.createdAt,
+    interactionStatistic: [
+      interactionCounter('LikeAction', post.voteCount),
+      interactionCounter('CommentAction', post.commentCount),
+    ],
+  };
+}

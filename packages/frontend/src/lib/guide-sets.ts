@@ -10,6 +10,7 @@ export const GuideSets = {
   flags: 'flags',
   messenger: 'messenger',
   help: 'help',
+  feedback: 'feedback',
   status: 'status',
   mcp: 'mcp',
 } as const;
@@ -22,6 +23,7 @@ export const guideSetSchema = z.enum([
   GuideSets.flags,
   GuideSets.messenger,
   GuideSets.help,
+  GuideSets.feedback,
   GuideSets.status,
   GuideSets.mcp,
 ]);
@@ -35,6 +37,7 @@ export const guideSetLabels: Record<GuideSet, string> = {
   [GuideSets.flags]: 'Feature flags',
   [GuideSets.messenger]: 'Messenger',
   [GuideSets.help]: 'Help center',
+  [GuideSets.feedback]: 'Feedback board',
   [GuideSets.status]: 'Status page',
   [GuideSets.mcp]: 'Agents (MCP)',
 };

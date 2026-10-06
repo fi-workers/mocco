@@ -53,6 +53,7 @@ import { createDiscordInstallRoutes, type DiscordInstallDeps } from '@backend/tr
 import { createInboundRoutes } from '@backend/transport/ext/inbound';
 import { createJobTickRoutes, type JobTickDeps } from '@backend/transport/ext/jobs';
 import { createOgRoutes } from '@backend/transport/ext/og';
+import { createFeedbackSiteRoutes } from '@backend/transport/ext/sites/feedback';
 import { createStorageRoutes, type StorageRouteDeps } from '@backend/transport/ext/storage';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
 import { statusApiDepsOf } from '@backend/transport/ext/v1/status';
@@ -68,6 +69,7 @@ import type { GitHubProvider } from '@backend/domain/integration/github/provider
 import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webhook-delivery.repo';
 import type { OgImageService } from '@backend/domain/og/OgImageService';
 import type { VersionCheckService } from '@backend/domain/ota/VersionCheckService';
+import type { FeedbackSiteDeps } from '@backend/transport/ext/sites/feedback';
 import type { V1Deps } from '@backend/transport/ext/v1/middleware';
 
 export interface ExtDeps {
@@ -115,6 +117,9 @@ export interface ExtDeps {
   /** The public /v1 surface's key authentication and rate limiter (ADR 0017); tests that
    * don't exercise it leave it out and /v1/ping, /v1/whoami are not mounted. */
   v1?: V1Deps;
+  /** The public board pages' calls (`/sites/:site/feedback`, #175), over v1's feedback routes;
+   * mounted only with v1's feedback. */
+  feedbackSites?: FeedbackSiteDeps;
 }
 
 const WORKSPACES = '/workspaces';
@@ -356,6 +361,9 @@ export function createExtApp(deps: ExtDeps): Hono {
   // Public /v1 API (ADR 0017): key-authenticated, rate-limited, problem+json errors.
   if (deps.v1 !== undefined) {
     app.route('/v1', createV1Routes(deps.v1));
+    if (deps.v1.feedback !== undefined && deps.feedbackSites !== undefined) {
+      app.route('/sites/:site/feedback', createFeedbackSiteRoutes(deps.v1, deps.v1.feedback, deps.feedbackSites));
+    }
   }
 
   // Signed reads and uploads for the filesystem storage driver (platform foundations §10).
@@ -470,6 +478,7 @@ export async function extHandler(request: Request): Promise<Response> {
       heartbeats: { heartbeats: getStatusDomain().statusHeartbeats },
       ...(statusSubscribers !== undefined && { statusSubscribers: { subscribers: statusSubscribers } }),
     },
+    feedbackSites: { projectOf: async site => await getHelpDomain().helpPublic.projectOf(site) },
     og: getOgImages(),
     storage:
       storageStore instanceof FilesystemObjectStore

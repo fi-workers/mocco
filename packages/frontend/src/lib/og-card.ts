@@ -69,3 +69,14 @@ export function helpHomeCard(fields: { siteName: string; collections: readonly s
     }) ?? null
   );
 }
+
+/** A public feedback board's card (#175): the site's name and the board. */
+export function feedbackBoardCard(fields: { siteName: string; boardName: string }): string | null {
+  return (
+    getOgImages()?.issue('simple', {
+      brand: { name: clip(fields.siteName, 60) },
+      title: clip(fields.boardName, 120),
+      subtitle: 'Post ideas, vote on them, and follow what gets built.',
+    }) ?? null
+  );
+}

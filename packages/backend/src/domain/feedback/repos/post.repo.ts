@@ -46,6 +46,15 @@ export class FeedbackPostRepo {
     return row;
   }
 
+  /** The board's post with this number (its public address). */
+  async findByNumber(scope: FeedbackScope, boardId: string, number: number): Promise<FeedbackPostRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(p)
+      .where(and(scoped(scope), eq(p.boardId, boardId), eq(p.number, number)));
+    return row;
+  }
+
   /** The post, locked until the transaction ends, so concurrent status changes apply one at a time. */
   async findForUpdate(scope: FeedbackScope, id: string): Promise<FeedbackPostRow | undefined> {
     const [row] = await this.db
