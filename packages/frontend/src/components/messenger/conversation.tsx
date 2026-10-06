@@ -277,7 +277,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
   if (conversationQuery.error) {
     return <p className="text-sm text-destructive">{errorMessage(conversationQuery.error)}</p>;
   }
-  const { conversation, contact, messages } = conversationQuery.data;
+  const { conversation, contact, assignee, messages } = conversationQuery.data;
   const who = contact.name ?? contact.email ?? contact.externalUserId;
   const category = settingsQuery.data?.settings?.categories.find(entry => entry.key === conversation.category);
   const isOpen = conversation.status === 'open';
@@ -300,6 +300,9 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
               <StatusBadge tone={Tones.neutral}>{category?.label ?? conversation.category}</StatusBadge>
             )}
             <StatusBadge tone={isOpen ? Tones.ok : Tones.neutral}>{isOpen ? 'Open' : 'Closed'}</StatusBadge>
+            <span className="text-xs text-muted-foreground">
+              {assignee === null ? 'Unassigned' : `Assigned to ${assignee.name ?? 'a former member'}`}
+            </span>
             <Button
               variant="outline"
               className="ml-auto text-sm"

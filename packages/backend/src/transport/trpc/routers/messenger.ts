@@ -64,6 +64,30 @@ export const messengerRouter = router({
         ),
     ),
 
+  /** Who takes new conversations (round robin), with each one's availability. */
+  inboxMembers: messengerProcedure.input(projectInput).query(async ({ ctx, input }) => ({
+    members: await ctx.inbox.members(input.workspaceId, input.projectId),
+  })),
+
+  addInboxMember: messengerProcedure
+    .input(projectInput.extend({ userId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.inbox.addMember(input.workspaceId, input.projectId, ctx.session.user.id, input.userId);
+      return { ok: true } as const;
+    }),
+
+  removeInboxMember: messengerProcedure
+    .input(projectInput.extend({ userId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.inbox.removeMember(input.workspaceId, input.projectId, ctx.session.user.id, input.userId);
+      return { ok: true } as const;
+    }),
+
+  /** Available members get new conversations; round robin skips the others. */
+  setAvailability: messengerProcedure
+    .input(projectInput.extend({ userId: z.uuid(), available: z.boolean() }))
+    .mutation(async ({ ctx, input }) => await ctx.inbox.setAvailable(input.workspaceId, input.projectId, input)),
+
   inbox: messengerProcedure
     .input(projectInput.extend({ status: conversationStatusSchema.default('open'), before: z.date().optional() }))
     .query(async ({ ctx, input }) => ({

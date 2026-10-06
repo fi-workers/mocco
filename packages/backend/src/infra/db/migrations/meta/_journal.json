@@ -512,6 +512,13 @@
       "when": 1791253543057,
       "tag": "0072_glossy_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791258877468,
+      "tag": "0073_parched_xavin",
+      "breakpoints": true
     }
   ]
 }

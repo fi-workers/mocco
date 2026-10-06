@@ -12,10 +12,16 @@ import {
   reserveAttachment,
 } from '@backend/domain/messenger/attachments';
 import { eraseContact } from '@backend/domain/messenger/erase';
-import { ContactNotFoundError, ConversationNotFoundError } from '@backend/domain/messenger/errors';
+import {
+  ContactNotFoundError,
+  ConversationNotFoundError,
+  InboxMemberNotFoundError,
+  NotWorkspaceMemberError,
+} from '@backend/domain/messenger/errors';
 import { pushMessengerReply } from '@backend/domain/messenger/jobs';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
+import { MessengerInboxMemberRepo } from '@backend/domain/messenger/repos/inbox-member.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { JobQueue } from '@backend/domain/jobs/ports';
@@ -72,10 +78,12 @@ export class InboxService {
       ...opts,
       limit: MessengerLimits.pageSize,
     });
-    return rows.map(({ conversation, contact, lastReadSeq }) => ({
+    return rows.map(({ conversation, contact, lastReadSeq, assigneeName }) => ({
       id: conversation.id,
       status: conversation.status,
       category: conversation.category,
+      assignee:
+        conversation.assigneeUserId === null ? null : { userId: conversation.assigneeUserId, name: assigneeName },
       preview: conversation.preview,
       lastMessageAt: conversation.lastMessageAt,
       createdAt: conversation.createdAt,
@@ -99,9 +107,14 @@ export class InboxService {
       workspaceId,
       messages.map(({ message }) => message.id),
     );
+    const { assigneeUserId } = conversation;
     return {
       conversation,
       contact,
+      assignee:
+        assigneeUserId === null
+          ? null
+          : { userId: assigneeUserId, name: (await conversations.assigneeName(assigneeUserId)) ?? null },
       messages: messages.map(({ message, authorName }) => ({
         ...message,
         authorName,
@@ -191,6 +204,58 @@ export class InboxService {
       userId,
       conversation.lastMessageSeq,
     );
+  }
+
+  /** Who takes new conversations in the project's inbox, in round-robin order of joining. */
+  async members(workspaceId: string, projectId: string) {
+    return await new MessengerInboxMemberRepo(this.deps.db).list(workspaceId, projectId);
+  }
+
+  /** Put a workspace member in the rotation (available). Adding someone twice is a no-op. Audited. */
+  async addMember(workspaceId: string, projectId: string, actorUserId: string, userId: string) {
+    const repo = new MessengerInboxMemberRepo(this.deps.db);
+    if (!(await repo.isWorkspaceMember(workspaceId, userId))) {
+      throw new NotWorkspaceMemberError(userId);
+    }
+    const added = await repo.add({ workspaceId, projectId, userId, createdAt: this.now() });
+    if (added !== undefined) {
+      await this.deps.audit.record(workspaceId, {
+        actorUserId,
+        action: AuditActions.messengerInboxMemberAdded,
+        subjectType: 'project',
+        subjectId: projectId,
+        payload: { userId },
+      });
+    }
+  }
+
+  /** Take someone out of the rotation. Conversations they already have stay theirs. Audited. */
+  async removeMember(workspaceId: string, projectId: string, actorUserId: string, userId: string) {
+    const removed = await new MessengerInboxMemberRepo(this.deps.db).remove(workspaceId, projectId, userId);
+    if (removed === undefined) {
+      throw new InboxMemberNotFoundError(userId);
+    }
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action: AuditActions.messengerInboxMemberRemoved,
+      subjectType: 'project',
+      subjectId: projectId,
+      payload: { userId },
+    });
+  }
+
+  /** Mark a member available (round robin gives them new conversations) or away (it skips them). */
+  async setAvailable(workspaceId: string, projectId: string, input: { userId: string; available: boolean }) {
+    const updated = await new MessengerInboxMemberRepo(this.deps.db).setAvailable(
+      workspaceId,
+      projectId,
+      input.userId,
+      input.available,
+    );
+    if (updated === undefined) {
+      throw new InboxMemberNotFoundError(input.userId);
+    }
+    return { available: updated.available };
   }
 
   /** Stop a contact writing (they can still read what they have), or let them again. Audited. */

@@ -801,3 +801,23 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   that waits for the messenger's tools.
 - Docs touched: `reference/messenger.md`, `reference/feature-map.md`, `customer/messenger/contact-us.md`, `log.md`
 - Source: branch `feat/messenger-operator-attachments` (issue #430)
+
+## 2026-10-06 — Messenger: round-robin assignment and operator notifications
+
+- Documented #204 in [Messenger](./reference/messenger.md#round-robin): a project's inbox members
+  (`mocco_messenger_inbox_members`, migration 0073) take new conversations in turn. The conversation start takes
+  `pg_advisory_xact_lock(messengerAssign, hashtext(projectId))` (a new `AdvisoryLockNamespaces` entry), picks the
+  available member with the lowest `last_turn` and gives them the next turn, so concurrent starts never share a turn;
+  away members and people who left the workspace are skipped, and with no one available the conversation stays
+  unassigned. Joining and leaving the rotation are audited. The inbox shows each conversation's assignee, the viewer's
+  availability switch and a Round robin settings section.
+- [Events](./reference/messenger.md#events): the created event names the assignee, and a new catalog type
+  `messenger.conversation.unassigned` goes out when no one was available (not in the Mocco preset). Both start events
+  carry a `<type>:<conversation id>` dedupe key, so a retried start notifies a Slack or Discord channel once through
+  the existing fan-out. [Browser notifications](./reference/messenger.md#browser-notifications) use the Notification
+  API while the inbox tab is open. [Events](./reference/events.md), [notifications](./reference/notifications.md), the
+  feature map, [the customer guide](./customer/messenger/contact-us.md) (with a screenshot) and
+  [Mocco events](./customer/notifications/mocco-events.md) say the same.
+- Docs touched: `reference/messenger.md`, `reference/events.md`, `reference/notifications.md`,
+  `reference/feature-map.md`, `customer/messenger/contact-us.md`, `customer/notifications/mocco-events.md`, `log.md`
+- Source: branch `feat/messenger-assignment` (issue #204)

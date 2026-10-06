@@ -22,5 +22,7 @@ export const AdvisoryLockNamespaces = {
   flagEnvironment: 2,
   /** Serializes writes of one status monitor's state (pause and resume, the verdict evaluator). */
   statusMonitor: 3,
+  /** Serializes round-robin assignment in one project's messenger inbox (`MessengerInboxMemberRepo.takeTurn`). */
+  messengerAssign: 4,
 } as const;
 export type AdvisoryLockNamespace = (typeof AdvisoryLockNamespaces)[keyof typeof AdvisoryLockNamespaces];

@@ -25,6 +25,7 @@ import { isUserHashValid, newGuestToken, newSessionToken, sessionTokenHash } fro
 import { contactMessageEvent } from '@backend/domain/messenger/messages';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
+import { MessengerInboxMemberRepo } from '@backend/domain/messenger/repos/inbox-member.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
@@ -128,6 +129,7 @@ export class ContactMessengerService {
     contact: ContactRow,
     conversation: ConversationRow,
     body: string,
+    extra: { assignee?: { name: string | null } | null; dedupeKey?: string } = {},
   ) {
     const { events } = this.deps;
     if (events === undefined) {
@@ -135,8 +137,31 @@ export class ContactMessengerService {
     }
     await publishBestEffort(events, type, async () => {
       await Promise.resolve();
-      return contactMessageEvent(type, { contact, conversation, body }, this.deps.appOrigin);
+      return contactMessageEvent(type, { contact, conversation, body, ...extra }, this.deps.appOrigin);
     });
+  }
+
+  /**
+   * Announce a new conversation: `messenger.conversation.created` with its assignee, and
+   * `messenger.conversation.unassigned` too when round robin found no one. Each is keyed
+   * by the conversation, so announcing again (a retried start) publishes nothing new and
+   * a channel gets each one once.
+   */
+  private async announceStart(contact: ContactRow, conversation: ConversationRow, body: string) {
+    const { assigneeUserId } = conversation;
+    const assignee =
+      assigneeUserId === null
+        ? null
+        : { name: (await new MessengerConversationRepo(this.deps.db).assigneeName(assigneeUserId)) ?? null };
+    const created = MessengerEventTypes.messengerConversationCreated;
+    await this.announce(created, contact, conversation, body, {
+      assignee,
+      dedupeKey: `${created}:${conversation.id}`,
+    });
+    if (assignee === null) {
+      const unassigned = MessengerEventTypes.messengerConversationUnassigned;
+      await this.announce(unassigned, contact, conversation, body, { dedupeKey: `${unassigned}:${conversation.id}` });
+    }
   }
 
   /** The contact's own unclaimed attachments among `ids`, verified (see `prepareAttachments`). */
@@ -263,16 +288,25 @@ export class ContactMessengerService {
       input.clientMessageId,
     );
     if (started !== undefined) {
+      // Announce again in case the first attempt stopped before it did; the keys dedupe.
+      await this.announceStart(contact, started, input.body);
       return toConversationDto(started);
     }
     const attachmentIds = await this.prepareAttachments(contact, input.attachmentIds);
     const now = this.now();
     const result = await this.deps.db.transaction(async tx => {
       const repo = new MessengerConversationRepo(tx);
+      // Round robin, under the project's lock until this transaction commits.
+      const assigneeUserId = await new MessengerInboxMemberRepo(tx).takeTurn(
+        contact.workspaceId,
+        contact.projectId,
+        now,
+      );
       const conversation = await repo.create({
         workspaceId: contact.workspaceId,
         projectId: contact.projectId,
         contactId: contact.id,
+        assigneeUserId: assigneeUserId ?? null,
         status: 'open',
         category: input.category ?? null,
         lastMessageAt: now,
@@ -302,7 +336,7 @@ export class ContactMessengerService {
     });
     await new MessengerContactRepo(this.deps.db).touch(contact.id, input.context, now);
     if (result.created) {
-      await this.announce(MessengerEventTypes.messengerConversationCreated, contact, result.conversation, input.body);
+      await this.announceStart(contact, result.conversation, input.body);
     }
     return toConversationDto(result.conversation);
   }

@@ -279,7 +279,15 @@ describe('/v1/messenger (pglite)', () => {
         }),
       ],
     });
-    expect(published.map(event => event.type)).toEqual([MessengerEventTypes.messengerConversationCreated]);
+    // No one is in the rotation, so the start is also announced as unassigned. The retry
+    // announces again under the same keys, which the bus dedupes to the first events.
+    const conversationId = conversationOf(first);
+    expect(published.map(event => [event.type, event.dedupeKey])).toEqual(
+      Array.from({ length: 2 }, () => [
+        [MessengerEventTypes.messengerConversationCreated, `messenger.conversation.created:${conversationId}`],
+        [MessengerEventTypes.messengerConversationUnassigned, `messenger.conversation.unassigned:${conversationId}`],
+      ]).flat(),
+    );
     expect(published[0]).toMatchObject({
       projectId,
       payload: {
@@ -372,6 +380,7 @@ describe('/v1/messenger (pglite)', () => {
     expect(listed.body).toMatchObject({ conversations: [{ status: 'open' }] });
     expect(published.map(event => event.type)).toEqual([
       MessengerEventTypes.messengerConversationCreated,
+      MessengerEventTypes.messengerConversationUnassigned,
       MessengerEventTypes.messengerMessageReceived,
     ]);
     expect([blocked.status, newSession.status]).toEqual([403, 403]);
@@ -450,7 +459,9 @@ describe('/v1/messenger (pglite)', () => {
       const conversationId = (started.body as unknown as { conversation: { id: string } }).conversation.id;
       const { contact } = await messenger.inbox.get(workspaceId, projectId, conversationId);
       expect(contact).toMatchObject({ externalUserId: null, email: 'guest@example.com', name: 'Guest' });
-      expect(published.at(-1)).toMatchObject({ payload: { message: { title: 'New message from Guest' } } });
+      expect(
+        published.findLast(event => event.type === MessengerEventTypes.messengerConversationCreated),
+      ).toMatchObject({ payload: { message: { title: 'New message from Guest' } } });
     });
 
     it('finds a returning guest by their device token, and keeps devices apart', async () => {

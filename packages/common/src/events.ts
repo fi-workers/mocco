@@ -197,6 +197,8 @@ export const FlagEventTypes = {
 export const MessengerEventTypes = {
   messengerConversationCreated: 'messenger.conversation.created',
   messengerMessageReceived: 'messenger.message.received',
+  /** A new conversation found no available inbox member, so round robin left it unassigned (#204). */
+  messengerConversationUnassigned: 'messenger.conversation.unassigned',
 } as const;
 
 /** Status monitors (#150): a monitor's confirmed state changes, one event per change. */
@@ -240,6 +242,7 @@ export const flagEventPayloadSchemas = {
 export const messengerEventPayloadSchemas = {
   [MessengerEventTypes.messengerConversationCreated]: renderedEventPayloadSchema,
   [MessengerEventTypes.messengerMessageReceived]: renderedEventPayloadSchema,
+  [MessengerEventTypes.messengerConversationUnassigned]: renderedEventPayloadSchema,
 } as const;
 
 export const statusEventPayloadSchemas = {

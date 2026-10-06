@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
+import { DesktopAlertsToggle, useNewConversationAlerts } from '@frontend/components/messenger/desktop-alerts';
+import { AvailabilityBar, RotationSettings } from '@frontend/components/messenger/rotation';
 import {
   Ago,
   CopyField,
@@ -118,11 +120,16 @@ function Conversations({ workspaceId, projectId, categories }: Props & { categor
     { refetchInterval: INBOX_REFRESH_MS },
   );
   const conversations = inboxQuery.data?.conversations ?? [];
+  // Only the open list raises desktop notifications: that is where new ones arrive.
+  useNewConversationAlerts({ workspaceId, projectId }, status === 'open' ? inboxQuery.data?.conversations : undefined);
   const labelOf = (key: string | null) =>
     key === null ? null : (categories.find(category => category.key === key)?.label ?? key);
 
   return (
     <section className="flex flex-col gap-3">
+      <AvailabilityBar workspaceId={workspaceId} projectId={projectId}>
+        <DesktopAlertsToggle />
+      </AvailabilityBar>
       <nav aria-label="Conversation status" className="flex gap-1 border-b border-border">
         {Object.values(ConversationStatuses).map(value => (
           <Link
@@ -167,8 +174,11 @@ function Conversations({ workspaceId, projectId, categories }: Props & { categor
                 </span>
                 <span className="truncate text-sm text-muted-foreground">{conversation.preview}</span>
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="flex shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
                 <Ago date={conversation.lastMessageAt} />
+                <span>
+                  {conversation.assignee === null ? 'Unassigned' : (conversation.assignee.name ?? 'Former member')}
+                </span>
               </span>
             </Link>
           </li>
@@ -238,6 +248,7 @@ function Settings({
     <section className="flex flex-col gap-4">
       <h2 className="text-sm font-medium">Settings</h2>
       <GuestToggle workspaceId={workspaceId} projectId={projectId} isAllowed={areGuestsAllowed} />
+      <RotationSettings workspaceId={workspaceId} projectId={projectId} />
       <form
         aria-label="Categories"
         className="flex flex-col gap-2"
