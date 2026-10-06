@@ -78,6 +78,9 @@ export const AuditActions = {
   helpArticleUnpublished: 'help.article.unpublished',
   helpArticleDeleted: 'help.article.deleted',
   messengerGuestsChanged: 'messenger.guests.changed',
+  /** Someone joined or left a project's round-robin rotation. */
+  messengerInboxMemberAdded: 'messenger.inbox_member.added',
+  messengerInboxMemberRemoved: 'messenger.inbox_member.removed',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
   /** A workspace turned the MCP deciding tools on or off. */
@@ -199,6 +202,8 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.helpArticleUnpublished]: 'Help article unpublished',
   [AuditActions.helpArticleDeleted]: 'Help article deleted',
   [AuditActions.messengerGuestsChanged]: 'Messenger guest access changed',
+  [AuditActions.messengerInboxMemberAdded]: 'Added to a messenger inbox',
+  [AuditActions.messengerInboxMemberRemoved]: 'Removed from a messenger inbox',
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
   [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',

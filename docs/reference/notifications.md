@@ -124,7 +124,7 @@ leaves `rule_id` null.
 
 | Preset | Rules |
 |---|---|
-| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed`, the OTA, flag and messenger types, and `status.monitor.down` / `.degraded` / `.recovered` (never source-bound) |
+| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed`, the OTA and flag types, `messenger.conversation.created` and `messenger.message.received` (not `messenger.conversation.unassigned`, which repeats a created event; a channel that wants only the conversations no one took adds that rule by hand), and `status.monitor.down` / `.degraded` / `.recovered` (never source-bound) |
 | `sentry` | `sentry.issue.created` |
 | `vercel` | `vercel.deployment.succeeded` `{ target: production }`, `vercel.deployment.error`, `vercel.deployment.canceled` |
 | `github` | `github.push` `{ hasCommits: true }`, `github.pull_request.opened` / `.reopened` / `.merged` / `.closed`, `github.issues.opened` / `.reopened` / `.closed`, `github.release.published`, `github.workflow_run.failed` |
