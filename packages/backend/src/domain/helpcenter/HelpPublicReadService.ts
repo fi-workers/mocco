@@ -107,6 +107,17 @@ export class HelpPublicReadService {
     };
   }
 
+  /**
+   * The project a site serves, or undefined when there is no such site: what the other public
+   * pages on the site's host (its feedback boards, #175) are scoped by.
+   */
+  async projectOf(slug: string): Promise<{ workspaceId: string; projectId: string; name: string } | undefined> {
+    const site = await new HelpSiteRepo(this.deps.db).findBySlug(slug);
+    return site === undefined
+      ? undefined
+      : { workspaceId: site.workspaceId, projectId: site.projectId, name: site.name };
+  }
+
   /** The published tree in `locale`: collections, sections and articles with something published. */
   async tree(slug: string, locale: string) {
     const site = await this.requireSite(slug);

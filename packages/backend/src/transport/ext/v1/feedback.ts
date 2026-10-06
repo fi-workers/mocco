@@ -45,7 +45,7 @@ import type { EmailVoteService } from '@backend/domain/feedback/EmailVoteService
 import type { PublicBoardService, PublicComment, PublicPost } from '@backend/domain/feedback/PublicBoardService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { RoadmapColumn } from '@mocco/common/feedback';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 
 export interface FeedbackServingDeps {
   boards: Pick<
@@ -126,7 +126,7 @@ const answer = async (work: () => Promise<Response>): Promise<Response> => {
 
 const iso = (at: Date) => at.toISOString();
 
-const wirePost = (post: PublicPost) => ({
+export const wirePost = (post: PublicPost) => ({
   ...post,
   createdAt: iso(post.createdAt),
   shippedAt: post.shippedAt === null ? null : iso(post.shippedAt),
@@ -137,7 +137,7 @@ const wireRoadmap = (roadmap: Record<RoadmapColumn, PublicPost[]>) =>
     Object.entries(roadmap).map(([column, posts]) => [column, posts.map(post => wirePost(post))]),
   ) as Record<RoadmapColumn, ReturnType<typeof wirePost>[]>;
 
-const wireComment = (comment: PublicComment) => ({ ...comment, createdAt: iso(comment.createdAt) });
+export const wireComment = (comment: PublicComment) => ({ ...comment, createdAt: iso(comment.createdAt) });
 
 /** `body` narrowed by `schema`: a field the schema doesn't name is dropped. */
 const send = <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status: 200 | 201 | 202 = 200) =>
@@ -170,10 +170,29 @@ const endUserBucket = (name: string, projectId: string, endUserId: string) => {
   return `feedback:${name}:${hash.slice(0, 32)}`;
 };
 
-export function createFeedbackRoutes(deps: V1Deps, feedback: FeedbackServingDeps): Hono<V1Env> {
+/**
+ * Who may read and write, and in which project: by default a key with feedback:read or
+ * feedback:write. The public board pages (#175) mount the same routes behind their site
+ * instead (transport/ext/sites/feedback.ts), so both surfaces answer with one projection, one
+ * set of token checks and one set of limits.
+ */
+export interface FeedbackGate {
+  read: MiddlewareHandler<V1Env>;
+  write: MiddlewareHandler<V1Env>;
+}
+
+export const keyGate = (deps: V1Deps): FeedbackGate => ({
+  read: requireKey(deps, { scope: ApiScopes.feedbackRead }),
+  write: requireKey(deps, { scope: ApiScopes.feedbackWrite }),
+});
+
+export function createFeedbackRoutes(
+  deps: V1Deps,
+  feedback: FeedbackServingDeps,
+  gate: FeedbackGate = keyGate(deps),
+): Hono<V1Env> {
   const app = new Hono<V1Env>();
-  const read = requireKey(deps, { scope: ApiScopes.feedbackRead });
-  const write = requireKey(deps, { scope: ApiScopes.feedbackWrite });
+  const { read, write } = gate;
 
   /** The end user the request's token names, undefined without one; a bad token throws. */
   const viewerOf = async (c: Context<V1Env>): Promise<string | undefined> => {
@@ -407,7 +426,7 @@ export function createFeedbackRoutes(deps: V1Deps, feedback: FeedbackServingDeps
   app.post('/posts/:id/subscription', write, subscription(true));
   app.delete('/posts/:id/subscription', write, subscription(false));
 
-  app.route('/', createFeedbackLinkRoutes(deps, { emailVotes: feedback.emailVotes, answer, send }));
+  app.route('/', createFeedbackLinkRoutes(deps, { emailVotes: feedback.emailVotes, answer, send, write }));
 
   return app;
 }

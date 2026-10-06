@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, the feedback MCP tools, and the public /v1 surface with end-user tokens.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, the feedback MCP tools, and the public /v1 surface with end-user tokens, and the public board pages.
 type: reference
 status: active
 created: 2026-10-06
@@ -30,11 +30,16 @@ code_refs:
   - packages/backend/src/domain/feedback/EmailVoteService.ts
   - packages/backend/src/domain/feedback/link-tokens.ts
   - packages/backend/src/transport/ext/v1/feedback-links.ts
+  - packages/backend/src/transport/ext/sites/feedback.ts
+  - packages/backend/src/transport/sites/feedback.ts
+  - packages/frontend/src/pages/_sites/[site]/feedback/[board]/index.tsx
+  - packages/frontend/src/pages/_sites/[site]/feedback/[board]/[number].tsx
+  - packages/frontend/src/lib/feedback-client.ts
 ---
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` surface (#174, [below](#the-public-v1-surface)): reads, the similar-posts search, and posts, votes, comments and follows from the app's signed-in end users, voting by email, and signed unsubscribe links. GitHub links, shipping on deploy and the changelog come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` surface (#174, [below](#the-public-v1-surface)): reads, the similar-posts search, and posts, votes, comments and follows from the app's signed-in end users, voting by email, and signed unsubscribe links; the public board and post pages (#175, [below](#public-board-pages)). GitHub links, shipping on deploy and the changelog come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -222,3 +227,18 @@ Every feedback mail carries a signed unsubscribe link, `/unsubscribe/{token}`, i
 - The links take no key. A token is `<claims>.<HMAC-SHA256>` over its purpose (`identify` or `unsubscribe`), workspace, project, end user, post and expiry, with a key derived from `AUTH_SECRET` (apart from the status subscribers' key), like the [status subscriber links](./status.md#subscribers). Nothing is stored. An edited token, one signed with another key, an expired one or one for the other purpose gets the "not valid" page (`400`).
 - The pages are `no-store`, `noindex`, `no-referrer`, and escape the post's title. 30 link openings a minute per client address.
 
+## Public board pages
+
+A project's public boards have pages on its help center's site (#175, [ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/feedback/<board>` lists a board and `/feedback/<board>/<number>` shows one post, so `showyourtime.help.mocco.club/feedback/ideas/12`, or the site's custom domain. The help site is the project's one public host so far; the site's slug names the project the way a key does on `/v1`. A project without a help site has no board pages. Customer guide: [Open a public feedback board](../customer/feedback/public-board.md).
+
+**Rendering.** `pages/_sites/[site]/feedback/[board]/index.tsx` and `[number].tsx` are ISR (`getStaticProps`, `fallback: 'blocking'`, 60 seconds), so a crawler or a browser without JavaScript reads the board and its posts. Their data comes from `@mocco/backend/sites/feedback` (`transport/sites/feedback.ts`), which reads through `PublicBoardService` and parses every post, comment and board through the same `@mocco/common/feedback-v1` schemas `/v1` answers with. A private or missing board, an unknown number and an unknown site are 404. A merged duplicate's number redirects permanently (308) to the post it was merged into (`PublicBoardService.postOnBoard`, a post by its number on the board). A post's Markdown becomes the render tree on the server, with links and images shown as their text, so the board is no place to plant links. Comments are plain text.
+
+**SEO.** Each page has its canonical and Open Graph URLs on the site's origin (`helpSiteOrigin`), a signed share card (ADR 0030), a `BreadcrumbList`, and on a post a `DiscussionForumPosting` with its vote and comment counts. Pages carry `referrer: no-referrer`. Without `HELP_SITES_DOMAIN` (no origin to be canonical on) a page is `noindex`.
+
+**The browser's calls.** Filters (`?status=&category=&sort=`, in the address), the next page, the live count, the viewer's own vote, posting, voting, comments, similar posts and voting by email go to `/api/ext/sites/{site}/feedback/*` (`transport/ext/sites/feedback.ts`). These are the `/v1/feedback` routes themselves, mounted behind the site instead of a key (`createFeedbackRoutes` takes a gate): the site's project is the principal, as a publishable key with `feedback:read` and `feedback:write` would be, after a per-address limit (120 a minute). So the projection, the end-user token checks and the per-end-user and per-address [limits](#the-public-v1-surface) are the same code. Answers are `no-store`. It is not a versioned API: apps and widgets use `/v1` with their key.
+
+**Signing in.** An app links its signed-in user to the board with `?token=<the HS256 end-user token>`. The page keeps the token in `sessionStorage` for that tab, takes it out of the address through the router, and sends it as `Authorization: Bearer`. A refused or expired token is forgotten, and the page falls back to voting by email. Without a token a visitor reads and votes by email; posting and commenting need a token.
+
+A test (`transport/ext/sites/feedback.test.ts`) builds both pages' data and calls the routes after an internal note, an official response, another end user's comment and a post written by an email-like end-user id, and checks that none of the note, the team member's id, the end users' ids, the email or the workspace, project and board ids is in any page or answer.
+
+Not built yet: the roadmap page, the sitemap entries, and the console's inbox.

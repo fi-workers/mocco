@@ -214,6 +214,26 @@ export class PublicBoardService {
     return { post: toPublicPost(post), viewer: { vote: vote?.state ?? null } };
   }
 
+  /**
+   * A post by its number on a public board: the address the public board pages use. A merged
+   * duplicate comes with the number of the post it was merged into (on the same board), so its
+   * page can redirect there. Anything else is FeedbackPostNotFoundError.
+   */
+  async postOnBoard(
+    scope: FeedbackScope,
+    slug: string,
+    number: number,
+  ): Promise<{ post: PublicPost; mergedIntoNumber: number | null }> {
+    const board = await this.publicBoard(scope, slug);
+    const posts = new FeedbackPostRepo(this.deps.db);
+    const post = await posts.findByNumber(scope, board.id, number);
+    if (post === undefined) {
+      throw new FeedbackPostNotFoundError(`${slug}#${String(number)}`);
+    }
+    const target = post.mergedIntoPostId === null ? undefined : await posts.find(scope, post.mergedIntoPostId);
+    return { post: toPublicPost(post), mergedIntoNumber: target?.number ?? null };
+  }
+
   /** The post's public comments, oldest first. */
   async comments(
     scope: FeedbackScope,
