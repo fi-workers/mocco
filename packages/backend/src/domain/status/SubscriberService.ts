@@ -1,18 +1,21 @@
-// Status page subscribers (#156): a visitor signs up with an email address, confirms it from the
-// mail (double opt-in), and is then sent each published incident update and maintenance change
-// of the page, filtered to the components they chose. Every mail is a delivery row unique per
-// subscriber and notice, so a repeated fan-out sends nothing new, and a delivery is sent at most
-// once. The confirm and unsubscribe links are signed tokens (`subscriber-token.ts`).
+// Status page subscribers (#156): a visitor signs up with an email address or a webhook URL,
+// confirms it (double opt-in: the link in the mail, or the `confirm` link of the webhook's
+// confirmation event), and is then sent each published incident update and maintenance change
+// of the page, filtered to the components they chose. Every mail or event is a delivery row
+// unique per subscriber and notice, so a repeated fan-out sends nothing new, and a delivery is
+// sent at most once. The confirm and unsubscribe links are signed tokens (`subscriber-token.ts`).
 import { DeliveryStatuses } from '@mocco/common/notification';
-import { IncidentVisibilities, SubscriberLocales, SubscriberMailKinds } from '@mocco/common/status';
+import { IncidentVisibilities, SubscriberChannels, SubscriberLocales, SubscriberMailKinds } from '@mocco/common/status';
 
 import { RetryAt } from '@backend/domain/jobs/retry-at';
 import { EmailResultKinds } from '@backend/domain/notification/senders/email';
+import { newWebhookSecret, WebhookResultKinds } from '@backend/domain/notification/senders/webhook';
 import {
   StatusEntityNotFoundError,
   SubscriberComponentError,
   SubscriberDeliveryRetryError,
   SubscriberTokenError,
+  SubscriberWebhookUrlError,
 } from '@backend/domain/status/errors';
 import { deliverToSubscriber } from '@backend/domain/status/jobs';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
@@ -26,11 +29,13 @@ import { SubscriberDeliveryRepo } from '@backend/domain/status/repos/subscriber-
 import { SubscriberRepo } from '@backend/domain/status/repos/subscriber.repo';
 import { renderSubscriberMail, subscriberMailContentSchema } from '@backend/domain/status/subscriber-mail';
 import { CONFIRM_TOKEN_TTL_MS, SubscriberTokenPurposes } from '@backend/domain/status/subscriber-token';
+import { renderSubscriberWebhook, webhookSecretAad } from '@backend/domain/status/subscriber-webhook';
 import { noticeKeyOf } from '@backend/domain/status/SubscriberNotices';
 import { inBatches } from '@backend/infra/db/rows';
 
 import type { JobQueue } from '@backend/domain/jobs/ports';
-import type { EmailResult, EmailSender } from '@backend/domain/notification/senders/email';
+import type { EmailSender } from '@backend/domain/notification/senders/email';
+import type { WebhookSender } from '@backend/domain/notification/senders/webhook';
 import type { RateLimitRule } from '@backend/domain/ratelimit/ports';
 import type { SubscriberNotice } from '@backend/domain/status/jobs';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
@@ -38,8 +43,9 @@ import type { SubscriberDeliveryRow } from '@backend/domain/status/repos/subscri
 import type { SubscriberRow } from '@backend/domain/status/repos/subscriber.repo';
 import type { SubscriberMailContent } from '@backend/domain/status/subscriber-mail';
 import type { SubscriberTokenPurpose, SubscriberTokens } from '@backend/domain/status/subscriber-token';
+import type { SecretBox } from '@backend/infra/crypto/secret-box';
 import type { Db } from '@backend/infra/db/types';
-import type { StatusSubscribeInput, SubscriberLocale } from '@mocco/common/status';
+import type { StatusEmailSubscribeInput, StatusWebhookSubscribeInput, SubscriberLocale } from '@mocco/common/status';
 
 /** Limits of the public sign-up route: per client address, and per page and address. */
 export const SubscriberRateLimits = {
@@ -67,6 +73,10 @@ export interface SubscriberServiceDeps {
   tokens: SubscriberTokens;
   /** Undefined when this deployment sends no email: deliveries then fail. */
   email: EmailSender | undefined;
+  /** Seals webhook signing secrets; undefined without SECRETS_ENCRYPTION_KEYS (no webhook sign-ups). */
+  box?: Pick<SecretBox, 'seal' | 'open'>;
+  /** Sends webhook events; undefined leaves webhook sign-ups refused. */
+  webhooks?: Pick<WebhookSender, 'send' | 'refusalOf'>;
   /** The app's origin, for the links in mail. */
   appOrigin: string;
   now?: () => Date;
@@ -89,6 +99,16 @@ export const SubscribeOutcomes = {
   alreadySubscribed: 'already_subscribed',
 } as const;
 export type SubscribeOutcome = (typeof SubscribeOutcomes)[keyof typeof SubscribeOutcomes];
+
+/** A channel's answer to one send. `gone` (a webhook's 410) also unsubscribes the subscriber. */
+type SendResult = { kind: 'sent' } | { kind: 'transient' | 'permanent' | 'gone'; reason: string };
+
+/** A delivery ready to go out, or why it doesn't (`suppressed` or `failed`). */
+type Composed =
+  | { refused: { status: typeof DeliveryStatuses.suppressed | typeof DeliveryStatuses.failed; error: string } }
+  | { refused?: undefined; send: () => Promise<SendResult> };
+
+const refuse = (error: string): Composed => ({ refused: { status: DeliveryStatuses.failed, error } });
 
 /** A notice resolved: the page, the components it is about, and what the mail says. */
 interface NoticeTarget {
@@ -241,12 +261,12 @@ export class SubscriberService {
   /** Settle a claimed delivery from the relay's answer; throw so the job retries a transient one. */
   private async settleResult(
     delivery: SubscriberDeliveryRow,
-    result: EmailResult,
+    result: SendResult,
     attempt: SubscriberDeliveryAttempt,
   ): Promise<void> {
     const deliveries = new SubscriberDeliveryRepo(this.deps.db);
     const from = DeliveryStatuses.sending;
-    if (result.kind === EmailResultKinds.sent) {
+    if (result.kind === 'sent') {
       await deliveries.updateFrom(delivery.id, from, {
         status: DeliveryStatuses.sent,
         sentAt: attempt.now,
@@ -255,7 +275,11 @@ export class SubscriberService {
       });
       return;
     }
-    if (result.kind === EmailResultKinds.permanent || attempt.isFinalAttempt) {
+    if (result.kind !== 'transient' || attempt.isFinalAttempt) {
+      if (result.kind === 'gone') {
+        // The receiver asked to stop: no more deliveries to it.
+        await new SubscriberRepo(this.deps.db).unsubscribe(delivery.subscriberId, attempt.now);
+      }
       await deliveries.updateFrom(delivery.id, from, {
         status: DeliveryStatuses.failed,
         error: result.reason,
@@ -272,61 +296,78 @@ export class SubscriberService {
     throw new SubscriberDeliveryRetryError(result.reason);
   }
 
-  /** The mail of a queued delivery, or why it is not sent (`suppressed` or `failed`). */
-  // eslint-disable-next-line sonarjs/function-return-type -- a union: the mail, or the refusal
-  private composeMail(delivery: SubscriberDeliveryRow, subscriber: SubscriberRow, page: StatusPageRow, now: Date) {
+  /** What a queued delivery sends through its subscriber's channel, or why it doesn't. */
+  // eslint-disable-next-line sonarjs/function-return-type -- one union type (`Composed`)
+  private compose(
+    delivery: SubscriberDeliveryRow,
+    subscriber: SubscriberRow,
+    page: StatusPageRow,
+    now: Date,
+  ): Composed {
     const suppressed = suppressionOf(delivery, subscriber);
     if (suppressed !== undefined) {
       return { refused: { status: DeliveryStatuses.suppressed, error: suppressed } };
     }
     const content = subscriberMailContentSchema.safeParse(delivery.content);
-    if (!content.success || subscriber.email === null) {
-      const error = content.success ? 'no email address' : 'unreadable mail content';
-      return { refused: { status: DeliveryStatuses.failed, error } };
+    if (!content.success) {
+      return refuse('unreadable content');
     }
     const { tokens } = this.deps;
-    const confirm = tokens.issue(SubscriberTokenPurposes.confirm, subscriber.id, now);
-    const unsubscribe = tokens.issue(SubscriberTokenPurposes.unsubscribe, subscriber.id, now);
-    const mail = renderSubscriberMail(content.data, {
-      locale: subscriber.locale,
-      pageTitle: page.title,
-      confirmUrl: this.linkOf(page, 'confirm', confirm),
-      unsubscribeUrl: this.linkOf(page, 'unsubscribe', unsubscribe),
-    });
-    return { mail: { ...mail, to: subscriber.email } };
-  }
-
-  /** Whether this deployment sends mail; without it sign-ups are refused (links still work). */
-  canSendMail(): boolean {
-    return this.deps.email !== undefined;
-  }
-
-  /**
-   * Sign an address up for the page at `slug`, pending confirmation, and queue the confirmation
-   * mail (at most one per `confirmationIntervalMs`). Throws StatusEntityNotFoundError for an
-   * unknown page and SubscriberComponentError for a component that isn't on it.
-   */
-  async subscribe(slug: string, input: Omit<StatusSubscribeInput, 'website'>): Promise<SubscribeOutcome> {
-    const page = await this.pageBySlug(slug);
-    const scope = { workspaceId: page.workspaceId, projectId: page.projectId };
-    const componentIds = input.componentIds === undefined ? null : [...new Set(input.componentIds)];
-    if (componentIds !== null) {
-      const found = new Set(await new ComponentRepo(this.deps.db).idsOnPage(scope, page.id, componentIds));
-      const missing = componentIds.find(id => !found.has(id));
-      if (missing !== undefined) {
-        throw new SubscriberComponentError(missing);
+    const links = {
+      confirmUrl: this.linkOf(page, 'confirm', tokens.issue(SubscriberTokenPurposes.confirm, subscriber.id, now)),
+      unsubscribeUrl: this.linkOf(
+        page,
+        'unsubscribe',
+        tokens.issue(SubscriberTokenPurposes.unsubscribe, subscriber.id, now),
+      ),
+    };
+    if (subscriber.channel === SubscriberChannels.webhook) {
+      const { box, webhooks } = this.deps;
+      const { webhookUrl: url, webhookSecretSealed: sealed } = subscriber;
+      if (box === undefined || webhooks === undefined || url === null || sealed === null) {
+        return refuse('webhooks are not configured (SECRETS_ENCRYPTION_KEYS)');
       }
+      const body = renderSubscriberWebhook(content.data, { page, sentAt: now, ...links });
+      return {
+        send: async () => {
+          const secret = box.open(sealed, webhookSecretAad(page.id));
+          const result = await webhooks.send({ url, secret, id: delivery.id, sentAt: now, body });
+          return result.kind === WebhookResultKinds.sent ? { kind: 'sent' } : result;
+        },
+      };
     }
-    const subscriber = await new SubscriberRepo(this.deps.db).upsertPendingEmail({
-      ...scope,
-      pageId: page.id,
-      email: input.email,
-      componentIds,
-      locale: input.locale ?? SubscriberLocales.en,
-    });
-    if (subscriber === undefined) {
-      return SubscribeOutcomes.alreadySubscribed;
+    const { email } = this.deps;
+    if (subscriber.email === null || email === undefined) {
+      return refuse(subscriber.email === null ? 'no email address' : 'email is not configured (EMAIL_DRIVER)');
     }
+    const to = subscriber.email;
+    const mail = renderSubscriberMail(content.data, { locale: subscriber.locale, pageTitle: page.title, ...links });
+    return {
+      send: async () => {
+        const result = await email.send({ ...mail, to });
+        return result.kind === EmailResultKinds.sent ? { kind: 'sent' } : result;
+      },
+    };
+  }
+
+  /** The components a sign-up names, deduplicated and checked to be on the page; null for all. */
+  private async componentFilterOf(page: StatusPageRow, ids: readonly string[] | undefined): Promise<string[] | null> {
+    if (ids === undefined) {
+      return null;
+    }
+    const componentIds = [...new Set(ids)];
+    const scope = { workspaceId: page.workspaceId, projectId: page.projectId };
+    const found = new Set(await new ComponentRepo(this.deps.db).idsOnPage(scope, page.id, componentIds));
+    const missing = componentIds.find(id => !found.has(id));
+    if (missing !== undefined) {
+      throw new SubscriberComponentError(missing);
+    }
+    return componentIds;
+  }
+
+  /** Queue the subscriber's confirmation (mail or event) unless one went out in the last
+   * `confirmationIntervalMs`; then kick its job. */
+  private async queueConfirmation(subscriber: SubscriberRow): Promise<SubscribeOutcome> {
     const now = this.now();
     const jobId = await this.deps.db.transaction(async tx => {
       const since = new Date(now.getTime() - SubscriberPolicy.confirmationIntervalMs);
@@ -349,6 +390,73 @@ export class SubscriberService {
     }
     this.deps.queue.kick(jobId);
     return SubscribeOutcomes.confirmationQueued;
+  }
+
+  /** Whether this deployment sends mail; without it sign-ups are refused (links still work). */
+  canSendMail(): boolean {
+    return this.deps.email !== undefined;
+  }
+
+  /**
+   * Sign an address up for the page at `slug`, pending confirmation, and queue the confirmation
+   * mail (at most one per `confirmationIntervalMs`). Throws StatusEntityNotFoundError for an
+   * unknown page and SubscriberComponentError for a component that isn't on it.
+   */
+  async subscribe(
+    slug: string,
+    input: Omit<StatusEmailSubscribeInput, 'website' | 'channel'>,
+  ): Promise<SubscribeOutcome> {
+    const page = await this.pageBySlug(slug);
+    const componentIds = await this.componentFilterOf(page, input.componentIds);
+    const subscriber = await new SubscriberRepo(this.deps.db).upsertPendingEmail({
+      workspaceId: page.workspaceId,
+      projectId: page.projectId,
+      pageId: page.id,
+      email: input.email,
+      componentIds,
+      locale: input.locale ?? SubscriberLocales.en,
+    });
+    return subscriber === undefined ? SubscribeOutcomes.alreadySubscribed : await this.queueConfirmation(subscriber);
+  }
+
+  /** Whether this deployment takes webhook sign-ups: it can seal their secrets and call them. */
+  canTakeWebhooks(): boolean {
+    return this.deps.box !== undefined && this.deps.webhooks !== undefined;
+  }
+
+  /**
+   * Sign a webhook URL up for the page at `slug`, pending confirmation, with a new signing secret
+   * (returned once, sealed at rest), and queue the confirmation event. A URL already following
+   * the page is `alreadySubscribed` and keeps its secret. Throws SubscriberWebhookUrlError for a
+   * URL whose host is an address that isn't public (a name is checked on every delivery).
+   */
+  async subscribeWebhook(
+    slug: string,
+    input: Omit<StatusWebhookSubscribeInput, 'channel'>,
+  ): Promise<{ outcome: SubscribeOutcome; secret?: string }> {
+    const { box, webhooks } = this.deps;
+    if (box === undefined || webhooks === undefined) {
+      throw new Error('webhook sign-ups need SECRETS_ENCRYPTION_KEYS (check canTakeWebhooks first)');
+    }
+    const refusal = webhooks.refusalOf(input.url);
+    if (refusal !== undefined) {
+      throw new SubscriberWebhookUrlError(refusal);
+    }
+    const page = await this.pageBySlug(slug);
+    const componentIds = await this.componentFilterOf(page, input.componentIds);
+    const secret = newWebhookSecret();
+    const subscriber = await new SubscriberRepo(this.deps.db).upsertPendingWebhook({
+      workspaceId: page.workspaceId,
+      projectId: page.projectId,
+      pageId: page.id,
+      webhookUrl: input.url,
+      webhookSecretSealed: box.seal(secret, webhookSecretAad(page.id)),
+      componentIds,
+    });
+    if (subscriber === undefined) {
+      return { outcome: SubscribeOutcomes.alreadySubscribed };
+    }
+    return { outcome: await this.queueConfirmation(subscriber), secret };
   }
 
   /** Confirm the sign-up a confirmation link names. */
@@ -385,7 +493,7 @@ export class SubscriberService {
     if (target === undefined) {
       return { queued: 0 };
     }
-    const active = await new SubscriberRepo(this.deps.db).listActiveEmail(target.page.id);
+    const active = await new SubscriberRepo(this.deps.db).listActive(target.page.id);
     const subscribers = active.filter(subscriber => isWanted(subscriber, target.componentIds));
     const dedupeKey = noticeKeyOf(notice);
     const jobIds: string[] = [];
@@ -415,9 +523,9 @@ export class SubscriberService {
   }
 
   /**
-   * Send one delivery. A delivery is sent at most once: it is claimed (`sending`) before the mail
-   * goes out, and a claim left by a run that died is given up (`failed`) rather than sent again,
-   * since mail can't be taken back. Runs as the `status.subscribers.deliver` job.
+   * Send one delivery by mail or webhook. A delivery is sent at most once: it is claimed
+   * (`sending`) before it goes out, and a claim left by a run that died is given up (`failed`)
+   * rather than sent again, since a sent message can't be taken back. Runs as the `status.subscribers.deliver` job.
    */
   async deliver(deliveryId: string, attempt: SubscriberDeliveryAttempt): Promise<void> {
     const deliveries = new SubscriberDeliveryRepo(this.deps.db);
@@ -436,14 +544,9 @@ export class SubscriberService {
     if (subscriber === undefined || page === undefined) {
       return;
     }
-    const { email } = this.deps;
-    const composed = this.composeMail(delivery, subscriber, page, attempt.now);
-    if (composed.refused !== undefined || email === undefined) {
-      const refused = composed.refused ?? {
-        status: DeliveryStatuses.failed,
-        error: 'email is not configured (EMAIL_DRIVER)',
-      };
-      await deliveries.updateFrom(delivery.id, DeliveryStatuses.queued, refused);
+    const composed = this.compose(delivery, subscriber, page, attempt.now);
+    if (composed.refused !== undefined) {
+      await deliveries.updateFrom(delivery.id, DeliveryStatuses.queued, composed.refused);
       return;
     }
     const claimed = await deliveries.claim(delivery.id, attempt.now);
@@ -451,7 +554,7 @@ export class SubscriberService {
       // Another run claimed it between the read and the claim.
       return;
     }
-    await this.settleResult(claimed, await email.send(composed.mail), attempt);
+    await this.settleResult(claimed, await composed.send(), attempt);
   }
 
   /** Delete sign-ups never confirmed whose link has expired, and settled deliveries past retention. */

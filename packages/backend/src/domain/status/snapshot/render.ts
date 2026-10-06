@@ -2,6 +2,11 @@
 // and CSS that show the current state without JavaScript; a small script localizes times and,
 // while the tab is visible, polls `current.json` and swaps in the version it names. Every piece
 // of customer text goes through `escapeHtml`.
+//
+// The sign-up form (#156) is the page's only call to the app. It is a plain form that posts
+// without the script (the app answers with a page); with the script it posts in the background
+// and says how it went in place. Either way a failure only changes the form's message: nothing
+// else on the page depends on it.
 import { ComponentStatuses, IncidentStatuses, MaintenanceStatuses } from '@mocco/common/status';
 
 import type { PublicIncident, PublicSnapshot, PublicUptimeDay } from '@backend/domain/status/snapshot/format';
@@ -62,6 +67,10 @@ main{max-width:760px;margin:0 auto;padding:32px 16px 48px}h1{font-size:24px;marg
 .status{font-size:13px;font-weight:600;white-space:nowrap}.card{border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:12px}
 .card h3{margin:0 0 4px;font-size:16px}.update{margin-top:12px}.update p{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 footer{margin-top:40px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}a{color:inherit}
+.subscribe .field{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}.subscribe input[type=email]{flex:1 1 220px;min-width:0;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.subscribe button{font:inherit;font-weight:600;padding:8px 14px;border:0;border-radius:6px;background:var(--fg);color:var(--bg);cursor:pointer}.subscribe button:disabled{opacity:.6}
+.subscribe fieldset{border:0;margin:8px 0 0;padding:0}.subscribe details{margin-top:8px}.subscribe .choice{display:block;font-size:14px}
+.hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 `;
 
 const statusColor = (status: ComponentStatus) => `var(--${status})`;
@@ -140,15 +149,52 @@ function renderMaintenance(window: PublicSnapshot['maintenances'][number]): stri
   return `<article class="card"><h3>${escapeHtml(window.title)}</h3>${meta}${paragraph(window.body)}</article>`;
 }
 
+/** What the form says before and after a sign-up; the script writes the last three. */
+const SUBSCRIBE_TEXT = {
+  hint: "We'll email you a link to confirm. Or follow the",
+  sending: 'Signing you up…',
+  done: 'Check your inbox: we sent you a link to confirm your subscription.',
+  invalid: 'Check the address and try again.',
+  failed: "We couldn't sign you up right now. Try again later.",
+} as const;
+
+/** The sign-up form: email, optionally the components to hear about, and a honeypot field people
+ * never see (`website`). */
+function renderSubscribe(snapshot: PublicSnapshot, root: string): string {
+  if (snapshot.subscribe === null) {
+    return '';
+  }
+  const components = snapshot.sections.flatMap(section => section.components);
+  const choices =
+    components.length < 2
+      ? ''
+      : `<details><summary>Only some components</summary><fieldset><legend class="sr">Components</legend>${components
+          .map(
+            component =>
+              `<label class="choice"><input type="checkbox" name="componentIds" value="${escapeHtml(component.id)}"> ${escapeHtml(component.name)}</label>`,
+          )
+          .join('')}</fieldset></details>`;
+  return `<h2 id="subscribe">Get updates</h2><form class="card subscribe" method="post" action="${escapeHtml(snapshot.subscribe.url)}" data-subscribe>
+<label for="subscribe-email">Email address</label><div class="field"><input id="subscribe-email" name="email" type="email" required autocomplete="email" maxlength="254" placeholder="you@example.com"><button type="submit">Subscribe</button></div>
+<div class="hp" aria-hidden="true"><label for="subscribe-website">Website</label><input id="subscribe-website" name="website" tabindex="-1" autocomplete="off"></div>${choices}
+<p class="meta" role="status" aria-live="polite" data-subscribe-status>${escapeHtml(SUBSCRIBE_TEXT.hint)} <a href="${root}feed.atom">Atom feed</a>.</p></form>`;
+}
+
 const incidentList = (incidents: readonly PublicIncident[]) =>
   incidents.map(incident => renderIncident(incident)).join('');
 
-/** The page's script: localize times, then poll the pointer while the tab is visible. */
-function script(root: string, version: number): string {
-  return `(function(){var root=${JSON.stringify(root)},version=${version};
+/** The page's script: localize times, poll the pointer while the tab is visible (never swapping the
+ * page while someone is typing an address), and post the sign-up form in the background. */
+export function pageScript(root: string, version: number): string {
+  const text = JSON.stringify(SUBSCRIBE_TEXT);
+  return `(function(){var root=${JSON.stringify(root)},version=${version},text=${text};
 function localize(){document.querySelectorAll('time[datetime]').forEach(function(el){var d=new Date(el.getAttribute('datetime'));if(!isNaN(d))el.textContent=d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});});}
-function poll(){if(document.visibilityState!=='visible')return;fetch(root+'current.json',{cache:'no-cache'}).then(function(r){return r.ok?r.json():null;}).then(function(p){if(!p||typeof p.version!=='number'||p.version===version)return null;return fetch(root+'v/'+p.version+'/index.html').then(function(r){return r.ok?r.text():null;}).then(function(html){if(!html)return;var next=new DOMParser().parseFromString(html,'text/html').querySelector('main');if(!next)return;document.querySelector('main').replaceWith(next);version=p.version;localize();});}).catch(function(){});}
-localize();setInterval(poll,30000);document.addEventListener('visibilitychange',poll);})();`;
+function typing(){var el=document.querySelector('[data-subscribe] input[name=email]');return !!el&&(el.value!==''||document.activeElement===el);}
+function poll(){if(document.visibilityState!=='visible'||typing())return;fetch(root+'current.json',{cache:'no-cache'}).then(function(r){return r.ok?r.json():null;}).then(function(p){if(!p||typeof p.version!=='number'||p.version===version)return null;return fetch(root+'v/'+p.version+'/index.html').then(function(r){return r.ok?r.text():null;}).then(function(html){if(!html)return;var next=new DOMParser().parseFromString(html,'text/html').querySelector('main');if(!next)return;document.querySelector('main').replaceWith(next);version=p.version;localize();});}).catch(function(){});}
+function subscribe(e){var form=e.target;if(!form||!form.hasAttribute||!form.hasAttribute('data-subscribe')||typeof fetch!=='function'||typeof URLSearchParams!=='function'||typeof FormData!=='function')return;e.preventDefault();var status=form.querySelector('[data-subscribe-status]'),button=form.querySelector('button');function say(t){if(status)status.textContent=t;}
+if(button)button.disabled=true;say(text.sending);
+fetch(form.action,{method:'POST',headers:{Accept:'application/json'},body:new URLSearchParams(new FormData(form))}).then(function(r){if(r.status===202){form.reset();say(text.done);}else{say(r.status===400?text.invalid:text.failed);}},function(){say(text.failed);}).then(function(){if(button)button.disabled=false;});}
+localize();setInterval(poll,30000);document.addEventListener('visibilitychange',poll);document.addEventListener('submit',subscribe);})();`;
 }
 
 /**
@@ -164,14 +210,16 @@ export function renderStatusPage(snapshot: PublicSnapshot, root: '' | '../../'):
     snapshot.incidents.length === 0 ? '' : `<h2>Active incidents</h2>${incidentList(snapshot.incidents)}`,
     maintenances === '' ? '' : `<h2>Maintenance</h2>${maintenances}`,
     `<h2>Components</h2>${renderComponents(snapshot)}`,
+    renderSubscribe(snapshot, root),
     `<h2>Past incidents</h2>${history}`,
   ].join('');
+  const subscribeLink = snapshot.subscribe === null ? '' : '<a href="#subscribe">Get updates</a>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><link rel="alternate" type="application/atom+xml" title="${title}" href="${root}feed.atom"><style>${STYLE}</style></head>
 <body><main data-version="${snapshot.version}"><h1>${title}</h1><div class="banner" style="background:${statusColor(snapshot.status)}">${OVERALL_LABELS[snapshot.status]}</div>${sections}
-<footer><span>Updated ${time(snapshot.builtAt)}</span><a href="${root}feed.atom">Atom feed</a></footer></main>
-<script>${script(root, snapshot.version)}</script></body></html>
+<footer><span>Updated ${time(snapshot.builtAt)}</span><span>${subscribeLink} <a href="${root}feed.atom">Atom feed</a></span></footer></main>
+<script>${pageScript(root, snapshot.version)}</script></body></html>
 `;
 }
 

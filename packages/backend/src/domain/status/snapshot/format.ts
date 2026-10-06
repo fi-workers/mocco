@@ -79,6 +79,9 @@ export const publicSnapshotSchema = z.object({
   maintenances: z.array(publicMaintenanceSchema),
   /** The latest resolved incidents, most recently resolved first. */
   history: z.array(publicIncidentSchema),
+  /** Where the page's sign-up form posts (#156); null when this deployment takes no email
+   * sign-ups. Versions built before it existed read as null. */
+  subscribe: z.object({ url: z.url() }).nullable().default(null),
 });
 export type PublicSnapshot = z.infer<typeof publicSnapshotSchema>;
 export type PublicIncident = z.infer<typeof publicIncidentSchema>;

@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks';
 
 import { BlockedAddressError, NoAddressError } from './errors';
 
-import type { AddressPolicy } from './address-policy';
+import type { AddressPolicy } from '@mocco/common/address-policy';
 
 export interface ResolvedAddress {
   address: string;

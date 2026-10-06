@@ -36,6 +36,7 @@ code_refs:
   - packages/backend/src/domain/notification/senders/email.ts
   - packages/backend/src/domain/notification/senders/smtp.ts
   - packages/backend/src/domain/notification/email-config.ts
+  - packages/backend/src/domain/notification/senders/webhook.ts
 ---
 
 # Notifications
@@ -322,6 +323,17 @@ importer; an SMTP 5xx reply is permanent, anything else transient) and `LogEmail
 `createEmailSenderFromEnv` picks one from `EMAIL_DRIVER` ([env](./env.md#email-vars)). Its first user is status page
 subscribers ([status](./status.md#subscribers)), which keep their own per-recipient deliveries; channels and rules
 here stay Discord-only.
+
+## Webhooks out
+
+`WebhookSender` (`senders/webhook.ts`) POSTs a JSON body to a URL someone outside the workspace chose, signed the
+Standard Webhooks way (`webhook-id`, `webhook-timestamp`, `webhook-signature: v1,<base64 HMAC-SHA256>` keyed by the
+bytes of a `whsec_` secret; `newWebhookSecret`, `signWebhook`). It calls only `https` URLs, checks a literal IP and every
+address a name resolves to against its address policy (`isPublicAddress` from `@mocco/common/address-policy` in
+production) inside the socket's `lookup`, so it connects to the address it checked, and never follows a redirect.
+`refusalOf(url)` answers why a URL would never be called, for checks at sign-up. Answers map to `sent` (2xx),
+`transient` (408, 429, 5xx, timeout, network), `gone` (410) and `permanent` (the rest, redirects and refused addresses
+included). Its first user is status page webhook subscribers.
 
 ## Env
 

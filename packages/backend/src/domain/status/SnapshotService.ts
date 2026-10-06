@@ -40,6 +40,8 @@ export interface SnapshotServiceDeps {
   publisher: StaticPublisher;
   scheduler: Pick<SnapshotScheduler, 'request'>;
   componentStatus: ComponentStatusService;
+  /** The app origin the page's sign-up form posts to; undefined leaves the form out (no email). */
+  subscribeOrigin?: string;
   now?: () => Date;
 }
 
@@ -120,7 +122,11 @@ export class SnapshotService {
         maintenanceComponents,
         componentDays,
       },
-      { version, builtAt },
+      {
+        version,
+        builtAt,
+        ...(this.deps.subscribeOrigin !== undefined && { subscribeOrigin: this.deps.subscribeOrigin }),
+      },
     );
   }
 

@@ -190,7 +190,13 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createReleaseHandlers({ releases: createReleaseService(db, { bus }) }),
     ...createStatusHandlers({
       maintenances: status.statusMaintenances,
-      snapshots: createSnapshotService(db, { store: deps.storage?.store, queue, now: deps.now }),
+      snapshots: createSnapshotService(db, {
+        store: deps.storage?.store,
+        queue,
+        // The page's sign-up form is there only when this deployment sends the confirmation mail.
+        ...(deps.statusSubscribers?.email !== undefined && { subscribeOrigin: deps.appOrigin }),
+        now: deps.now,
+      }),
       retention: new TimeSeriesRetention({
         db,
         ...(deps.statusRawRetentionDays !== undefined && { checkResultDays: deps.statusRawRetentionDays }),

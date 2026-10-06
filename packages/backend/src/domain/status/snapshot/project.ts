@@ -62,7 +62,10 @@ function uptimeOf(days: readonly string[], rows: readonly ComponentDayRow[]) {
   return { days: bars, percent };
 }
 
-export function projectSnapshot(rows: SnapshotRows, meta: { version: number; builtAt: Date }): PublicSnapshot {
+export function projectSnapshot(
+  rows: SnapshotRows,
+  meta: { version: number; builtAt: Date; subscribeOrigin?: string },
+): PublicSnapshot {
   const nameOf = new Map(rows.components.map(component => [component.id, component.name]));
   const days = uptimeBarDays(meta.builtAt);
   const toComponent = (component: ShownComponent) => ({
@@ -138,5 +141,9 @@ export function projectSnapshot(rows: SnapshotRows, meta: { version: number; bui
     incidents: rows.incidents.open.map(incident => toIncident(incident)),
     maintenances,
     history: rows.incidents.resolved.map(incident => toIncident(incident)),
+    subscribe:
+      meta.subscribeOrigin === undefined
+        ? null
+        : { url: `${meta.subscribeOrigin}/api/ext/v1/status-pages/${rows.page.slug}/subscribers` },
   });
 }

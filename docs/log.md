@@ -731,3 +731,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/env.md`, `reference/notifications.md`,
   `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-subscribers` (issue #156)
+
+## 2026-10-06 — Status: webhook subscribers and the page's sign-up form
+
+- Documented the rest of #156 in the [status page model](./reference/status.md#subscribers): webhook subscribers
+  (`{ channel: "webhook", url }`, the `whsec_` secret shown once and sealed by SecretBox, the confirmation event, Standard
+  Webhooks signatures, the address check at sign-up and in the socket's lookup, no redirects, `410` unsubscribes) and the
+  **Get updates** form on the public page, which posts without JavaScript and, with it, only changes its own message when
+  the sign-up fails. The address policy moved to `@mocco/common/address-policy`, shared by the probe and the webhook
+  sender. The [public API](./reference/public-api.md#routes), [notifications](./reference/notifications.md#webhooks-out),
+  [env](./reference/env.md#email-vars) and the feature map (Subscribers is live) say so, and the new customer guide
+  [Let visitors subscribe](./customer/status/subscribers.md) has screenshots of the form, its answer and the
+  confirmation page; [Run a status page](./customer/status/status-page.md) links it.
+- Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/notifications.md`, `reference/env.md`,
+  `reference/feature-map.md`, `customer/status/subscribers.md`, `customer/status/status-page.md`, `log.md`
+- Source: branch `feat/status-subscribers-webhooks` (issue #156)
