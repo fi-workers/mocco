@@ -1,0 +1,35 @@
+# Mocco's hosted probe locations on Fly.io (#151, ADR 0027): the same @mocco/probe container a
+# customer runs at a private location, one Fly app per region, each with its own location token.
+# Nothing in Mocco calls Fly's API; this file and README.md next to it are the whole integration.
+#
+# The app name and region are given at deploy time, so one file serves every region:
+#
+#   fly deploy . --config infra/probe/fly.toml --app mocco-probe-fra --primary-region fra
+#
+# Run it from the repository root: the image builds with the root as its context
+# (packages/probe/Dockerfile). See README.md for the regions, the tokens and the location rows.
+
+primary_region = "fra"
+# The agent stops leasing on SIGTERM and finishes running checks (30 s at most) before exiting.
+kill_signal = "SIGTERM"
+kill_timeout = "45s"
+
+[build]
+  dockerfile = "../../packages/probe/Dockerfile"
+
+[env]
+  MOCCO_URL = "https://www.mocco.work"
+  # Hosted probes refuse private, loopback, link-local and metadata targets (the address policy).
+  MOCCO_PROBE_HOSTED = "true"
+  MOCCO_PROBE_CONCURRENCY = "50"
+  # MOCCO_PROBE_TOKEN is a secret, set per app: fly secrets set --app mocco-probe-<region> ...
+
+# No [http_service] or [[services]]: the agent only makes outbound HTTPS calls, so the machine
+# exposes nothing and needs no public IP.
+
+[[restart]]
+  policy = "always"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -759,3 +759,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/notifications.md`, `reference/env.md`,
   `reference/feature-map.md`, `customer/status/subscribers.md`, `customer/status/status-page.md`, `log.md`
 - Source: branch `feat/status-subscribers-webhooks` (issue #156)
+
+## 2026-10-06 — Status: quorum floor, location health, TLS expiry warnings, hosted probe config
+
+- Documented #151 in the [status page model](./reference/status.md#verdicts-and-the-state-machine): a `majority` or
+  `all` round at two or more locations needs at least two failing (`failQuorumFor`), so one failing region, even beside
+  silent ones, never takes a monitor down; [location health](./reference/status.md#location-health), where the
+  `status.evaluate` job marks a probe silent after three minutes (`unhealthy_since`), rounds stop waiting for it, and a
+  private location alerts once each way (`status.location.unhealthy`, `.recovered`) while a shared one logs for the
+  operator; and [TLS expiry warnings](./reference/status.md#tls-expiry-warnings), one `status.monitor.tls_expiring`
+  per threshold (`tlsWarnDays`, then 7, 3 and 1 day), with `tls_warned_days` re-armed by a renewal. Migration 0072 adds
+  both columns. The probe protocol section says why a private location works behind NAT with outbound 443 only. The
+  hosted regions' Fly.io config and runbook are in `infra/probe/` (config only; the location rows are inserted by an
+  operator, documented there). [Events](./reference/events.md), the feature map and
+  [Monitor your service](./customer/status/monitor-your-service.md) say the same.
+- Docs touched: `reference/status.md`, `reference/events.md`, `reference/feature-map.md`,
+  `customer/status/monitor-your-service.md`, `log.md`
+- Source: branch `feat/status-consensus-tls` (issue #151)

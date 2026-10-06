@@ -202,6 +202,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         ...(deps.statusRawRetentionDays !== undefined && { checkResultDays: deps.statusRawRetentionDays }),
       }),
       verdicts: status.statusVerdicts,
+      locationHealth: status.statusLocationHealth,
       rollups: status.statusRollups,
       subscribers: status.statusSubscribers,
       now: deps.now,

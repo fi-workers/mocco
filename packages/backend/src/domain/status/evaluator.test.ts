@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
+import { StatusEventTypes } from '@mocco/common/events';
 import { CheckOutcomes, LocationKinds, MonitorKinds, MonitorStates, monitorInputSchema } from '@mocco/common/status';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createTestEventBus } from '@backend/domain/events/testing/event-bus';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { createStatusDomain } from '@backend/domain/status/compose';
 import { generateLocationToken, hashLocationToken } from '@backend/domain/status/location-token';
@@ -12,6 +15,7 @@ import { LocationRepo } from '@backend/domain/status/repos/location.repo';
 import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention';
 import { expectOne } from '@backend/infra/db/rows';
 import {
+  domainEvents,
   statusMonitors,
   statusMonitorStateChanges,
   statusRoundVerdicts,
@@ -29,13 +33,15 @@ const T0 = new Date('2026-10-05T09:00:00.000Z');
 const seconds = (n: number) => new Date(T0.getTime() + n * 1000);
 
 /** A result for a lease, as a probe reports it. */
-const resultOf = (lease: ProbeLease, outcome: CheckOutcome, latencyMs = 100) => ({
+const resultOf = (lease: ProbeLease, outcome: CheckOutcome, latencyMs = 100, tlsExpiresAt?: Date) => ({
   leaseId: lease.leaseId,
   monitorId: lease.monitorId,
   roundAt: lease.roundAt,
   outcome: outcome === CheckOutcomes.ok ? CheckOutcomes.ok : CheckOutcomes.fail,
   latencyMs,
+  ...(tlsExpiresAt !== undefined && { tlsExpiresAt }),
 });
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('verdict evaluator (pglite)', () => {
   let t: TestDb;
@@ -73,12 +79,12 @@ describe('verdict evaluator (pglite)', () => {
     );
 
   /** Lease at `location` now and report `outcome` for every round it got; the rounds leased. */
-  const probeRound = async (location: ProbeLocation, outcome: CheckOutcome, latencyMs = 100) => {
+  const probeRound = async (location: ProbeLocation, outcome: CheckOutcome, latencyMs = 100, tlsExpiresAt?: Date) => {
     const { leases } = await status.statusProbes.lease(location, { agentVersion: '1', capacity: 10 });
     if (leases.length > 0) {
       await status.statusProbes.report(
         location,
-        leases.map(lease => resultOf(lease, outcome, latencyMs)),
+        leases.map(lease => resultOf(lease, outcome, latencyMs, tlsExpiresAt)),
       );
     }
     return leases.map(lease => lease.roundAt);
@@ -94,7 +100,11 @@ describe('verdict evaluator (pglite)', () => {
   beforeEach(async () => {
     t = await createTestDb();
     clock = T0;
-    status = createStatusDomain(t.db, { audit: new AuditService({ audit: new AuditRepo(t.db) }), now: () => clock });
+    status = createStatusDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      events: createTestEventBus(t.db, () => clock),
+      now: () => clock,
+    });
     actor = expectOne(
       await t.db
         .insert(users)
@@ -226,5 +236,83 @@ describe('verdict evaluator (pglite)', () => {
     expect(await t.db.select().from(statusRoundVerdicts)).toHaveLength(1);
     const rows = await t.db.select().from(statusMonitors);
     expect(rows.find(row => row.id === paused.id)).toMatchObject({ state: MonitorStates.paused, nextRoundAt: T0 });
+  });
+  it('never takes a majority monitor down for a single failing region (#151)', async () => {
+    const fra = await hosted('fra');
+    const iad = await hosted('iad');
+    const sin = await hosted('sin');
+    await monitor([fra.id, iad.id, sin.id], { confirmations: 1 });
+
+    // Six rounds with fra failing every one; from the fourth, iad is silent and fra fails beside sin.
+    const rounds = [0, 1, 2, 3, 4, 5];
+    await rounds.reduce(async (previous, round) => {
+      await previous;
+      clock = seconds(round * 60 + 5);
+      await probeRound(fra, CheckOutcomes.fail);
+      if (round < 3) {
+        await probeRound(iad, CheckOutcomes.ok);
+      }
+      await probeRound(sin, CheckOutcomes.ok);
+      // A round iad didn't report closes at its deadline.
+      clock = seconds(round * 60 + 26);
+      await status.statusVerdicts.evaluate();
+    }, Promise.resolve());
+
+    expect(await current()).toMatchObject({ state: MonitorStates.up, consecutiveFails: 0 });
+    expect(await transitions()).toEqual(['pending→up']);
+    const verdicts = await t.db.select().from(statusRoundVerdicts).orderBy(statusRoundVerdicts.roundAt);
+    expect(verdicts.map(row => [row.verdict, row.failCount, row.noDataCount])).toEqual([
+      ['ok', 1, 0],
+      ['ok', 1, 0],
+      ['ok', 1, 0],
+      ['ok', 1, 1],
+      ['ok', 1, 1],
+      ['ok', 1, 1],
+    ]);
+  });
+
+  it('warns once at each TLS threshold as the certificate runs out, and again after a renewal (#151)', async () => {
+    const fra = await hosted('fra');
+    const iad = await hosted('iad');
+    const created = await monitor([fra.id, iad.id], {
+      spec: monitorInputSchema.shape.spec.parse({
+        kind: MonitorKinds.http,
+        url: 'https://api.acme.test/health',
+        tlsWarnDays: 14,
+      }),
+    });
+    // The days left each round as fra saw them; iad sees a certificate a day later (the earliest counts).
+    const daysLeft = [20, 13.5, 13, 6.5, 6, 2.5, 2, 60, 13.2];
+    await daysLeft.reduce(async (previous, days, round) => {
+      await previous;
+      clock = seconds(round * 60 + 5);
+      await probeRound(fra, CheckOutcomes.ok, 100, new Date(clock.getTime() + days * DAY_MS));
+      await probeRound(iad, CheckOutcomes.ok, 100, new Date(clock.getTime() + (days + 1) * DAY_MS));
+    }, Promise.resolve());
+
+    const events = await t.db
+      .select()
+      .from(domainEvents)
+      .where(eq(domainEvents.type, StatusEventTypes.statusMonitorTlsExpiring))
+      .orderBy(domainEvents.occurredAt);
+    const facts = events.map(event => (event.payload as { facts: { thresholdDays: string; daysLeft: string } }).facts);
+    expect(facts.map(fact => [fact.thresholdDays, fact.daysLeft])).toEqual([
+      ['14', '13'],
+      ['7', '6'],
+      ['3', '2'],
+      ['14', '13'],
+    ]);
+    expect(await current()).toMatchObject({ id: created.id, state: MonitorStates.up, tlsWarnedDays: 14 });
+    // A warning is a separate signal: the monitor never left up.
+    expect(await transitions()).toEqual(['pending→up']);
+  });
+
+  it('leaves a monitor without tlsWarnDays alone', async () => {
+    const fra = await hosted('fra');
+    await monitor([fra.id]);
+    clock = seconds(5);
+    await probeRound(fra, CheckOutcomes.ok, 100, new Date(clock.getTime() + DAY_MS));
+    expect(await current()).toMatchObject({ tlsWarnedDays: null });
+    expect(await t.db.select().from(domainEvents)).toHaveLength(0);
   });
 });

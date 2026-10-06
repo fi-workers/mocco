@@ -1,5 +1,6 @@
 // The workspace's probe locations (#150), the status section's locations view: Mocco's shared
-// locations and the workspace's private ones, with when each last polled and its agent version.
+// locations and the workspace's private ones, with when each last polled and its agent version,
+// and a "Silent" badge while its probe has stopped polling (#151).
 // Owners and admins create a private location, rotate its token and disable it; a token is
 // shown once, with the commands that run the probe with it. Members read the list.
 import { LOCATION_CODE_PATTERN, LocationKinds } from '@mocco/common/status';
@@ -301,6 +302,9 @@ export default function Locations({ workspaceId }: Props) {
                 {location.agentVersion === null ? '' : ` · ${location.agentVersion}`}
               </span>
               {location.disabledAt === null ? null : <StatusBadge tone={Tones.neutral}>Disabled</StatusBadge>}
+              {location.unhealthySince === null || location.disabledAt !== null ? null : (
+                <StatusBadge tone={Tones.warn}>Silent</StatusBadge>
+              )}
               {isAdmin && location.workspaceId === workspaceId && location.disabledAt === null ? (
                 <LocationActions workspaceId={workspaceId} location={location} onRotated={onIssued} />
               ) : null}

@@ -53,6 +53,7 @@ import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor
 import type { MonitorRow } from '@backend/domain/status/repos/monitor.repo';
 import type { SnapshotScheduler, TouchPage } from '@backend/domain/status/SnapshotScheduler';
 import type { SubscriberNotices } from '@backend/domain/status/SubscriberNotices';
+import type { TlsWarning } from '@backend/domain/status/tls-expiry';
 import type { Db } from '@backend/infra/db/types';
 import type { ComponentImpact, IncidentSeverity, IncidentStatus, MonitorState } from '@mocco/common/status';
 
@@ -75,11 +76,12 @@ export interface MonitorTransitionDeps {
 }
 
 type MonitorLink = Awaited<ReturnType<ComponentMonitorRepo['componentsOfMonitor']>>[number];
-/** A monitor's alerts: every status event but the maintenance overrun (MaintenanceService). */
-type AlertType = Exclude<
-  (typeof StatusEventTypes)[keyof typeof StatusEventTypes],
-  typeof StatusEventTypes.statusMaintenanceOverran
->;
+/** A monitor's state change alerts: not the maintenance overrun (MaintenanceService), the TLS
+ * warning (`warnTls`) or location health (LocationHealthService). */
+type AlertType =
+  | typeof StatusEventTypes.statusMonitorDown
+  | typeof StatusEventTypes.statusMonitorDegraded
+  | typeof StatusEventTypes.statusMonitorRecovered;
 
 const SEVERITY_OF_IMPACT: Record<ComponentImpact, IncidentSeverity> = {
   [ComponentImpacts.majorOutage]: IncidentSeverities.major,
@@ -394,6 +396,44 @@ function alertInput(
   };
 }
 
+const DAY_LABEL = (days: number) => (days === 1 ? '1 day' : `${days} days`);
+
+/** The TLS warning's alert: once per monitor, certificate and threshold (the dedupe key). */
+function tlsAlertInput(monitor: MonitorRow, warning: TlsWarning, appOrigin: string | undefined): PublishInput {
+  const type = StatusEventTypes.statusMonitorTlsExpiring;
+  const target = monitorTargetOf(monitor.spec);
+  const expires = warning.expiresAt.toISOString();
+  // eslint-disable-next-line sonarjs/null-dereference -- toISOString always returns a string
+  const day = expires.slice(0, 10);
+  const path = `/workspaces/${monitor.workspaceId}/p/${monitor.projectId}/status/monitors/${monitor.id}`;
+  return {
+    type,
+    workspaceId: monitor.workspaceId,
+    projectId: monitor.projectId,
+    subject: { type: 'status_monitor', id: monitor.id },
+    dedupeKey: `${type}:${monitor.id}:${expires}:${warning.thresholdDays}`,
+    payload: {
+      facts: {
+        monitor: monitor.name,
+        daysLeft: String(warning.daysLeft),
+        thresholdDays: String(warning.thresholdDays),
+      },
+      message: {
+        title: `Certificate expires in ${DAY_LABEL(warning.daysLeft)}: ${monitor.name}`.slice(0, 256),
+        ...(appOrigin !== undefined && { url: `${appOrigin}${path}` }),
+        description: `The TLS certificate expires on ${day} (UTC). Renew it before then; the checks fail once it has expired.`,
+        severity: warning.thresholdDays <= 3 ? Severities.error : Severities.warning,
+        fields: [
+          // eslint-disable-next-line sonarjs/null-dereference -- target is narrowed to a string on this branch
+          ...(target === null ? [] : [{ name: 'Checks', value: target.slice(0, 1024), inline: false }]),
+          { name: 'Expires', value: expires, inline: true },
+        ],
+        footer: 'Mocco status',
+      },
+    },
+  };
+}
+
 export class MonitorTransitionService {
   constructor(private readonly deps: MonitorTransitionDeps) {}
 
@@ -431,6 +471,17 @@ export class MonitorTransitionService {
         error,
       });
     }
+  }
+
+  /** Alert that the monitor's certificate crossed a warning threshold (the evaluator's
+   * `onTlsWarning` port). Best-effort, like every alert. */
+  async warnTls(monitor: MonitorRow, warning: TlsWarning): Promise<void> {
+    const { events } = this.deps;
+    if (events === undefined) {
+      return;
+    }
+    const input = tlsAlertInput(monitor, warning, this.deps.appOrigin);
+    await publishBestEffort(events, input.type, async () => await Promise.resolve(input));
   }
 
   /** React to a committed state change of `monitor` (the row as the evaluator left it). */

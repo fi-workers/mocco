@@ -207,6 +207,12 @@ export const StatusEventTypes = {
   statusMonitorRecovered: 'status.monitor.recovered',
   /** A run-linked maintenance window is still in progress after its expected minutes. */
   statusMaintenanceOverran: 'status.maintenance.overran',
+  /** A monitored certificate's remaining days fell below one of its warning thresholds (#151). */
+  statusMonitorTlsExpiring: 'status.monitor.tls_expiring',
+  /** A private location's probe stopped polling (#151): its rounds count it as no data. */
+  statusLocationUnhealthy: 'status.location.unhealthy',
+  /** A silent private location's probe is polling again. */
+  statusLocationRecovered: 'status.location.recovered',
 } as const;
 
 /** A product event that, like an inbound one, carries its message rendered when it
@@ -241,6 +247,9 @@ export const statusEventPayloadSchemas = {
   [StatusEventTypes.statusMonitorDegraded]: renderedEventPayloadSchema,
   [StatusEventTypes.statusMonitorRecovered]: renderedEventPayloadSchema,
   [StatusEventTypes.statusMaintenanceOverran]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusMonitorTlsExpiring]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusLocationUnhealthy]: renderedEventPayloadSchema,
+  [StatusEventTypes.statusLocationRecovered]: renderedEventPayloadSchema,
 } as const;
 
 /** Every domain event type. Extension point: spread each area's types here. */

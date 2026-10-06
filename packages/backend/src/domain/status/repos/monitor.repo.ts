@@ -196,6 +196,8 @@ export class MonitorRepo {
       watchUntil?: null;
       watchIntervalSeconds?: null;
       watchRunId?: null;
+      /** The lowest TLS warning threshold alerted (tls-expiry.ts). */
+      tlsWarnedDays?: number | null;
     },
     at: Date,
   ): Promise<MonitorRow> {

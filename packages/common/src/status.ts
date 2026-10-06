@@ -226,6 +226,10 @@ export const MonitorLimits = {
 
 const timeoutMs = z.int().min(1000).max(MonitorLimits.maxTimeoutMs).default(MonitorLimits.defaultTimeoutMs);
 
+/** The warnings below a monitor's `tlsWarnDays`: a certificate warned at 14 days is warned
+ * again at 7, 3 and 1 day left, once each. */
+export const TLS_WARN_STEPS_DAYS = [7, 3, 1] as const;
+
 export const httpMonitorSpecSchema = z.object({
   kind: z.literal(MonitorKinds.http),
   url: z.url({ protocol: /^https?$/ }).max(MonitorLimits.urlMax),
@@ -241,7 +245,8 @@ export const httpMonitorSpecSchema = z.object({
   latencyThresholdMs: z.int().min(1).max(MonitorLimits.maxTimeoutMs).optional(),
   timeoutMs,
   followRedirects: z.boolean().default(true),
-  /** Warn when the certificate expires within this many days. */
+  /** Warn when the certificate expires within this many days, and again at each of
+   * `TLS_WARN_STEPS_DAYS` below it (#151). */
   tlsWarnDays: z.int().min(1).max(365).optional(),
 });
 
@@ -357,6 +362,8 @@ export const locationSchema = z.object({
   lastSeenAt: z.date().nullable(),
   agentVersion: z.string().nullable(),
   disabledAt: z.date().nullable(),
+  /** Since when the location's probe has been silent (#151): its rounds don't wait for it. */
+  unhealthySince: z.date().nullable(),
   createdAt: z.date(),
 });
 export type LocationDto = z.infer<typeof locationSchema>;
@@ -396,6 +403,9 @@ export const ProbeProtocol = {
   resultGraceSeconds: 15,
   /** How long an agent waits before its next lease call. */
   pollAfterMs: 15_000,
+  /** A location whose probe hasn't polled or heartbeat for this long is silent (unhealthy):
+   * rounds stop waiting for it and an alert goes out. Several missed polls and heartbeats. */
+  silentAfterSeconds: 180,
   maxCapacity: 200,
   maxResults: 200,
   detailMax: 512,

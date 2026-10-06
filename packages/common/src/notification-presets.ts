@@ -48,6 +48,9 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: StatusEventTypes.statusMonitorDegraded, filter: {} },
     { eventType: StatusEventTypes.statusMonitorRecovered, filter: {} },
     { eventType: StatusEventTypes.statusMaintenanceOverran, filter: {} },
+    { eventType: StatusEventTypes.statusMonitorTlsExpiring, filter: {} },
+    { eventType: StatusEventTypes.statusLocationUnhealthy, filter: {} },
+    { eventType: StatusEventTypes.statusLocationRecovered, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [
