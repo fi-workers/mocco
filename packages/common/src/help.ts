@@ -78,6 +78,14 @@ export type TranslationState = (typeof TranslationStates)[keyof typeof Translati
 export const SegmentOrigins = { machine: 'machine', human: 'human' } as const;
 export type SegmentOrigin = (typeof SegmentOrigins)[keyof typeof SegmentOrigins];
 
+/**
+ * How one source segment changed between the source a translation was made from and the
+ * current one: the review's segment diff (#213). `changed` pairs an old segment with the
+ * new one in its place.
+ */
+export const SegmentChanges = { same: 'same', changed: 'changed', added: 'added', removed: 'removed' } as const;
+export type SegmentChange = (typeof SegmentChanges)[keyof typeof SegmentChanges];
+
 export const translationInputSchema = z.object({
   articleId: z.uuid(),
   locale: helpLocaleSchema,

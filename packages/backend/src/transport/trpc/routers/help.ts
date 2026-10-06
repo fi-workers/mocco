@@ -186,11 +186,27 @@ export const helpRouter = router({
         await ctx.helpTranslations.saveTranslation(input.workspaceId, input.projectId, ctx.session.user.id, input),
     ),
 
-  /** Ask the machine again for one language (replacing a reviewed translation too). */
-  retranslate: helpProcedure
+  /** One language for review: source beside text, reviewer, machine draft and the source's segment diff. */
+  translationReview: helpProcedure
     .input(articleInput.extend({ locale: helpLocaleSchema }))
+    .query(
+      async ({ ctx, input }) =>
+        await ctx.helpTranslations.review(input.workspaceId, input.projectId, input.articleId, input.locale),
+    ),
+
+  /** Make the machine draft beside a stale reviewed translation the reviewed text. */
+  acceptProposal: helpProcedure
+    .input(articleInput.extend({ locale: helpLocaleSchema, proposalRevisionId: z.uuid() }))
     .mutation(
       async ({ ctx, input }) =>
-        await ctx.helpTranslations.retranslate(input.workspaceId, input.projectId, input.articleId, input.locale),
+        await ctx.helpTranslations.acceptProposal(input.workspaceId, input.projectId, ctx.session.user.id, input),
+    ),
+
+  /** Ask the machine again for one language; replacing a reviewed translation needs `confirm`. */
+  retranslate: helpProcedure
+    .input(articleInput.extend({ locale: helpLocaleSchema, confirm: z.boolean().optional() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.helpTranslations.retranslate(input.workspaceId, input.projectId, ctx.session.user.id, input),
     ),
 });

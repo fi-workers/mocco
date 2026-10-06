@@ -208,6 +208,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createHelpHandlers({
       translations: new HelpTranslationService({
         db,
+        audit,
         sites: new HelpSiteService({ db, audit }),
         queue,
         ...(deps.translator !== undefined && { translator: deps.translator }),

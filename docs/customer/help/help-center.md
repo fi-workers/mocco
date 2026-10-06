@@ -4,7 +4,7 @@ description: Set up a public help site for a project, write articles in Markdown
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, help-center, guide]
@@ -82,12 +82,27 @@ When you publish, Mocco translates the article into each language the site offer
 - **Machine translated**: Mocco's translation, made from the published article.
 - **Reviewed**: a person wrote or fixed it. Mocco never replaces it on its own.
 - **Source changed**: the article was published again after this translation was made; review it to bring it up to date.
+- **Machine draft ready**: on a reviewed language whose source changed, Mocco has drafted a version for the new source. Your sentences are kept and only the changed ones are machine-translated. Readers keep seeing your reviewed text until you accept it.
 - **Failed**: the translation changed the article's structure (a heading, a code block or a link), so Mocco didn't use it. The reason is shown.
 - **Not translated**: nothing yet. Readers in that language get the article in the language you write in.
 
-Choose **Review** (or **Edit**) to write or fix a language beside its preview, then **Save translation**. **Translate again** asks for a new machine translation; on a reviewed language it asks first, because it replaces the reviewed text.
-
 ![An article's translations: English reviewed, Japanese not translated yet](./images/translations.png)
+
+### Review a translation
+
+Choose **Review** (or **Edit**) on a language. The article you wrote is on the left and the translation on the right; switch the right side between **Markdown** and **Preview**. The top line says who last reviewed the language and when.
+
+When the source changed since the translation was made, the review opens with what changed: each changed, added or removed paragraph, heading or table cell, with the old text struck through above the new. Unchanged parts are only counted, so you can see exactly what to look at.
+
+![Reviewing a stale English translation: the two sentences that changed in the source, and the machine draft with Accept draft and Edit draft](./images/translation-review-stale.png)
+
+If a machine draft is ready, **Accept draft** makes it the reviewed text as it is. **Edit draft** puts it in the editor so you can fix it first.
+
+![The review editor: the source article beside the English translation's preview, with Save as reviewed](./images/translation-review.png)
+
+**Save as reviewed** keeps your text and marks the language reviewed. If the machine's translation is already right, the button reads **Mark reviewed**: saving it unchanged marks it reviewed. Mocco never replaces a reviewed text on its own, and every review is recorded in the workspace's audit log with who did it.
+
+**Translate again** asks for a new machine translation. On a reviewed language it asks you to confirm first, because the machine's text replaces yours on the site. Your version stays in the article's history.
 
 Readers who pick a language see its translation, and the article list shows translated titles, collections and sections included.
 

@@ -55,3 +55,33 @@ export class HelpImageNotAnImageError extends BadRequestError {
     this.name = 'HelpImageNotAnImageError';
   }
 }
+
+/** A language the help center doesn't offer — NOT_FOUND. */
+export class HelpLocaleNotOfferedError extends NotFoundError {
+  constructor(locale: string, options?: ErrorOptions) {
+    super(`The help center isn't translated into ${locale}`, options);
+    this.name = 'HelpLocaleNotOfferedError';
+  }
+}
+
+/** Accepting a machine draft that isn't there, or isn't the one the reviewer saw — CONFLICT. */
+export class HelpNoProposalError extends ConflictError {
+  constructor(locale: string, options?: ErrorOptions) {
+    super(
+      `There's no machine draft in ${locale} for the current source, or a newer one replaced it. Look again.`,
+      options,
+    );
+    this.name = 'HelpNoProposalError';
+  }
+}
+
+/** Asking the machine to replace a reviewed translation without confirming it — BAD_REQUEST. */
+export class TranslationOverwriteRequiresConfirmationError extends BadRequestError {
+  constructor(locale: string, options?: ErrorOptions) {
+    super(
+      `The ${locale} translation was reviewed by a person; confirm to replace it with a machine translation`,
+      options,
+    );
+    this.name = 'TranslationOverwriteRequiresConfirmationError';
+  }
+}
