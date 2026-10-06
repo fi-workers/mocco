@@ -25,6 +25,7 @@ export const ProblemCodes = {
   subscriptionsUnavailable: 'subscriptions_unavailable',
   missingEndUserToken: 'missing_end_user_token',
   invalidEndUserToken: 'invalid_end_user_token',
+  emailUnavailable: 'email_unavailable',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

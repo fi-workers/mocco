@@ -2,7 +2,8 @@
 // a widget or a public board page, and what the app's signed-in end users do there. Every
 // answer is an explicit projection: a private board, its posts and their comments read as
 // not found; internal notes, the team's ids and other end users' ids are never in it. Writes
-// go through VoteService and CommentService, so their locks and counters hold here too.
+// go through VoteService, CommentService, SubscriptionService and PostService, so their locks
+// and counters hold here too.
 import { FeedbackCommentAuthorKinds, FeedbackVoteStates, RoadmapColumns } from '@mocco/common/feedback';
 import { FeedbackPublicSorts } from '@mocco/common/feedback-v1';
 
@@ -17,9 +18,11 @@ import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 
 import type { CommentService, FeedbackPublicComment } from '@backend/domain/feedback/CommentService';
+import type { PostService } from '@backend/domain/feedback/PostService';
 import type { FeedbackBoardRow } from '@backend/domain/feedback/repos/board.repo';
 import type { FeedbackPostRow } from '@backend/domain/feedback/repos/post.repo';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
+import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { Db } from '@backend/infra/db/types';
 import type {
@@ -35,7 +38,19 @@ export interface PublicBoardServiceDeps {
   db: Db;
   votes: Pick<VoteService, 'vote' | 'unvote'>;
   comments: Pick<CommentService, 'createAsEndUser' | 'listForPublic'>;
+  posts: Pick<PostService, 'createAsEndUser'>;
+  subscriptions: Pick<SubscriptionService, 'subscribe' | 'unsubscribe'>;
 }
+
+/** The end-user sources a /v1 caller may name. */
+export type PublicVoteSource = typeof FeedbackVoteSources.web | typeof FeedbackVoteSources.widget;
+
+/** The words `similar` matches on: letters and digits, two characters or more, at most eight. */
+export const SIMILAR_MAX_WORDS = 8;
+const wordsOf = (query: string): string[] => [
+  // eslint-disable-next-line sonarjs/null-dereference -- query is a parsed string, never null
+  ...new Set((query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []).slice(0, SIMILAR_MAX_WORDS)),
+];
 
 /** How many posts each roadmap column shows (the most voted). */
 export const ROADMAP_COLUMN_LIMIT = 50;
@@ -219,13 +234,11 @@ export class PublicBoardService {
     scope: FeedbackScope,
     postId: string,
     endUserId: string,
-    source: typeof FeedbackVoteSources.web | typeof FeedbackVoteSources.widget,
+    source: PublicVoteSource,
+    state: FeedbackVoteState = FeedbackVoteStates.counted,
   ): Promise<{ vote: FeedbackVoteState; voteCount: number }> {
     await this.publicPost(scope, postId);
-    const result = await this.deps.votes.vote(scope, postId, endUserId, {
-      source,
-      state: FeedbackVoteStates.counted,
-    });
+    const result = await this.deps.votes.vote(scope, postId, endUserId, { source, state });
     return { vote: result.vote.state, voteCount: result.post.voteCount };
   }
 
@@ -248,5 +261,48 @@ export class PublicBoardService {
       body: row.body,
       createdAt: row.createdAt,
     };
+  }
+
+  /** A signed-in end user's post on the board: under review, with their vote. */
+  async createPost(
+    scope: FeedbackScope,
+    slug: string,
+    endUserId: string,
+    input: { title: string; body?: string; categoryId?: string; source: PublicVoteSource },
+  ): Promise<PublicPost> {
+    const board = await this.publicBoard(scope, slug);
+    const post = await this.deps.posts.createAsEndUser(scope, endUserId, { ...input, boardId: board.id });
+    return toPublicPost(post);
+  }
+
+  /** The board's posts most like `query`, so an end user about to post can vote instead. */
+  async similar(scope: FeedbackScope, slug: string, query: string, limit: number): Promise<PublicPost[]> {
+    const board = await this.publicBoard(scope, slug);
+    const words = wordsOf(query);
+    if (words.length === 0) {
+      return [];
+    }
+    const rows = await new FeedbackPostRepo(this.deps.db).similar(scope, board.id, words, limit);
+    return rows.map(row => toPublicPost(row));
+  }
+
+  /** Follow or stop following a post. Idempotent; an opt-out outlives later votes. */
+  async setSubscribed(
+    scope: FeedbackScope,
+    postId: string,
+    endUserId: string,
+    isSubscribed: boolean,
+  ): Promise<{ subscribed: boolean }> {
+    await this.publicPost(scope, postId);
+    const row = isSubscribed
+      ? await this.deps.subscriptions.subscribe(scope, postId, endUserId)
+      : await this.deps.subscriptions.unsubscribe(scope, postId, endUserId);
+    return { subscribed: row.unsubscribedAt === null };
+  }
+
+  /** The title of a post on a public board, for the pages its links open. */
+  async postTitle(scope: FeedbackScope, postId: string): Promise<string> {
+    const post = await this.publicPost(scope, postId);
+    return post.title;
   }
 }

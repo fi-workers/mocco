@@ -454,7 +454,11 @@ export async function extHandler(request: Request): Promise<Response> {
         streamTokens: flagStreamTokensFromEnv(env),
       },
       messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
-      feedback: { boards: getFeedbackDomain().feedbackPublic, endUsers: getEndUserTokens() },
+      feedback: {
+        boards: getFeedbackDomain().feedbackPublic,
+        endUsers: getEndUserTokens(),
+        emailVotes: getFeedbackDomain().feedbackEmailVotes,
+      },
       runs: { runs: execution.runs },
       help: {
         help: getHelpDomain().helpPublic,
