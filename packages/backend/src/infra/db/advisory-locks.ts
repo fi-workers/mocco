@@ -26,5 +26,8 @@ export const AdvisoryLockNamespaces = {
   messengerAssign: 4,
   /** Serializes claims and results of one help article's translation into one language (`HelpTranslationRepo.lock`). */
   helpTranslation: 5,
+  /** Serializes merges touching one feedback post (`FeedbackPostRepo.lockForMerge`), taken for
+   * both posts in id order. */
+  feedbackPost: 6,
 } as const;
 export type AdvisoryLockNamespace = (typeof AdvisoryLockNamespaces)[keyof typeof AdvisoryLockNamespaces];

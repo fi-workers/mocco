@@ -9,7 +9,9 @@ import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
+import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
+import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
@@ -117,11 +119,13 @@ export interface Context {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
-  /** Feedback boards, their categories and posts (#172), votes and comments (#173). */
+  /** Feedback boards, their categories and posts (#172), votes, comments, subscriptions and merges (#173). */
   feedbackBoards: BoardService;
   feedbackPosts: PostService;
   feedbackVotes: VoteService;
   feedbackComments: CommentService;
+  feedbackSubscriptions: SubscriptionService;
+  feedbackMerges: MergeService;
   /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;
   statusIncidents: IncidentService;

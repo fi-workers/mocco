@@ -4239,7 +4239,7 @@ export const statusSubscriberDeliveries = pgTable(
 // Feedback board (#98, slice #172): a project's boards, their categories, posts and each post's
 // status history. Every row carries `workspace_id`; children reach their board through composite
 // FKs on (board_id, workspace_id, project_id), so a row can never point at another tenant's board.
-// Votes and comments came with #173; subscriptions, merges, GitHub links and shipping come in
+// Votes, comments, subscriptions and merges came with #173; GitHub links and shipping come in
 // later slices.
 // ─────────────────────────────────────────────────────────────
 
@@ -4323,6 +4323,10 @@ export const feedbackPosts = pgTable(
     // the same transaction as the vote or comment (FeedbackVoteRepo, FeedbackCommentRepo).
     voteCount: integer('vote_count').notNull().default(0),
     commentCount: integer('comment_count').notNull().default(0),
+    // The post this duplicate was merged into (MergeService), on the same board and never itself
+    // merged: merging a target re-parents the posts merged into it, so there are no chains.
+    mergedIntoPostId: uuid('merged_into_post_id'),
+    mergedAt: timestamp('merged_at'),
     createdAt,
     updatedAt,
   },
@@ -4350,6 +4354,18 @@ export const feedbackPosts = pgTable(
     check('mocco_feedback_posts_number_check', sql`${t.number} >= 1`),
     check('mocco_feedback_posts_vote_count_check', sql`${t.voteCount} >= 0`),
     check('mocco_feedback_posts_comment_count_check', sql`${t.commentCount} >= 0`),
+    foreignKey({
+      columns: [t.mergedIntoPostId, t.workspaceId],
+      foreignColumns: [t.id, t.workspaceId],
+      name: 'mocco_feedback_posts_merged_into_fk',
+    }),
+    index('mocco_feedback_posts_merged_into_idx')
+      .on(t.mergedIntoPostId)
+      .where(sql`${t.mergedIntoPostId} IS NOT NULL`),
+    check(
+      'mocco_feedback_posts_merged_check',
+      sql`(${t.mergedIntoPostId} IS NULL) = (${t.mergedAt} IS NULL) AND ${t.mergedIntoPostId} IS DISTINCT FROM ${t.id}`,
+    ),
   ],
 );
 
@@ -4465,5 +4481,31 @@ export const feedbackComments = pgTable(
         ELSE ${t.authorEndUserId} IS NULL END`,
     ),
     check('mocco_feedback_comments_visibility_check', sql`NOT (${t.isOfficial} AND ${t.isInternal})`),
+  ],
+);
+
+/** An end user following a post, to hear when it moves. One per (post, end user); voting
+ * subscribes, and `unsubscribed_at` keeps an opt-out so a later vote doesn't undo it. */
+export const feedbackSubscriptions = pgTable(
+  'mocco_feedback_subscriptions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    endUserId: text('end_user_id').notNull(),
+    createdAt,
+    unsubscribedAt: timestamp('unsubscribed_at'),
+  },
+  t => [
+    uniqueIndex('mocco_feedback_subscriptions_post_end_user_uq').on(t.postId, t.endUserId),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_subscriptions_post_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_subscriptions_end_user_check',
+      sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
+    ),
   ],
 );

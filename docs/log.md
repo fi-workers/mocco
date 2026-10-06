@@ -931,6 +931,22 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `log.md`
 - Source: branch `feat/feedback-votes` (issue #173)
 
+## 2026-10-06 — Feedback: subscriptions and merging duplicates
+
+- Documented the second half of #173 in the [feedback board model](./reference/feedback.md#merging-duplicates):
+  migration 0078 with `mocco_feedback_subscriptions` and `merged_into_post_id` / `merged_at` on posts,
+  `SubscriptionService` (voting subscribes, an opt-out sticks), and `MergeService`, which copies a duplicate's votes
+  and subscribers to the target one per end user, recounts the target, re-points earlier merges so no chain forms, and
+  closes the duplicate with a `merge` history row, keeping its own rows. It runs under the new
+  `AdvisoryLockNamespaces.feedbackPost` and both posts' row locks in id order; votes and subscriptions refuse a merged
+  post. New audit action `feedback.post.merged`. The `feedback` router gains `subscribers` and `mergePost`, both in
+  the cross-tenant table.
+- The MCP tools for votes, comments and merging are named in the
+  [spec](./specs/2026-09-24-feedback-design.md#61-mcp-tools-adr-0025) and come in the next slice.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
+  `log.md`
+- Source: branch `feat/feedback-merge` (issue #173)
+
 ## 2026-10-06 — Help center: translation review
 
 - Built the review half of #213, in the [help center reference](./reference/help-center.md#translation). Saving a

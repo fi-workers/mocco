@@ -1,6 +1,7 @@
 import { FEEDBACK_POST_STATUS_ORDER, FeedbackPostSorts } from '@mocco/common/feedback';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
+import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
 
@@ -11,6 +12,7 @@ import type { FeedbackPostListQuery, FeedbackPostStatus } from '@mocco/common/fe
 export type FeedbackPostRow = typeof schema.feedbackPosts.$inferSelect;
 
 const p = schema.feedbackPosts;
+const byText = (left: string, right: string) => (left < right ? -1 : 1);
 const scoped = (scope: FeedbackScope) => and(eq(p.workspaceId, scope.workspaceId), eq(p.projectId, scope.projectId));
 
 /** A status's place in the workflow (FEEDBACK_POST_STATUS_ORDER), for sorting by status. */
@@ -108,6 +110,66 @@ export class FeedbackPostRepo {
       await this.db
         .update(p)
         .set({ [counter]: sql`${p[counter]} + ${delta}` })
+        .where(and(scoped(scope), eq(p.id, id)))
+        .returning(),
+    );
+  }
+
+  /**
+   * Lock two posts for a merge until the transaction ends: the `feedbackPost` advisory lock and
+   * the row lock of each, both taken in id order so two merges sharing a post never deadlock.
+   * Returns the posts found in the scope, keyed by id.
+   */
+  async lockForMerge(scope: FeedbackScope, ids: [string, string]): Promise<Map<string, FeedbackPostRow>> {
+    const ordered = ids.toSorted(byText);
+    await ordered.reduce(async (previous, id) => {
+      await previous;
+      await this.db.execute(sql`SELECT pg_advisory_xact_lock(${AdvisoryLockNamespaces.feedbackPost}, hashtext(${id}))`);
+    }, Promise.resolve());
+    const rows = await this.db
+      .select()
+      .from(p)
+      .where(and(scoped(scope), inArray(p.id, ordered)))
+      .orderBy(asc(p.id))
+      .for('update');
+    return new Map(rows.map(row => [row.id, row]));
+  }
+
+  /** Mark the post merged into `intoPostId`, with the status it ends in. */
+  async markMerged(
+    scope: FeedbackScope,
+    id: string,
+    values: { intoPostId: string; at: Date; status: FeedbackPostStatus },
+  ): Promise<FeedbackPostRow> {
+    return expectOne(
+      await this.db
+        .update(p)
+        .set({
+          mergedIntoPostId: values.intoPostId,
+          mergedAt: values.at,
+          status: values.status,
+          shippedAt: null,
+          updatedAt: values.at,
+        })
+        .where(and(scoped(scope), eq(p.id, id)))
+        .returning(),
+    );
+  }
+
+  /** Point the posts merged into `fromPostId` at `toPostId`, so no merge chain forms. */
+  async reparentMerged(scope: FeedbackScope, fromPostId: string, toPostId: string): Promise<void> {
+    await this.db
+      .update(p)
+      .set({ mergedIntoPostId: toPostId })
+      .where(and(scoped(scope), eq(p.mergedIntoPostId, fromPostId)));
+  }
+
+  /** Set the post's vote count to `n` (after a merge moved votes in, recounted from the rows). */
+  async setVoteCount(scope: FeedbackScope, id: string, n: number): Promise<FeedbackPostRow> {
+    return expectOne(
+      await this.db
+        .update(p)
+        .set({ voteCount: n, updatedAt: new Date() })
         .where(and(scoped(scope), eq(p.id, id)))
         .returning(),
     );
