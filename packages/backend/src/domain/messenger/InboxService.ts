@@ -1,11 +1,16 @@
 // The team's side of the messenger (#95): a project's inbox, a conversation with every
-// message (internal notes included), replies, notes, open/closed, read positions, and
-// blocking a contact. Callers are workspace members, checked by the tRPC procedure;
+// message (internal notes included), replies and notes (with attachments, #430),
+// open/closed, read positions, and blocking a contact. Callers are workspace members, checked by the tRPC procedure;
 // every query here is also scoped by workspace and project.
 import { AuditActions } from '@mocco/common/audit';
 import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 
-import { attachmentsByMessage } from '@backend/domain/messenger/attachments';
+import {
+  attachmentsByMessage,
+  claimAttachments,
+  prepareAttachments,
+  reserveAttachment,
+} from '@backend/domain/messenger/attachments';
 import { eraseContact } from '@backend/domain/messenger/erase';
 import { ContactNotFoundError, ConversationNotFoundError } from '@backend/domain/messenger/errors';
 import { pushMessengerReply } from '@backend/domain/messenger/jobs';
@@ -16,7 +21,7 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { AttachmentStorage } from '@backend/domain/messenger/attachments';
 import type { Db } from '@backend/infra/db/types';
-import type { ConversationStatus } from '@mocco/common/messenger';
+import type { AttachmentCreateInput, ConversationStatus } from '@mocco/common/messenger';
 
 export interface InboxDeps {
   db: Db;
@@ -29,6 +34,13 @@ export interface InboxDeps {
 
 // eslint-disable-next-line sonarjs/null-dereference -- body is a string, never null
 const preview = (body: string) => body.replaceAll(/\s+/gu, ' ').slice(0, MessengerLimits.previewMax);
+
+/** The contact a conversation's attachments are reserved for. */
+const scopeOf = (conversation: { workspaceId: string; projectId: string; contactId: string }) => ({
+  workspaceId: conversation.workspaceId,
+  projectId: conversation.projectId,
+  contactId: conversation.contactId,
+});
 
 export class InboxService {
   private readonly now: () => Date;
@@ -98,14 +110,38 @@ export class InboxService {
     };
   }
 
-  /** Reply to the contact (`internal: false`) or add a note only the team sees. */
+  /**
+   * Reserve an upload for a screenshot or a PDF to send in this conversation; name its
+   * id in `write`. The same types, 10 MB limit and storage as a contact's upload. It
+   * stays `userId`'s: only they can send it, and only in a conversation with this contact.
+   */
+  async createAttachment(
+    workspaceId: string,
+    projectId: string,
+    userId: string,
+    input: AttachmentCreateInput & { conversationId: string },
+  ) {
+    const { conversationId, ...file } = input;
+    const conversation = await this.require(workspaceId, projectId, conversationId);
+    return await reserveAttachment(this.deps.db, this.deps.storage, scopeOf(conversation), file, userId);
+  }
+
+  /** Reply to the contact (`internal: false`) or add a note only the team sees, with up to
+   * three of the caller's own attachments (checked as a contact's are; see `prepareAttachments`). */
   async write(
     workspaceId: string,
     projectId: string,
     userId: string,
-    input: { conversationId: string; body: string; internal: boolean },
+    input: { conversationId: string; body: string; internal: boolean; attachmentIds?: readonly string[] },
   ) {
-    await this.require(workspaceId, projectId, input.conversationId);
+    const conversation = await this.require(workspaceId, projectId, input.conversationId);
+    const attachmentIds = await prepareAttachments(
+      this.deps.db,
+      this.deps.storage,
+      scopeOf(conversation),
+      userId,
+      input.attachmentIds,
+    );
     const now = this.now();
     const { message, pushJobId } = await this.deps.db.transaction(async tx => {
       const repo = new MessengerConversationRepo(tx);
@@ -123,6 +159,7 @@ export class InboxService {
         now,
         preview(input.body),
       );
+      await claimAttachments(tx, attachmentIds, written.id);
       // Writing means having read up to here.
       await repo.markOperatorRead(workspaceId, input.conversationId, userId, written.seq);
       const queued = input.internal

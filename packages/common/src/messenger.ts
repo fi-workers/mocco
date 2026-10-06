@@ -53,7 +53,8 @@ export const attachmentCreateInputSchema = z.object({
 });
 export type AttachmentCreateInput = z.infer<typeof attachmentCreateInputSchema>;
 
-const attachmentIdsSchema = z.array(z.uuid()).max(MessengerLimits.attachmentsPerMessage).optional();
+/** The attachments a message carries: up to 3 ids from reserved uploads. */
+export const attachmentIdsSchema = z.array(z.uuid()).max(MessengerLimits.attachmentsPerMessage).optional();
 
 /** An attachment as served: a short-lived link (a download, for a PDF) and the safe
  * filename it was stored under. */

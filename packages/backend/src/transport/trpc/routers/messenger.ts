@@ -1,7 +1,13 @@
 // Messenger router (#95) — the team's inbox and the project's messenger settings. Every
 // procedure requires the messenger product to be enabled and the project to belong to
 // the workspace (`productProcedure`), which maps the domain error families.
-import { conversationStatusSchema, messengerCategoriesSchema, MessengerLimits } from '@mocco/common/messenger';
+import {
+  attachmentCreateInputSchema,
+  attachmentIdsSchema,
+  conversationStatusSchema,
+  messengerCategoriesSchema,
+  MessengerLimits,
+} from '@mocco/common/messenger';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
 
@@ -71,12 +77,23 @@ export const messengerRouter = router({
     .input(conversationInput)
     .query(async ({ ctx, input }) => await ctx.inbox.get(input.workspaceId, input.projectId, input.conversationId)),
 
-  /** Reply to the contact, or add an internal note (`internal: true`) only the team sees. */
+  /** Reserve an upload for an image or a PDF to send in the conversation; PUT the bytes,
+   * then name the id in `write`'s `attachmentIds`. */
+  createAttachment: messengerProcedure
+    .input(conversationInput.extend(attachmentCreateInputSchema.shape))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.inbox.createAttachment(input.workspaceId, input.projectId, ctx.session.user.id, input),
+    ),
+
+  /** Reply to the contact, or add an internal note (`internal: true`) only the team sees,
+   * with up to three attachments the caller reserved in this conversation. */
   write: messengerProcedure
     .input(
       conversationInput.extend({
         body: z.string().trim().min(1).max(MessengerLimits.bodyMax),
         internal: z.boolean().default(false),
+        attachmentIds: attachmentIdsSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => ({

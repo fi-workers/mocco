@@ -771,3 +771,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   operator's steps to turn it on (a 5-minute period and 10-minute grace on the dead-man switch). No migration.
 - Docs touched: `reference/notifications.md`, `reference/env.md`, `log.md`
 - Source: branch `feat/ops-stage0-canary` (issue #245)
+
+## 2026-10-06 — Messenger: the team attaches images and PDFs to replies
+
+- Documented #430 in the [messenger reference](./reference/messenger.md#from-the-team): `messenger.createAttachment`
+  reserves an upload in a conversation (scoped to the workspace and project) and `messenger.write` takes up to 3
+  `attachmentIds`. A contact's and a team member's uploads go through the same reserve, verify and claim functions,
+  so the types, the 10 MB limit, the byte check and the claim rules are one code path; the storage object's
+  `created_by_user_id` keeps the two sides apart. The contact's app receives the files like any other attachment;
+  a note's stay in the inbox. The [customer guide](./customer/messenger/contact-us.md#6-answer-from-the-inbox) shows
+  **Attach** with two screenshots, and the feature map says so. No migration. No messenger MCP tool exists yet, so
+  that waits for the messenger's tools.
+- Docs touched: `reference/messenger.md`, `reference/feature-map.md`, `customer/messenger/contact-us.md`, `log.md`
+- Source: branch `feat/messenger-operator-attachments` (issue #430)
