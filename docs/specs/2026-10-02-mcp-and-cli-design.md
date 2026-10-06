@@ -185,6 +185,8 @@ has several servers loaded.
 | `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
 | `mocco_feedback_posts_search` | A board's posts (status, category; by status or newest), offset-paged |
 | `mocco_feedback_post_get` | One feedback post with its status history; the body cut short unless detailed |
+| `mocco_feedback_votes_list` | A post's votes (end user, counted or pending), offset-paged |
+| `mocco_feedback_comments_list` | A post's comments as the team sees them, internal notes marked, offset-paged |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -206,6 +208,9 @@ has several servers loaded.
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
 | `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
+| `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
+| `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
+| `mocco_feedback_post_merge` | Merge a duplicate post into another as the caller (`feedback:write`) |
 
 ### Search, not list
 
@@ -255,7 +260,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
-| `feedback:write` | On MCP, move a feedback post to another status (`mocco_feedback_post_set_status`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -394,8 +399,13 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    built* below): `mocco_feedback_boards_list`, `mocco_feedback_posts_search` and
    `mocco_feedback_post_get` over `BoardService.listBoards` / `getBoard` and
    `PostService.list` / `get` behind `ProjectScope` with `Products.feedback`, and
-   `mocco_feedback_post_set_status` over `PostService.setStatus`. Voting, merging and
-   accepting a ship suggestion get their tools in the slices that build them.
+   `mocco_feedback_post_set_status` over `PostService.setStatus`. Votes, comments and merging
+   follow (*shipped*, issue #473; see *How the feedback votes, comments and merges are built*):
+   `mocco_feedback_votes_list` and `mocco_feedback_comments_list` over `VoteService.list` and
+   `CommentService.listForStaff`, and the changes `mocco_feedback_comment_create`,
+   `mocco_feedback_post_vote` and `mocco_feedback_post_merge` over `CommentService.createAsStaff`,
+   `VoteService.vote` and `MergeService.merge`. Accepting a ship suggestion gets its tool in
+   the slice that builds it.
 
 ### How the vote is built (slice 6b)
 
@@ -540,6 +550,28 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   has already answers without asking.
 - **No code path the console lacks.** Every tool calls the same services the `feedback` router
   does; the change is recorded as `feedback.post.status_changed` with the caller as the actor.
+
+### How the feedback votes, comments and merges are built (issue #473)
+
+- **One scope for feedback changes.** The three tools (`tools/feedback-engagement.ts`) use
+  `feedback:write` with the status tool, and the consent line now says all of it
+  (**Move, comment on, vote on and merge your feedback posts, as you**). A separate scope per change would ask the person four times for one kind
+  of trust: changing their own board.
+- **Each confirmation is bound to what it showed.** A comment is bound to its exact text and
+  kind, so a replay with other text is refused. A vote is bound to whether the end user had a
+  vote (none or pending) when asked; a vote that counts already answers without asking. A merge
+  is bound to both posts, their board, and the vote count each had when asked, so a vote on
+  either before the answer asks again with the new counts. A post merged in between is refused
+  before any confirmation is compared, since the merge can no longer happen.
+- **The services re-check under their locks.** The re-read and the write are not one step:
+  `VoteService.vote` refuses a merged post under the post's row lock, and `MergeService.merge`
+  takes the `feedbackPost` advisory lock and both rows in id order and refuses a merged post,
+  a post into itself or across boards (`FeedbackPostMergedError`, `FeedbackMergeInvalidError`).
+- **Read projections.** `mocco_feedback_comments_list` is the team's view, with internal
+  notes marked; the public projection is for the `/v1` surface, not for agents acting as a
+  team member. Both reads page with `limit` and `nextOffset`.
+- **Nothing the console can't do.** `vote`, `createComment` and `mergePost` in the `feedback`
+  router call the same methods; a merge is audited as `feedback.post.merged` naming the caller.
 
 ## Evaluating it
 

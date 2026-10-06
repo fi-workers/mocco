@@ -195,6 +195,9 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
+      feedbackVotes: { list: refuse, find: refuse, vote: refuse },
+      feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
+      feedbackMerges: { merge: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });
