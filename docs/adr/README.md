@@ -4,7 +4,7 @@ description: Chronological index of all architecture decision records with their
 type: overview
 status: active
 created: 2026-06-30
-updated: 2026-10-04
+updated: 2026-10-05
 confidence: high
 owner: andrea
 tags: [adr, index]
@@ -45,6 +45,7 @@ related:
 | [0028](./0028-status-pages-are-static-snapshots.md) | Public status pages are static snapshots on object storage (the exception to 0015's ISR) | draft | 2026-10-04 |
 | [0029](./0029-mocco-is-everything-a-product-needs-except-the-code.md) | Mocco is everything a product needs, except the code | draft | 2026-10-04 |
 | [0030](./0030-og-images-are-rendered-on-node-and-stored-by-content-hash.md) | Open Graph images are rendered from templates on Node and stored by content hash | draft | 2026-10-05 |
+| [0031](./0031-custom-domains-are-routed-by-a-cached-database-lookup.md) | Custom domains are routed by a cached database lookup in the proxy | draft | 2026-10-05 |
 
 0015–0017 are reserved for the decisions named in the [platform foundations design](../specs/2026-09-24-platform-foundations-design.md) §21 (public sites, end-user identity, public API) and are written with their slices.
 
