@@ -1,9 +1,10 @@
 // Feedback router (#172): a project's boards, categories and posts, moving posts through
-// statuses, and their votes and comments (#173). Every procedure requires the feedback product to
-// be enabled and the project to belong to the workspace (`productProcedure`, which asserts
-// membership), and the same chain maps the domain's error families (FeedbackBoardNotFoundError
-// and the other not-founds → NOT_FOUND, FeedbackSlugTakenError and FeedbackStatusUnchangedError →
-// CONFLICT, FeedbackOfficialInternalError → BAD_REQUEST). Entities are looked up within the
+// statuses, and their votes, comments, subscribers and merges (#173). Every procedure requires the
+// feedback product to be enabled and the project to belong to the workspace (`productProcedure`,
+// which asserts membership), and the same chain maps the domain's error families
+// (FeedbackBoardNotFoundError and the other not-founds → NOT_FOUND; FeedbackSlugTakenError,
+// FeedbackStatusUnchangedError and FeedbackPostMergedError → CONFLICT;
+// FeedbackOfficialInternalError and FeedbackMergeInvalidError → BAD_REQUEST). Entities are looked up within the
 // caller's workspace and project, so another tenant's id is NOT_FOUND.
 import {
   FeedbackVoteSources,
@@ -167,6 +168,25 @@ export const feedbackRouter = router({
     .mutation(async ({ ctx, input }) => ({
       post: await ctx.feedbackVotes.unvote(scopeOf(input), input.postId, input.endUserId),
     })),
+
+  /** The post's current subscribers, oldest first (voters subscribe unless they opted out). */
+  subscribers: feedbackProcedure
+    .input(postInput.extend(feedbackPageInputSchema.shape))
+    .query(async ({ ctx, input }) => ({
+      subscribers: await ctx.feedbackSubscriptions.list(scopeOf(input), input.postId, {
+        limit: input.limit,
+        offset: input.offset,
+      }),
+    })),
+
+  /** Merge the post (a duplicate) into another on its board: its votes and subscribers move
+   * there, one per end user, and it is closed. */
+  mergePost: feedbackProcedure
+    .input(postInput.extend({ intoPostId: z.uuid() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.feedbackMerges.merge(scopeOf(input), ctx.session.user.id, input.postId, input.intoPostId),
+    ),
 
   /** The post's comments, oldest first, internal notes included. */
   comments: feedbackProcedure.input(postInput.extend(feedbackPageInputSchema.shape)).query(async ({ ctx, input }) => ({

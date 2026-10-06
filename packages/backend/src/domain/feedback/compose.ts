@@ -2,7 +2,9 @@
 // binds the production deps, tests bind pglite.
 import { BoardService } from '@backend/domain/feedback/BoardService';
 import { CommentService } from '@backend/domain/feedback/CommentService';
+import { MergeService } from '@backend/domain/feedback/MergeService';
 import { PostService } from '@backend/domain/feedback/PostService';
+import { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import { VoteService } from '@backend/domain/feedback/VoteService';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
@@ -13,6 +15,8 @@ export interface FeedbackDomain {
   feedbackPosts: PostService;
   feedbackVotes: VoteService;
   feedbackComments: CommentService;
+  feedbackSubscriptions: SubscriptionService;
+  feedbackMerges: MergeService;
 }
 
 export function createFeedbackDomain(
@@ -27,5 +31,7 @@ export function createFeedbackDomain(
     feedbackPosts,
     feedbackVotes: new VoteService({ db, posts: feedbackPosts, ...now }),
     feedbackComments: new CommentService({ db, posts: feedbackPosts }),
+    feedbackSubscriptions: new SubscriptionService({ db, posts: feedbackPosts, ...now }),
+    feedbackMerges: new MergeService({ db, audit: deps.audit, ...now }),
   };
 }

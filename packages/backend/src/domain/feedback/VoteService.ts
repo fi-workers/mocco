@@ -1,11 +1,14 @@
 // End users' votes on feedback posts (#173). One vote per (post, end user): voting again is a
 // no-op, and a post's `vote_count` moves only in the transaction that counts or removes a vote,
 // so it always equals the post's counted votes. Every write locks the post row first, so writes
-// to one post apply one after another in the same lock order.
+// to one post apply one after another in the same lock order. Voting subscribes the voter to the
+// post (unless they opted out), and a merged post takes no more votes (FeedbackPostMergedError).
 import { FeedbackVoteStates } from '@mocco/common/feedback';
 
-import { FeedbackPostNotFoundError, FeedbackVoteNotFoundError } from '@backend/domain/feedback/errors';
+import { FeedbackVoteNotFoundError } from '@backend/domain/feedback/errors';
+import { lockLivePost } from '@backend/domain/feedback/live-post';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
+import { FeedbackSubscriptionRepo } from '@backend/domain/feedback/repos/subscription.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 
 import type { PostService } from '@backend/domain/feedback/PostService';
@@ -41,19 +44,13 @@ export class VoteService {
     return this.deps.now?.() ?? new Date();
   }
 
-  /** Run `write` with the post locked; another project's post is FeedbackPostNotFoundError. */
+  /** Run `write` with the post locked (`lockLivePost`). */
   private async withPostLocked<T>(
     scope: FeedbackScope,
     postId: string,
     write: (tx: Db, post: FeedbackPostRow) => Promise<T>,
   ): Promise<T> {
-    return await this.deps.db.transaction(async tx => {
-      const post = await new FeedbackPostRepo(tx).findForUpdate(scope, postId);
-      if (post === undefined) {
-        throw new FeedbackPostNotFoundError(postId);
-      }
-      return await write(tx, post);
-    });
+    return await this.deps.db.transaction(async tx => await write(tx, await lockLivePost(tx, scope, postId)));
   }
 
   /**
@@ -64,6 +61,7 @@ export class VoteService {
     const state = options.state ?? FeedbackVoteStates.counted;
     const isCounted = state === FeedbackVoteStates.counted;
     return await this.withPostLocked(scope, postId, async (tx, post) => {
+      await new FeedbackSubscriptionRepo(tx).insertIfAbsent(scope.workspaceId, postId, endUserId);
       const votes = new FeedbackVoteRepo(tx);
       const inserted = await votes.insertIfAbsent({
         workspaceId: scope.workspaceId,

@@ -1,5 +1,5 @@
-import { FeedbackVoteStates } from '@mocco/common/feedback';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { FeedbackVoteSources, FeedbackVoteStates } from '@mocco/common/feedback';
+import { and, count, desc, eq, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -68,6 +68,22 @@ export class FeedbackVoteRepo {
       .orderBy(desc(v.createdAt), desc(v.id))
       .limit(page.limit)
       .offset(page.offset);
+  }
+
+  /**
+   * Copy `fromPostId`'s votes to `toPostId` as `merge` votes. An end user who voted on both keeps
+   * one vote on the target (the unique index), counted if either of theirs was; the source's own
+   * rows stay as its history.
+   */
+  async copyToPost(workspaceId: string, fromPostId: string, toPostId: string): Promise<void> {
+    await this.db.execute(sql`
+      INSERT INTO ${v} (workspace_id, post_id, end_user_id, state, source, created_at, counted_at)
+      SELECT workspace_id, ${toPostId}::uuid, end_user_id, state, ${FeedbackVoteSources.merge}, created_at, counted_at
+      FROM ${v}
+      WHERE workspace_id = ${workspaceId} AND post_id = ${fromPostId}
+      ON CONFLICT (post_id, end_user_id) DO UPDATE
+        SET state = excluded.state, counted_at = excluded.counted_at
+        WHERE ${v.state} = ${FeedbackVoteStates.pending} AND excluded.state = ${FeedbackVoteStates.counted}`);
   }
 
   /** How many of the post's votes count: what its `vote_count` must equal. */

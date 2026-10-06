@@ -88,7 +88,7 @@ related:
 - [Mocco-hosted OTA updates](./reference/ota-hosting.md) — OTA apps for React Native, fixed manifest and asset URLs, signing certificates, channels and gated protection
 - [OTA version policy and native force update](./reference/ota-version-policy.md) — minimum, recommended and blocked versions per store app, direction-aware gating
 - [Feature flags](./reference/flags.md) — environments, flags, changesets and the versioned flagd ruleset each applied change compiles to
-- [Feedback board model](./reference/feedback.md) — feedback boards, categories, posts and their status history, votes and comments, the feedback router
+- [Feedback board model](./reference/feedback.md) — feedback boards, categories, posts and their status history, votes, comments, subscriptions and merging duplicates, the feedback router
 - [Status page model](./reference/status.md) — status pages, components, incidents and their lifecycle, scheduled maintenance and its tick, the status router
 - [Approvals outside runs](./reference/approvals.md) — N-of-M approval of pinned changes and post-hoc reviews, shared with run gates
 - [Project model and product enablement](./reference/project.md) — projects, apps, repo links, product enablement, procedures for product routers

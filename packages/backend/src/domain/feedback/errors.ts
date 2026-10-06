@@ -51,6 +51,30 @@ export class FeedbackStatusMovedError extends ConflictError {
   }
 }
 
+/** A post that was merged into another: it can't be merged, merged into, voted on or followed
+ * any more — CONFLICT. `intoPostId` is where its votes went. */
+export class FeedbackPostMergedError extends ConflictError {
+  constructor(
+    postId: string,
+    readonly intoPostId: string,
+    options?: ErrorOptions,
+  ) {
+    super(`Feedback post ${postId} was merged into ${intoPostId}`, options);
+    this.name = 'FeedbackPostMergedError';
+  }
+}
+
+/** Merging a post into itself or into a post on another board — BAD_REQUEST. */
+export class FeedbackMergeInvalidError extends BadRequestError {
+  constructor(reason: 'same_post' | 'other_board', options?: ErrorOptions) {
+    super(
+      reason === 'same_post' ? 'A post cannot be merged into itself' : 'Posts can only be merged on the same board',
+      options,
+    );
+    this.name = 'FeedbackMergeInvalidError';
+  }
+}
+
 /** Confirming a vote the end user doesn't have on the post — NOT_FOUND. */
 export class FeedbackVoteNotFoundError extends NotFoundError {
   constructor(postId: string, options?: ErrorOptions) {

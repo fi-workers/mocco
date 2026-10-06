@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ExecutorIds } from '@mocco/common/execution';
 import {
   FeedbackPostSorts,
@@ -83,6 +85,9 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
   comments: async (api, scope, ids) => await api.feedback.comments({ ...scope, postId: ids.postId }),
   createComment: async (api, scope, ids) =>
     await api.feedback.createComment({ ...scope, postId: ids.postId, body: 'x', isOfficial: true }),
+  subscribers: async (api, scope, ids) => await api.feedback.subscribers({ ...scope, postId: ids.postId }),
+  mergePost: async (api, scope, ids) =>
+    await api.feedback.mergePost({ ...scope, postId: ids.postId, intoPostId: randomUUID() }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
@@ -268,6 +273,30 @@ describe('feedback router on pglite', () => {
     });
   });
 
+  it('merges a duplicate, lists subscribers and maps merge errors', async () => {
+    const { api, scope } = await setup('owner@example.com', 'acme');
+    const ids = await seed(api, scope, 'ideas');
+    const { post: duplicate } = await api.feedback.createPost({ ...scope, boardId: ids.boardId, title: 'Dark theme' });
+    await api.feedback.vote({ ...scope, postId: duplicate.id, endUserId: 'voter' });
+    await api.feedback.vote({ ...scope, postId: duplicate.id, endUserId: 'other' });
+
+    const { source, target } = await api.feedback.mergePost({ ...scope, postId: duplicate.id, intoPostId: ids.postId });
+    expect(source).toMatchObject({ mergedIntoPostId: ids.postId, status: FeedbackPostStatuses.closed });
+    expect(target.voteCount).toBe(2);
+    const { subscribers } = await api.feedback.subscribers({ ...scope, postId: ids.postId });
+    expect(subscribers.map(row => row.endUserId)).toEqual(['voter', 'other']);
+
+    await expect(
+      api.feedback.mergePost({ ...scope, postId: ids.postId, intoPostId: duplicate.id }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(api.feedback.vote({ ...scope, postId: duplicate.id, endUserId: 'late' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    await expect(
+      api.feedback.mergePost({ ...scope, postId: ids.postId, intoPostId: ids.postId }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('covers every feedback procedure in the cross-tenant table', () => {
     expect(new Set(Object.keys(calls))).toEqual(new Set(Object.keys(feedbackRouter._def.procedures)));
   });
@@ -312,6 +341,14 @@ describe('feedback router on pglite', () => {
     expect(votes.map(vote => vote.endUserId)).toEqual(['voter']);
     const { comments } = await owner.api.feedback.comments({ ...owner.scope, postId: victim.postId });
     expect(comments).toEqual([]);
+    // Merging the attacker's own post into the victim's would move votes across tenants.
+    await expect(
+      attacker.api.feedback.mergePost({ ...attacker.scope, postId: own.postId, intoPostId: victim.postId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const afterMerge = await owner.api.feedback.post({ ...owner.scope, postId: victim.postId });
+    expect(afterMerge.post.voteCount).toBe(1);
+    const { subscribers } = await owner.api.feedback.subscribers({ ...owner.scope, postId: victim.postId });
+    expect(subscribers.map(row => row.endUserId)).toEqual(['voter']);
     const { posts } = await owner.api.feedback.posts({ ...owner.scope, boardId: victim.boardId });
     expect(posts.map(row => row.id)).toEqual([victim.postId]);
     const { boards } = await attacker.api.feedback.boards(attacker.scope);

@@ -91,6 +91,8 @@ export const AuditActions = {
   feedbackBoardDeleted: 'feedback.board.deleted',
   /** Staff moved a feedback post to another status; the payload carries both. */
   feedbackPostStatusChanged: 'feedback.post.status_changed',
+  /** Staff merged a duplicate feedback post into another; its votes and subscribers moved. */
+  feedbackPostMerged: 'feedback.post.merged',
   statusPageCreated: 'status.page.created',
   statusPageDeleted: 'status.page.deleted',
   /** An operator set a component's status by hand. */
@@ -217,6 +219,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.feedbackBoardCreated]: 'Feedback board created',
   [AuditActions.feedbackBoardDeleted]: 'Feedback board deleted',
   [AuditActions.feedbackPostStatusChanged]: 'Feedback post status changed',
+  [AuditActions.feedbackPostMerged]: 'Feedback post merged into another',
   [AuditActions.statusPageCreated]: 'Status page created',
   [AuditActions.statusPageDeleted]: 'Status page deleted',
   [AuditActions.statusComponentStatusChanged]: 'Component status set by hand',
