@@ -3,6 +3,7 @@
 // `c.var.principal` and scope every query by it.
 import { createHash } from 'node:crypto';
 
+import { ApiKeyPrefixes } from '@mocco/common/apikey';
 import { createMiddleware } from 'hono/factory';
 import { routePath } from 'hono/route';
 
@@ -11,6 +12,7 @@ import { problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext
 
 import type { ApiKeyService, ApiPrincipal } from '@backend/domain/apikey/ApiKeyService';
 import type { RateLimiter, RateLimitResult, RateLimitRule } from '@backend/domain/ratelimit/ports';
+import type { FeedbackServingDeps } from '@backend/transport/ext/v1/feedback';
 import type { FlagServingDeps } from '@backend/transport/ext/v1/flags';
 import type { HeartbeatPingDeps } from '@backend/transport/ext/v1/heartbeat-ping';
 import type { HelpServingDeps } from '@backend/transport/ext/v1/help';
@@ -46,6 +48,9 @@ export interface V1Deps {
   heartbeats?: HeartbeatPingDeps;
   /** Status page sign-ups and their links (no key); undefined leaves /v1/status-pages unmounted. */
   statusSubscribers?: StatusSubscriberDeps;
+  /** Public feedback boards and their end users' votes and comments (#174); undefined leaves
+   * /v1/feedback unmounted. */
+  feedback?: FeedbackServingDeps;
 }
 
 export interface V1Env {
@@ -64,14 +69,26 @@ export const KeyRateLimits: Record<ApiKeyKind, RateLimitRule> = {
 };
 export const ANONYMOUS_RATE_LIMIT: RateLimitRule = { limit: 120, windowSeconds: 60 };
 
-/** The key a request presents: `Authorization: Bearer mk_…` or `X-Mocco-Key: mk_…`. */
-function presentedKey(c: Context): string | undefined {
+/** The `Authorization: Bearer …` credential, if any. */
+export function bearerOf(c: Context): string | undefined {
   const authorization = c.req.header('authorization') ?? '';
   // eslint-disable-next-line sonarjs/null-dereference -- defaulted to '' above, never null
-  if (authorization.startsWith(BEARER)) {
-    return authorization.slice(BEARER.length).trim();
+  return authorization.startsWith(BEARER) ? authorization.slice(BEARER.length).trim() : undefined;
+}
+
+/** Whether `token` looks like an API key (`mk_pub_…`, `mk_sec_…`) rather than an end user's token. */
+export const isApiKeyToken = (token: string): boolean =>
+  // eslint-disable-next-line sonarjs/null-dereference -- token is a string, never null
+  Object.values(ApiKeyPrefixes).some(prefix => token.startsWith(prefix));
+
+/** The key a request presents: `Authorization: Bearer mk_…` or `X-Mocco-Key: mk_…`. When
+ * `Authorization` carries an end user's token instead (/v1/feedback), the key is the header. */
+function presentedKey(c: Context): string | undefined {
+  const bearer = bearerOf(c);
+  if (bearer !== undefined && isApiKeyToken(bearer)) {
+    return bearer;
   }
-  return c.req.header(KEY_HEADER)?.trim();
+  return c.req.header(KEY_HEADER)?.trim() ?? bearer;
 }
 
 /** The client IP (the first forwarded hop). Hash it before it goes anywhere that keeps it. */

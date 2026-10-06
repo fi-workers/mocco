@@ -23,6 +23,9 @@ code_refs:
   - packages/backend/src/transport/ext/v1/status-openapi.ts
   - packages/common/src/status-v1.ts
   - packages/backend/src/transport/ext/v1/status-subscribers.ts
+  - packages/common/src/feedback-v1.ts
+  - packages/backend/src/transport/ext/v1/feedback.ts
+  - packages/backend/src/domain/enduser/EndUserTokenService.ts
 ---
 
 # Public /v1 API
@@ -35,7 +38,7 @@ A key belongs to one project and has a kind:
 
 | Kind | Token | Where it lives | Scopes |
 |---|---|---|---|
-| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed), `help:read` |
+| Publishable | `mk_pub_` + 32 base62 characters | Web and React Native apps | Client scopes only: `ota:read`, `flags:read`, `messenger:chat` (it acts only for a user the app's server signed), `help:read`, `feedback:read`, `feedback:write` (it acts only for a user the app's server signed) |
 | Secret | `mk_sec_` + 32 base62 characters | Servers and CI | Any scope |
 
 `runs:read` is secret-only and read-only. Run history is operational data about a team's deploys, so it never reaches a browser or an app; and a key authenticates a **project**, not a person, so it can watch a deploy but never resume one — deciding needs someone the audit chain can name ([ADR 0002](../adr/0002-mocco-is-an-independent-authorization-layer.md), [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)). A run carries no project: it reaches one through its commit's repository and `mocco_project_repos`, so a key sees its own project's repositories and nothing else.
@@ -48,7 +51,7 @@ A key with `flags:read` is bound to exactly one flag environment of its project 
 
 ## Authentication
 
-Send the key as `Authorization: Bearer <token>` (or `X-Mocco-Key: <token>`). `requireKey({ kinds?, scope? })` resolves it and sets `c.var.principal = { workspaceId, projectId, keyId, kind, scopes }`. Routes scope every query by the principal, never by request input.
+Send the key as `Authorization: Bearer <token>` (or `X-Mocco-Key: <token>`). When `Authorization` carries something other than a key (`/v1/feedback` takes the end user's token there), the key is read from `X-Mocco-Key`. `requireKey({ kinds?, scope? })` resolves it and sets `c.var.principal = { workspaceId, projectId, keyId, kind, scopes }`. Routes scope every query by the principal, never by request input.
 
 | Situation | Answer |
 |---|---|
@@ -87,6 +90,8 @@ Preflights (`OPTIONS`) are answered for any origin; the real request still has t
 | `GET /v1/help/articles/{id}?locale=` | `help:read` | A published article by its `id` (the 6-character short id, or the `{id}-{slug}` ref from its path; a stale slug still resolves): `{ id, slug, locale, title, body (Markdown), path, url, locales, publishedAt, updatedAt }`. `404` for a draft, an unpublished or deleted article, or another project's |
 | `POST /v1/help/articles/{id}/feedback` | `help:read` | "Was this helpful?": body `{ helpful, locale?, comment? (≤ 500), visitorId? }`; `201 { counted }`, where `counted` is false when the same visitor already answered that article today (the new answer replaces it). `404` as for the article; 30 a minute per client address on top of the key's limit; see [Help center](./help-center.md#was-this-helpful) |
 | `POST /v1/messenger/sessions` | `messenger:chat` | A session for a user the app's server signed (`userHash`); then `/v1/messenger/conversations…` with the `mms_` session token; see [Messenger](./messenger.md) |
+| `GET /v1/feedback/boards/{slug}` · `…/posts?status=&category=&sort=top\|new&limit=&offset=` · `…/roadmap` · `GET /v1/feedback/posts/{id}` · `…/comments?limit=&offset=` | `feedback:read` | A public board of the key's project and its categories; its posts, merged duplicates left out, most voted (`top`, the default) or newest first, with `nextOffset`; the roadmap's planned, in progress and shipped columns; one post (a duplicate carries `mergedIntoPostId`) with `viewer.vote` when an end-user token comes with the request; its public comments with `isMine`. A private board, its posts and another project's are `404`. Every answer is parsed through `@mocco/common/feedback-v1`: no internal note, team member's id, other end user's id or email. See [Feedback: the public /v1 surface](./feedback.md#the-public-v1-surface) |
+| `POST`/`DELETE /v1/feedback/posts/{id}/vote` · `POST /v1/feedback/posts/{id}/comments` | `feedback:write` plus the end user's token | Vote (counted at once; idempotent; body `{ source? }`, `web` or `widget`) or take the vote back: `{ vote, voteCount }`; comment `{ body }` → `201 { comment }`. The token is an HS256 JWT the app's server signs with the project's identity secret (`sub`, `exp` within an hour), sent as `Authorization: Bearer …` with the key in `X-Mocco-Key`: `401 missing_end_user_token` without it, `401 invalid_end_user_token` when it is expired, another project's, valid for longer than an hour, or the project has no identity secret. `409` on a merged post. 30 votes and 20 comments an hour per end user, 120 writes an hour per client address |
 | `GET /v1/flags/stream` | `flags:read` key, or `?token=` from an OFREP response | OFREP event stream: `refetchEvaluation` events (`id` = version, `Last-Event-ID` resumes), pings every 25 s, closes after 240 s; see [Feature flags](./flags.md#change-stream) |
 | `POST /v1/flags/telemetry` | `flags:read` (publishable: client-visible flags only) | Aggregated evaluation counts `{ evaluations: [{ flag, variant, count, windowStart }] }` (≤ 500 entries); `202 { accepted, ignored }`; 300 a minute per key on top of the key's limit; see [Feature flags](./flags.md#evaluation-telemetry-and-stale-flags) |
 | `POST /v1/ofrep/v1/evaluate/flags` · `…/flags/{key}` | `flags:read` (publishable: client-visible flags only) | OFREP bulk / single evaluation for `{ context }`; bulk has an `ETag` (`If-None-Match` → `304`) and `eventStreams`; see [Feature flags](./flags.md#ofrep-browsers-and-apps) |

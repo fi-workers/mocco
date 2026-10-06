@@ -1,5 +1,6 @@
 import { FEEDBACK_POST_STATUS_ORDER, FeedbackPostSorts } from '@mocco/common/feedback';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { FeedbackPublicSorts } from '@mocco/common/feedback-v1';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { AdvisoryLockNamespaces } from '@backend/infra/db/advisory-locks';
 import { expectOne } from '@backend/infra/db/rows';
@@ -8,6 +9,7 @@ import * as schema from '@backend/infra/db/schema';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type { Db } from '@backend/infra/db/types';
 import type { FeedbackPostListQuery, FeedbackPostStatus } from '@mocco/common/feedback';
+import type { FeedbackPublicSort } from '@mocco/common/feedback-v1';
 
 export type FeedbackPostRow = typeof schema.feedbackPosts.$inferSelect;
 
@@ -61,6 +63,39 @@ export class FeedbackPostRepo {
           scoped(scope),
           eq(p.boardId, query.boardId),
           query.status === undefined ? undefined : eq(p.status, query.status),
+          query.categoryId === undefined ? undefined : eq(p.categoryId, query.categoryId),
+        ),
+      )
+      .orderBy(...order)
+      .limit(query.limit)
+      .offset(query.offset);
+  }
+
+  /** A board's posts as the public lists them: never a merged duplicate; most voted or newest first. */
+  async listPublic(
+    scope: FeedbackScope,
+    query: {
+      boardId: string;
+      statuses?: readonly FeedbackPostStatus[];
+      categoryId?: string;
+      sort: FeedbackPublicSort;
+      limit: number;
+      offset: number;
+    },
+  ): Promise<FeedbackPostRow[]> {
+    const order =
+      query.sort === FeedbackPublicSorts.top
+        ? [desc(p.voteCount), desc(p.createdAt), desc(p.number)]
+        : [desc(p.createdAt), desc(p.number)];
+    return await this.db
+      .select()
+      .from(p)
+      .where(
+        and(
+          scoped(scope),
+          eq(p.boardId, query.boardId),
+          isNull(p.mergedIntoPostId),
+          query.statuses === undefined ? undefined : inArray(p.status, [...query.statuses]),
           query.categoryId === undefined ? undefined : eq(p.categoryId, query.categoryId),
         ),
       )

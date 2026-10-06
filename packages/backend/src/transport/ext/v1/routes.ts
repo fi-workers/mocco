@@ -3,6 +3,7 @@
 // their slices land; each takes a key with `requireKey` and scopes by `c.var.principal`.
 import { Hono } from 'hono';
 
+import { createFeedbackRoutes } from '@backend/transport/ext/v1/feedback';
 import { createFlagServingRoutes } from '@backend/transport/ext/v1/flags';
 import { createHeartbeatPingRoutes } from '@backend/transport/ext/v1/heartbeat-ping';
 import { createHelpRoutes } from '@backend/transport/ext/v1/help';
@@ -46,6 +47,10 @@ export function createV1Routes(deps: V1Deps): Hono<V1Env> {
 
   if (deps.help !== undefined) {
     app.route('/help', createHelpRoutes(deps, deps.help));
+  }
+
+  if (deps.feedback !== undefined) {
+    app.route('/feedback', createFeedbackRoutes(deps, deps.feedback));
   }
 
   if (deps.flags !== undefined) {

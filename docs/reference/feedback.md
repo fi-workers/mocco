@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, the feedback MCP tools, and the public /v1 surface with end-user tokens.
 type: reference
 status: active
 created: 2026-10-06
@@ -23,11 +23,15 @@ code_refs:
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback-engagement.ts
+  - packages/backend/src/domain/feedback/PublicBoardService.ts
+  - packages/backend/src/domain/enduser/EndUserTokenService.ts
+  - packages/backend/src/transport/ext/v1/feedback.ts
+  - packages/common/src/feedback-v1.ts
 ---
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173). GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` reads, and votes and comments from the app's signed-in end users (#174, [below](#the-public-v1-surface)). Posting from `/v1`, email identification, subscriptions over `/v1`, GitHub links, shipping on deploy and the changelog come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -84,7 +88,7 @@ Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 - **Taking a vote back** deletes it; no vote is no change.
 - **`vote_count` equals the post's counted votes.** It moves by one in the transaction that counts or removes a counted vote, after that transaction has locked the post row, so concurrent writes to one post apply one after another. A test runs a long random sequence of votes, pending votes, confirmations and removals, six at a time, and checks the count against the rows after every batch.
 
-Votes aren't audited: there are many, and they are the end users' own. The public `/v1` surface will take votes from the board and the widget, with the email confirmation flow; for now the team records a vote on an end user's behalf (`source: staff`).
+Votes aren't audited: there are many, and they are the end users' own. The team records a vote on an end user's behalf (`source: staff`); the app's signed-in end users vote through [the public `/v1` surface](#the-public-v1-surface) (`source: web` or `widget`), counted at once. Email-only voters, whose votes wait as pending, come with email identification.
 
 ## Subscriptions
 
@@ -161,3 +165,32 @@ Five more (`transport/mcp/tools/feedback-engagement.ts`, #473) sit over `VoteSer
 | `mocco_feedback_post_merge` | `MergeService.merge` | Merges a duplicate into another post on its board as the caller |
 
 The three changes have the locks of `mocco_feedback_post_set_status`: `feedback:write`, the opt-in and a confirmation round trip. Each confirmation is bound to what it showed. A comment is bound to its text and kind. A vote is bound to whether the end user had a pending vote or none; one that counts already answers without asking. A merge is bound to both posts, their board and each post's vote count, so a vote on either before the answer asks again. A post merged in between, a post into itself, or a post on another board is refused before asking. The services check the same rules again under their locks ([Merging duplicates](#merging-duplicates)).
+
+## The public /v1 surface
+
+`/api/ext/v1/feedback` (#174, `transport/ext/v1/feedback.ts`) serves a project's public boards to its app, its widget and public board pages, over `PublicBoardService`. Routes and status codes are in the [public API reference](./public-api.md#routes).
+
+**Keys.** Reads take a key with `feedback:read`; votes and comments a key with `feedback:write`. A publishable key may hold both. The key's project is the scope: a board is found by its slug within that project, so another project's board, post or token reads as not there.
+
+**End-user tokens.** A vote or comment also needs to know who the end user is. The app's server signs a short-lived JWT for its signed-in user and the app sends it as `Authorization: Bearer …`, with the key in `X-Mocco-Key`:
+
+- HS256, signed with the project's **identity secret**: the secret the messenger setup mints and shows once, the one `signIdentity` in `@mocco/node` uses for the messenger's `userHash`. No second secret: one project, one secret its server signs its users with. The secret is SecretBox-sealed at rest (it has to be opened to verify a signature, so it can't be stored as a hash).
+- `sub` is the end user's id as the app knows them, the id votes and comments carry. `exp` is required and may be at most an hour ahead; 60 seconds of clock skew are allowed. Other claims (`email`, `name`) are ignored and never stored.
+- Refused tokens are `401 invalid_end_user_token`: expired, signed by another project's secret (another project's token), not HS256, too long-lived, or presented to a project with no identity secret yet. A write without a token is `401 missing_end_user_token`. A bad token on a read is refused too, rather than read as nobody.
+- `EndUserTokenService` (`domain/enduser/`) verifies; it reads the secret through `MessengerSettingsService.identitySecretOf`. When end-user identity (#100) lands, the secret moves to the project's identity config and the same service reads it there.
+
+**The public projection.** `PublicBoardService` answers only from explicit projections, and the routes parse every answer through `@mocco/common/feedback-v1`, which drops any field not named there:
+
+- A private board (`is_public` false), its posts and their comments are `404`, the same as a board that doesn't exist.
+- Lists leave merged duplicates out. Reading a duplicate by id still works and carries `mergedIntoPostId`; voting on one is `409` with that id in `detail`.
+- A post is its id, number, title, body, status, category id, vote and comment counts, `createdAt`, `shippedAt` and `mergedIntoPostId`: never the team member who wrote it, the workspace, or the board's internals.
+- Comments are the public ones only (internal notes never), each with its author's kind, `isOfficial` and `isMine` (the viewer's own). No team member's id and no other end user's id: an app's user ids can be emails.
+- GitHub links aren't built yet. When they are, the projection carries only number and state, never their title.
+
+A test reads every route after an internal note, an official response, another end user's comment and a token carrying an email, and checks that none of those ids, the note or the email is in any answer.
+
+**Reads.** `GET /boards/{slug}` (name and categories), `GET /boards/{slug}/posts` (filter by status and category slug, `sort` `top`, most counted votes first, or `new`; `limit` up to 100, `offset`, `nextOffset`), `GET /boards/{slug}/roadmap` (the 50 most voted posts of each of planned, in progress and shipped), `GET /posts/{id}` (with `viewer: { vote }`, `counted`, `pending` or null, when a token comes with it) and `GET /posts/{id}/comments` (oldest first, paged the same way).
+
+**Writes.** `POST /posts/{id}/vote` votes through `VoteService.vote`, counted at once (the app's server vouched for the user), so it is idempotent and, like any vote, subscribes the voter. `DELETE` takes it back. `POST /posts/{id}/comments` comments through `CommentService.createAsEndUser`. Their locks and counters are the services'.
+
+**Limits.** On top of the key's own: 30 votes and unvotes and 20 comments an hour per end user (the bucket is a hash of the project and the end user's id), and 120 writes an hour per client address, whoever signs in. Over a limit is `429 rate_limited` with `Retry-After`. The production driver is the Postgres limiter.

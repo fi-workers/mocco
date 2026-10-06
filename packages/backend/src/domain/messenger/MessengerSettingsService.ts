@@ -107,6 +107,13 @@ export class MessengerSettingsService {
     return { allowGuests: row.allowGuests };
   }
 
+  /** The project's identity secret, opened, or undefined while the messenger was never set up.
+   * Other products verify their end users' signed tokens with it (EndUserTokenService). */
+  async identitySecretOf(workspaceId: string, projectId: string): Promise<string | undefined> {
+    const row = await new MessengerSettingsRepo(this.deps.db).find(workspaceId, projectId);
+    return row === undefined ? undefined : this.deps.box().open(row.identitySecretSealed, identitySecretAad(projectId));
+  }
+
   /** The settings with the identity secret opened (for verifying user hashes). */
   async withSecret(workspaceId: string, projectId: string) {
     const row = await this.require(workspaceId, projectId);
