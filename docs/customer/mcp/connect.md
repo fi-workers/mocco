@@ -26,7 +26,8 @@ https://www.mocco.club/api/mcp
 ```
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
-> resuming or rejecting a paused run, and changing where notifications go. The plan is in the
+> resuming or rejecting a paused run, changing where notifications go, and replying to and
+> assigning messenger conversations. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -56,6 +57,8 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
 | `mocco_help_articles_search` | Which published help center articles match a question (every word, or any word for a customer's message), or every article in order, in a language where translated |
 | `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, the languages it is published in, and how readers answered "Was this helpful?" in the last 30 days (with their newest comments when detailed) |
+| `mocco_messenger_conversations_search` | Which messenger conversations are open (or closed), newest activity first, by assignee (yours, someone's, or no one's) or by contact (id, email or your app's user id), with a preview of the latest message and whether you have read it |
+| `mocco_messenger_conversation_get` | One conversation's thread: every message from the user and your team, internal notes marked, and each attachment's name, type and size |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -92,6 +95,13 @@ to it in the console. Apart from checking a monitor now (below), they only read;
 incident, post an update, schedule maintenance, and add, pause or change a monitor or a
 location in the console.
 
+The messenger tools pick their project the same way and answer only where the messenger is
+turned on, for any member of the workspace, as the inbox does. They read internal notes too,
+since your team sees them in the inbox. An attachment comes back as its name, type and size,
+never as a link to the file: open the conversation in the console to see it. A user's email,
+your app's user id for them, their traits and the devices they wrote from are in the
+`detailed` answer only.
+
 The notification and webhook source tools read the whole workspace, with no project to
 pick, and answer for any member, as the console does. They never return a signing
 secret or a token: a source says whether it has a secret, and the detailed answer gives
@@ -116,6 +126,8 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_inbound_sources_pause` / `_resume` | Pauses a webhook source (its deliveries are refused) or resumes it |
 | `mocco_inbound_sources_delete` | Deletes a webhook source and the deliveries it received |
 | `mocco_monitors_check` | Runs an HTTP or TCP monitor's next round now, for example right after a deploy, instead of at its interval |
+| `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
+| `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -148,6 +160,20 @@ next round is due. Nothing runs until you answer yes. It needs its own permissio
 first time it is used: **Run your status monitors' checks now, as you**. Any member of the
 project may check its monitors, as in the console. A heartbeat (its job pings it) and a paused
 monitor are refused before you are asked anything.
+
+**Replying and assigning in the messenger.** `mocco_messenger_reply` sends what the inbox's
+**Send** does: your user reads it in the app, and gets a push notification if they turned them
+on. Your client first shows who it goes to and the exact text, and nothing is sent until you
+answer yes. A confirmation is for a reply after the conversation's latest message, so answering
+it twice sends once, and if the user writes again before you answer, you are asked afresh. It
+sends text only; attach files, leave internal notes, close a conversation and block a user in
+the console. `mocco_messenger_assign` is the hand-off: your client shows who has the
+conversation now and who would take it, and someone outside the workspace is refused before
+you are asked. Round robin still assigns new conversations when they start. Both follow the
+same rules as the other changes, need the workspace to allow agents to make changes, and
+need their own permission, asked for the first time either is used: **Reply to and assign
+your messenger conversations, as you**. Any member of the workspace may reply and assign, as
+in the inbox, and an assignment is recorded in the audit trail naming you.
 
 Webhook source changes follow the same rules, and a signing secret never passes through
 your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the
@@ -282,6 +308,10 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not run checks in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… is a heartbeat; its job pings it" | A heartbeat has no rounds to run. Its last ping is in `mocco_status_monitors_search` |
 | "… is paused; resume it in the console to check it" | Resume the monitor in the console first |
+| "This connection may not reply in the messenger" or "… may not assign conversations" | The app was never allowed to reply or assign. Reconnect it and allow the messenger permission when asked |
+| "Agents may not reply in the messenger in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "… isn't a member of this workspace" | A conversation can only go to a member of the workspace. `mocco_messenger_conversations_search` names the people who have conversations now |
+| "Conversation … was not found" | It is in another project or workspace, or the id is wrong. Search the inbox first |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
 | "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |

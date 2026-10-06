@@ -285,6 +285,7 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
+      messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

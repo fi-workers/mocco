@@ -821,3 +821,21 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/messenger.md`, `reference/events.md`, `reference/notifications.md`,
   `reference/feature-map.md`, `customer/messenger/contact-us.md`, `customer/notifications/mocco-events.md`, `log.md`
 - Source: branch `feat/messenger-assignment` (issue #204)
+
+## 2026-10-06 — MCP: messenger tools (search, read, reply, assign)
+
+- Documented #462 in [Messenger](./reference/messenger.md#mcp-tools): `mocco_messenger_conversations_search`
+  (status, assignee `me` / a user id / `unassigned`, contact by id, email or the app's user id; concise or detailed;
+  keyset-paged) and `mocco_messenger_conversation_get` (the latest messages, notes marked, attachments as id, file
+  name, type and size, never the signed link), over `InboxService` behind `ProjectScope` with `Products.messenger`.
+  `mocco_messenger_reply` (text only) and `mocco_messenger_assign` act as the caller behind a new `messenger:write`
+  OAuth scope, the workspace's opt-in and the confirmation round trip; a reply's confirmation is bound to the
+  conversation's latest seq and its `client_message_id` is derived from it, so answering twice sends once.
+- Assigning by hand had no console path, so `InboxService.assign`, the tRPC `messenger.assign` and the conversation
+  header's **Assigned to** picker ship with the tool, audited as `messenger.conversation.assigned`. No migration.
+- The [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md#how-the-messenger-changes-are-built-issue-462), the
+  [connect guide](./customer/mcp/connect.md), the feature map and the
+  [customer messenger guide](./customer/messenger/contact-us.md#share-the-work-with-round-robin) say the same.
+- Docs touched: `reference/messenger.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
+  `reference/feature-map.md`, `customer/messenger/contact-us.md`, `log.md`
+- Source: branch `feat/mcp-messenger-tools` (issue #462)

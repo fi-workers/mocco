@@ -255,6 +255,7 @@ Mocco can give each new conversation to one person on your team, in turn, so the
 - Choose **Join the rotation** at the top of the inbox to start getting new conversations. To add someone else, pick them under **Round robin** in the inbox settings; anyone in the workspace can be added.
 - The switch at the top of the inbox is your availability. While you are away, new conversations skip you and go to the next available person. When you come back, the next one is yours.
 - If no one is available, new conversations stay unassigned until someone picks them up.
+- To hand a conversation to someone else, or take one that is unassigned, pick a person in **Assigned to** at the top of the conversation. Anyone in the workspace can take one, whether or not they are in the rotation; choose **No one** to put it back. Each change is in the audit log.
 - Removing someone from the rotation doesn't take away the conversations they already have.
 
 ![Round robin: the availability switch over the inbox, each conversation's assignee, and the rotation in the settings](./images/messenger-round-robin.png)

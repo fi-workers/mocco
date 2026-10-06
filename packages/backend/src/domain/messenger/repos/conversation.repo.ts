@@ -1,5 +1,5 @@
 import { MessageVisibilities } from '@mocco/common/messenger';
-import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import { expectOne } from '@backend/infra/db/rows';
@@ -24,6 +24,29 @@ export interface NewMessage {
   body: string;
   clientMessageId: string | null;
   context: MessengerContext | null;
+}
+
+/** Which of a project's conversations an inbox read returns; each filter left out matches all. */
+export interface InboxFilter {
+  status?: ConversationStatus;
+  before?: Date;
+  /** Only this person's conversations. */
+  assigneeUserId?: string;
+  /** Only the conversations no one has. */
+  unassigned?: boolean;
+  /** A contact's id, email (any case) or the app's user id. */
+  contact?: string;
+}
+
+/** A contact id is a uuid; anything else can only be an email or an app's user id. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/** The assignee filter's condition: no one's, one person's, or none at all. */
+function assigneeIs(filter: Pick<InboxFilter, 'assigneeUserId' | 'unassigned'>) {
+  if (filter.unassigned === true) {
+    return [isNull(conv.assigneeUserId)];
+  }
+  return filter.assigneeUserId === undefined ? [] : [eq(conv.assigneeUserId, filter.assigneeUserId)];
 }
 
 /** Data access for conversations, their messages and read positions. Scoped by workspace. */
@@ -182,6 +205,17 @@ export class MessengerConversationRepo {
       .where(eq(conv.id, conversationId));
   }
 
+  /** Give a conversation to a person, or to no one (null). */
+  async setAssignee(workspaceId: string, conversationId: string, assigneeUserId: string | null) {
+    return expectOne(
+      await this.db
+        .update(conv)
+        .set({ assigneeUserId })
+        .where(and(eq(conv.id, conversationId), eq(conv.workspaceId, workspaceId)))
+        .returning(),
+    );
+  }
+
   async setStatus(workspaceId: string, conversationId: string, status: ConversationStatus, now: Date) {
     return expectOne(
       await this.db
@@ -204,14 +238,13 @@ export class MessengerConversationRepo {
 
   /**
    * A project's inbox, newest activity first, with each conversation's contact and
-   * the caller's read position. Keyset-paged by `before` (a last_message_at).
+   * the caller's read position. Keyset-paged by `before` (a last_message_at). Without a
+   * `status`, open and closed alike; `contact` matches a contact's id, email (any case)
+   * or the app's user id exactly.
    */
-  async inbox(
-    workspaceId: string,
-    projectId: string,
-    userId: string,
-    opts: { status: ConversationStatus; before?: Date; limit: number },
-  ) {
+  async inbox(workspaceId: string, projectId: string, userId: string, opts: InboxFilter & { limit: number }) {
+    const { status, contact } = opts;
+
     return await this.db
       .select({
         conversation: conv,
@@ -232,7 +265,17 @@ export class MessengerConversationRepo {
         and(
           eq(conv.workspaceId, workspaceId),
           eq(conv.projectId, projectId),
-          eq(conv.status, opts.status),
+          ...(status === undefined ? [] : [eq(conv.status, status)]),
+          ...assigneeIs(opts),
+          ...(contact === undefined
+            ? []
+            : [
+                or(
+                  ...(UUID.test(contact) ? [eq(contacts.id, contact)] : []),
+                  eq(sql`lower(${contacts.email})`, contact.toLowerCase()),
+                  eq(contacts.externalUserId, contact),
+                ),
+              ]),
           ...(opts.before === undefined ? [] : [lt(conv.lastMessageAt, opts.before)]),
         ),
       )
