@@ -4361,8 +4361,10 @@ export const feedbackPosts = pgTable(
     body: text().notNull().default(''),
     status: text().$type<FeedbackPostStatus>().notNull().default(FeedbackPostStatuses.underReview),
     shippedAt: timestamp('shipped_at'),
-    // The staff member who wrote it. End-user authors come with the end-user identity foundation.
+    // The staff member who wrote it, or (from /v1, #174) the end user: never both (DB-checked).
     authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // The app's id for the end user who wrote it (feedbackEndUserIdSchema), from /v1.
+    authorEndUserId: text('author_end_user_id'),
     // Denormalized: the post's `counted` votes and its public (not internal) comments, changed in
     // the same transaction as the vote or comment (FeedbackVoteRepo, FeedbackCommentRepo).
     voteCount: integer('vote_count').notNull().default(0),
@@ -4398,6 +4400,10 @@ export const feedbackPosts = pgTable(
     check('mocco_feedback_posts_number_check', sql`${t.number} >= 1`),
     check('mocco_feedback_posts_vote_count_check', sql`${t.voteCount} >= 0`),
     check('mocco_feedback_posts_comment_count_check', sql`${t.commentCount} >= 0`),
+    check(
+      'mocco_feedback_posts_author_check',
+      sql`(${t.authorUserId} IS NULL OR ${t.authorEndUserId} IS NULL) AND (${t.authorEndUserId} IS NULL OR char_length(${t.authorEndUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))})`,
+    ),
     foreignKey({
       columns: [t.mergedIntoPostId, t.workspaceId],
       foreignColumns: [t.id, t.workspaceId],
@@ -4470,6 +4476,10 @@ export const feedbackVotes = pgTable(
   t => [
     uniqueIndex('mocco_feedback_votes_post_end_user_uq').on(t.postId, t.endUserId),
     index('mocco_feedback_votes_post_created_idx').on(t.postId, t.createdAt.desc()),
+    // An email-only voter's pending votes, which their confirmation counts (#174).
+    index('mocco_feedback_votes_pending_end_user_idx')
+      .on(t.workspaceId, t.endUserId)
+      .where(sql`${t.state} IN (${sqlInList([FeedbackVoteStates.pending])})`),
     foreignKey({
       columns: [t.postId, t.workspaceId],
       foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],

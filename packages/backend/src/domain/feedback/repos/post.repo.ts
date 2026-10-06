@@ -23,6 +23,13 @@ const statusRank = sql`array_position(ARRAY[${sql.join(
   sql`, `,
 )}]::text[], ${p.status})`;
 
+/** `word` as a LIKE pattern that matches it anywhere, literally (its wildcards escaped). */
+const like = (word: string) => {
+  // eslint-disable-next-line sonarjs/null-dereference -- word is a string, never null
+  const literal = word.replaceAll(/[\\%_]/gu, char => `\\${char}`);
+  return `%${literal}%`;
+};
+
 /** Data access for mocco_feedback_posts. Scoped by workspace and project. */
 export class FeedbackPostRepo {
   constructor(private readonly db: Db) {}
@@ -102,6 +109,28 @@ export class FeedbackPostRepo {
       .orderBy(...order)
       .limit(query.limit)
       .offset(query.offset);
+  }
+
+  /**
+   * A board's posts most like `words` (the non-LLM fallback of the design's duplicate search): a
+   * word in the title counts twice, one in the body once; merged duplicates are left out. `words`
+   * are matched literally (LIKE wildcards escaped).
+   */
+  async similar(scope: FeedbackScope, boardId: string, words: readonly string[], limit: number) {
+    const score = sql.join(
+      words.map(
+        word =>
+          sql`(CASE WHEN ${p.title} ILIKE ${like(word)} THEN 2 ELSE 0 END + CASE WHEN ${p.body} ILIKE ${like(word)} THEN 1 ELSE 0 END)`,
+      ),
+      sql` + `,
+    );
+    const scored = sql<number>`(${score})`;
+    return await this.db
+      .select()
+      .from(p)
+      .where(and(scoped(scope), eq(p.boardId, boardId), isNull(p.mergedIntoPostId), sql`${scored} > 0`))
+      .orderBy(desc(scored), desc(p.voteCount), desc(p.createdAt))
+      .limit(limit);
   }
 
   /** The updated post, or undefined when the scope has no such post. */

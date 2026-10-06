@@ -2,7 +2,7 @@
 // takes, including the one it is created with, is a row in mocco_feedback_status_changes,
 // written in the same transaction as the post.
 import { AuditActions } from '@mocco/common/audit';
-import { FeedbackPostStatuses, FeedbackStatusChangeReasons } from '@mocco/common/feedback';
+import { FeedbackPostStatuses, FeedbackStatusChangeReasons, FeedbackVoteStates } from '@mocco/common/feedback';
 
 import {
   FeedbackBoardNotFoundError,
@@ -13,6 +13,8 @@ import {
 import { FeedbackBoardRepo } from '@backend/domain/feedback/repos/board.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 import { FeedbackStatusChangeRepo } from '@backend/domain/feedback/repos/status-change.repo';
+import { FeedbackSubscriptionRepo } from '@backend/domain/feedback/repos/subscription.repo';
+import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
@@ -25,6 +27,7 @@ import type {
   FeedbackPostListQuery,
   FeedbackPostStatus,
   FeedbackPostUpdateInput,
+  FeedbackVoteSource,
 } from '@mocco/common/feedback';
 
 export interface PostServiceDeps {
@@ -102,6 +105,56 @@ export class PostService {
         reason: FeedbackStatusChangeReasons.created,
         actorUserId,
       });
+      return post;
+    });
+  }
+
+  /**
+   * An end user's post (#174): under review, written by them, with their counted vote and their
+   * subscription, all in one transaction, so the post never exists without its author's vote.
+   */
+  async createAsEndUser(
+    scope: FeedbackScope,
+    endUserId: string,
+    input: { boardId: string; title: string; body?: string; categoryId?: string; source: FeedbackVoteSource },
+  ): Promise<FeedbackPostRow> {
+    if (input.categoryId !== undefined) {
+      await this.deps.boards.requireCategory(scope, input.boardId, input.categoryId);
+    }
+    const now = this.now();
+    return await this.deps.db.transaction(async tx => {
+      const number = await new FeedbackBoardRepo(tx).takePostNumber(scope, input.boardId);
+      if (number === undefined) {
+        throw new FeedbackBoardNotFoundError(input.boardId);
+      }
+      const post = await new FeedbackPostRepo(tx).insert({
+        ...scope,
+        boardId: input.boardId,
+        categoryId: input.categoryId ?? null,
+        number,
+        title: input.title,
+        body: input.body ?? '',
+        status: FeedbackPostStatuses.underReview,
+        authorEndUserId: endUserId,
+        voteCount: 1,
+      });
+      await new FeedbackStatusChangeRepo(tx).append({
+        workspaceId: scope.workspaceId,
+        postId: post.id,
+        fromStatus: null,
+        toStatus: post.status,
+        reason: FeedbackStatusChangeReasons.created,
+        actorUserId: null,
+      });
+      await new FeedbackVoteRepo(tx).insertIfAbsent({
+        workspaceId: scope.workspaceId,
+        postId: post.id,
+        endUserId,
+        state: FeedbackVoteStates.counted,
+        source: input.source,
+        countedAt: now,
+      });
+      await new FeedbackSubscriptionRepo(tx).insertIfAbsent(scope.workspaceId, post.id, endUserId);
       return post;
     });
   }

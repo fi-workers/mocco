@@ -83,6 +83,22 @@ export class FeedbackVoteNotFoundError extends NotFoundError {
   }
 }
 
+/** A feedback mail link that is malformed, edited, expired or for another purpose — BAD_REQUEST. */
+export class FeedbackLinkInvalidError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('The link is not valid', options);
+    this.name = 'FeedbackLinkInvalidError';
+  }
+}
+
+/** This server sends no email, or the mail couldn't be handed over. */
+export class FeedbackMailUnavailableError extends Error {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`Feedback mail could not be sent: ${reason}`, options);
+    this.name = 'FeedbackMailUnavailableError';
+  }
+}
+
 /** A comment that is both the official response (public) and an internal note — BAD_REQUEST. */
 export class FeedbackOfficialInternalError extends BadRequestError {
   constructor(options?: ErrorOptions) {

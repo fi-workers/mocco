@@ -27,11 +27,14 @@ code_refs:
   - packages/backend/src/domain/enduser/EndUserTokenService.ts
   - packages/backend/src/transport/ext/v1/feedback.ts
   - packages/common/src/feedback-v1.ts
+  - packages/backend/src/domain/feedback/EmailVoteService.ts
+  - packages/backend/src/domain/feedback/link-tokens.ts
+  - packages/backend/src/transport/ext/v1/feedback-links.ts
 ---
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` reads, and votes and comments from the app's signed-in end users (#174, [below](#the-public-v1-surface)). Posting from `/v1`, email identification, subscriptions over `/v1`, GitHub links, shipping on deploy and the changelog come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` surface (#174, [below](#the-public-v1-surface)): reads, the similar-posts search, and posts, votes, comments and follows from the app's signed-in end users, voting by email, and signed unsubscribe links. GitHub links, shipping on deploy and the changelog come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -41,7 +44,7 @@ Migration 0076 adds four tables. Every row carries `workspace_id`. Children reac
 |---|---|
 | `mocco_feedback_boards` | A board of a project: `slug` (unique within the project, same pattern as a project handle), `name`, `is_public` (default true; the public surface reads it later), and `next_post_number` |
 | `mocco_feedback_categories` | A board's categories: `slug` (unique within the board), `name`, `position` |
-| `mocco_feedback_posts` | A post: `number` (unique within the board), `title`, `body` (Markdown), `status`, `category_id` (a category of the same board, or null), `shipped_at`, and `author_user_id` (the staff member who wrote it; end-user authors come with end-user identity) |
+| `mocco_feedback_posts` | A post: `number` (unique within the board), `title`, `body` (Markdown), `status`, `category_id` (a category of the same board, or null), `shipped_at`, and its author: `author_user_id` (a staff member) or `author_end_user_id` (an end user, from `/v1`; migration 0080), never both (DB-checked) |
 | `mocco_feedback_status_changes` | Append-only history: `from_status` (null on the row written when the post is created), `to_status`, `reason`, `actor_user_id` |
 
 Migration 0077 (#173) adds two more tables and two counters on posts, `vote_count` and `comment_count` (see [Votes](#votes) and [Comments](#comments)). Both tables reach their post through a composite FK on `(post_id, workspace_id)`.
@@ -52,6 +55,8 @@ Migration 0077 (#173) adds two more tables and two counters on posts, `vote_coun
 | `mocco_feedback_comments` | A comment: `author_kind` (`staff` or `end_user`), `author_user_id` or `author_end_user_id`, `body` (up to 8,000 characters), `is_official`, `is_internal` |
 
 Migration 0078 (#173) adds `mocco_feedback_subscriptions` (`end_user_id`, `unsubscribed_at`; unique on `(post_id, end_user_id)`, the same composite FK) and two columns on posts: `merged_into_post_id` (an FK on `(merged_into_post_id, workspace_id)`, so a post can only be merged into one of its own workspace) and `merged_at`. A check holds both set or both null, and a post never merged into itself (see [Merging duplicates](#merging-duplicates)).
+
+Migration 0080 (#174) adds `author_end_user_id` to posts (see the table above) and a partial index on votes `(workspace_id, end_user_id) WHERE state = 'pending'`, which an email voter's confirmation reads ([voting by email](#voting-by-email)).
 
 An end user is the id the project's app knows them by: the user id it signs, the same id space as a messenger contact's `external_user_id`. End-user identity (#100) isn't built yet. When it gives these ids a directory, votes, comments and subscriptions point into it; until then the column carries the id itself (1 to 255 characters).
 
@@ -88,7 +93,7 @@ Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 - **Taking a vote back** deletes it; no vote is no change.
 - **`vote_count` equals the post's counted votes.** It moves by one in the transaction that counts or removes a counted vote, after that transaction has locked the post row, so concurrent writes to one post apply one after another. A test runs a long random sequence of votes, pending votes, confirmations and removals, six at a time, and checks the count against the rows after every batch.
 
-Votes aren't audited: there are many, and they are the end users' own. The team records a vote on an end user's behalf (`source: staff`); the app's signed-in end users vote through [the public `/v1` surface](#the-public-v1-surface) (`source: web` or `widget`), counted at once. Email-only voters, whose votes wait as pending, come with email identification.
+Votes aren't audited: there are many, and they are the end users' own. The team records a vote on an end user's behalf (`source: staff`); the app's signed-in end users vote through [the public `/v1` surface](#the-public-v1-surface) (`source: web` or `widget`), counted at once. An email-only voter's vote waits as pending until they open the link mailed to them ([voting by email](#voting-by-email)).
 
 ## Subscriptions
 
@@ -185,12 +190,35 @@ The three changes have the locks of `mocco_feedback_post_set_status`: `feedback:
 - Lists leave merged duplicates out. Reading a duplicate by id still works and carries `mergedIntoPostId`; voting on one is `409` with that id in `detail`.
 - A post is its id, number, title, body, status, category id, vote and comment counts, `createdAt`, `shippedAt` and `mergedIntoPostId`: never the team member who wrote it, the workspace, or the board's internals.
 - Comments are the public ones only (internal notes never), each with its author's kind, `isOfficial` and `isMine` (the viewer's own). No team member's id and no other end user's id: an app's user ids can be emails.
+- A post an end user wrote never says who: `author_end_user_id` stays with the team.
 - GitHub links aren't built yet. When they are, the projection carries only number and state, never their title.
 
 A test reads every route after an internal note, an official response, another end user's comment and a token carrying an email, and checks that none of those ids, the note or the email is in any answer.
 
 **Reads.** `GET /boards/{slug}` (name and categories), `GET /boards/{slug}/posts` (filter by status and category slug, `sort` `top`, most counted votes first, or `new`; `limit` up to 100, `offset`, `nextOffset`), `GET /boards/{slug}/roadmap` (the 50 most voted posts of each of planned, in progress and shipped), `GET /posts/{id}` (with `viewer: { vote }`, `counted`, `pending` or null, when a token comes with it) and `GET /posts/{id}/comments` (oldest first, paged the same way).
 
-**Writes.** `POST /posts/{id}/vote` votes through `VoteService.vote`, counted at once (the app's server vouched for the user), so it is idempotent and, like any vote, subscribes the voter. `DELETE` takes it back. `POST /posts/{id}/comments` comments through `CommentService.createAsEndUser`. Their locks and counters are the services'.
+**Similar posts.** `GET /boards/{slug}/similar?q=&limit=` (`feedback:read`, up to 10, default 5) answers the posts most like a title being typed, so the end user can vote instead of posting a duplicate. It is the design's fallback without an LLM: the query's words (letters and digits, two or more characters, at most eight) are matched literally in the title and body, a title match counting twice, then by votes; merged duplicates are left out. 60 searches a minute per client address.
 
-**Limits.** On top of the key's own: 30 votes and unvotes and 20 comments an hour per end user (the bucket is a hash of the project and the end user's id), and 120 writes an hour per client address, whoever signs in. Over a limit is `429 rate_limited` with `Retry-After`. The production driver is the Postgres limiter.
+**Writes.** `POST /boards/{slug}/posts` (`{ title, body?, categoryId?, source? }`) posts as the end user through `PostService.createAsEndUser`: the post starts under review, with the author's counted vote and subscription, written in one transaction with its `created` history row (no actor). `POST /posts/{id}/vote` votes through `VoteService.vote`, counted at once (the app's server vouched for the user), so it is idempotent and, like any vote, subscribes the voter. `DELETE` takes it back. `POST /posts/{id}/comments` comments through `CommentService.createAsEndUser`. `POST`/`DELETE /posts/{id}/subscription` follows or stops following through `SubscriptionService` (`{ subscribed }`; an opt-out still outlives later votes). Their locks and counters are the services'.
+
+**Limits.** On top of the key's own: 30 votes and unvotes, 20 comments, 5 posts and 30 follows or unfollows an hour per end user (the bucket is a hash of the project and the end user's id), and 120 writes an hour per client address, whoever signs in. Over a limit is `429 rate_limited` with `Retry-After`. The production driver is the Postgres limiter.
+
+### Voting by email
+
+Someone the app hasn't signed in can still vote, with their email address (`EmailVoteService`, `transport/ext/v1/feedback-links.ts`):
+
+- `POST /identify/email` (`feedback:write`, no end-user token) with `{ email, postId, source? }` writes a **pending** vote for the end user `email:<address, lowercased>` and mails the address. It answers `202 { status: "pending_confirmation" }`, never the address. Signed tokens can't claim an `email:` id: a token whose `sub` starts with it is `401 invalid_end_user_token`.
+- The mail goes through the notifications email sender (`EMAIL_DRIVER`; `log` prints it instead of sending, the development default). Without a sender, or without `AUTH_SECRET` to sign links, the route answers `503 email_unavailable` and writes nothing.
+- The mail's link, `GET /identify/email/confirm?token=`, counts every pending vote that address cast in the project in the last 7 days (measured by the database clock that wrote them) through `VoteService.confirm`, and shows a small page. A vote on a post merged or deleted since is skipped. The link works for a day; opening it again changes nothing.
+- 10 email votes per 10 minutes per client address, and 3 an hour per address mailed (per project).
+
+An email voter can't post or comment: that needs a token from the app's server.
+
+### Unsubscribe links
+
+Every feedback mail carries a signed unsubscribe link, `/unsubscribe/{token}`, in its body and in `List-Unsubscribe` with `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058). `EmailVoteService.unsubscribeUrlOf` makes one for any later mail, such as the status-change fan-out.
+
+- `GET` asks first and changes nothing, so a mail scanner opening the link unsubscribes nobody. `POST` (the page's form, or the mail client's one click) unsubscribes the end user from the post; for a merged duplicate, from the post it was merged into, which took its subscribers. Both are idempotent.
+- The links take no key. A token is `<claims>.<HMAC-SHA256>` over its purpose (`identify` or `unsubscribe`), workspace, project, end user, post and expiry, with a key derived from `AUTH_SECRET` (apart from the status subscribers' key), like the [status subscriber links](./status.md#subscribers). Nothing is stored. An edited token, one signed with another key, an expired one or one for the other purpose gets the "not valid" page (`400`).
+- The pages are `no-store`, `noindex`, `no-referrer`, and escape the post's title. 30 link openings a minute per client address.
+

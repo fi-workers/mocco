@@ -1,5 +1,5 @@
 import { FeedbackVoteSources, FeedbackVoteStates } from '@mocco/common/feedback';
-import { and, count, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -84,6 +84,26 @@ export class FeedbackVoteRepo {
       ON CONFLICT (post_id, end_user_id) DO UPDATE
         SET state = excluded.state, counted_at = excluded.counted_at
         WHERE ${v.state} = ${FeedbackVoteStates.pending} AND excluded.state = ${FeedbackVoteStates.counted}`);
+  }
+
+  /** The posts of the project the end user has a pending vote on, cast within the last `withinMs`
+   * by the database's clock (the one `created_at` is written with). */
+  async pendingPostIds(scope: { workspaceId: string; projectId: string }, endUserId: string, withinMs: number) {
+    const posts = schema.feedbackPosts;
+    const rows = await this.db
+      .select({ postId: v.postId })
+      .from(v)
+      .innerJoin(posts, and(eq(posts.id, v.postId), eq(posts.workspaceId, v.workspaceId)))
+      .where(
+        and(
+          eq(v.workspaceId, scope.workspaceId),
+          eq(posts.projectId, scope.projectId),
+          eq(v.endUserId, endUserId),
+          eq(v.state, FeedbackVoteStates.pending),
+          gte(v.createdAt, sql`now() - make_interval(secs => ${withinMs / 1000})`),
+        ),
+      );
+    return rows.map(row => row.postId);
   }
 
   /** How many of the post's votes count: what its `vote_count` must equal. */

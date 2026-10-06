@@ -2,7 +2,9 @@
 // Reads take a key with feedback:read. Votes and comments take a key with feedback:write
 // plus the end user's token: an HS256 JWT the app's server signs with the project's identity
 // secret, sent as `Authorization: Bearer …` (the key then rides in `X-Mocco-Key`). A token
-// on a read adds the viewer's own vote and marks their comments. Every answer is parsed
+// on a read adds the viewer's own vote and marks their comments. Posting, following a post
+// and the similar-posts search work the same way; voting by email and the mail links are in
+// feedback-links.ts. Every answer is parsed
 // through its @mocco/common/feedback-v1 schema, so nothing outside the public projection
 // reaches the wire.
 import { createHash } from 'node:crypto';
@@ -16,9 +18,14 @@ import {
   feedbackV1PageQuerySchema,
   feedbackV1PostDetailSchema,
   feedbackV1PostListQuerySchema,
+  feedbackV1PostCreateInputSchema,
   feedbackV1PostListSchema,
+  feedbackV1PostResultSchema,
   feedbackV1RoadmapSchema,
+  feedbackV1SimilarQuerySchema,
+  feedbackV1SimilarSchema,
   feedbackV1SlugSchema,
+  feedbackV1SubscriptionResultSchema,
   feedbackV1VoteInputSchema,
   feedbackV1VoteResultSchema,
 } from '@mocco/common/feedback-v1';
@@ -27,19 +34,37 @@ import { z } from 'zod';
 
 import { EndUserTokenRefusals, EndUserTokenRejectedError } from '@backend/domain/enduser/errors';
 import { BadRequestError, NotFoundError } from '@backend/domain/errors';
+import { EMAIL_END_USER_PREFIX } from '@backend/domain/feedback/EmailVoteService';
 import { FeedbackPostMergedError } from '@backend/domain/feedback/errors';
+import { createFeedbackLinkRoutes } from '@backend/transport/ext/v1/feedback-links';
 import { bearerOf, ipBucketOf, isApiKeyToken, limit, requireKey } from '@backend/transport/ext/v1/middleware';
 import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/transport/ext/v1/problem';
 
 import type { EndUserTokenService } from '@backend/domain/enduser/EndUserTokenService';
+import type { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
 import type { PublicBoardService, PublicComment, PublicPost } from '@backend/domain/feedback/PublicBoardService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { RoadmapColumn } from '@mocco/common/feedback';
 import type { Context } from 'hono';
 
 export interface FeedbackServingDeps {
-  boards: Pick<PublicBoardService, 'board' | 'posts' | 'roadmap' | 'post' | 'comments' | 'vote' | 'unvote' | 'comment'>;
+  boards: Pick<
+    PublicBoardService,
+    | 'board'
+    | 'posts'
+    | 'roadmap'
+    | 'post'
+    | 'comments'
+    | 'vote'
+    | 'unvote'
+    | 'comment'
+    | 'createPost'
+    | 'similar'
+    | 'setSubscribed'
+  >;
   endUsers: Pick<EndUserTokenService, 'verify'>;
+  /** Voting by email and the signed mail links; undefined without AUTH_SECRET (those routes 503). */
+  emailVotes?: Pick<EmailVoteService, 'canSendMail' | 'start' | 'confirm' | 'describeUnsubscribe' | 'unsubscribe'>;
 }
 
 /** End users' write limits, on top of the key's own (feedback design §8). */
@@ -48,6 +73,12 @@ export const FeedbackRateLimits = {
   votes: { limit: 30, windowSeconds: 60 * 60 },
   /** Comments per end user. */
   comments: { limit: 20, windowSeconds: 60 * 60 },
+  /** New posts per end user. */
+  posts: { limit: 5, windowSeconds: 60 * 60 },
+  /** Follows and unfollows per end user. */
+  subscriptions: { limit: 30, windowSeconds: 60 * 60 },
+  /** Similar-posts searches per client address (typed as a title is written). */
+  similar: { limit: 60, windowSeconds: 60 },
   /** Every write from one client address, whoever the end user. */
   writesPerAddress: { limit: 120, windowSeconds: 60 * 60 },
 } as const;
@@ -109,7 +140,7 @@ const wireRoadmap = (roadmap: Record<RoadmapColumn, PublicPost[]>) =>
 const wireComment = (comment: PublicComment) => ({ ...comment, createdAt: iso(comment.createdAt) });
 
 /** `body` narrowed by `schema`: a field the schema doesn't name is dropped. */
-const send = <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status: 200 | 201 = 200) =>
+const send = <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status: 200 | 201 | 202 = 200) =>
   c.json(schema.parse(body), status);
 
 /** A path that names no post. */
@@ -152,13 +183,18 @@ export function createFeedbackRoutes(deps: V1Deps, feedback: FeedbackServingDeps
     }
     const { workspaceId, projectId } = c.var.principal;
     const { endUserId } = await feedback.endUsers.verify({ workspaceId, projectId }, token);
+
+    if (endUserId.startsWith(EMAIL_END_USER_PREFIX)) {
+      // Email voters' ids are Mocco's own: a signed token can't claim one.
+      throw new EndUserTokenRejectedError(EndUserTokenRefusals.invalid);
+    }
     return endUserId;
   };
 
   /** The signed-in end user for a write, after the write limits; else the refusal. */
   const writerOf = async (
     c: Context<V1Env>,
-    limitName: 'votes' | 'comments',
+    limitName: 'votes' | 'comments' | 'posts' | 'subscriptions',
   ): Promise<{ endUserId: string; refused?: undefined } | { endUserId?: undefined; refused: Response }> => {
     const endUserId = await viewerOf(c);
     if (endUserId === undefined) {
@@ -314,6 +350,64 @@ export function createFeedbackRoutes(deps: V1Deps, feedback: FeedbackServingDeps
         return send(c, feedbackV1CommentResultSchema, { comment: wireComment(comment) }, 201);
       }),
   );
+
+  app.get('/boards/:slug/similar', read, async c => {
+    const slug = slugOf(c);
+    if (!slug.success) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
+    }
+    const query = feedbackV1SimilarQuerySchema.safeParse(c.req.query());
+    if (!query.success) {
+      return badQuery('q is required (1–200 characters); limit is 1–10');
+    }
+    const limited = await limit(deps, `feedback:similar:ip:${ipBucketOf(c)}`, FeedbackRateLimits.similar);
+    if (limited.refused !== undefined) {
+      return limited.refused;
+    }
+    return await answer(async () => {
+      const posts = await feedback.boards.similar(scopeOf(c), slug.data, query.data.q, query.data.limit);
+      return send(c, feedbackV1SimilarSchema, { posts: posts.map(post => wirePost(post)) });
+    });
+  });
+
+  app.post('/boards/:slug/posts', write, async c => {
+    const slug = slugOf(c);
+    if (!slug.success) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
+    }
+    return await answer(async () => {
+      const writer = await writerOf(c, 'posts');
+      if (writer.refused !== undefined) {
+        return writer.refused;
+      }
+      const body = await parseJson(
+        c,
+        feedbackV1PostCreateInputSchema.extend({ source: feedbackV1VoteInputSchema.shape.source }),
+      );
+      if (body.refused !== undefined) {
+        return body.refused;
+      }
+      const post = await feedback.boards.createPost(scopeOf(c), slug.data, writer.endUserId, body.data);
+      return send(c, feedbackV1PostResultSchema, { post: wirePost(post) }, 201);
+    });
+  });
+
+  const subscription = (isSubscribed: boolean) => async (c: Context<V1Env>) =>
+    await answer(async () => {
+      const writer = await writerOf(c, 'subscriptions');
+      if (writer.refused !== undefined) {
+        return writer.refused;
+      }
+      return send(
+        c,
+        feedbackV1SubscriptionResultSchema,
+        await feedback.boards.setSubscribed(scopeOf(c), postIdOf(c), writer.endUserId, isSubscribed),
+      );
+    });
+  app.post('/posts/:id/subscription', write, subscription(true));
+  app.delete('/posts/:id/subscription', write, subscription(false));
+
+  app.route('/', createFeedbackLinkRoutes(deps, { emailVotes: feedback.emailVotes, answer, send }));
 
   return app;
 }
