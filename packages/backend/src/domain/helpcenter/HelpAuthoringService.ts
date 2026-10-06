@@ -10,7 +10,7 @@
 import { AuditActions } from '@mocco/common/audit';
 import { ArticleStatuses, RevisionKinds, slugify } from '@mocco/common/help';
 
-import { contentHashOf, newShortId } from '@backend/domain/helpcenter/content';
+import { contentHashOf, newShortId, revisionText } from '@backend/domain/helpcenter/content';
 import {
   HelpNodeNotFoundError,
   HelpNothingToPublishError,
@@ -91,9 +91,7 @@ export class HelpAuthoringService {
       workspaceId: article.workspaceId,
       articleId: article.id,
       locale,
-      title: input.title,
-      bodyMd: input.body,
-      contentHash: contentHashOf(input.title, input.body),
+      ...revisionText(input.title, input.body),
       kind: input.kind,
       authorUserId: input.authorUserId,
       // The service's clock, which the editing-session check compares against.
@@ -258,7 +256,7 @@ export class HelpAuthoringService {
       return await this.article(workspaceId, projectId, article.id);
     }
     if (isSourceDraft && this.isOpenSession(article, draft, actorUserId)) {
-      await repo.updateRevisionText(workspaceId, draft.id, { title: input.title, bodyMd: input.body, contentHash });
+      await repo.updateRevisionText(workspaceId, draft.id, revisionText(input.title, input.body));
     } else {
       await this.writeRevision(article, site.sourceLocale, {
         title: input.title,

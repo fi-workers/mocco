@@ -12,6 +12,7 @@ import {
   HelpStorageNotConfiguredError,
 } from '@backend/domain/helpcenter/errors';
 import { EDIT_SESSION_MS } from '@backend/domain/helpcenter/HelpAuthoringService';
+import { segmentRefsOf } from '@backend/domain/helpcenter/markdown/segment';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
@@ -256,6 +257,16 @@ describe('help center (pglite)', () => {
       expect(third.draft).toMatchObject({ body: 'Hello, widget', kind: 'source_edit' });
       // The new article's empty first revision was the session's start.
       expect(await bodies(domain, article.id)).toEqual(['Hello, widget']);
+    });
+
+    it("keeps the draft revision's segment hashes in step with its text", async () => {
+      const { article } = await setUp();
+      const { domain } = withClock();
+
+      const saved = await save(domain, article.id, 'One paragraph.\n\n`code` alone');
+      const [row] = await new HelpArticleRepo(t.db).revisionsByIds([saved.draft?.id ?? '']);
+      expect(row?.segments).toEqual(segmentRefsOf(row?.title ?? '', 'One paragraph.\n\n`code` alone'));
+      expect(row?.segments.map(({ kind }) => kind)).toEqual(['title', 'paragraph', 'paragraph']);
     });
 
     it('writes nothing when the text is unchanged', async () => {

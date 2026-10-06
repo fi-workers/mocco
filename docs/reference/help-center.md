@@ -4,7 +4,7 @@ description: How Mocco stores a project's help center — a public slug and lang
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, help-center, support]
@@ -16,6 +16,8 @@ code_refs:
   - packages/backend/src/domain/helpcenter/HelpImageService.ts
   - packages/backend/src/domain/helpcenter/HelpPublicReadService.ts
   - packages/backend/src/domain/helpcenter/HelpFeedbackService.ts
+  - packages/backend/src/domain/helpcenter/markdown/segment.ts
+  - packages/backend/src/domain/helpcenter/markdown/validate.ts
   - packages/common/src/help.ts
   - packages/common/src/help-v1.ts
   - packages/backend/src/transport/ext/v1/help.ts
@@ -37,7 +39,7 @@ An article has a stable `short_id` (6 characters, unique in the project) and a c
 
 ## Revisions and publishing
 
-Text lives in `mocco_help_revisions`: locale, title, Markdown body, a `content_hash` (sha256 of the normalized title and body; translations compare against it) and a `kind` (`source_edit`, `restore`, `import`). The article points at its `draft_revision_id` and its `published_revision_id`.
+Text lives in `mocco_help_revisions`: locale, title, Markdown body, a `content_hash` (sha256 of the normalized title and body; translations compare against it), `segments` (each translatable segment's hash and kind, in order; migration 0073, see [Markdown segments](#markdown-segments)) and a `kind` (`source_edit`, `restore`, `import`). The article points at its `draft_revision_id` and its `published_revision_id`.
 
 - **Save** (`saveDraft`) makes the text the draft. The public site keeps the published one. Text equal to the draft's writes nothing. Within an editing session it rewrites the draft revision instead of adding one: the draft is a `source_edit` by the same person, not the published revision, and started less than `EDIT_SESSION_MS` (10 minutes) ago. Anything else (a published, restored or imported draft, another author, an older session) gets a new revision, so a revision is never changed once it is published, restored or superseded. The service sets `created_at` from its own clock, which the session check compares against.
 - **Publish** makes the draft the published revision (`help.article.published`, audited). Publishing with no draft is a CONFLICT.
@@ -90,11 +92,22 @@ Article images are public objects of the project's help center in [object storag
 Each article has a translation per offered language in `mocco_help_translations` (migration 0043): a state (`pending`, `auto` for machine text, `reviewed` for a person's text, `failed`), the current text as a revision in that language (`machine` or `human_edit`), and the content hash of the published source it was made from. A translation is **stale** when that hash differs from the current published source; staleness is derived, not stored.
 
 - **On publish**, `HelpTranslationService.onPublished` queues a `help.translate` job per offered language, except languages with a reviewed translation (deduped per article and language).
-- **The job** sends the published title and Markdown to the `Translator` port. The production driver is `AiGatewayTranslator`, an AI Gateway chat completion asking for `{title, body}` JSON; it exists only with `AI_GATEWAY_API_KEY`. The answer must keep the source's structure (`translate/validate.ts`: the same heading levels, identical code fences, the same link and image targets), or it is refused and the translation is `failed` with the reason. An outage or rate limit throws, so the job retries. A translation already made from the current source is not redone.
+- **The job** sends the published title and Markdown to the `Translator` port. The production driver is `AiGatewayTranslator`, an AI Gateway chat completion asking for `{title, body}` JSON; it exists only with `AI_GATEWAY_API_KEY`. The answer must keep the source's structure (`markdown/validate.ts`, `structureProblem`: the same heading levels, identical code blocks, the same link and image targets, compared on the parsed tree), or it is refused and the translation is `failed` with the reason. An outage or rate limit throws, so the job retries. A translation already made from the current source is not redone.
 - **A person's text** (`help.saveTranslation`) is stored as `reviewed` and is never overwritten by the machine; when the source changes it shows as stale. `help.retranslate` asks the machine again for one language, replacing a reviewed text too.
 - **The console**: the article editor's **Translations** section lists each offered language with its state (Machine translated, Reviewed, Source changed, Failed with the reason, Not translated), an editor with a live preview to write or fix one (saved as reviewed), and **Translate again** (confirmed first on a reviewed language). It polls while a translation is pending.
 - **Collection and section titles** are translated along with the first article translated under them into a language, and again when renamed (`mocco_help_node_translations`, migration 0044, keyed by the source title they were made from). A failed title keeps the source title.
 - **The public site** serves a language's translation where there is one. An untranslated article, in the tree and on its own, is served in the source language at the source's path.
+
+### Markdown segments
+
+`domain/helpcenter/markdown/` turns an article into the pieces a translator sees and back, through unified/remark (CommonMark plus GitHub tables, strikethrough, task lists, footnotes and autolinks; `tree.ts` is the only importer). It is pure and not yet wired into the job, which still sends the whole article; segment-level translation with translation memory comes with the translation jobs (#212).
+
+- **Segment** (`segment.ts`): headings, paragraphs (in lists, quotes and footnotes too) and table cells are a segment each; image alt texts and link titles are segments of their own; the title is the `title` segment. Code blocks, HTML and anything without a letter are never sent. Each segment has a document-order id (`s0`, `s1`, …) and a hash (sha256 of its text, NFC with whitespace collapsed). Every revision write stores the title's and body's `[{hash, kind}]` in `segments`, so an edit changes only the hashes of the segments it touched; rows written before migration 0073 hold `[]`.
+- **Protect** (`protect.ts`): inline code, images, autolinks, hard breaks, inline HTML, URLs in text (`https://…`, `asset://…`, `www.…`, `mailto:`, emails), `{{variables}}`, emoji shortcodes, glossary keep terms and a literal `⟦`/`⟧` become `⟦n⟧`; emphasis, strong, strikethrough and links become `⟦n⟧…⟦/n⟧` around text that stays translatable, so a link's text is translated and its target never leaves Mocco.
+- **Reassemble** (`reassemble.ts`): each translation is validated and put back into the source's own parsed tree, which is serialized in the house style (`normalizeMarkdown`: `-` bullets, `*` emphasis, fenced code). Structure comes from the source, never from the translator; an untranslated segment keeps its source text, and an invalid one throws `TranslationRejectedError` naming the segment.
+- **Validate** (`validate.ts`): `segmentProblem` refuses a segment whose placeholders are dropped, duplicated, unknown, closed before they open or across another one, or left as a stray bracket, or that adds a URL the source didn't have; reordering is allowed. `structureProblem` compares whole documents as above.
+
+The golden corpus (`markdown/testing/corpus.ts`: nested lists, tables, fences with Markdown inside, reference links, HTML, footnotes, escapes, Korean and Japanese) and fast-check property tests (seeded) hold the contract: an identity translation reassembles to the normalized source, and no URL, code or variable reaches a segment.
 
 ## Import
 

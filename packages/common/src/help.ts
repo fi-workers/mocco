@@ -39,6 +39,23 @@ export const RevisionKinds = {
 } as const;
 export type RevisionKind = (typeof RevisionKinds)[keyof typeof RevisionKinds];
 
+/** What a piece of translatable text is in its article (see `domain/helpcenter/markdown/segment.ts`). */
+export const SegmentKinds = {
+  title: 'title',
+  heading: 'heading',
+  paragraph: 'paragraph',
+  tableCell: 'tableCell',
+  imageAlt: 'imageAlt',
+  linkTitle: 'linkTitle',
+} as const;
+export type SegmentKind = (typeof SegmentKinds)[keyof typeof SegmentKinds];
+
+/** One segment as a revision stores it: the hash of its text, and its kind, in document order. */
+export interface SegmentRef {
+  readonly hash: string;
+  readonly kind: SegmentKind;
+}
+
 /**
  * A translation's state per article and language. `auto` is machine output, `reviewed`
  * a person's text (never overwritten by the machine). Whether it is stale (made from an

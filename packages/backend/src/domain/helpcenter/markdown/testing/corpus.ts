@@ -1,0 +1,186 @@
+// The golden corpus for the help center's Markdown pipeline (#211): tricky documents,
+// each with the strings a translator must never see.
+
+export interface CorpusDocument {
+  readonly name: string;
+  readonly markdown: string;
+  /** Substrings no segment text may contain: code, URLs, asset refs, variables. */
+  readonly hidden: readonly string[];
+}
+
+export const corpus: readonly CorpusDocument[] = [
+  {
+    name: 'headings, emphasis and links with titles',
+    markdown: [
+      '# Install the widget',
+      '',
+      'Open **Settings**, then _Widgets_ and ~~old~~ new [the guide](https://docs.example.com/widget "Widget guide").',
+      '',
+      'Setext heading',
+      '--------------',
+      '',
+      '### Third *level* heading',
+    ].join('\n'),
+    hidden: ['https://docs.example.com/widget'],
+  },
+  {
+    name: 'nested lists and task lists',
+    markdown: [
+      '- First step',
+      '  1. Sign in at https://app.example.com.',
+      '  2. Pick a project',
+      '     - [x] Done item',
+      '     - [ ] Open item with `npm run build`',
+      '- Second step',
+      '',
+      '3. Ordered from three',
+      '4. Next',
+    ].join('\n'),
+    hidden: ['https://app.example.com', 'npm run build'],
+  },
+  {
+    name: 'a table with inline code and links',
+    markdown: [
+      '| Option | Default | Notes |',
+      '| :----- | :-----: | ----: |',
+      '| `timeout` | `30` | See [limits](https://example.com/limits) |',
+      '| `retries` | 3 | Retries \\| pipes escaped |',
+    ].join('\n'),
+    hidden: ['timeout', 'retries', 'https://example.com/limits'],
+  },
+  {
+    name: 'code fences with Markdown inside',
+    markdown: [
+      'Run this:',
+      '',
+      '```md',
+      '# Not a heading',
+      'Visit [docs](https://inside.example.com) and {{secret}}',
+      '```',
+      '',
+      '~~~js title="x.js"',
+      'const answer = 42; // https://inside-tilde.example.com',
+      '~~~',
+      '',
+      '    indented code stays put',
+      '',
+      'After the code.',
+    ].join('\n'),
+    hidden: ['Not a heading', 'https://inside.example.com', '{{secret}}', 'const answer', 'indented code'],
+  },
+  {
+    name: 'images, asset refs and reference links',
+    markdown: [
+      '![The settings page](asset://img/settings.png "Settings title")',
+      '',
+      'Inline ![a diagram](https://cdn.example.com/d.webp) next to text, see asset://files/guide.pdf too.',
+      '',
+      'Read the [reference][ref] and [another one].',
+      '',
+      '[ref]: https://example.com/reference "Reference title"',
+      '[another one]: <https://example.com/another>',
+    ].join('\n'),
+    hidden: [
+      'asset://img/settings.png',
+      'https://cdn.example.com/d.webp',
+      'asset://files/guide.pdf',
+      'https://example.com/reference',
+      'https://example.com/another',
+    ],
+  },
+  {
+    name: 'HTML blocks and inline HTML',
+    markdown: [
+      '<div class="note">',
+      'Raw <b>HTML</b> block, untouched.',
+      '</div>',
+      '',
+      'Inline <kbd>Ctrl</kbd>+<kbd>K</kbd> opens search.',
+      '',
+      '<!-- a comment -->',
+    ].join('\n'),
+    hidden: ['class="note"', 'Raw', '<kbd>', 'a comment'],
+  },
+  {
+    name: 'Korean with variables, emoji and bare URLs',
+    markdown: [
+      '## 위젯 설치하기',
+      '',
+      '안녕하세요, {{user.name}}님! :wave: 먼저 https://app.mocco.work에서 로그인하세요.',
+      '',
+      '> **참고:** `mocco init` 명령은 `{{project}}` 폴더에서 실행합니다.',
+      '> - 목록 항목 하나',
+      '',
+      '자세한 내용은 [도움말](https://help.example.com/ko "도움말 제목")을 보세요.',
+    ].join('\n'),
+    hidden: [
+      '{{user.name}}',
+      ':wave:',
+      'https://app.mocco.work',
+      'mocco init',
+      '{{project}}',
+      'https://help.example.com/ko',
+    ],
+  },
+  {
+    name: 'Japanese with inline code, strong and links',
+    markdown: [
+      '# ウィジェットの設定',
+      '',
+      '**重要:** 設定は`config.yaml`に保存されます。詳しくは[ガイド](https://example.jp/guide)をご覧ください。',
+      '',
+      '1. ダッシュボードを開く',
+      '2. 「保存」を押す — www.example.jp を参照',
+      '',
+      '| 項目 | 説明 |',
+      '| --- | --- |',
+      '| 名前 | プロジェクトの*名前* |',
+    ].join('\n'),
+    hidden: ['config.yaml', 'https://example.jp/guide', 'www.example.jp'],
+  },
+  {
+    name: 'blockquotes, footnotes and breaks',
+    markdown: [
+      '> Quoted paragraph with a footnote.[^1]',
+      '>',
+      '> > Nested quote.',
+      '',
+      'Line one with a hard break  ',
+
+      'line two after it\\',
+      'line three.',
+      '',
+      '[^1]: The footnote text, with a [link](https://example.com/note).',
+      '',
+      '---',
+      '',
+      '***',
+    ].join('\n'),
+    hidden: ['https://example.com/note'],
+  },
+  {
+    name: 'escapes, look-alike placeholders and autolinks',
+    markdown: [
+      String.raw`Literal \*stars\* and \_underscores\_ and a backslash \\ here.`,
+      '',
+      'A fake placeholder ⟦0⟧ and ⟦/1⟧ written by the author.',
+      '',
+      'Autolinks <https://auto.example.com> and <help@example.com> and plain help@example.org.',
+      '',
+      'Entities &amp; &copy; and an <a href="https://html.example.com">HTML link</a>.',
+    ].join('\n'),
+    hidden: ['https://auto.example.com', 'help@example.com', 'help@example.org', 'https://html.example.com'],
+  },
+  {
+    name: 'mixed scripts and glossary-free product names',
+    markdown: [
+      '### Mocco Gate と 게이트',
+      '',
+      'Mocco Gate는 `deploy` 前に承認を待ちます。Use *Mocco Gate* to pause.',
+      '',
+      '- 한국어 _기울임_ and **굵게**',
+      '- 日本語の~~取り消し~~',
+    ].join('\n'),
+    hidden: ['deploy'],
+  },
+];
