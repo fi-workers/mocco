@@ -41,3 +41,12 @@ export class FeedbackStatusUnchangedError extends ConflictError {
     this.name = 'FeedbackStatusUnchangedError';
   }
 }
+
+/** The post left the status a change was asked from before it applied (a confirmation answered
+ * after someone else moved the post) — CONFLICT, and nothing is written. */
+export class FeedbackStatusMovedError extends ConflictError {
+  constructor(expected: FeedbackPostStatus, current: FeedbackPostStatus, options?: ErrorOptions) {
+    super(`The post is ${current} now, not ${expected}`, options);
+    this.name = 'FeedbackStatusMovedError';
+  }
+}

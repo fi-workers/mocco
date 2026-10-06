@@ -290,7 +290,7 @@ The React Native module exposes `<WhatsNewBadge />` and `useWhatsNew()` hooks an
 
 ### 6.1 MCP tools (ADR 0025)
 
-The core slice (#172) ships the services and the `feedback` tRPC router; the next slice adds these tools over the same services, behind `Products.feedback`:
+The core slice (#172) ships the services and the `feedback` tRPC router; the next slice (#468, shipped) adds these tools over the same services, behind `Products.feedback` ([feedback MCP tools](../reference/feedback.md#mcp-tools)):
 
 - `mocco_feedback_boards_list`: the project's boards with their categories.
 - `mocco_feedback_posts_search`: a board's posts filtered by status and category, sorted by status or date, paged, concise or detailed.

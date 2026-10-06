@@ -12,8 +12,8 @@
 // `tools/approvals.ts`), and the SDK answers a call to one with a 403
 // `insufficient_scope` before the tool runs — judged on the parsed request it is about to
 // execute, not on a header that merely names it. `mocco_monitors_check` does the same for
-// `status:write`, and `mocco_messenger_reply` and `mocco_messenger_assign` for
-// `messenger:write`.
+// `status:write`, `mocco_messenger_reply` and `mocco_messenger_assign` for `messenger:write`,
+// and `mocco_feedback_post_set_status` for `feedback:write`.
 import { requireMcpAuth } from '@better-auth/mcp';
 import { mcpSignInScopes } from '@mocco/common/mcp';
 

@@ -26,8 +26,8 @@ https://www.mocco.club/api/mcp
 ```
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
-> resuming or rejecting a paused run, changing where notifications go, and replying to and
-> assigning messenger conversations. The plan is in the
+> resuming or rejecting a paused run, changing where notifications go, replying to and
+> assigning messenger conversations, and moving feedback posts to another status. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -59,6 +59,9 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, the languages it is published in, and how readers answered "Was this helpful?" in the last 30 days (with their newest comments when detailed) |
 | `mocco_messenger_conversations_search` | Which messenger conversations are open (or closed), newest activity first, by assignee (yours, someone's, or no one's) or by contact (id, email or your app's user id), with a preview of the latest message and whether you have read it |
 | `mocco_messenger_conversation_get` | One conversation's thread: every message from the user and your team, internal notes marked, and each attachment's name, type and size |
+| `mocco_feedback_boards_list` | Which feedback boards a project has, whether each is public, and their categories in order |
+| `mocco_feedback_posts_search` | A board's posts by status (under review, planned, in progress, shipped, closed) or newest first, by status or category, a page at a time |
+| `mocco_feedback_post_get` | One feedback post, and every status it took and when |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -102,6 +105,11 @@ never as a link to the file: open the conversation in the console to see it. A u
 your app's user id for them, their traits and the devices they wrote from are in the
 `detailed` answer only.
 
+The feedback tools pick their project the same way and answer only where feedback is turned
+on, for any member of the workspace. A post's body is cut short
+unless you ask for the `detailed` answer, which also names who wrote it and who changed each
+status (as user ids).
+
 The notification and webhook source tools read the whole workspace, with no project to
 pick, and answer for any member, as the console does. They never return a signing
 secret or a token: a source says whether it has a secret, and the detailed answer gives
@@ -128,6 +136,7 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_monitors_check` | Runs an HTTP or TCP monitor's next round now, for example right after a deploy, instead of at its interval |
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
+| `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -174,6 +183,18 @@ same rules as the other changes, need the workspace to allow agents to make chan
 need their own permission, asked for the first time either is used: **Reply to and assign
 your messenger conversations, as you**. Any member of the workspace may reply and assign, as
 in the inbox, and an assignment is recorded in the audit trail naming you.
+
+**Moving a feedback post.** `mocco_feedback_post_set_status` does what changing a post's
+status on the board does: the post gets the new status (moving it to shipped records when it
+shipped, and moving it away clears that), and the change goes into the post's history and the
+audit trail, naming you. Your client first shows the post, the status it has now and the one
+it would get, and nothing changes until you answer yes. A confirmation is for a move from the
+status the post had when you were asked: if anyone moves the post before you answer, the
+answer is refused and you are asked afresh, and answering the same confirmation twice moves
+it once. Asking for the status a post has already answers without asking you. It follows the
+same rules as the other changes, needs the workspace to allow agents to make changes, and
+needs its own permission, asked for the first time it is used: **Move your feedback posts to
+another status, as you**. Any member of the workspace may move posts, as on the board.
 
 Webhook source changes follow the same rules, and a signing secret never passes through
 your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the
@@ -312,6 +333,10 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not reply in the messenger in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… isn't a member of this workspace" | A conversation can only go to a member of the workspace. `mocco_messenger_conversations_search` names the people who have conversations now |
 | "Conversation … was not found" | It is in another project or workspace, or the id is wrong. Search the inbox first |
+| "This connection may not change feedback statuses" | The app was never allowed to move posts. Reconnect it and allow the feedback permission when asked |
+| "Agents may not change feedback statuses in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "That confirmation was for a different change" after moving a post | Someone moved the post before you answered. Call again to be asked about the move from its status now |
+| "Feedback board … was not found" or "Feedback post … was not found" | It is in another project or workspace, or the id is wrong. `mocco_feedback_boards_list` and `mocco_feedback_posts_search` give the ids |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
 | "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |

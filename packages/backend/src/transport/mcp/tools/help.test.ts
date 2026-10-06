@@ -198,6 +198,8 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       helpPublic: help.helpPublic,
       helpFeedback: help.helpFeedback,
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
+      feedbackBoards: { listBoards: refuse, getBoard: refuse },
+      feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings: { agentsMayDecide: refuse },

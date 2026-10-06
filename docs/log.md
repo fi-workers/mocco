@@ -883,3 +883,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
   `log.md`
 - Source: branch `feat/feedback-core` (issue #172)
+
+## 2026-10-06 — MCP: feedback tools
+
+- Documented #468 in the [feedback board model](./reference/feedback.md#mcp-tools): `mocco_feedback_boards_list`,
+  `mocco_feedback_posts_search` and `mocco_feedback_post_get` over `BoardService` and `PostService` behind
+  `ProjectScope` with `Products.feedback` (concise or detailed, filtered by status and category, offset-paged with
+  `nextOffset`), and `mocco_feedback_post_set_status`, which acts as the caller behind a new `feedback:write` scope,
+  the workspace's opt-in and the confirmation round trip.
+- The confirmation records the post's status when asked, so a post moved before the answer is refused as a different
+  change; `PostService.setStatus` takes an optional `from` that it re-checks under the post's lock
+  (`FeedbackStatusMovedError`, CONFLICT). The console's `setPostStatus` is unchanged. No migration.
+- The [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md#how-the-feedback-change-is-built-issue-468), the
+  [connect guide](./customer/mcp/connect.md), the feature map and the
+  [feedback design](./specs/2026-09-24-feedback-design.md#61-mcp-tools-adr-0025) say the same.
+- Docs touched: `reference/feedback.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
+  `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/mcp-feedback-tools` (issue #468)
