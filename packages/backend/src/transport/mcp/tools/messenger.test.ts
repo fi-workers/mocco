@@ -345,6 +345,8 @@ describe('mocco_messenger_* (pglite, over HTTP)', () => {
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
       messengerInbox: messenger.inbox,
+      feedbackBoards: { listBoards: refuse, getBoard: refuse },
+      feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings,

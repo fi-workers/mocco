@@ -6,6 +6,7 @@
 // confirmation state is signed with a key every deployment derives from the same secret.
 import { MembershipRepo } from '@backend/domain/auth/repos/membership.repo';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getFeedbackDomain } from '@backend/domain/feedback/instance';
 import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getHelpDomain } from '@backend/domain/helpcenter/instance';
@@ -55,6 +56,8 @@ export function getMcpHandler(): McpHttpHandler {
       helpPublic: getHelpDomain().helpPublic,
       helpFeedback: getHelpDomain().helpFeedback,
       messengerInbox: getMessengerDomain().inbox,
+      feedbackBoards: getFeedbackDomain().feedbackBoards,
+      feedbackPosts: getFeedbackDomain().feedbackPosts,
       notifications: getNotification().channels,
       notificationActivity: getNotification().activity,
       inbound: getInbound(),

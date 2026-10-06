@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes and comments — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how the staff list sorts, what is audited, the feedback tRPC router, and the MCP tools planned for the next slices.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes and comments — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools with those planned next.
 type: reference
 status: active
 created: 2026-10-06
@@ -19,11 +19,12 @@ code_refs:
   - packages/backend/src/domain/feedback/CommentService.ts
   - packages/backend/src/domain/feedback/errors.ts
   - packages/backend/src/transport/trpc/routers/feedback.ts
+  - packages/backend/src/transport/mcp/tools/feedback.ts
 ---
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172); end users' votes and comments, and the team's official responses and internal notes (#173). Subscriptions, merging duplicates, GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes and comments, and the team's official responses and internal notes (#173). Subscriptions, merging duplicates, GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -58,6 +59,7 @@ A post's number comes from its board's `next_post_number`, taken by an `UPDATE �
 - Every status a post takes is a `mocco_feedback_status_changes` row, written in the same transaction as the post: `created` for the first, `manual` for a staff change. `FeedbackStatusChangeReasons` also lists `ship_suggestion`, `auto_apply` and `merge`, which later slices write.
 - Entering `shipped` sets `shipped_at`; leaving it clears it. A DB check holds `shipped_at` set exactly when the status is `shipped`.
 - The status change locks the post row, so two concurrent changes apply one after the other and each records the status it left.
+- `setStatus` takes an optional `from`: the change applies only while the post is still in that status, checked under the same lock, else `FeedbackStatusMovedError` (CONFLICT) and nothing is written. The MCP tool passes the status its confirmation showed; the console does not pass it.
 
 ## Listing
 
@@ -94,7 +96,7 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 
 ## The feedback router
 
-`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError` and `FeedbackVoteNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError` and `FeedbackStatusUnchangedError` are CONFLICT; `FeedbackOfficialInternalError` is BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
+`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError` and `FeedbackVoteNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError`, `FeedbackStatusUnchangedError` and `FeedbackStatusMovedError` are CONFLICT; `FeedbackOfficialInternalError` is BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
 
 | Procedure | Does |
 |---|---|
@@ -107,16 +109,20 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `votes`, `vote`, `unvote` | A post's votes, newest first, pending ones included; record an end user's vote on their behalf (it counts at once); take one back |
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 
-## MCP tools (next slice)
+## MCP tools
 
-Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), the next feedback slice adds tools over these services, behind `Products.feedback`:
+Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), four tools sit over these services (`transport/mcp/tools/feedback.ts`, #468). Each goes through `ProjectScope` with `Products.feedback` and the caller's own id first: the caller must be a member of the workspace, feedback must be enabled there, and the project must belong to it. The services then look boards and posts up only inside that project, so another tenant's board or post reads exactly like one that does not exist.
 
-- `mocco_feedback_boards_list`: the project's boards with their categories.
-- `mocco_feedback_posts_search`: a board's posts filtered by status and category, sorted by status or date, paged, concise or detailed.
-- `mocco_feedback_post_get`: one post with its status history.
-- `mocco_feedback_post_set_status`: a mutating tool that acts as the caller, behind a `feedback:write` scope, the workspace's opt-in and the confirmation round trip.
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_feedback_boards_list` | `BoardService.listBoards`, `getBoard` | The project's boards (id, slug, name, public) with their categories' ids and names in order; detailed adds category slugs and positions and the boards' timestamps |
+| `mocco_feedback_posts_search` | `PostService.list` | One board's posts, filtered by status and category, sorted by status (workflow order) or newest, `limit` up to 99 and `offset`, with `nextOffset` when there is more; concise is id, number, title, status, category id and when it was posted, detailed adds the first 500 characters of the body, `shippedAt`, `updatedAt` and the author's user id |
+| `mocco_feedback_post_get` | `PostService.get` | One post and its history, oldest first (from, to, reason, when); concise cuts the body at 500 characters (`isBodyCut`), detailed has it whole with the author and each change's actor (user ids) |
+| `mocco_feedback_post_set_status` | `PostService.setStatus` | Moves the post to another status as the caller |
 
-Votes and comments (#173) get their tools in the slice after them, over `VoteService` and `CommentService`:
+`mocco_feedback_post_set_status` has the locks of every changing MCP tool: the `feedback:write` scope (a token without it is challenged for it), the workspace's **Settings → Agents** opt-in, and a confirmation round trip that names the post, its status now and the status it would get. The signed confirmation records that `from` status, so a post moved by anyone before the answer is refused as a different change, and the tool passes `from` to `setStatus` so the service re-checks it under the post's lock. A second answer to the same confirmation finds the post moved already and writes nothing; asking for the status a post already has answers without asking. The change is the console's: a history row with reason `manual` and a `feedback.post.status_changed` audit entry naming the caller.
+
+Votes and comments (#173) get their tools in the next slice, over `VoteService` and `CommentService`:
 
 - `mocco_feedback_votes_list`: a post's votes, paged, concise or detailed.
 - `mocco_feedback_comments_list`: a post's comments as the team sees them, internal notes included, paged.

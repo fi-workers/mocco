@@ -13,6 +13,7 @@ import {
   FeedbackCategoryNotFoundError,
   FeedbackPostNotFoundError,
   FeedbackSlugTakenError,
+  FeedbackStatusMovedError,
   FeedbackStatusUnchangedError,
 } from '@backend/domain/feedback/errors';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -208,6 +209,25 @@ describe('feedback boards and posts (pglite)', () => {
         expect.objectContaining({ from: FeedbackPostStatuses.shipped, to: FeedbackPostStatuses.inProgress }),
       ],
     ]);
+  });
+
+  it('applies a change asked from a status only while the post is still in it', async () => {
+    const board = await feedback.feedbackBoards.createBoard(scope, actor, { slug: 'ideas', name: 'Ideas' });
+    const post = await feedback.feedbackPosts.create(scope, actor, { boardId: board.id, title: 'Dark mode' });
+    await feedback.feedbackPosts.setStatus(scope, actor, post.id, FeedbackPostStatuses.planned);
+
+    await expect(
+      feedback.feedbackPosts.setStatus(scope, actor, post.id, FeedbackPostStatuses.shipped, {
+        from: FeedbackPostStatuses.underReview,
+      }),
+    ).rejects.toBeInstanceOf(FeedbackStatusMovedError);
+    const moved = await feedback.feedbackPosts.setStatus(scope, actor, post.id, FeedbackPostStatuses.shipped, {
+      from: FeedbackPostStatuses.planned,
+    });
+
+    expect(moved.change).toMatchObject({ fromStatus: FeedbackPostStatuses.planned });
+    const { history } = await feedback.feedbackPosts.get(scope, post.id);
+    expect(history).toHaveLength(3);
   });
 
   it('edits a post, uncategorizes posts when their category is deleted, and deletes a board with its posts', async () => {
