@@ -5,6 +5,7 @@ import { getAudit } from '@backend/domain/audit/instance';
 import { getServices, type Services } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getFeedbackDomain } from '@backend/domain/feedback/instance';
 import { getFlagsDomain } from '@backend/domain/flags/instance';
 import { getGovernance } from '@backend/domain/governance/instance';
 import { getHelpDomain } from '@backend/domain/helpcenter/instance';
@@ -22,6 +23,8 @@ import type { ApiKeyService } from '@backend/domain/apikey/ApiKeyService';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { PostService } from '@backend/domain/feedback/PostService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
 import type { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
@@ -100,6 +103,8 @@ export interface TrpcDeps extends Services {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
+  feedbackBoards: BoardService;
+  feedbackPosts: PostService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
@@ -163,6 +168,8 @@ export function createTrpcHandler(deps: TrpcDeps) {
         helpImages: deps.helpImages,
         helpTranslations: deps.helpTranslations,
         helpFeedback: deps.helpFeedback,
+        feedbackBoards: deps.feedbackBoards,
+        feedbackPosts: deps.feedbackPosts,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,
         statusMaintenances: deps.statusMaintenances,
@@ -220,6 +227,7 @@ export function productionServices(): TrpcDeps {
     helpImages: getHelpDomain().helpImages,
     helpTranslations: getHelpDomain().helpTranslations,
     helpFeedback: getHelpDomain().helpFeedback,
+    ...getFeedbackDomain(),
     ...getStatusDomain(),
     inbound: getInbound(),
     notifications: getNotification().channels,

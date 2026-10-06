@@ -127,6 +127,16 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 | App API and SDK | Live | `GET /v1/help/site`, `/collections/{slug}`, `/articles/{id}` and `/search` with a `help:read` key (publishable allowed), language-negotiated with ETags; `HelpClient` in `@mocco/js` and `@mocco/react-native/messenger` ([public API](./public-api.md)) |
 | Was this helpful? | Live | Yes/no and an optional comment under each published article, from the public site's widget and `POST /v1/help/articles/{id}/feedback` (`sendFeedback`); one answer per visitor, article and day under a keyed hash; the article editor shows the last 30 days |
 
+### Feedback board (#98)
+
+The first slice of the [feedback design](../specs/2026-09-24-feedback-design.md) ([feedback board model](./feedback.md)).
+
+| Capability | State | Notes |
+|---|---|---|
+| Boards, categories and posts | Not drawn | Built so far (#172): a project's boards and categories, posts numbered per board, and staff moving a post between any two statuses (under review, planned, in progress, shipped, closed), each change a row in the post's history and in the audit log; the `feedback.*` tRPC procedures, with the staff list sorted by status or date. No console screen yet |
+| MCP tools | Not drawn | Next slice (ADR 0025): `mocco_feedback_boards_list`, `mocco_feedback_posts_search`, `mocco_feedback_post_get`, and `mocco_feedback_post_set_status` behind a write scope and confirmation ([planned tools](./feedback.md#mcp-tools-next-slice)) |
+| Votes, comments, merge, GitHub links, ship on deploy, changelog, public board | Not drawn | Later slices of the design |
+
 ### Status page (#103)
 
 Status pages, components, incidents and scheduled maintenance are built as a backend model and API

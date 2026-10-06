@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-06
 confidence: medium
 owner: andrea
 tags: [spec, design, feedback]
@@ -287,6 +287,17 @@ mocco.whatsNew.on('open', () => { /* analytics */ });
 ```
 
 The React Native module exposes `<WhatsNewBadge />` and `useWhatsNew()` hooks and a `FeedbackSheet` from the messenger shell.
+
+### 6.1 MCP tools (ADR 0025)
+
+The core slice (#172) ships the services and the `feedback` tRPC router; the next slice adds these tools over the same services, behind `Products.feedback`:
+
+- `mocco_feedback_boards_list`: the project's boards with their categories.
+- `mocco_feedback_posts_search`: a board's posts filtered by status and category, sorted by status or date, paged, concise or detailed.
+- `mocco_feedback_post_get`: one post with its status history.
+- `mocco_feedback_post_set_status`: acts as the caller, behind a `feedback:write` scope, the workspace's opt-in and the confirmation round trip.
+
+Voting, merging and accepting a ship suggestion get their tools in the slices that build them.
 
 ## 7. External vendors and self-host story
 

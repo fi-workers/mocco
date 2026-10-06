@@ -1,5 +1,6 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
+import { FeedbackPostStatuses, FeedbackStatusChangeReasons } from '@mocco/common/feedback';
 import {
   ChangesetSources,
   ChangesetStates,
@@ -77,6 +78,7 @@ import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { ReleaseGate } from '@mocco/common/events';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
+import type { FeedbackPostStatus, FeedbackStatusChangeReason } from '@mocco/common/feedback';
 import type {
   AttributeClause,
   ChangeDiffEntry,
@@ -4217,5 +4219,153 @@ export const statusSubscriberDeliveries = pgTable(
       sql`${t.status} IN (${sqlInList(Object.values(DeliveryStatuses))})`,
     ),
     check('mocco_status_subscriber_deliveries_attempts_check', sql`${t.attempts} >= 0`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────
+// Feedback board (#98, slice #172): a project's boards, their categories, posts and each post's
+// status history. Every row carries `workspace_id`; children reach their board through composite
+// FKs on (board_id, workspace_id, project_id), so a row can never point at another tenant's board.
+// Votes, comments, merges, GitHub links and shipping come in later slices.
+// ─────────────────────────────────────────────────────────────
+
+/** A feedback board of a project. `slug` is unique within the project. */
+export const feedbackBoards = pgTable(
+  'mocco_feedback_boards',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    slug: text().notNull(),
+    name: text().notNull(),
+    isPublic: boolean('is_public').notNull().default(true),
+    // The number the board's next post gets; taken under the board row's lock (FeedbackBoardRepo).
+    nextPostNumber: integer('next_post_number').notNull().default(1),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_boards_project_slug_uq').on(t.projectId, t.slug),
+    index('mocco_feedback_boards_workspace_idx').on(t.workspaceId),
+    // A UNIQUE CONSTRAINT so children's composite FKs can reference (id, workspace_id, project_id).
+    unique('mocco_feedback_boards_scope_uq').on(t.id, t.workspaceId, t.projectId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_feedback_boards_project_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_boards_slug_check', sql`${t.slug} ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'`),
+    check('mocco_feedback_boards_next_post_number_check', sql`${t.nextPostNumber} >= 1`),
+  ],
+);
+
+/** A category of a board's posts ("Integrations", "Mobile"). */
+export const feedbackCategories = pgTable(
+  'mocco_feedback_categories',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    slug: text().notNull(),
+    name: text().notNull(),
+    position: integer().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_categories_board_slug_uq').on(t.boardId, t.slug),
+    index('mocco_feedback_categories_board_position_idx').on(t.boardId, t.position),
+    // Lets a post's category FK require the category to be on the post's board.
+    unique('mocco_feedback_categories_id_board_uq').on(t.id, t.boardId),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_feedback_categories_board_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_categories_slug_check', sql`${t.slug} ~ '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$'`),
+  ],
+);
+
+/** A post on a board. `number` is its display id within the board. Invariant (DB-checked):
+ * `shipped_at` is set iff `status = 'shipped'`. */
+export const feedbackPosts = pgTable(
+  'mocco_feedback_posts',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    // Null = uncategorized. Deleting a category uncategorizes its posts first (FeedbackCategoryRepo).
+    categoryId: uuid('category_id'),
+    number: integer().notNull(),
+    title: text().notNull(),
+    body: text().notNull().default(''),
+    status: text().$type<FeedbackPostStatus>().notNull().default(FeedbackPostStatuses.underReview),
+    shippedAt: timestamp('shipped_at'),
+    // The staff member who wrote it. End-user authors come with the end-user identity foundation.
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_posts_board_number_uq').on(t.boardId, t.number),
+    index('mocco_feedback_posts_board_status_created_idx').on(t.boardId, t.status, t.createdAt.desc()),
+    index('mocco_feedback_posts_board_created_idx').on(t.boardId, t.createdAt.desc()),
+    // Lets status changes reference (post_id, workspace_id).
+    unique('mocco_feedback_posts_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_feedback_posts_board_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.categoryId, t.boardId],
+      foreignColumns: [feedbackCategories.id, feedbackCategories.boardId],
+      name: 'mocco_feedback_posts_category_fk',
+    }),
+    check('mocco_feedback_posts_status_check', sql`${t.status} IN (${sqlInList(Object.values(FeedbackPostStatuses))})`),
+    check(
+      'mocco_feedback_posts_shipped_check',
+      sql`(${t.status} IN (${sqlInList([FeedbackPostStatuses.shipped])})) = (${t.shippedAt} IS NOT NULL)`,
+    ),
+    check('mocco_feedback_posts_number_check', sql`${t.number} >= 1`),
+  ],
+);
+
+/** A post's status history. Append-only: one row when the post is created and one per change. */
+export const feedbackStatusChanges = pgTable(
+  'mocco_feedback_status_changes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    // Null on the row written when the post is created.
+    fromStatus: text('from_status').$type<FeedbackPostStatus>(),
+    toStatus: text('to_status').$type<FeedbackPostStatus>().notNull(),
+    reason: text().$type<FeedbackStatusChangeReason>().notNull(),
+    // SET NULL: the history outlives the person; the audit chain keeps who.
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    index('mocco_feedback_status_changes_post_created_idx').on(t.postId, t.createdAt),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_status_changes_post_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_status_changes_from_check',
+      sql`${t.fromStatus} IS NULL OR ${t.fromStatus} IN (${sqlInList(Object.values(FeedbackPostStatuses))})`,
+    ),
+    check(
+      'mocco_feedback_status_changes_to_check',
+      sql`${t.toStatus} IN (${sqlInList(Object.values(FeedbackPostStatuses))})`,
+    ),
+    check(
+      'mocco_feedback_status_changes_reason_check',
+      sql`${t.reason} IN (${sqlInList(Object.values(FeedbackStatusChangeReasons))})`,
+    ),
   ],
 );

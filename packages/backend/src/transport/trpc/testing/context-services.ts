@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
+import { createFeedbackDomain } from '@backend/domain/feedback/compose';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createApprovalService } from '@backend/domain/governance/instance';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
@@ -39,6 +40,7 @@ export function contextServices(db: Db) {
     ...createFlagsDomain(db, { audit, approvals }),
     ...createMessengerDomain(db, { audit, box: () => box }),
     ...createHelpDomain(db, { audit }),
+    ...createFeedbackDomain(db, { audit }),
     ...createStatusDomain(db, { audit }),
     apiKeys: createApiKeyService(db, { projects: project.projects, audit }),
     mcpSettings: createMcpSettingsService(db, audit),
