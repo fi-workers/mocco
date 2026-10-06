@@ -1024,15 +1024,18 @@ lost; page `visibility`, `locale` and `theme`; the CDN host mapping
 (`<slug>.status.mocco.club`) and custom domains; subscriber webhooks, the sign-up form on the public page, and the
 console's subscriber list with its MCP tool; a way to publish a draft incident
 (a monitor's draft is visible in the console but can't be published yet); repo and project links on components;
-`origin` and `suspected_run_id` in the console and the incident DTO; `tlsWarnDays` in the monitor form; a
+`origin` and `suspected_run_id` in the console (MCP shows both); `tlsWarnDays` in the monitor form; a
 latency chart in the console's monitor view (the series is `history` on `status.monitor`); and a per-window
 `suppress_alerts` switch for gate-linked maintenance. Each arrives with its slice as an additive column or table.
 
 ## MCP
 
 Agents read status pages over MCP with `mocco_status_pages_get` (each component and its `displayedStatus`),
-`mocco_status_incidents_search` (open by default; by status, severity, page or title text, newest first, paged),
-`mocco_status_incidents_get` (the timeline, affected components and postmortem; detailed adds the linked deploys from
+`mocco_status_incidents_search` (open by default; by status, severity, page or title text, newest first, paged; each
+with its `origin`, and detailed adds `suspectedRun`),
+`mocco_status_incidents_get` (the `origin` (`manual`, `monitor`, `deploy_watch`), the `suspectedRun` a deploy watch
+attributed (`runId` and `url`, the run page on the console's origin, which is the host of the MCP resource; null for any
+other incident), the timeline, affected components and postmortem; detailed adds the linked deploys from
 `CorrelationService.list`: relation, score, repo, commit, when the run finished, and whether Mocco suggested it or a
 person linked it) and `mocco_status_maintenances_search` (scheduled and in progress by default; detailed adds a gated run's `runId`,
 `overranAt` and `endNote`) in
@@ -1044,12 +1047,26 @@ Monitors and locations are in `transport/mcp/tools/status-monitors.ts`. `mocco_s
 `MonitorService.list` (by name, paged with `after`; filtered by `states` and name text) and
 `mocco_status_monitors_get` reads `MonitorService.get` (the latest state changes, newest first, capped by `limit`; the
 open monitor incident; detailed adds each change's `reason` (with a heartbeat's `cause` and `exitCode`), the latest
-closed rounds and the same `history` as `status.monitor`: uptime and p50/p95 latency for the last 48 hours and 90 days,
-and for a heartbeat its period, grace, last ping, last start and last duration instead of the probe settings), both
-behind `ProjectScope`.
+closed rounds and the same `history` as `status.monitor`: uptime and p50/p95 latency for the last 48 hours and 90 days),
+both behind `ProjectScope`. A heartbeat carries `heartbeat` in both shapes (`periodSeconds`, `graceSeconds`,
+`lastPingAt`, `lastStartAt`, `lastDurationMs`) in place of the probe settings; its ping token and the token's hash are
+never read out (`MonitorView` has no hash).
 A monitor's `target` is `monitorTargetOf`, the same host and port alerts show: its URL credentials, path and query, its
 request body and its keyword never leave the server, because they can hold secrets. `mocco_status_locations_search`
 reads `LocationService.list` behind the checks of the workspace-level `locations` query (membership and the status
-product, `ProjectScope.resolveWorkspace`), which any member may read; it never returns a token hash. Nothing on MCP
-declares or updates an incident, or changes a monitor or a location. See
+product, `ProjectScope.resolveWorkspace`), which any member may read; it never returns a token hash.
+
+`mocco_monitors_check` is the MCP side of `POST /v1/monitors/{id}/check`: it calls `MonitorService.requestCheck` behind
+the same `ProjectScope`, so any member of a project with the status product may ask, as in the console, and another
+tenant's monitor reads like one that does not exist. It needs the `status:write` OAuth scope, which a client is not
+asked for when it connects: the tool declares it as a `scopeChallenge`, so a token without it gets a 403
+`insufficient_scope` naming its scopes plus `status:write`, and the tool checks the scope again itself. It changes
+state (the next round moves to now), so it has the locks of every changing tool (`openDecision` and `confirmThenApply`
+in `transport/mcp/tools/deciding.ts`): the workspace's `agents_may_decide` opt-in, a server able to sign, and a
+confirmation round trip whose question names the monitor, its target, its state and when its next round is due. The
+signed state records the tool, the workspace, the project and the monitor, so a confirmation for one monitor is
+refused for another. A heartbeat or a paused monitor is refused before anything is asked, and the service checks both
+again when a confirmed check is applied (`MonitorKindError`, `MonitorPausedError`). A round already due is not
+moved. Nothing on MCP declares or
+updates an incident, or changes a monitor's settings or a location. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).
