@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { TranslationOverwriteRequiresConfirmationError } from '@backend/domain/helpcenter/errors';
 import { createHelpHandlers, HelpJobKinds } from '@backend/domain/helpcenter/jobs';
 import { structureProblem } from '@backend/domain/helpcenter/markdown/validate';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
@@ -434,7 +435,7 @@ describe('help center translation (pglite)', () => {
     expect(await new HelpTranslationUsageRepo(t.db).used(workspaceId, '2026-10-01')).toBe(0);
   });
 
-  it('translates again without translation memory when asked, replacing a reviewed text', async () => {
+  it('translates again without translation memory when asked, replacing a reviewed text only when confirmed', async () => {
     const translator = new FakeTranslator();
     const help = domainWith(translator);
     const article = await published(help);
@@ -447,11 +448,25 @@ describe('help center translation (pglite)', () => {
     });
     translator.calls.length = 0;
 
-    await help.helpTranslations.retranslate(workspaceId, projectId, article.id, 'en');
+    const ask = { articleId: article.id, locale: 'en' };
+
+    await expect(help.helpTranslations.retranslate(workspaceId, projectId, authorId, ask)).rejects.toBeInstanceOf(
+      TranslationOverwriteRequiresConfirmationError,
+    );
+    expect(queued).toEqual([]);
+    expect(await stateOf(help, article.id, 'en')).toMatchObject({ state: 'reviewed' });
+
+    await help.helpTranslations.retranslate(workspaceId, projectId, authorId, { ...ask, confirm: true });
     await help.drain();
 
     expect(sentTo(translator, 'en')).toEqual(['Widget', 'Add the widget', LINK_SEGMENT]);
     expect(await stateOf(help, article.id, 'en')).toMatchObject({ state: 'auto', title: 'EN Widget' });
+    // The machine's text is a new revision; the person's stays in the language's history.
+    const history = await new HelpArticleRepo(t.db).history(workspaceId, article.id, 'en', 10);
+    const kinds = history.map(revision => `${revision.kind}: ${revision.title}`);
+    expect(kinds).toHaveLength(3);
+    expect(kinds.filter(kind => kind === 'machine: EN Widget')).toHaveLength(2);
+    expect(kinds).toContain('human_edit: Widget (reviewed)');
   });
 
   it('checks headings, code blocks and link targets', () => {

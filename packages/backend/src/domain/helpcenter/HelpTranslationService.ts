@@ -11,10 +11,22 @@
 // one, and a run whose source is already translated does nothing. Characters sent to the
 // translator are metered per workspace and month; past the allowance a language waits as
 // `pending` with the reason.
+//
+// Review (#213): a person saves a language (or marks the machine's text reviewed), accepts
+// the machine draft beside a stale reviewed one, or asks the machine again, which replaces a
+// reviewed text only when confirmed. Each is audited, and the text lands as a new revision,
+// so history keeps every person's and machine's version.
+import { AuditActions } from '@mocco/common/audit';
 import { RevisionKinds, SegmentOrigins, TranslationStates } from '@mocco/common/help';
 
 import { revisionText } from '@backend/domain/helpcenter/content';
-import { HelpNodeNotFoundError, HelpNothingToPublishError } from '@backend/domain/helpcenter/errors';
+import {
+  HelpLocaleNotOfferedError,
+  HelpNodeNotFoundError,
+  HelpNoProposalError,
+  HelpNothingToPublishError,
+  TranslationOverwriteRequiresConfirmationError,
+} from '@backend/domain/helpcenter/errors';
 import { translateHelpArticle } from '@backend/domain/helpcenter/jobs';
 import { reassemble, reassembleTitle } from '@backend/domain/helpcenter/markdown/reassemble';
 import { segmentMarkdown, segmentTitle, TITLE_SEGMENT_ID } from '@backend/domain/helpcenter/markdown/segment';
@@ -26,6 +38,7 @@ import { HelpTranslationUsageRepo } from '@backend/domain/helpcenter/repos/trans
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { alignedSegments } from '@backend/domain/helpcenter/translate/align';
+import { segmentDiff } from '@backend/domain/helpcenter/translate/diff';
 import { charactersOf, distinctByHash, translateMisses } from '@backend/domain/helpcenter/translate/pipeline';
 import {
   ClaimDecisions,
@@ -36,19 +49,23 @@ import {
   TranslationOutcomes,
 } from '@backend/domain/helpcenter/translate/state';
 
+import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { Segment } from '@backend/domain/helpcenter/markdown/segment';
 import type { HelpArticleRow, HelpRevisionRow } from '@backend/domain/helpcenter/repos/article.repo';
 import type { HelpNode } from '@backend/domain/helpcenter/repos/node-translation.repo';
+import type { HelpTranslationRow } from '@backend/domain/helpcenter/repos/translation.repo';
 import type { MachineResult } from '@backend/domain/helpcenter/translate/pipeline';
 import type { TranslationOutcome } from '@backend/domain/helpcenter/translate/state';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
+import type { AuditAction } from '@mocco/common/audit';
 import type { TranslationInput, TranslationState } from '@mocco/common/help';
 
 export interface HelpTranslationDeps {
   db: Db;
+  audit: Pick<AuditService, 'record'>;
   sites: Pick<HelpSiteService, 'require'>;
   /** Without a translator (no LLM configured), nothing is translated automatically. */
   translator?: Translator;
@@ -59,6 +76,13 @@ export interface HelpTranslationDeps {
   monthlyCharacters?: number;
   now?: () => Date;
 }
+
+/** A revision's title and body, as review shows them. */
+const textOf = (revision: HelpRevisionRow | undefined) =>
+  revision === undefined ? null : { title: revision.title, body: revision.bodyMd };
+
+/** A revision's segments: its title, then its body's, in order. */
+const segmentsOf = (revision: HelpRevisionRow) => [segmentTitle(revision.title), ...segmentMarkdown(revision.bodyMd)];
 
 /** How long a run without a job deadline holds a translation. */
 const DEFAULT_CLAIM_MS = 10 * 60_000;
@@ -265,6 +289,83 @@ export class HelpTranslationService {
     );
   }
 
+  /** The site's offered language, or HelpLocaleNotOfferedError. */
+  private async requireLocale(workspaceId: string, projectId: string, locale: string): Promise<void> {
+    const site = await this.deps.sites.require(workspaceId, projectId);
+    if (!(site.locales as readonly string[]).includes(locale)) {
+      throw new HelpLocaleNotOfferedError(locale);
+    }
+  }
+
+  private async requirePublishedSource(article: HelpArticleRow): Promise<HelpRevisionRow> {
+    const source = await this.publishedSource(article);
+    if (source === undefined) {
+      throw new HelpNothingToPublishError(article.id);
+    }
+    return source;
+  }
+
+  /**
+   * Make `text` the language's reviewed text, by `actorUserId`, now: a new `human_edit`
+   * revision (its author and time are the review's) under the translation's lock, and the
+   * segments that line up with the source written to translation memory as the person's.
+   * `check` sees the row under the lock first and throws to change nothing.
+   */
+  private async storeReviewed(
+    key: TranslationKey & { projectId: string },
+    source: HelpRevisionRow,
+    actorUserId: string,
+    text: { title: string; body: string },
+    check?: (row: HelpTranslationRow | undefined) => void,
+  ): Promise<string> {
+    const { projectId, ...translation } = key;
+    const revisionId = await this.deps.db.transaction(async tx => {
+      const repo = new HelpTranslationRepo(tx);
+      await repo.lock(key.articleId, key.locale);
+      check?.(await repo.find(key.workspaceId, key.articleId, key.locale));
+      const revision = await new HelpArticleRepo(tx).insertRevision({
+        ...translation,
+        ...revisionText(text.title, text.body),
+        kind: RevisionKinds.humanEdit,
+        authorUserId: actorUserId,
+        createdAt: this.now(),
+      });
+      await repo.upsert({
+        ...translation,
+        state: TranslationStates.reviewed,
+        revisionId: revision.id,
+        sourceHash: source.contentHash,
+        lastError: null,
+        reviewedByUserId: actorUserId,
+        proposalRevisionId: null,
+        proposalSourceHash: null,
+      });
+      return revision.id;
+    });
+    await new HelpSegmentMemoryRepo(this.deps.db).put(
+      { workspaceId: key.workspaceId, projectId, locale: key.locale },
+      SegmentOrigins.human,
+      alignedSegments({ title: source.title, body: source.bodyMd }, text),
+    );
+    return revisionId;
+  }
+
+  private async audited(
+    workspaceId: string,
+    actorUserId: string,
+    action: AuditAction,
+    articleId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action,
+      subjectType: 'help_article',
+      subjectId: articleId,
+      payload,
+    });
+  }
+
   /** Whether this deployment translates (an LLM is configured). */
   get isAvailable(): boolean {
     return this.deps.translator !== undefined && this.deps.queue !== undefined;
@@ -436,57 +537,141 @@ export class HelpTranslationService {
   }
 
   /**
-   * A person's translation: stored as `reviewed`, made from the current published source.
-   * The segments that line up with the source go to translation memory, so later runs
-   * reuse the person's sentences over the machine's.
+   * A person's translation: stored as `reviewed`, made from the current published source,
+   * with the reviewer and the time on its revision. Saving the machine's text unchanged
+   * marks it reviewed. The segments that line up with the source go to translation memory,
+   * so later runs reuse the person's sentences over the machine's.
    */
   async saveTranslation(workspaceId: string, projectId: string, actorUserId: string, input: TranslationInput) {
+    await this.requireLocale(workspaceId, projectId, input.locale);
     const article = await this.requireArticle(workspaceId, projectId, input.articleId);
-    const source = await this.publishedSource(article);
-    if (source === undefined) {
-      throw new HelpNothingToPublishError(article.id);
-    }
-    const articleRepo = new HelpArticleRepo(this.deps.db);
-    const revision = await articleRepo.insertRevision({
-      workspaceId,
-      articleId: article.id,
+    const source = await this.requirePublishedSource(article);
+    const key = { workspaceId, projectId, articleId: article.id, locale: input.locale };
+    const revisionId = await this.storeReviewed(key, source, actorUserId, input);
+    await this.audited(workspaceId, actorUserId, AuditActions.helpTranslationReviewed, article.id, {
+      projectId,
       locale: input.locale,
-      ...revisionText(input.title, input.body),
-      kind: RevisionKinds.humanEdit,
-      authorUserId: actorUserId,
-    });
-    await new HelpTranslationRepo(this.deps.db).upsert({
-      workspaceId,
-      articleId: article.id,
-      locale: input.locale,
-      state: TranslationStates.reviewed,
-      revisionId: revision.id,
+      revisionId,
       sourceHash: source.contentHash,
-      lastError: null,
-      reviewedByUserId: actorUserId,
-      proposalRevisionId: null,
-      proposalSourceHash: null,
     });
-    await new HelpSegmentMemoryRepo(this.deps.db).put(
-      { workspaceId, projectId, locale: input.locale },
-      SegmentOrigins.human,
-      alignedSegments({ title: source.title, body: source.bodyMd }, input),
-    );
     await this.deps.onTranslated?.(workspaceId, projectId, article);
     return await this.translations(workspaceId, projectId, article.id);
   }
 
-  /** Ask the machine again for one language, without translation memory, replacing a person's text if there is one. */
-  async retranslate(workspaceId: string, projectId: string, articleId: string, locale: string) {
-    const article = await this.requireArticle(workspaceId, projectId, articleId);
-    const source = await this.publishedSource(article);
-    if (source === undefined) {
-      throw new HelpNothingToPublishError(article.id);
+  /**
+   * Accept the machine draft beside a stale reviewed translation: it becomes the reviewed
+   * text, by this person, now. `proposalRevisionId` is the draft the reviewer saw; when a
+   * newer one replaced it or the source moved on since, nothing changes (HelpNoProposalError).
+   */
+  async acceptProposal(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { articleId: string; locale: string; proposalRevisionId: string },
+  ) {
+    await this.requireLocale(workspaceId, projectId, input.locale);
+    const article = await this.requireArticle(workspaceId, projectId, input.articleId);
+    const source = await this.requirePublishedSource(article);
+    const [proposal] = await new HelpArticleRepo(this.deps.db).revisionsByIds([input.proposalRevisionId]);
+    if (
+      proposal?.articleId !== article.id ||
+      proposal.locale !== input.locale ||
+      proposal.kind !== RevisionKinds.proposal
+    ) {
+      throw new HelpNoProposalError(input.locale);
     }
-    await this.queueLocale({ workspaceId, articleId: article.id, locale }, source.contentHash, {
+    const key = { workspaceId, projectId, articleId: article.id, locale: input.locale };
+    const text = { title: proposal.title, body: proposal.bodyMd };
+    const revisionId = await this.storeReviewed(key, source, actorUserId, text, row => {
+      if (row?.proposalRevisionId !== proposal.id || row.proposalSourceHash !== source.contentHash) {
+        throw new HelpNoProposalError(input.locale);
+      }
+    });
+    await this.audited(workspaceId, actorUserId, AuditActions.helpTranslationProposalAccepted, article.id, {
+      projectId,
+      locale: input.locale,
+      revisionId,
+      proposalRevisionId: proposal.id,
+      sourceHash: source.contentHash,
+    });
+    await this.deps.onTranslated?.(workspaceId, projectId, article);
+    return await this.review(workspaceId, projectId, article.id, input.locale);
+  }
+
+  /**
+   * Ask the machine again for one language, without translation memory. A reviewed
+   * language is replaced only with `confirm` (TranslationOverwriteRequiresConfirmationError
+   * otherwise); the result lands as a new `machine` revision, so the person's stays in history.
+   */
+  async retranslate(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { articleId: string; locale: string; confirm?: boolean },
+  ) {
+    await this.requireLocale(workspaceId, projectId, input.locale);
+    const article = await this.requireArticle(workspaceId, projectId, input.articleId);
+    const source = await this.requirePublishedSource(article);
+    const row = await new HelpTranslationRepo(this.deps.db).find(workspaceId, article.id, input.locale);
+    const isReviewed = row?.state === TranslationStates.reviewed;
+    if (isReviewed && input.confirm !== true) {
+      throw new TranslationOverwriteRequiresConfirmationError(input.locale);
+    }
+    await this.queueLocale({ workspaceId, articleId: article.id, locale: input.locale }, source.contentHash, {
       force: true,
       fresh: true,
     });
+    await this.audited(workspaceId, actorUserId, AuditActions.helpTranslationRetranslated, article.id, {
+      projectId,
+      locale: input.locale,
+      replacesReviewed: isReviewed,
+      sourceHash: source.contentHash,
+    });
     return await this.translations(workspaceId, projectId, article.id);
+  }
+
+  /**
+   * One language of an article, for review: the published source beside the current text,
+   * who reviewed it and when, the machine draft if one waits for the current source, and,
+   * when the source changed since the text was made, the segment diff from that source to
+   * the published one.
+   */
+  async review(workspaceId: string, projectId: string, articleId: string, locale: string) {
+    await this.requireLocale(workspaceId, projectId, locale);
+    const article = await this.requireArticle(workspaceId, projectId, articleId);
+    const articleRepo = new HelpArticleRepo(this.deps.db);
+    const source = await this.publishedSource(article);
+    const found = await new HelpTranslationRepo(this.deps.db).findWithReviewer(workspaceId, article.id, locale);
+    const row = found?.row;
+    const proposalId =
+      source !== undefined && row?.proposalSourceHash === source.contentHash ? row.proposalRevisionId : null;
+    const ids = [row?.revisionId ?? null, proposalId].flatMap(id => (id === null ? [] : [id]));
+    const rows = await articleRepo.revisionsByIds(ids);
+    const revisions = new Map(rows.map(revision => [revision.id, revision]));
+    const current = revisions.get(row?.revisionId ?? '');
+    const proposal = revisions.get(proposalId ?? '');
+    const madeFrom = row?.sourceHash ?? null;
+    const isStale = madeFrom !== null && source !== undefined && madeFrom !== source.contentHash;
+    const before = isStale
+      ? await articleRepo.findByContentHash(workspaceId, article.id, source.locale, madeFrom)
+      : undefined;
+    const isReviewed = row?.state === TranslationStates.reviewed && current?.kind === RevisionKinds.humanEdit;
+    return {
+      locale,
+      state: row?.state ?? null,
+      isStale,
+      lastError: row?.lastError ?? null,
+      source: textOf(source),
+      text: textOf(current),
+      /** What the current text is: `machine`, or a person's `human_edit`. */
+      textKind: current?.kind ?? null,
+      reviewedBy: isReviewed ? (found?.reviewer ?? null) : null,
+      reviewedAt: isReviewed ? current.createdAt : null,
+      proposal:
+        proposal === undefined ? null : { revisionId: proposal.id, title: proposal.title, body: proposal.bodyMd },
+      /** Null when the text follows the source, or the source it was made from isn't kept. */
+      changes:
+        before === undefined || source === undefined ? null : segmentDiff(segmentsOf(before), segmentsOf(source)),
+    };
   }
 }

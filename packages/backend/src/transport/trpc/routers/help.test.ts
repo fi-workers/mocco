@@ -206,6 +206,48 @@ describe('help router on pglite', () => {
     });
   });
 
+  describe('translation review', () => {
+    it('reviews as the signed-in member, confirms replacing a reviewed text, and is closed to other workspaces', async () => {
+      const owner = await setup('owner@example.com', 'acme');
+      await owner.api.help.updateSite({ ...owner.scope, slug: 'acme', sourceLocale: 'en', locales: ['ko'] });
+      const collection = await owner.api.help.createCollection({ ...owner.scope, title: 'Start', slug: 'start' });
+      const section = await owner.api.help.createSection({ ...owner.scope, collectionId: collection.id, title: 'B' });
+      const article = await owner.api.help.createArticle({ ...owner.scope, sectionId: section.id, title: 'Widgets' });
+      await owner.api.help.saveDraft({ ...owner.scope, articleId: article.id, title: 'Widgets', body: 'Long-press.' });
+      await owner.api.help.publish({ ...owner.scope, articleId: article.id });
+      const ko = { ...owner.scope, articleId: article.id, locale: 'ko' } as const;
+      const intruder = await setup('intruder@example.com', 'intruder');
+      // Offered in the intruder's site too, so only the article's project keeps it out.
+      await intruder.api.help.updateSite({ ...intruder.scope, slug: 'intruder', sourceLocale: 'en', locales: ['ko'] });
+
+      await owner.api.help.saveTranslation({ ...ko, title: '위젯', body: '길게 누르세요.' });
+      const review = await owner.api.help.translationReview(ko);
+
+      expect(review).toMatchObject({ state: 'reviewed', reviewedBy: 'fixture-user', text: { title: '위젯' } });
+      await expect(owner.api.help.retranslate(ko)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(owner.api.help.retranslate({ ...ko, confirm: true })).resolves.toBeDefined();
+      await expect(
+        owner.api.help.acceptProposal({ ...ko, proposalRevisionId: '00000000-0000-4000-8000-000000000000' }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      // Another workspace's member, with the owner's ids or their own project's.
+      await expect(intruder.api.help.translationReview(ko)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(intruder.api.help.saveTranslation({ ...ko, title: 'x', body: 'x' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(
+        intruder.api.help.retranslate({ ...intruder.scope, articleId: article.id, locale: 'ko', confirm: true }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        intruder.api.help.acceptProposal({
+          ...intruder.scope,
+          articleId: article.id,
+          locale: 'ko',
+          proposalRevisionId: '00000000-0000-4000-8000-000000000000',
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
   describe('article images', () => {
     it('uploads a pasted PNG as a public help center object and returns its public URL', async () => {
       const { api, scope } = await setup('owner@example.com', 'acme');

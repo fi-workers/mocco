@@ -77,6 +77,12 @@ export const AuditActions = {
   helpArticlePublished: 'help.article.published',
   helpArticleUnpublished: 'help.article.unpublished',
   helpArticleDeleted: 'help.article.deleted',
+  /** A person saved or marked a translation reviewed (#213). */
+  helpTranslationReviewed: 'help.translation.reviewed',
+  /** A person accepted the machine draft of a stale reviewed translation. */
+  helpTranslationProposalAccepted: 'help.translation.proposal_accepted',
+  /** A person asked the machine to translate a language again (confirmed when it replaces a reviewed one). */
+  helpTranslationRetranslated: 'help.translation.retranslated',
   messengerGuestsChanged: 'messenger.guests.changed',
   /** Someone joined or left a project's round-robin rotation. */
   messengerInboxMemberAdded: 'messenger.inbox_member.added',
@@ -207,6 +213,9 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.helpArticlePublished]: 'Help article published',
   [AuditActions.helpArticleUnpublished]: 'Help article unpublished',
   [AuditActions.helpArticleDeleted]: 'Help article deleted',
+  [AuditActions.helpTranslationReviewed]: 'Help translation reviewed',
+  [AuditActions.helpTranslationProposalAccepted]: 'Help translation machine draft accepted',
+  [AuditActions.helpTranslationRetranslated]: 'Help translation requested again',
   [AuditActions.messengerGuestsChanged]: 'Messenger guest access changed',
   [AuditActions.messengerInboxMemberAdded]: 'Added to a messenger inbox',
   [AuditActions.messengerInboxMemberRemoved]: 'Removed from a messenger inbox',

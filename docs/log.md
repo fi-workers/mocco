@@ -914,3 +914,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
   `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/mcp-feedback-tools` (issue #468)
+
+## 2026-10-06 — Help center: translation review
+
+- Built the review half of #213, in the [help center reference](./reference/help-center.md#translation). Saving a
+  translation stores a `human_edit` revision whose author and time are the reviewer's, and saving the machine's text
+  unchanged marks it reviewed. `acceptProposal` makes the machine draft the reviewer saw the reviewed text, under the
+  translation's lock, and refuses a draft that a newer one replaced (`HelpNoProposalError`). `retranslate` of a
+  reviewed language needs `confirm` (`TranslationOverwriteRequiresConfirmationError` without it), and its machine text
+  lands as a new revision beside the person's. All three are audited (`help.translation.*`).
+- `help.translationReview` returns the segment diff (`translate/diff.ts`, matched by hash like translation memory)
+  between the source a stale translation was made from and the published one. The console's review editor shows it,
+  the draft with Accept and Edit, and the source beside the translation. No migration.
+- The articles × languages dashboard, and the MCP tools the
+  [design](./specs/2026-09-24-help-center-design.md#mcp-tools-for-translation-review) now names, come next.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
+  `customer/help/help-center.md`, `log.md`
+- Source: branch `feat/help-translation-review` (issue #213)
