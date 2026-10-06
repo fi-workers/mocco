@@ -210,6 +210,31 @@ describe('messenger router on pglite', () => {
     expect(closed.conversations).toHaveLength(1);
   });
 
+  it('manages the round-robin rotation, and keeps it to the workspace', async () => {
+    const owner = await setup();
+    await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.messenger });
+    await owner.api.messenger.enable(owner.scope);
+    await owner.api.messenger.addInboxMember({ ...owner.scope, userId: owner.userId });
+    await owner.api.messenger.setAvailability({ ...owner.scope, userId: owner.userId, available: false });
+
+    expect(await owner.api.messenger.inboxMembers(owner.scope)).toEqual({
+      members: [expect.objectContaining({ userId: owner.userId, available: false, lastAssignedAt: null })],
+    });
+    const attacker = await setup('attacker@example.com');
+    await attacker.api.product.enable({ workspaceId: attacker.scope.workspaceId, product: Products.messenger });
+    await attacker.api.messenger.enable(attacker.scope);
+    // Someone from another workspace can't join, read or change this rotation.
+    await expect(owner.api.messenger.addInboxMember({ ...owner.scope, userId: attacker.userId })).rejects.toMatchObject(
+      { code: 'BAD_REQUEST' },
+    );
+    await expect(attacker.api.messenger.inboxMembers(owner.scope)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      attacker.api.messenger.setAvailability({ ...attacker.scope, userId: owner.userId, available: true }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await owner.api.messenger.removeInboxMember({ ...owner.scope, userId: owner.userId });
+    expect(await owner.api.messenger.inboxMembers(owner.scope)).toEqual({ members: [] });
+  });
+
   it("never reaches another workspace's conversations", async () => {
     const owner = await setup();
     await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.messenger });

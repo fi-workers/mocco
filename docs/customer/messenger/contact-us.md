@@ -248,6 +248,21 @@ When someone asks you to delete their data, choose **Erase user's data** in the 
 
 The categories users pick from are in the inbox settings. Your app gets them with each session; it can show the labels as they are or translate them by key.
 
+### Share the work with round robin
+
+Mocco can give each new conversation to one person on your team, in turn, so the work spreads evenly and everyone knows which ones are theirs. Each conversation in the inbox shows who it is assigned to, or **Unassigned**.
+
+- Choose **Join the rotation** at the top of the inbox to start getting new conversations. To add someone else, pick them under **Round robin** in the inbox settings; anyone in the workspace can be added.
+- The switch at the top of the inbox is your availability. While you are away, new conversations skip you and go to the next available person. When you come back, the next one is yours.
+- If no one is available, new conversations stay unassigned until someone picks them up.
+- Removing someone from the rotation doesn't take away the conversations they already have.
+
+![Round robin: the availability switch over the inbox, each conversation's assignee, and the rotation in the settings](./images/messenger-round-robin.png)
+
 ## 7. Get notified
 
-New conversations (`messenger.conversation.created`) and users writing again (`messenger.message.received`) are Mocco events. Apply the **Mocco** preset on a Discord channel's rules, or add rules for these two events, to hear about them where your team already is (see [Mocco events](../notifications/mocco-events.md#the-mocco-preset)).
+New conversations (`messenger.conversation.created`) and users writing again (`messenger.message.received`) are Mocco events. Apply the **Mocco** preset on a Discord channel's rules, or add rules for these two events, to hear about them where your team already is (see [Mocco events](../notifications/mocco-events.md#the-mocco-preset)). A new conversation's message says who it was assigned to.
+
+If you only want to hear about the conversations no one picked up, add a rule for `messenger.conversation.unassigned` instead: Mocco sends it when a conversation starts while nobody in the rotation is available. Each conversation event reaches a channel once, even if the app retries.
+
+While the inbox is open in a browser tab, Mocco can also show a desktop notification for each new conversation. Choose **Turn on desktop notifications** at the top of the inbox and allow it in the browser; clicking a notification opens the conversation. They stop when you close the tab.

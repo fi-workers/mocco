@@ -4,7 +4,7 @@ description: The events Mocco produces on its own for deploy governance (runs an
 type: guide
 status: active
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, notifications, events, governance, guide]
@@ -36,7 +36,9 @@ On a channel's **Rules**, choose the **Mocco** preset and click **Apply**. It ad
 feature-flag events `flags.changeset.requested`, `flags.changeset.applied`,
 `flags.changeset.rejected`, `flags.flag.killed` and `flags.stale.digest`; and the messenger events
 `messenger.conversation.created` and `messenger.message.received`. It leaves out
-`run.succeeded`, which is often noisy; add it by hand if you want it. You can also use `gate.*` or `run.*` to get a whole family.
+`run.succeeded`, which is often noisy, and `messenger.conversation.unassigned` (a new conversation
+nobody in the inbox rotation was available for), which repeats a created message; add them by
+hand if you want them. You can also use `gate.*` or `run.*` to get a whole family.
 
 Mocco events never come from a source, so a rule limited with **Only from source** never matches
 them.

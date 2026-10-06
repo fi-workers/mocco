@@ -27,6 +27,10 @@ code_refs:
   - packages/backend/src/transport/trpc/routers/messenger.ts
   - packages/frontend/src/components/messenger/inbox.tsx
   - packages/frontend/src/components/messenger/conversation.tsx
+  - packages/backend/src/domain/messenger/repos/inbox-member.repo.ts
+  - packages/frontend/src/components/messenger/rotation.tsx
+  - packages/frontend/src/components/messenger/desktop-alerts.tsx
+  - packages/backend/src/domain/messenger/messages.ts
 ---
 
 # Messenger
@@ -55,9 +59,10 @@ Guest sessions need no signature, so they are also limited to 20 an hour per cli
 | `mocco_messenger_settings` | Per project: the sealed identity secret, the categories users pick from (default: bug, billing, how-to, idea, other) |
 | `mocco_messenger_contacts` | A user who has written: the app's user id (unique per project; null for a guest), name, email and traits as the app last sent them, a guest's device token hash, the last device context, `blocked_at` |
 | `mocco_messenger_sessions` | A contact's session token hash, expiry, revocation |
-| `mocco_messenger_conversations` | Status (open, closed), category, `last_message_seq`, `last_operator_seq` (the team's newest public message), `contact_last_read_seq`, preview, the device context when it opened |
+| `mocco_messenger_conversations` | Status (open, closed), category, `assignee_user_id` (null while unassigned), `last_message_seq`, `last_operator_seq` (the team's newest public message), `contact_last_read_seq`, preview, the device context when it opened |
 | `mocco_messenger_messages` | `seq` (unique per conversation), author (contact, operator, system), visibility (public, internal), body (≤ 8,000 characters), `client_message_id` (unique per conversation) |
 | `mocco_messenger_operator_reads` | Each team member's read position per conversation |
+| `mocco_messenger_inbox_members` | Who takes new conversations in a project (PK project, user): `available`, `last_turn`, `last_assigned_at` |
 
 - **Numbering.** A message's seq comes from `UPDATE … SET last_message_seq = last_message_seq + 1 RETURNING` in the same transaction as the insert; the row lock serializes concurrent sends and the unique index is the backstop.
 - **Idempotency.** A retried send with the same `clientMessageId` returns the stored message; a retried start returns the conversation it already started.
@@ -66,6 +71,18 @@ Guest sessions need no signature, so they are also limited to 20 an hour per cli
 - **Reopening.** A contact writing in a closed conversation reopens it.
 - **Blocking** (`messenger.setContactBlocked`, audited) stops a contact writing and opening sessions; they can still read what they have.
 - **Erasing** (privacy requests) is a hard delete of the contact with every session, conversation, message, attachment, read position and push token (the foreign keys cascade), and the attachments' bytes first (`StorageService.delete`), so an erase that stops halfway can run again. The team erases from the inbox (`messenger.eraseContact`); a user erases themselves with `DELETE /v1/messenger/me`. Both are audited as `messenger.contact.erased` with only `{ projectId, by: 'operator' | 'contact' }`.
+
+## Round robin
+
+Each new conversation is assigned to one team member when it starts (#204, migration 0073). A project's **inbox members** are the workspace members in its rotation; each is available or away.
+
+- **Who gets it.** In the conversation-start transaction, `MessengerInboxMemberRepo.takeTurn` takes `pg_advisory_xact_lock(AdvisoryLockNamespaces.messengerAssign, hashtext(projectId))`, picks the available member with the lowest `last_turn` (ties by when they joined, then user id), and sets their `last_turn` to the project's highest plus one. The conversation is created with that `assignee_user_id`. Turn numbers, not timestamps, order the rotation, so two conversations started in the same millisecond still take two turns.
+- **Concurrency.** The lock holds until the start commits, so concurrent starts in one project take turns one after another and no turn is taken twice; other projects don't wait. The pglite suite (`assignment.test.ts`) covers order, skipping, and nine concurrent starts. pglite runs one transaction at a time, so the same check was also run against Postgres 16 with a 12-connection pool: 60 concurrent starts came out in strict rotation by transaction order, and without the lock the check fails.
+- **Skipped.** Away members, and anyone who has left the workspace (their row stays but is ignored and not listed). With no one available, the conversation stays unassigned (`assignee_user_id` null).
+- **Joining.** A member who joins or comes back from away has an old turn, so the next conversation is theirs. Removing someone from the rotation leaves the conversations they already have with them. Deleting the user unassigns their conversations (`ON DELETE SET NULL`).
+- **Audit.** Adding and removing members are audited (`messenger.inbox_member.added`, `.removed`, payload `{ userId }`). Availability isn't: people switch it often, and it changes no access.
+
+Assignment happens only when a conversation starts. A contact writing again, or reopening a closed conversation, keeps its assignee.
 
 ## /v1/messenger
 
@@ -119,12 +136,20 @@ A team **reply** (never an internal note) enqueues `messenger.push.reply` `{ con
 
 ## Inbox (tRPC)
 
-The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `setContactBlocked`, `eraseContact`.
+The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `setContactBlocked`, `eraseContact`, and the rotation: `inboxMembers` (each member's name, email, availability and last assignment), `addInboxMember` (workspace members only, else `BAD_REQUEST`), `removeInboxMember`, `setAvailability({ userId, available })` (an id not in the rotation is `NOT_FOUND`). `inbox` rows and `conversation` carry `assignee: { userId, name } | null`.
 
 ## Console
 
-The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations and holds the settings; a conversation is `…/inbox/:conversationId`. Both poll every 15 s. The composer's **Attach** picks up to 3 images or PDFs (checked for type and size before uploading, then again by the server), uploads them when the reply is sent, and shows the server's refusal if one fails the byte check. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
+The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations with each one's assignee and holds the settings; a conversation is `…/inbox/:conversationId` and shows who it is assigned to. A bar over the list is the viewer's own rotation switch: **Join the rotation**, then **Available** or away. The settings' **Round robin** section lists the members with their availability and last assignment, adds workspace members and removes them. Both poll every 15 s. The composer's **Attach** picks up to 3 images or PDFs (checked for type and size before uploading, then again by the server), uploads them when the reply is sent, and shows the server's refusal if one fails the byte check. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
 
 ## Events
 
-`messenger.conversation.created` and `messenger.message.received` (a contact writing again) carry a rendered message: who wrote, the start of the text, category, app version and platform, and a link to the conversation. Both are in the Mocco notification preset.
+`messenger.conversation.created` and `messenger.message.received` (a contact writing again) carry a rendered message: who wrote, the start of the text, category, app version and platform, and a link to the conversation. Both are in the Mocco notification preset. The created event also has an **Assigned to** field: the member round robin chose, or `Unassigned`.
+
+`messenger.conversation.unassigned` ("No one is available for …", same fields) is published alongside the created event when round robin found no available member. It isn't in the Mocco preset, since it repeats a created event; a channel for the conversations nobody took (a support lead's Slack or Discord channel) adds a rule for it alone.
+
+These go through the ordinary notification fan-out to the workspace's channels (see [Notifications](./notifications.md)); the messenger has no sender of its own. **Once per conversation event:** both start events carry a dedupe key (`<type>:<conversationId>`), so a retried start (same `clientMessageId`), which announces again in case the first attempt stopped before it did, returns the stored event and creates nothing; the fan-out's `UNIQUE (event_id, channel_id)` and the delivery job's dedupe make a redelivered event a no-op too. `domain/messenger/notifications.test.ts` drives a start, its retry and a redelivery through the real bus and fan-out to a fake Discord sender and counts one send.
+
+## Browser notifications
+
+While the **Inbox** tab is open on the Open list, each conversation its 15 s poll finds that wasn't in the list it first loaded raises a system notification through the browser's Notification API (`New conversation from …`, the preview as the body, tagged with the conversation id so the browser shows one per conversation; clicking it opens the conversation). The bar over the list asks for permission (**Turn on desktop notifications**) and then says they are on, or that the browser blocks them. Nothing is sent while the tab is closed; Slack or Discord rules cover that. No service worker or push subscription is involved.

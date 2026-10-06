@@ -2304,11 +2304,20 @@ export const messengerConversations = pgTable(
     contactLastReadSeq: integer('contact_last_read_seq').notNull().default(0),
     preview: text().notNull(),
     contextAtOpen: jsonb('context_at_open').$type<MessengerContext>().notNull().default({}),
+    // The team member round robin (or a person) gave it; null while no one was available.
+    assigneeUserId: uuid('assignee_user_id'),
     closedAt: timestamp('closed_at'),
     createdAt,
   },
   t => [
     unique('mocco_messenger_conversations_id_workspace_uq').on(t.id, t.workspaceId),
+    index('mocco_messenger_conversations_assignee_idx').on(t.assigneeUserId, t.status),
+    // Named: the generated name passes Postgres's 63-character limit.
+    foreignKey({
+      columns: [t.assigneeUserId],
+      foreignColumns: [users.id],
+      name: 'mocco_messenger_conversations_assignee_fk',
+    }).onDelete('set null'),
     index('mocco_messenger_conversations_inbox_idx').on(t.workspaceId, t.projectId, t.status, t.lastMessageAt),
     index('mocco_messenger_conversations_contact_idx').on(t.contactId, t.lastMessageAt),
     foreignKey({
@@ -2430,6 +2439,34 @@ export const messengerOperatorReads = pgTable(
       columns: [t.conversationId, t.workspaceId],
       foreignColumns: [messengerConversations.id, messengerConversations.workspaceId],
       name: 'mocco_messenger_operator_reads_conversation_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** A team member who takes new conversations in a project's inbox. Round robin gives a
+ * new conversation to the available member with the lowest `last_turn`, under the
+ * project's `messengerAssign` advisory lock, and stamps them with the next turn. */
+export const messengerInboxMembers = pgTable(
+  'mocco_messenger_inbox_members',
+  {
+    projectId: uuid('project_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Off: skipped by round robin (away, off shift) but still a member.
+    available: boolean().notNull().default(true),
+    // The project's turn number this member last took; 0 before their first.
+    lastTurn: integer('last_turn').notNull().default(0),
+    lastAssignedAt: timestamp('last_assigned_at'),
+    createdAt,
+  },
+  t => [
+    primaryKey({ columns: [t.projectId, t.userId], name: 'mocco_messenger_inbox_members_pk' }),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_messenger_inbox_members_project_fk',
     }).onDelete('cascade'),
   ],
 );

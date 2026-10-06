@@ -1,5 +1,6 @@
 import { MessageVisibilities } from '@mocco/common/messenger';
 import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -14,6 +15,7 @@ const conv = schema.messengerConversations;
 const msg = schema.messengerMessages;
 const reads = schema.messengerOperatorReads;
 const contacts = schema.messengerContacts;
+const assignees = alias(schema.users, 'assignee');
 
 export interface NewMessage {
   authorKind: AuthorKind;
@@ -163,6 +165,15 @@ export class MessengerConversationRepo {
       .limit(opts.limit);
   }
 
+  /** The display name of the person a conversation is assigned to. */
+  async assigneeName(userId: string) {
+    const [row] = await this.db
+      .select({ name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    return row?.name;
+  }
+
   /** Move the contact's read position forward (never back, never past the last message). */
   async markContactRead(conversationId: string, seq: number) {
     await this.db
@@ -211,10 +222,12 @@ export class MessengerConversationRepo {
           externalUserId: contacts.externalUserId,
         },
         lastReadSeq: reads.lastReadSeq,
+        assigneeName: assignees.name,
       })
       .from(conv)
       .innerJoin(contacts, and(eq(contacts.id, conv.contactId), eq(contacts.workspaceId, conv.workspaceId)))
       .leftJoin(reads, and(eq(reads.conversationId, conv.id), eq(reads.userId, userId)))
+      .leftJoin(assignees, eq(assignees.id, conv.assigneeUserId))
       .where(
         and(
           eq(conv.workspaceId, workspaceId),

@@ -88,3 +88,19 @@ export class GuestsNotAllowedError extends ForbiddenError {
     this.name = 'GuestsNotAllowedError';
   }
 }
+
+/** Someone who isn't in the project's inbox rotation — NOT_FOUND. */
+export class InboxMemberNotFoundError extends NotFoundError {
+  constructor(userId: string, options?: ErrorOptions) {
+    super(`${userId} isn't a member of this inbox`, options);
+    this.name = 'InboxMemberNotFoundError';
+  }
+}
+
+/** Only the workspace's members can take conversations — BAD_REQUEST. */
+export class NotWorkspaceMemberError extends BadRequestError {
+  constructor(userId: string, options?: ErrorOptions) {
+    super(`${userId} isn't a member of this workspace`, options);
+    this.name = 'NotWorkspaceMemberError';
+  }
+}
