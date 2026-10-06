@@ -9,6 +9,13 @@
 // through `ProjectScope` — membership, the help center product, the project in that
 // workspace — with the caller's own id, and the service then reads only that project's
 // site. The paging here only narrows what the service returned; it decides nothing.
+import {
+  HELP_LOCALES,
+  helpLocaleSchema,
+  SegmentChanges,
+  translationFilterSchema,
+  TranslationFilters,
+} from '@mocco/common/help';
 import { helpV1LocaleSchema } from '@mocco/common/help-v1';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
@@ -18,6 +25,7 @@ import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/run
 
 import type { HelpFeedbackService } from '@backend/domain/helpcenter/HelpFeedbackService';
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
+import type { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslationService';
 import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import type { McpServer } from '@modelcontextprotocol/server';
 
@@ -25,10 +33,13 @@ export interface HelpToolDeps {
   helpPublic: Pick<HelpPublicReadService, 'searchInProject' | 'siteInProject' | 'articleInProject'>;
   /** "Was this helpful?" over the last 30 days: the console's read of the same answers. */
   helpFeedback: Pick<HelpFeedbackService, 'helpfulness'>;
+  /** The translations dashboard and one language's review: the console's reads. */
+  helpTranslations: Pick<HelpTranslationService, 'grid' | 'reviewByShortId'>;
   projects: Pick<ProjectScope, 'resolve'>;
 }
 
 const DEFAULT_LIMIT = 10;
+const DEFAULT_TRANSLATIONS_LIMIT = 20;
 const MAX_LIMIT = 50;
 /** The most a search ranks; the service caps a public search the same way. */
 const MAX_SEARCH_HITS = 20;
@@ -90,8 +101,49 @@ const readInput = z.object({
   ),
 });
 
+const translationsInput = z.object({
+  workspaceId: workspaceArg,
+  projectId: projectArg,
+  filter: translationFilterSchema
+    .default(TranslationFilters.attention)
+    .describe(
+      'Which articles to list: `attention` (the default: a language stale, failed or not translated), `stale`, `failed`, or `all`.',
+    ),
+  locales: z
+    .array(helpLocaleSchema)
+    .max(HELP_LOCALES.length)
+    .optional()
+    .describe(
+      'Only these languages (`ko`, `ja`, …), for the counts, the columns and the filter. Omit for every offered one.',
+    ),
+  limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_TRANSLATIONS_LIMIT),
+  offset: z.number().int().min(0).default(0).describe("Paging: the previous answer's `nextOffset`, as it was given."),
+  responseFormat: responseFormatArg(
+    "per-language counts, and each listed article's id, title and a short status per language (`auto`, `reviewed`, `stale`, `failed`, …)",
+    "adds each article's collection and section, and per language its state, whether it is stale, whether a machine draft waits, and the last error",
+  ),
+});
+
+const translationInput = z.object({
+  articleId: z
+    .string()
+    .regex(/^[a-z0-9]{6}(?:-[a-z0-9-]{0,80})?$/u)
+    .describe(
+      'The article id (6 characters), or the `{id}-{slug}` from its path, as `mocco_help_translations_list` returns it.',
+    ),
+  locale: helpLocaleSchema.describe('The language of the translation (`ko`, `ja`, …): one the help center offers.'),
+  workspaceId: workspaceArg,
+  projectId: projectArg,
+  responseFormat: responseFormatArg(
+    'its state, who reviewed it and when, whether a machine draft waits, and the source segments that changed since it was made',
+    'adds the source, the translation and the machine draft as Markdown',
+  ),
+});
+
 export type SearchHelpArticlesArgs = z.infer<typeof searchInput>;
 export type GetHelpArticleArgs = z.infer<typeof readInput>;
+export type ListHelpTranslationsArgs = z.infer<typeof translationsInput>;
+export type GetHelpTranslationArgs = z.infer<typeof translationInput>;
 
 const resolveHelpProject = async (deps: HelpToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
   await deps.projects.resolve(userId, asked, Products.helpcenter);
@@ -195,7 +247,88 @@ export async function getHelpArticle(deps: HelpToolDeps, args: GetHelpArticleArg
   };
 }
 
+/** A language's status in a few words: its state (`not_translated` without one), then `stale` and `draft` when they apply. */
+const statusOf = (cell: { state: string | null; isStale: boolean; hasProposal: boolean }) =>
+  [cell.state ?? 'not_translated', ...(cell.isStale ? ['stale'] : []), ...(cell.hasProposal ? ['draft'] : [])].join(
+    ', ',
+  );
+
+export async function listHelpTranslations(deps: HelpToolDeps, args: ListHelpTranslationsArgs, userId: string) {
+  const scope = await resolveHelpProject(deps, userId, args);
+  const grid = await deps.helpTranslations.grid(scope.workspaceId, scope.projectId, {
+    filter: args.filter,
+    offset: args.offset,
+    limit: args.limit,
+    ...(args.locales !== undefined && { locales: args.locales }),
+  });
+  const isDetailed = args.responseFormat === 'detailed';
+  return {
+    sourceLocale: grid.sourceLocale,
+    filter: grid.filter,
+    counts: grid.counts,
+    total: grid.total,
+    articles: grid.articles.map(article => ({
+      id: article.shortId,
+      title: article.title,
+      ...(isDetailed
+        ? {
+            collection: article.collection,
+            section: article.section,
+            languages: article.languages,
+          }
+        : { languages: Object.fromEntries(article.languages.map(cell => [cell.locale, statusOf(cell)])) }),
+    })),
+    // Present when there is more: pass it back as `offset`.
+    ...(grid.nextOffset !== null && { nextOffset: grid.nextOffset }),
+  };
+}
+
+export async function getHelpTranslation(deps: HelpToolDeps, args: GetHelpTranslationArgs, userId: string) {
+  const scope = await resolveHelpProject(deps, userId, args);
+  const [shortId = args.articleId] = args.articleId.split('-');
+  const review = await deps.helpTranslations.reviewByShortId(scope.workspaceId, scope.projectId, shortId, args.locale);
+  const isDetailed = args.responseFormat === 'detailed';
+  return {
+    id: review.article.shortId,
+    locale: review.locale,
+    state: review.state,
+    isStale: review.isStale,
+    textKind: review.textKind,
+    reviewedBy: review.reviewedBy,
+    reviewedAt: review.reviewedAt,
+    lastError: review.lastError,
+    hasProposal: review.proposal !== null,
+    // What a reviewer should look at: the source segments that changed since the text was made.
+    changes: review.changes?.filter(change => change.change !== SegmentChanges.same) ?? null,
+    ...(isDetailed && { source: review.source, text: review.text, proposal: review.proposal }),
+  };
+}
+
 export function registerHelpTools(server: McpServer, deps: HelpToolDeps): void {
+  server.registerTool(
+    'mocco_help_translations_list',
+    {
+      title: 'List help center translations',
+      description:
+        "A project's help center translations: per language, how many published articles are machine translated, reviewed, stale (made from an older source), failed or not translated; and the articles a filter lists (by default the ones needing attention), each with its status per language. Read-only.",
+      inputSchema: translationsInput,
+      annotations: { readOnlyHint: true },
+    },
+    async (args, ctx) => asJson(await listHelpTranslations(deps, args, userIdOf(ctx))),
+  );
+
+  server.registerTool(
+    'mocco_help_translation_get',
+    {
+      title: 'Read a help article translation',
+      description:
+        'One published help article in one language, for review: its state, who reviewed it and when, whether a machine draft waits, and the source segments that changed since it was made (before and after). Detailed adds the source, the translation and the draft as Markdown. Read-only: accepting a draft or reviewing stays in the console.',
+      inputSchema: translationInput,
+      annotations: { readOnlyHint: true },
+    },
+    async (args, ctx) => asJson(await getHelpTranslation(deps, args, userIdOf(ctx))),
+  );
+
   server.registerTool(
     'mocco_help_articles_search',
     {

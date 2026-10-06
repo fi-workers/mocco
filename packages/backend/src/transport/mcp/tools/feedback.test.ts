@@ -255,6 +255,7 @@ describe('mocco_feedback_* (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
+      helpTranslations: { grid: refuse, reviewByShortId: refuse },
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: feedback.feedbackBoards,
       feedbackPosts: feedback.feedbackPosts,

@@ -104,6 +104,18 @@ If a machine draft is ready, **Accept draft** makes it the reviewed text as it i
 
 **Translate again** asks for a new machine translation. On a reviewed language it asks you to confirm first, because the machine's text replaces yours on the site. Your version stays in the article's history.
 
+### See every translation at once
+
+Once the site offers another language, the **Help center** page links to **Translations**. At the top, each language shows how many published articles are reviewed, machine translated, out of date with the original (**Source changed**), failed, waiting for a translation, or not translated yet.
+
+![The Translations page: counts for English and Japanese, and the grid of articles with each language's status](./images/translations-dashboard.png)
+
+Below is every published article with its status in each language. Choose **Needs attention** to list only the articles with a language that is out of date, failed or not translated, or **Source changed** or **Failed** for just those. Pick a language to see only its column. Each status opens that language's review in the article, so you can go down the list and bring each one up to date.
+
+![Needs attention in Japanese: the articles whose Japanese translation is out of date, failed or missing](./images/translations-attention.png)
+
+The page's address keeps the filter and language, so you can bookmark the view or send it to a teammate.
+
 Readers who pick a language see its translation, and the article list shows translated titles, collections and sections included.
 
 ![The English translation of an article on the public site](./images/public-translated.png)
