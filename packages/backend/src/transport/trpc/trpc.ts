@@ -8,7 +8,9 @@ import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { CommentService } from '@backend/domain/feedback/CommentService';
 import type { PostService } from '@backend/domain/feedback/PostService';
+import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
 import type { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
@@ -115,9 +117,11 @@ export interface Context {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
-  /** Feedback boards, their categories and posts (#172). */
+  /** Feedback boards, their categories and posts (#172), votes and comments (#173). */
   feedbackBoards: BoardService;
   feedbackPosts: PostService;
+  feedbackVotes: VoteService;
+  feedbackComments: CommentService;
   /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;
   statusIncidents: IncidentService;

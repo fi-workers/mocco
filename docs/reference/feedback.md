@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, and each post's append-only status history — the statuses and how staff move a post between them, how the staff list sorts, what is audited, the feedback tRPC router, and the MCP tools planned for the next slice.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes and comments — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how the staff list sorts, what is audited, the feedback tRPC router, and the MCP tools planned for the next slices.
 type: reference
 status: active
 created: 2026-10-06
@@ -15,13 +15,15 @@ code_refs:
   - packages/common/src/feedback.ts
   - packages/backend/src/domain/feedback/BoardService.ts
   - packages/backend/src/domain/feedback/PostService.ts
+  - packages/backend/src/domain/feedback/VoteService.ts
+  - packages/backend/src/domain/feedback/CommentService.ts
   - packages/backend/src/domain/feedback/errors.ts
   - packages/backend/src/transport/trpc/routers/feedback.ts
 ---
 
 # Feedback board model
 
-The first slice (#172) of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC. Votes, comments, merging, GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172); end users' votes and comments, and the team's official responses and internal notes (#173). Subscriptions, merging duplicates, GitHub links, shipping on deploy, the changelog and the public `/v1` surface come in later slices. There is no console screen yet.
 
 ## Tables
 
@@ -33,6 +35,15 @@ Migration 0076 adds four tables. Every row carries `workspace_id`. Children reac
 | `mocco_feedback_categories` | A board's categories: `slug` (unique within the board), `name`, `position` |
 | `mocco_feedback_posts` | A post: `number` (unique within the board), `title`, `body` (Markdown), `status`, `category_id` (a category of the same board, or null), `shipped_at`, and `author_user_id` (the staff member who wrote it; end-user authors come with end-user identity) |
 | `mocco_feedback_status_changes` | Append-only history: `from_status` (null on the row written when the post is created), `to_status`, `reason`, `actor_user_id` |
+
+Migration 0077 (#173) adds two more tables and two counters on posts, `vote_count` and `comment_count` (see [Votes](#votes) and [Comments](#comments)). Both tables reach their post through a composite FK on `(post_id, workspace_id)`.
+
+| Table | What it holds |
+|---|---|
+| `mocco_feedback_votes` | A vote: `end_user_id`, `state` (`pending` or `counted`), `source` (`web`, `widget`, `staff`, `intake`, `merge`), `recorded_by_user_id` (the team member who recorded it for the end user), `counted_at` (set exactly when counted, DB-checked). Unique on `(post_id, end_user_id)` |
+| `mocco_feedback_comments` | A comment: `author_kind` (`staff` or `end_user`), `author_user_id` or `author_end_user_id`, `body` (up to 8,000 characters), `is_official`, `is_internal` |
+
+An end user is the id the project's app knows them by: the user id it signs, the same id space as a messenger contact's `external_user_id`. End-user identity (#100) isn't built yet. When it gives these ids a directory, votes, comments and subscriptions point into it; until then the column carries the id itself (1 to 255 characters).
 
 The design keys board slugs per workspace; they are per project here, so two projects of one workspace can both have an `ideas` board. The public surface resolves a board through the project's publishable key, so the slug never needs to be unique across projects.
 
@@ -57,13 +68,33 @@ A post's number comes from its board's `next_post_number`, taken by an `UPDATE �
 
 Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 
+## Votes
+
+`VoteService` holds one vote per post and end user, enforced by the unique index:
+
+- **Voting is idempotent.** A second vote by the same end user returns the first and changes nothing. Two concurrent votes insert once: the post row is locked first, and the insert is `ON CONFLICT DO NOTHING`.
+- **Pending, then counted.** An identified end user's vote counts at once. An email-only voter's vote is written `pending` and counts when they confirm (`confirm`), or when they vote again identified. Confirming a counted vote changes nothing; confirming a vote that isn't there is `FeedbackVoteNotFoundError` (NOT_FOUND).
+- **Taking a vote back** deletes it; no vote is no change.
+- **`vote_count` equals the post's counted votes.** It moves by one in the transaction that counts or removes a counted vote, after that transaction has locked the post row, so concurrent writes to one post apply one after another. A test runs a long random sequence of votes, pending votes, confirmations and removals, six at a time, and checks the count against the rows after every batch.
+
+Votes aren't audited: there are many, and they are the end users' own. The public `/v1` surface will take votes from the board and the widget, with the email confirmation flow; for now the team records a vote on an end user's behalf (`source: staff`).
+
+## Comments
+
+`CommentService` writes two kinds of comment:
+
+- **A team member's** (`createAsStaff`): plain, the **official response** (`isOfficial`), or an **internal note** (`isInternal`). A comment can't be both: the service refuses it (`FeedbackOfficialInternalError`, BAD_REQUEST) and a DB check holds it.
+- **An end user's** (`createAsEndUser`): always public and never official, DB-checked.
+
+Reads come in two projections. `listForStaff` returns every comment, oldest first, internal notes included. `listForPublic` leaves internal notes out and returns only the id, the author kind, the end user's id on their own comments, the body, `isOfficial` and when, so no team member's id reaches the public board. `comment_count` counts public comments only, so the public count never gives away that a note exists.
+
 ## Audit
 
 `feedback.board.created`, `feedback.board.deleted`, and `feedback.post.status_changed` (with `from`, `to`, the board and the post number) are appended after their transaction commits. Category and post edits aren't audited.
 
 ## The feedback router
 
-`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError` and `FeedbackPostNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError` and `FeedbackStatusUnchangedError` are CONFLICT. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
+`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError` and `FeedbackVoteNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError` and `FeedbackStatusUnchangedError` are CONFLICT; `FeedbackOfficialInternalError` is BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
 
 | Procedure | Does |
 |---|---|
@@ -73,6 +104,8 @@ Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 | `posts`, `post` | The list above; one post with its status history, oldest first |
 | `createPost`, `updatePost` | An update changes only the fields it is given; `categoryId: null` uncategorizes |
 | `setPostStatus` | The status change above; returns the post and the history row |
+| `votes`, `vote`, `unvote` | A post's votes, newest first, pending ones included; record an end user's vote on their behalf (it counts at once); take one back |
+| `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 
 ## MCP tools (next slice)
 
@@ -82,3 +115,12 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), the next f
 - `mocco_feedback_posts_search`: a board's posts filtered by status and category, sorted by status or date, paged, concise or detailed.
 - `mocco_feedback_post_get`: one post with its status history.
 - `mocco_feedback_post_set_status`: a mutating tool that acts as the caller, behind a `feedback:write` scope, the workspace's opt-in and the confirmation round trip.
+
+Votes and comments (#173) get their tools in the slice after them, over `VoteService` and `CommentService`:
+
+- `mocco_feedback_votes_list`: a post's votes, paged, concise or detailed.
+- `mocco_feedback_comments_list`: a post's comments as the team sees them, internal notes included, paged.
+- `mocco_feedback_comment_create`: comment as the caller, plainly, as the official response or as an internal note. It changes data, so it sits behind `feedback:write`, the opt-in and the confirmation round trip.
+- `mocco_feedback_post_vote`: record an end user's vote on their behalf, behind the same locks.
+
+Merging duplicates adds `mocco_feedback_post_merge`, a changing tool, in the slice after the merge itself.

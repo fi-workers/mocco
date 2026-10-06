@@ -1,6 +1,6 @@
-// Feedback board (#98, slice #172): a project's boards, their categories, and posts that staff
-// move through statuses. Votes, comments, merges, GitHub links, the ship detector and the public
-// `/v1` surface come in later slices; their constants land with them.
+// Feedback board (#98): a project's boards, their categories, and posts that staff move through
+// statuses (#172), with votes and comments (#173). Subscriptions, merges, GitHub links, the ship
+// detector and the public `/v1` surface come in later slices; their constants land with them.
 import { z } from 'zod';
 
 /** Where a post is in its life. Staff may move a post from any status to any other. */
@@ -64,9 +64,31 @@ export const FeedbackLimits = {
   nameMax: 80,
   titleMax: 200,
   bodyMax: 20_000,
+  commentMax: 8000,
+  endUserIdMax: 255,
   listMax: 100,
   listDefault: 50,
 } as const;
+
+/** Whether a vote counts yet. An identified end user's vote counts at once; an email-only
+ * voter's waits as `pending` until they confirm the address. `vote_count` counts only `counted`. */
+export const FeedbackVoteStates = { pending: 'pending', counted: 'counted' } as const;
+export type FeedbackVoteState = (typeof FeedbackVoteStates)[keyof typeof FeedbackVoteStates];
+
+/** Where a vote came from: the public board, the in-app widget, a team member recording it on
+ * the end user's behalf, a conversion from another product, or a merge of duplicates. */
+export const FeedbackVoteSources = {
+  web: 'web',
+  widget: 'widget',
+  staff: 'staff',
+  intake: 'intake',
+  merge: 'merge',
+} as const;
+export type FeedbackVoteSource = (typeof FeedbackVoteSources)[keyof typeof FeedbackVoteSources];
+
+/** Who wrote a comment: a team member, or an end user of the project's app. */
+export const FeedbackCommentAuthorKinds = { staff: 'staff', endUser: 'end_user' } as const;
+export type FeedbackCommentAuthorKind = (typeof FeedbackCommentAuthorKinds)[keyof typeof FeedbackCommentAuthorKinds];
 
 const slug = z.string().regex(FEEDBACK_SLUG_PATTERN);
 const name = z.string().trim().min(1).max(FeedbackLimits.nameMax);
@@ -108,3 +130,23 @@ export const feedbackPostListInputSchema = z.object({
 });
 export type FeedbackPostListInput = z.input<typeof feedbackPostListInputSchema>;
 export type FeedbackPostListQuery = z.output<typeof feedbackPostListInputSchema>;
+
+/** An end user as the project's app knows them: the user id the app signs, the same id space as
+ * a messenger contact's. End-user identity (#100) gives these ids a directory; until then a vote,
+ * a comment and a subscription carry the id itself. */
+export const feedbackEndUserIdSchema = z.string().trim().min(1).max(FeedbackLimits.endUserIdMax);
+
+export const feedbackPageInputSchema = z.object({
+  limit: z.int().min(1).max(FeedbackLimits.listMax).default(FeedbackLimits.listDefault),
+  offset: z.int().min(0).default(0),
+});
+export type FeedbackPage = z.output<typeof feedbackPageInputSchema>;
+
+/** A team member's comment. `isOfficial` marks the team's response to the post; `isInternal`
+ * keeps it to the team. A comment can't be both (`CommentService` refuses it, a DB check holds it). */
+export const feedbackCommentInputSchema = z.object({
+  body: z.string().trim().min(1).max(FeedbackLimits.commentMax),
+  isOfficial: z.boolean().default(false),
+  isInternal: z.boolean().default(false),
+});
+export type FeedbackCommentInput = z.output<typeof feedbackCommentInputSchema>;
