@@ -101,6 +101,8 @@ export interface JobRunnerRuntimeDeps {
   push?: PushSender;
   /** Translates help center articles; undefined without an LLM configured. */
   translator?: Translator;
+  /** Characters a workspace may send to the translator per month (`HELP_TRANSLATION_MONTHLY_CHARACTERS`); unlimited without. */
+  helpTranslationMonthlyCharacters?: number;
   /** Submits changed help pages to IndexNow; undefined outside production. */
   helpIndexNow?: HelpIndexNow;
   /** Days of raw status check results kept (`STATUS_RAW_RETENTION_DAYS`); the policy's default without it. */
@@ -204,6 +206,9 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         sites: new HelpSiteService({ db, audit }),
         queue,
         ...(deps.translator !== undefined && { translator: deps.translator }),
+        ...(deps.helpTranslationMonthlyCharacters !== undefined && {
+          monthlyCharacters: deps.helpTranslationMonthlyCharacters,
+        }),
       }),
       ...(deps.helpIndexNow !== undefined && { indexNow: deps.helpIndexNow }),
     }),
@@ -288,6 +293,7 @@ export function getJobRunner(): JobRunner {
       storage: storageFromEnv(env),
       push: new ExpoPushSender({ accessToken: env.EXPO_ACCESS_TOKEN }),
       translator: translatorFromEnv(env),
+      helpTranslationMonthlyCharacters: env.HELP_TRANSLATION_MONTHLY_CHARACTERS,
       helpIndexNow: helpIndexNowFromEnv(getDb(), env),
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
       statusSubscribers: subscriberDepsFromEnv(env),

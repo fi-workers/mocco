@@ -526,6 +526,13 @@
       "when": 1791262483183,
       "tag": "0074_amusing_ezekiel_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791264773152,
+      "tag": "0075_majestic_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

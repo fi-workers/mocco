@@ -7,12 +7,11 @@ import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
 import { checkRevalidateRequest, helpPagePaths } from '@backend/domain/helpcenter/revalidate';
 import { HttpHelpRevalidator } from '@backend/domain/helpcenter/revalidate-http';
+import { FakeTranslator } from '@backend/domain/helpcenter/translate/testing/fake-translator';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { expectOne } from '@backend/infra/db/rows';
 import { users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
-
-import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 
 describe('helpPagePaths', () => {
   it('lists the home in every language, and the article in every language', () => {
@@ -91,10 +90,7 @@ describe('refreshing public pages on change (pglite)', () => {
   it('refreshes the article on publish, translation, unpublish and delete; a failing refresh is ignored', async () => {
     const calls: string[][] = [];
     let isDown = false;
-    const translator: Translator = {
-      name: 'fake',
-      translate: async ({ title, body }) => await Promise.resolve({ title: `EN ${title}`, body }),
-    };
+    const translator = new FakeTranslator();
     const help = createHelpDomain(t.db, {
       audit: new AuditService({ audit: new AuditRepo(t.db) }),
       translator,

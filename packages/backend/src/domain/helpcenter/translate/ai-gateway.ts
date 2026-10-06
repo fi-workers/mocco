@@ -5,7 +5,11 @@ import { z } from 'zod';
 
 import { TranslationRejectedError } from '@backend/domain/helpcenter/translate/Translator';
 
-import type { TranslateInput, Translator } from '@backend/domain/helpcenter/translate/Translator';
+import type {
+  TranslatableSegment,
+  TranslateSegmentsInput,
+  Translator,
+} from '@backend/domain/helpcenter/translate/Translator';
 
 export const DEFAULT_TRANSLATION_MODEL = 'anthropic/claude-sonnet-5';
 const ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
@@ -13,15 +17,24 @@ const ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 const answerSchema = z.object({
   choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1),
 });
-const translationSchema = z.object({ title: z.string().min(1), body: z.string() });
+const translationSchema = z.object({
+  segments: z.array(z.object({ id: z.string().min(1), text: z.string() })),
+});
 
 const SYSTEM_PROMPT = [
-  'You translate help center articles for a software product.',
-  'Translate the title and the Markdown body from the source language into the target language.',
-  'Keep the Markdown exactly as it is: the same headings, lists, tables, quotes and emphasis,',
-  'code blocks and inline code unchanged, link and image URLs unchanged (translate link text and image alt text).',
-  'Keep product names, button labels in quotes and anything in code as they are unless the target language has an established term.',
-  'Write naturally for a reader of the target language. Answer with JSON only: {"title": "...", "body": "..."}.',
+  'You translate help center articles for a software product, one segment at a time.',
+  'Each segment is a heading, a paragraph, a table cell, an alt text or a title from the article.',
+  'Translate the text of every segment from the source language into the target language.',
+  'Placeholders like ⟦0⟧ stand for code, links, images and formatting: copy each one exactly once, unchanged.',
+  'A pair like ⟦1⟧text⟦/1⟧ wraps text: translate the text inside and keep the pair around it, in the same nesting.',
+  'Never add a URL. Keep product names and quoted button labels unless the target language has an established term.',
+  'Write naturally for a reader of the target language.',
+  'Answer with JSON only: {"segments": [{"id": "...", "text": "..."}]}, one entry per segment, with the same ids.',
+].join(' ');
+
+const RETRY_NOTE = [
+  'Your previous answer for these segments was refused: a placeholder was lost, repeated or changed, or a URL was added.',
+  'Copy every placeholder exactly.',
 ].join(' ');
 
 export class AiGatewayTranslator implements Translator {
@@ -31,7 +44,7 @@ export class AiGatewayTranslator implements Translator {
     this.name = opts.model ?? DEFAULT_TRANSLATION_MODEL;
   }
 
-  async translate(input: TranslateInput): Promise<{ title: string; body: string }> {
+  async translateSegments(input: TranslateSegmentsInput): Promise<TranslatableSegment[]> {
     const response = await (this.opts.fetch ?? fetch)(ENDPOINT, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.opts.apiKey}`, 'content-type': 'application/json' },
@@ -39,14 +52,13 @@ export class AiGatewayTranslator implements Translator {
         model: this.name,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: input.isRetry === true ? `${SYSTEM_PROMPT} ${RETRY_NOTE}` : SYSTEM_PROMPT },
           {
             role: 'user',
             content: JSON.stringify({
               sourceLanguage: input.sourceLocale,
               targetLanguage: input.targetLocale,
-              title: input.title,
-              body: input.body,
+              segments: input.segments.map(({ id, text }) => ({ id, text })),
             }),
           },
         ],
@@ -66,9 +78,9 @@ export class AiGatewayTranslator implements Translator {
     }
     const translation = translationSchema.safeParse(parsed);
     if (!translation.success) {
-      throw new TranslationRejectedError("The translator's answer had no title or body");
+      throw new TranslationRejectedError("The translator's answer had no segments");
     }
-    return translation.data;
+    return translation.data.segments;
   }
 }
 

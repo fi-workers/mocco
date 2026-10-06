@@ -28,8 +28,9 @@ interface Props {
 
 interface Entry {
   locale: string;
-  state: 'pending' | 'auto' | 'reviewed' | 'failed' | null;
+  state: 'pending' | 'translating' | 'auto' | 'reviewed' | 'failed' | null;
   isStale: boolean;
+  hasProposal: boolean;
   lastError: string | null;
   title: string | null;
   body: string | null;
@@ -41,11 +42,13 @@ function StateBadges({ entry }: { entry: Entry }) {
   return (
     <>
       {entry.state === null ? <StatusBadge tone={Tones.neutral}>Not translated</StatusBadge> : null}
-      {entry.state === 'pending' ? <StatusBadge tone={Tones.neutral}>Translating…</StatusBadge> : null}
+      {entry.state === 'pending' ? <StatusBadge tone={Tones.neutral}>Waiting</StatusBadge> : null}
+      {entry.state === 'translating' ? <StatusBadge tone={Tones.neutral}>Translating…</StatusBadge> : null}
       {entry.state === 'auto' ? <StatusBadge tone={Tones.ok}>Machine translated</StatusBadge> : null}
       {entry.state === 'reviewed' ? <StatusBadge tone={Tones.ok}>Reviewed</StatusBadge> : null}
       {entry.state === 'failed' ? <StatusBadge tone={Tones.danger}>Failed</StatusBadge> : null}
       {entry.isStale ? <StatusBadge tone={Tones.warn}>Source changed</StatusBadge> : null}
+      {entry.hasProposal ? <StatusBadge tone={Tones.neutral}>Machine draft ready</StatusBadge> : null}
     </>
   );
 }
@@ -119,8 +122,16 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
   const utils = trpc.useUtils();
   const translationsQuery = trpc.help.translations.useQuery(
     { workspaceId, projectId, articleId },
-    // Machine translations land in the background; look again while any is pending.
-    { refetchInterval: query => (query.state.data?.locales.some(entry => entry.state === 'pending') ? 3000 : false) },
+    // Machine translations land in the background; look again while any is queued or running
+    // (a language waiting for next month's allowance says so and isn't polled).
+    {
+      refetchInterval: query =>
+        query.state.data?.locales.some(
+          entry => entry.state === 'translating' || (entry.state === 'pending' && entry.lastError === null),
+        )
+          ? 3000
+          : false,
+    },
   );
   const retranslate = trpc.help.retranslate.useMutation({
     onSuccess: async () => {
@@ -212,6 +223,9 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
               </div>
               {entry.state === 'failed' && entry.lastError !== null ? (
                 <p className="text-xs text-destructive">{entry.lastError}</p>
+              ) : null}
+              {entry.state === 'pending' && entry.lastError !== null ? (
+                <p className="text-xs text-muted-foreground">{entry.lastError}</p>
               ) : null}
               {editing === entry.locale ? (
                 <TranslationEditor
