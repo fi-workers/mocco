@@ -12,6 +12,7 @@
     "./events": "./src/events.ts",
     "./execution": "./src/execution.ts",
     "./feedback": "./src/feedback.ts",
+    "./feedback-v1": "./src/feedback-v1.ts",
     "./flags": "./src/flags.ts",
     "./flags-file": "./src/flags-file.ts",
     "./governance": "./src/governance.ts",

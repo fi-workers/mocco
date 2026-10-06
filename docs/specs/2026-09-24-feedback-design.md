@@ -266,6 +266,8 @@ Auth works in two layers. `x-mocco-key: pk_...` is a publishable project key tha
 | POST | `/identify/email` | starts a magic-link verification |
 | GET | `/unsubscribe/:token` | signed, one-click (List-Unsubscribe) |
 
+As built so far (#174, [public /v1 surface](../reference/feedback.md#the-public-v1-surface)): the board, posts, roadmap, post and comment reads, votes and comments. Keys are the existing `/v1` keys with `feedback:read` and `feedback:write`. The end-user token is signed with the project's existing identity secret (the messenger's, sealed rather than hashed, since verifying an HMAC needs the secret). Lists page by `limit` and `offset`, and sort `top` or `new`; `trending` waits for vote history. Posting, `similar`, subscriptions, email identify and unsubscribe are the next slice.
+
 RSS lives at `/feedback/:board/changelog.rss` on the public rendering host, with caching headers. Webhooks out (`post.created`, `post.status_changed`, `post.shipped`, `changelog.published`) are deferred to v1.1.
 
 ```ts

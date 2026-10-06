@@ -1,9 +1,10 @@
-// The feedback domain's services over a db (#172, #173). Pure (no instance imports); instance.ts
+// The feedback domain's services over a db (#172, #173, #174). Pure (no instance imports); instance.ts
 // binds the production deps, tests bind pglite.
 import { BoardService } from '@backend/domain/feedback/BoardService';
 import { CommentService } from '@backend/domain/feedback/CommentService';
 import { MergeService } from '@backend/domain/feedback/MergeService';
 import { PostService } from '@backend/domain/feedback/PostService';
+import { PublicBoardService } from '@backend/domain/feedback/PublicBoardService';
 import { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import { VoteService } from '@backend/domain/feedback/VoteService';
 
@@ -17,6 +18,8 @@ export interface FeedbackDomain {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  /** What /v1/feedback serves (#174). */
+  feedbackPublic: PublicBoardService;
 }
 
 export function createFeedbackDomain(
@@ -26,12 +29,15 @@ export function createFeedbackDomain(
   const now = deps.now === undefined ? {} : { now: deps.now };
   const feedbackBoards = new BoardService({ db, audit: deps.audit });
   const feedbackPosts = new PostService({ db, audit: deps.audit, boards: feedbackBoards, ...now });
+  const feedbackVotes = new VoteService({ db, posts: feedbackPosts, ...now });
+  const feedbackComments = new CommentService({ db, posts: feedbackPosts });
   return {
     feedbackBoards,
     feedbackPosts,
-    feedbackVotes: new VoteService({ db, posts: feedbackPosts, ...now }),
-    feedbackComments: new CommentService({ db, posts: feedbackPosts }),
+    feedbackVotes,
+    feedbackComments,
     feedbackSubscriptions: new SubscriptionService({ db, posts: feedbackPosts, ...now }),
     feedbackMerges: new MergeService({ db, audit: deps.audit, ...now }),
+    feedbackPublic: new PublicBoardService({ db, votes: feedbackVotes, comments: feedbackComments }),
   };
 }

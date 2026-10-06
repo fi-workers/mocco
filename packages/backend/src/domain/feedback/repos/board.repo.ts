@@ -28,6 +28,14 @@ export class FeedbackBoardRepo {
     return row;
   }
 
+  async findBySlug(scope: FeedbackScope, slug: string): Promise<FeedbackBoardRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(b)
+      .where(and(scoped(scope), eq(b.slug, slug)));
+    return row;
+  }
+
   /** A taken slug throws UniqueConstraintError (`mocco_feedback_boards_project_slug_uq`). */
   async insert(row: typeof b.$inferInsert): Promise<FeedbackBoardRow> {
     try {

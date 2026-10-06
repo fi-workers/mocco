@@ -41,7 +41,7 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 
 - **One inbox per project.** A project's apps (iOS, Android, web) share it, and the same app user id on every platform is one contact. The design sketched app-scoped inboxes; a project is the product a user knows, so its users are one population.
 - **Signed users only.** The product's server signs its user id with the project's **identity secret**: `userHash = hex(HMAC-SHA256(secret, userId))` (`signIdentity` in `@mocco/node`). Mocco compares in constant time. A client without its server's signature can't claim an id, so a publishable key alone opens nothing. Anonymous visitors come later.
-- **The identity secret** is minted when the team sets the messenger up (`messenger.enable`) and on `messenger.rotateSecret`, returned only then, and stored SecretBox-sealed (AAD `messenger-identity:<projectId>`). Rotation takes effect at once: hashes signed with the old secret stop opening sessions. Both are audited (`messenger.enabled`, `messenger.secret.rotated`).
+- **The identity secret** is minted when the team sets the messenger up (`messenger.enable`) and on `messenger.rotateSecret`, returned only then, and stored SecretBox-sealed (AAD `messenger-identity:<projectId>`). Rotation takes effect at once: hashes signed with the old secret stop opening sessions. Both are audited (`messenger.enabled`, `messenger.secret.rotated`). The same secret signs the end-user tokens the [feedback `/v1` surface](./feedback.md#the-public-v1-surface) takes, so rotating it also stops those.
 - **Sessions** are opaque `mms_` tokens (32 random bytes) stored as SHA-256 hashes, valid 30 days. The app opens a new one whenever it has a fresh hash.
 
 ## Guests
