@@ -11,6 +11,7 @@
     "./credential": "./src/credential.ts",
     "./events": "./src/events.ts",
     "./execution": "./src/execution.ts",
+    "./feedback": "./src/feedback.ts",
     "./flags": "./src/flags.ts",
     "./flags-file": "./src/flags-file.ts",
     "./governance": "./src/governance.ts",

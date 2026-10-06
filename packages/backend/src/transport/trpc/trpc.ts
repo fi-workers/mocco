@@ -7,6 +7,8 @@ import type { AuthService } from '@backend/domain/auth/AuthService';
 import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
+import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { PostService } from '@backend/domain/feedback/PostService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
 import type { FlagService } from '@backend/domain/flags/FlagService';
 import type { FlagTelemetryService } from '@backend/domain/flags/FlagTelemetryService';
@@ -113,6 +115,9 @@ export interface Context {
   helpImages: HelpImageService;
   helpTranslations: HelpTranslationService;
   helpFeedback: HelpFeedbackService;
+  /** Feedback boards, their categories and posts (#172). */
+  feedbackBoards: BoardService;
+  feedbackPosts: PostService;
   /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;
   statusIncidents: IncidentService;

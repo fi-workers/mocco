@@ -868,3 +868,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   segments. The [feature map](./reference/feature-map.md) and [env](./reference/env.md) say the same.
 - Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `reference/env.md`, `log.md`
 - Source: branch `feat/help-translation-jobs` (issue #212)
+
+## 2026-10-06 — Feedback: boards, posts and statuses
+
+- Documented #172 in the [feedback board model](./reference/feedback.md): `@mocco/common/feedback`
+  (`FeedbackPostStatuses`, `RoadmapColumns`, `FeedbackStatusChangeReasons`, `FeedbackPostSorts` and the input schemas),
+  migration 0076 with `mocco_feedback_boards`, `_categories`, `_posts` and `_status_changes`, a repo per table,
+  `BoardService`, `PostService`, `domain/feedback/errors.ts`, and the `feedback` tRPC router on
+  `productProcedure(Products.feedback)`. Posts are numbered per board; staff move a post between any two statuses, and
+  every status it takes (the first one too) is a history row written in the post's transaction. The staff list sorts
+  by status in workflow order or by date. Board slugs are unique per project, not per workspace as the design said.
+- The MCP tools are named in the [spec](./specs/2026-09-24-feedback-design.md#61-mcp-tools-adr-0025) and the feature
+  map, and are built in the next slice. No console screen yet.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
+  `log.md`
+- Source: branch `feat/feedback-core` (issue #172)
