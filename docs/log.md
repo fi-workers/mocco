@@ -821,3 +821,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/messenger.md`, `reference/events.md`, `reference/notifications.md`,
   `reference/feature-map.md`, `customer/messenger/contact-us.md`, `customer/notifications/mocco-events.md`, `log.md`
 - Source: branch `feat/messenger-assignment` (issue #204)
+
+## 2026-10-06 — Help center: Markdown segmentation, protection and validation
+
+- Documented #211 in the [help center reference](./reference/help-center.md#markdown-segments): `domain/helpcenter/markdown/`
+  segments an article (headings, paragraphs, table cells, image alts, link titles; code and HTML never sent), protects
+  inline code, URLs, `asset://` refs, `{{variables}}`, emoji and keep terms as `⟦n⟧` placeholders (formatting and link
+  text as `⟦n⟧…⟦/n⟧`), reassembles translations into the source's own tree, and validates placeholders, new URLs and
+  the heading, code and link structure. `translate/validate.ts` moved to `markdown/validate.ts` and now compares parsed
+  trees. Migration 0074 adds `mocco_help_revisions.segments` (`[{hash, kind}]`), written on every revision. A golden
+  corpus with Korean and Japanese and seeded fast-check property tests check the identity round trip. The translation
+  job still sends whole articles; segment-level jobs are #212.
+- Docs touched: `reference/help-center.md`, `log.md`
+- Source: branch `feat/help-markdown-segments` (issue #211)

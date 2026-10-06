@@ -5,16 +5,16 @@
 // as stale instead, until someone edits it or asks for a new machine translation.
 import { RevisionKinds, TranslationStates } from '@mocco/common/help';
 
-import { contentHashOf } from '@backend/domain/helpcenter/content';
+import { revisionText } from '@backend/domain/helpcenter/content';
 import { HelpNodeNotFoundError, HelpNothingToPublishError } from '@backend/domain/helpcenter/errors';
 import { translateHelpArticle } from '@backend/domain/helpcenter/jobs';
+import { structureProblem } from '@backend/domain/helpcenter/markdown/validate';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
 import { HelpNodeTranslationRepo } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import { HelpSiteRepo } from '@backend/domain/helpcenter/repos/site.repo';
 import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translation.repo';
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { TranslationRejectedError } from '@backend/domain/helpcenter/translate/Translator';
-import { structureProblem } from '@backend/domain/helpcenter/translate/validate';
 
 import type { HelpSiteService } from '@backend/domain/helpcenter/HelpSiteService';
 import type { HelpArticleRow } from '@backend/domain/helpcenter/repos/article.repo';
@@ -171,9 +171,7 @@ export class HelpTranslationService {
         workspaceId,
         articleId,
         locale,
-        title: translated.title,
-        bodyMd: translated.body,
-        contentHash: contentHashOf(translated.title, translated.body),
+        ...revisionText(translated.title, translated.body),
         kind: RevisionKinds.machine,
         authorUserId: null,
       });
@@ -249,9 +247,7 @@ export class HelpTranslationService {
       workspaceId,
       articleId: article.id,
       locale: input.locale,
-      title: input.title,
-      bodyMd: input.body,
-      contentHash: contentHashOf(input.title, input.body),
+      ...revisionText(input.title, input.body),
       kind: RevisionKinds.humanEdit,
       authorUserId: actorUserId,
     });

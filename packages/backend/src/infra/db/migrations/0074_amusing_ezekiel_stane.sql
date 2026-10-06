@@ -1,0 +1,1 @@
+ALTER TABLE "mocco_help_revisions" ADD COLUMN "segments" jsonb DEFAULT '[]'::jsonb NOT NULL;
