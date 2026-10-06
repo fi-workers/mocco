@@ -2,7 +2,7 @@
 // site's slug, in the asked language when it has one and in the source language
 // otherwise. The public pages and /v1 call this; nothing here needs a session.
 
-import { articlePath, ArticleStatuses } from '@mocco/common/help';
+import { articlePath, ArticleStatuses, RevisionKinds, TranslationStates } from '@mocco/common/help';
 
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';
 import { HelpArticleRepo } from '@backend/domain/helpcenter/repos/article.repo';
@@ -55,13 +55,14 @@ export class HelpPublicReadService {
     );
   }
 
+  /** A translation's served text, with its row (its state and the source hash it was made from). */
   private async translationText(workspaceId: string, articleId: string, locale: string) {
     const row = await new HelpTranslationRepo(this.deps.db).find(workspaceId, articleId, locale);
     if (row?.revisionId === null || row === undefined) {
       return undefined;
     }
     const [revision] = await new HelpArticleRepo(this.deps.db).revisionsByIds([row.revisionId]);
-    return revision;
+    return revision === undefined ? undefined : { row, revision };
   }
 
   /** Translated texts of these articles in `locale`, by article id. */
@@ -216,8 +217,9 @@ export class HelpPublicReadService {
     }
     const wanted = localeFor(site, locale);
     // Another language: its translation, else the source (and the source's address).
-    const translation =
+    const servedTranslation =
       wanted === site.sourceLocale ? undefined : await this.translationText(site.workspaceId, article.id, wanted);
+    const translation = servedTranslation?.revision;
     const served = translation === undefined ? site.sourceLocale : wanted;
     // The languages this article is really served in: the source and each translated one.
     const translated = await Promise.all(
@@ -242,6 +244,22 @@ export class HelpPublicReadService {
           : article.publishedAt,
       locales: [site.sourceLocale, ...translated.flat()],
       canonicalPath: articlePath(served, article.shortId, article.slug),
+      sourceLocale: site.sourceLocale,
+      /**
+       * About the served translation; null when the source is served. `isMachine`: the text
+       * is the machine's and no person has reviewed it (the "Automatically translated" label).
+       * `isStale`: it was made from an older published source (the "source updated" banner).
+       */
+      translation:
+        servedTranslation === undefined
+          ? null
+          : {
+              isMachine:
+                servedTranslation.row.state !== TranslationStates.reviewed &&
+                servedTranslation.revision.kind === RevisionKinds.machine,
+              isStale:
+                servedTranslation.row.sourceHash !== null && servedTranslation.row.sourceHash !== revision.contentHash,
+            },
     };
   }
 
