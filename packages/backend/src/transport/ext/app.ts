@@ -16,10 +16,12 @@ import { z } from 'zod';
 import { getApiKeys } from '@backend/domain/apikey/instance';
 import { getServices } from '@backend/domain/auth/instance';
 import { getCredential } from '@backend/domain/credential/instance';
+import { getEndUserTokens } from '@backend/domain/enduser/instance';
 import { errorSummary } from '@backend/domain/errors';
 import { simulateStep } from '@backend/domain/execution/executors/generic/executor';
 import { postJson } from '@backend/domain/execution/http';
 import { getExecution } from '@backend/domain/execution/instance';
+import { getFeedbackDomain } from '@backend/domain/feedback/instance';
 import {
   flagStreamTokensFromEnv,
   getFlagFiles,
@@ -452,6 +454,7 @@ export async function extHandler(request: Request): Promise<Response> {
         streamTokens: flagStreamTokensFromEnv(env),
       },
       messenger: { contacts: getMessengerDomain().contactMessenger, push: getMessengerDomain().messengerPush },
+      feedback: { boards: getFeedbackDomain().feedbackPublic, endUsers: getEndUserTokens() },
       runs: { runs: execution.runs },
       help: {
         help: getHelpDomain().helpPublic,

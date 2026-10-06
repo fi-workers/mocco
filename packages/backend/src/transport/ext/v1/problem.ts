@@ -23,6 +23,8 @@ export const ProblemCodes = {
   guestsNotAllowed: 'guests_not_allowed',
   invalidLocationToken: 'invalid_location_token',
   subscriptionsUnavailable: 'subscriptions_unavailable',
+  missingEndUserToken: 'missing_end_user_token',
+  invalidEndUserToken: 'invalid_end_user_token',
 } as const;
 export type ProblemCode = (typeof ProblemCodes)[keyof typeof ProblemCodes];
 

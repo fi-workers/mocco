@@ -41,17 +41,26 @@ export const ApiScopes = {
   /** Read the project's monitors, incidents (drafts too), maintenance and components (#159).
    * Secret keys only: draft incidents and monitor settings are operational data. */
   statusRead: 'status:read',
+  /** Read the project's public feedback boards (#174): boards, posts, the roadmap and public
+   * comments. Private boards, internal notes and the team's ids are never served. */
+  feedbackRead: 'feedback:read',
+  /** Vote and comment on the project's public boards as the app's users (#174); every call also
+   * needs the user's token, signed by the app's server. */
+  feedbackWrite: 'feedback:write',
 } as const;
 export type ApiScope = (typeof ApiScopes)[keyof typeof ApiScopes];
 export const apiScopeSchema = z.enum(Object.values(ApiScopes) as [ApiScope, ...ApiScope[]]);
 
-/** Scopes a publishable key may hold: reads a client app needs, and messenger chat, which
- * acts only for a user whose identity the app's server signed. Nothing else changes state. */
+/** Scopes a publishable key may hold: reads a client app needs, and messenger chat and feedback
+ * writes, which act only for a user whose identity the app's server signed. Nothing else
+ * changes state. */
 export const PUBLISHABLE_SCOPES: readonly ApiScope[] = [
   ApiScopes.otaRead,
   ApiScopes.flagsRead,
   ApiScopes.messengerChat,
   ApiScopes.helpRead,
+  ApiScopes.feedbackRead,
+  ApiScopes.feedbackWrite,
 ];
 
 /** A key as the console lists it — never the token or its hash. */

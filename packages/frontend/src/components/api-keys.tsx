@@ -45,6 +45,8 @@ const scopeLabels: Record<ApiScope, string> = {
   [ApiScopes.helpRead]: 'help:read — search your published help center',
   [ApiScopes.statusWrite]: 'status:write — manage monitors, incidents and maintenance, and run a check now',
   [ApiScopes.statusRead]: 'status:read — read monitors, incidents, maintenance and components',
+  [ApiScopes.feedbackRead]: 'feedback:read — show your public feedback boards and roadmap',
+  [ApiScopes.feedbackWrite]: 'feedback:write — let signed-in users vote and comment',
 };
 
 const ALL_SCOPES = Object.values(ApiScopes);

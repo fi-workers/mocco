@@ -997,3 +997,23 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
   `specs/2026-10-02-mcp-and-cli-design.md`, `customer/help/help-center.md`, `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/help-translation-dashboard` (issue #213)
+
+## 2026-10-06 — Feedback: the public /v1 reads, votes and comments
+
+- Documented #174 (first of two PRs) in the [feedback board model](./reference/feedback.md#the-public-v1-surface):
+  `/v1/feedback` serves a project's public boards, posts, roadmap, one post and its public comments with a
+  `feedback:read` key, and takes votes and comments from the app's signed-in users with a `feedback:write` key and an
+  HS256 end-user token.
+- The token is signed with the project's existing identity secret (the messenger's); `EndUserTokenService` in the new
+  `domain/enduser/` verifies it (`exp` at most an hour ahead, 60 s of skew). Expired, another project's, too long-lived
+  or unverifiable tokens are `401 invalid_end_user_token`. No migration.
+- `PublicBoardService` answers from explicit projections, and the routes parse them through
+  `@mocco/common/feedback-v1`: private boards are 404, merged duplicates are left out of lists, and no internal note,
+  team id, other end user's id or email reaches the wire. Writes are limited per end user and per client address.
+- `requireKey` reads the key from `X-Mocco-Key` when `Authorization` carries something other than a key.
+- The [public API reference](./reference/public-api.md#routes), the feature map, the
+  [messenger reference](./reference/messenger.md) and the
+  [feedback design](./specs/2026-09-24-feedback-design.md#6-public-api--sdk-surface) say the same.
+- Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`,
+  `reference/messenger.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/feedback-public-v1` (issue #174)
