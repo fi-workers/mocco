@@ -36,18 +36,23 @@ export class HelpSegmentMemoryRepo {
       );
   }
 
-  /** Store translations of one origin, replacing that origin's earlier text for the same source. */
+  /**
+   * Store translations of one origin, replacing that origin's earlier text for the same source.
+   * A source text that repeats in an article (the same paragraph twice) is one entry; the
+   * last one written wins, as one upsert can't touch a row twice.
+   */
   async put(
     scope: { workspaceId: string; projectId: string; locale: string },
     origin: SegmentOrigin,
     entries: readonly { sourceHash: string; text: string }[],
   ): Promise<void> {
-    if (entries.length === 0) {
+    const byHash = new Map(entries.map(entry => [entry.sourceHash, entry.text]));
+    if (byHash.size === 0) {
       return;
     }
     await this.db
       .insert(m)
-      .values(entries.map(entry => ({ ...scope, origin, sourceHash: entry.sourceHash, text: entry.text })))
+      .values([...byHash].map(([sourceHash, text]) => ({ ...scope, origin, sourceHash, text })))
       .onConflictDoUpdate({
         target: [m.projectId, m.locale, m.sourceHash, m.origin],
         set: { text: sql`excluded.text`, updatedAt: new Date() },

@@ -180,6 +180,8 @@ has several servers loaded.
 | `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
 | `mocco_help_articles_search` | A project's published help articles matching text (all or any word), or all in order; in a language where translated |
 | `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages and 30-day helpfulness |
+| `mocco_help_translations_list` | A help center's translation counts per language and the published articles a filter lists (attention, stale, failed, all), with each language's status; offset-paged |
+| `mocco_help_translation_get` | One article in one language for review: state, reviewer and time, whether a machine draft waits, the source segments that changed (detailed: the texts) |
 | `mocco_messenger_conversations_search` | A project's inbox, newest activity first (status, assignee or unassigned, contact) |
 | `mocco_messenger_conversation_get` | One conversation's thread, notes marked, attachments as metadata only (never a signed link) |
 | `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
