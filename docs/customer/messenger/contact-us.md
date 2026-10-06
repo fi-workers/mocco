@@ -4,7 +4,7 @@ description: Let your app's signed-in users contact your team from inside the ap
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, messenger, support, guide]
@@ -217,6 +217,7 @@ Open a conversation to read the thread and answer:
 
 - **Reply** sends a message the user sees in the app.
 - **Internal note** is for your team only; the user never sees it.
+- **Attach** adds up to three images (PNG, JPEG, WebP or GIF) or PDFs, 10 MB each, to a reply or a note.
 - **Close** when it is resolved. If the user writes again, it reopens by itself.
 - The side panel shows who the user is (as your app described them), the app version and platform they are on now, and what they were running when the conversation started.
 - **Block user** stops someone from writing. They can still read what they have.
@@ -230,6 +231,16 @@ Screenshots the user attached show in the thread; select one to open it full siz
 A PDF shows as a file with its name and size. Select it to download it; Mocco never opens a user's PDF in the browser, because a PDF can carry script.
 
 ![A message with an attached PDF: the file's name and size, ready to download](./images/messenger-attachment-pdf.png)
+
+To send the user a file, choose **Attach** below the reply, pick the images or PDFs, and select **Send reply**. Each file shows under the text with its size; select **×** to take one off before sending.
+
+![Attaching a screenshot and a PDF receipt to a reply](./images/messenger-reply-attach-composer.png)
+
+The reply shows the files in the thread, and the user's app receives them with the message, the same way it receives the files users send you: images to show, PDFs to download. Files on an internal note stay with your team.
+
+![The sent reply with its screenshot and PDF](./images/messenger-reply-attachments.png)
+
+Mocco checks your files the way it checks the user's: a file that isn't really the image or PDF it claims to be is refused, and nothing is sent.
 
 When someone asks you to delete their data, choose **Erase user's data** in the side panel and confirm. Mocco deletes the user with every conversation, message and attachment; it can't be undone, and the audit log records only that it happened.
 

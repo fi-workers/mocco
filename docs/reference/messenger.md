@@ -4,7 +4,7 @@ description: How Mocco's messenger stores conversations between a project's sign
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [reference, messenger, support]
@@ -85,7 +85,7 @@ Another contact's conversation is a 404. Limits per contact, on top of the key's
 
 ## Attachments
 
-A contact can attach up to 3 files to a message or to the start of a conversation: screenshots (PNG, JPEG, WebP or GIF) or PDFs, up to 10 MB each (the `messenger` storage policy; 10 reservations an hour per contact). Anything else, SVG included, is refused when it's reserved.
+A contact can attach up to 3 files to a message or to the start of a conversation, and a team member to a reply or a note ([From the team](#from-the-team)): screenshots (PNG, JPEG, WebP or GIF) or PDFs, up to 10 MB each (the `messenger` storage policy; 10 reservations an hour per contact). Anything else, SVG included, is refused when it's reserved.
 
 1. `POST /v1/messenger/attachments` `{ contentType, sizeBytes, filename? }` reserves a private object (`StorageService.beginUpload`, product `messenger`) and a `mocco_messenger_attachments` row owned by the contact, and answers `201 { attachmentId, upload: { url, method: 'PUT', headers } }`.
 2. The client PUTs the bytes straight to the store.
@@ -95,7 +95,17 @@ An attachment belongs to its contact until a message claims it, and then to that
 
 Messages carry `attachments: [{ id, contentType, sizeBytes, filename, url }]`. `filename` is the safe name the object was stored under (`Invoice March.pdf` becomes `invoice-march.pdf`). `url` is a signed link valid for 10 minutes: an image's can be shown inline, but a PDF's answers `Content-Disposition: attachment`, so it downloads and never renders on Mocco's or the bucket's origin (see [storage downloads](./storage.md#downloads)). The inbox shows images as thumbnails and PDFs as a file chip with the name and size. Without object storage configured, reserving an attachment answers 400. An upload reserved but never sent is collected by `storage.gc` after 24 hours, and sending it after that answers 400. Deleting the object deletes the attachment row.
 
-Only contacts attach files for now. The team's replies are text.
+### From the team
+
+A team member attaches up to 3 files to a reply or an internal note from the inbox (#430), through the same functions in `attachments.ts` as a contact: the same types and 10 MB limit (the `messenger` storage policy), the same byte checks on send, the same claim and the same links.
+
+1. `messenger.createAttachment` `{ workspaceId, projectId, conversationId, contentType, sizeBytes, filename? }` reserves the upload for the conversation's contact. The conversation is looked up within the workspace and project, so another project's or workspace's is `NOT_FOUND`. The object records the team member as `created_by_user_id`. There's no hourly cap: the caller is a signed-in member.
+2. The console PUTs the bytes straight to the store.
+3. `messenger.write` names them in `attachmentIds`. Each must be unclaimed, reserved for this conversation's contact, and uploaded by the caller; the bytes are verified as above and the attachments claimed in the reply's transaction.
+
+The uploader is what keeps the two sides apart: a contact can only send uploads with no `created_by_user_id`, and a team member only their own. So a contact can't send what the team reserved, one team member can't send another's, and an upload reserved in one project's conversation can't go into another project's (a different contact) or be reached through another workspace. The contact's app receives a reply's attachments like any other, through `GET /v1/messenger/conversations/{id}/messages`. A note's attachments stay in the inbox, because `/v1` only serves public messages. Erasing the contact erases the team's files in their conversations too.
+
+No `mocco_messenger_*` MCP tool exists yet, so attaching from an agent waits for the messenger's tools. No migration: the attachment row keeps the contact it was reserved for, and the uploader is on the storage object.
 
 ## Push
 
@@ -109,11 +119,11 @@ A team **reply** (never an internal note) enqueues `messenger.push.reply` `{ con
 
 ## Inbox (tRPC)
 
-The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `write` (reply, or `internal: true` for a note), `setStatus`, `markRead`, `setContactBlocked`, `eraseContact`.
+The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `setContactBlocked`, `eraseContact`.
 
 ## Console
 
-The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations and holds the settings; a conversation is `…/inbox/:conversationId`. Both poll every 15 s. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
+The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=closed`) sets the messenger up, lists conversations and holds the settings; a conversation is `…/inbox/:conversationId`. Both poll every 15 s. The composer's **Attach** picks up to 3 images or PDFs (checked for type and size before uploading, then again by the server), uploads them when the reply is sent, and shows the server's refusal if one fails the byte check. Opening a conversation marks it read for the viewer, again whenever a new message arrives. The user panel shows the contact's latest context (`last_context`) beside the context the conversation opened with.
 
 ## Events
 

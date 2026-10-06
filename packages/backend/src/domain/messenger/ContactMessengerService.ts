@@ -4,14 +4,17 @@
 // the request body, so one user can never read another's conversations.
 import { AuditActions } from '@mocco/common/audit';
 import { MessengerEventTypes } from '@mocco/common/events';
-import { AuthorKinds, isImageAttachment, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
+import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 
 import { publishBestEffort } from '@backend/domain/events/ports';
-import { attachmentOwnerOf, attachmentsByMessage, verifyAttachment } from '@backend/domain/messenger/attachments';
+import {
+  attachmentsByMessage,
+  claimAttachments,
+  prepareAttachments,
+  reserveAttachment,
+} from '@backend/domain/messenger/attachments';
 import { eraseContact } from '@backend/domain/messenger/erase';
 import {
-  AttachmentNotFoundError,
-  AttachmentsUnavailableError,
   ContactBlockedError,
   ConversationNotFoundError,
   GuestsNotAllowedError,
@@ -20,7 +23,6 @@ import {
 } from '@backend/domain/messenger/errors';
 import { isUserHashValid, newGuestToken, newSessionToken, sessionTokenHash } from '@backend/domain/messenger/identity';
 import { contactMessageEvent } from '@backend/domain/messenger/messages';
-import { MessengerAttachmentRepo } from '@backend/domain/messenger/repos/attachment.repo';
 import { MessengerContactRepo } from '@backend/domain/messenger/repos/contact.repo';
 import { MessengerConversationRepo } from '@backend/domain/messenger/repos/conversation.repo';
 
@@ -102,14 +104,6 @@ function toMessageDto(
   };
 }
 
-/** Claim every one of `ids` for the message, or throw (rolling the message back) when a
- * concurrent send claimed one first. */
-async function claimAll(tx: Db, ids: readonly string[], messageId: string): Promise<void> {
-  if ((await new MessengerAttachmentRepo(tx).claim(ids, messageId)) !== ids.length) {
-    throw new AttachmentNotFoundError();
-  }
-}
-
 export class ContactMessengerService {
   private readonly now: () => Date;
 
@@ -145,27 +139,9 @@ export class ContactMessengerService {
     });
   }
 
-  /**
-   * The ids, verified: the contact's own unclaimed attachments, each with its bytes
-   * uploaded as declared (storage checks size and type, then the bytes' signature).
-   * Throws on any other id. An attachment belongs to its contact until a message claims
-   * it, and then to that message's conversation only.
-   */
+  /** The contact's own unclaimed attachments among `ids`, verified (see `prepareAttachments`). */
   private async prepareAttachments(contact: ContactRow, ids: readonly string[] | undefined): Promise<string[]> {
-    const wanted = [...new Set(ids)];
-    if (wanted.length === 0) {
-      return [];
-    }
-    const { storage } = this.deps;
-    if (storage === undefined) {
-      throw new AttachmentsUnavailableError();
-    }
-    const rows = await new MessengerAttachmentRepo(this.deps.db).findUnclaimed(contact.workspaceId, contact.id, wanted);
-    if (rows.length !== wanted.length) {
-      throw new AttachmentNotFoundError();
-    }
-    await Promise.all(rows.map(async row => await verifyAttachment(this.deps.db, storage, contact, row)));
-    return wanted;
+    return await prepareAttachments(this.deps.db, this.deps.storage, { ...contact, contactId: contact.id }, null, ids);
   }
 
   /** A signed-in user, verified by the app's server signature. A guest token from the same
@@ -318,7 +294,7 @@ export class ContactMessengerService {
         now,
         preview(input.body),
       );
-      await claimAll(tx, attachmentIds, message.id);
+      await claimAttachments(tx, attachmentIds, message.id);
       // The contact has read their own first message.
       await repo.markContactRead(conversation.id, 1);
       const fresh = await repo.findForContact(contact.workspaceId, contact.id, conversation.id);
@@ -335,25 +311,7 @@ export class ContactMessengerService {
   async createAttachment(principal: ContactPrincipal, input: AttachmentCreateInput) {
     const { contact } = principal;
     requireActive(contact);
-    const { storage } = this.deps;
-    if (storage === undefined) {
-      throw new AttachmentsUnavailableError();
-    }
-    const { object, upload } = await storage.beginUpload({
-      workspaceId: contact.workspaceId,
-      ...attachmentOwnerOf(contact),
-      filename: input.filename ?? (isImageAttachment(input.contentType) ? 'screenshot' : 'document.pdf'),
-      contentType: input.contentType,
-      sizeBytes: input.sizeBytes,
-    });
-    const attachment = await new MessengerAttachmentRepo(this.deps.db).insert({
-      workspaceId: contact.workspaceId,
-      contactId: contact.id,
-      objectId: object.id,
-      contentType: input.contentType,
-      sizeBytes: input.sizeBytes,
-    });
-    return { attachmentId: attachment.id, upload };
+    return await reserveAttachment(this.deps.db, this.deps.storage, { ...contact, contactId: contact.id }, input);
   }
 
   /** Public messages after `afterSeq`, oldest first. */
@@ -406,7 +364,7 @@ export class ContactMessengerService {
         preview(input.body),
       );
       if (appended.created) {
-        await claimAll(tx, attachmentIds, appended.message.id);
+        await claimAttachments(tx, attachmentIds, appended.message.id);
       }
       await repo.markContactRead(conversationId, appended.message.seq);
       return appended;

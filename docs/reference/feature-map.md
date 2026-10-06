@@ -107,7 +107,7 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Conversations and identity | Live | `/v1/messenger`: sessions for users the app's server signed (HMAC), conversations with categories, seq-numbered idempotent messages, read positions, per-contact limits |
 | Team inbox | Live | The project's **Inbox** tab: setup (identity secret shown once), open/closed lists with unread, the thread with replies and internal notes, the user's current and starting app context, close/reopen, blocking, categories and secret rotation; Discord alerts through the Mocco preset ([customer guide](../customer/messenger/contact-us.md)) |
 | React Native SDK | Live | `MessengerClient` in `@mocco/sdk-core` and headless hooks in `@mocco/react-native/messenger` (pure JS, Expo Go) |
-| Attachments | Live | Up to 3 screenshots or PDFs (10 MB each) per message through object storage, verified on send (size, declared type and the bytes' signature), served with short-lived links, PDFs only as downloads; thumbnails and file chips in the inbox |
+| Attachments | Live | Up to 3 screenshots or PDFs (10 MB each) per message through object storage, verified on send (size, declared type and the bytes' signature), served with short-lived links, PDFs only as downloads; thumbnails and file chips in the inbox. The team attaches them to replies and notes from the inbox under the same checks |
 | Guests | Live | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
 | Push replies | Live | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
 

@@ -1,13 +1,19 @@
 // One messenger conversation (#95): the thread with internal notes marked, a composer
-// that replies or adds a note, open/closed, and a side panel with who the user is and
+// that replies or adds a note (with images and PDFs attached, #430), open/closed, and a side panel with who the user is and
 // what they were running when they wrote.
-import { isImageAttachment, MessageVisibilities } from '@mocco/common/messenger';
-import { DownloadIcon, FileTextIcon } from 'lucide-react';
+import {
+  ATTACHMENT_CONTENT_TYPES,
+  isImageAttachment,
+  MessageVisibilities,
+  MessengerLimits,
+} from '@mocco/common/messenger';
+import { DownloadIcon, FileTextIcon, ImageIcon, PaperclipIcon, XIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { INBOX_REFRESH_MS } from '@frontend/components/messenger/inbox';
+import { replyAttachmentProblem, useReplyAttachments } from '@frontend/components/messenger/use-reply-attachments';
 import {
   Ago,
   errorMessage,
@@ -17,6 +23,7 @@ import {
   Tones,
 } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
+import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 import { cn, formatBytes } from '@frontend/lib/utils';
@@ -68,15 +75,49 @@ function Composer({ workspaceId, projectId, conversationId }: Props) {
   const utils = trpc.useUtils();
   const [body, setBody] = useState('');
   const [isNote, setIsNote] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [problem, setProblem] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const attachments = useReplyAttachments(workspaceId, projectId, conversationId);
   const write = trpc.messenger.write.useMutation({
     onSuccess: async () => {
       setBody('');
+      setFiles([]);
       await utils.messenger.conversation.invalidate({ workspaceId, projectId, conversationId });
       await utils.messenger.inbox.invalidate();
     },
   });
   // eslint-disable-next-line sonarjs/null-dereference -- body is a useState<string>, never null
   const trimmed = body.trim();
+  const isFull = files.length >= MessengerLimits.attachmentsPerMessage;
+
+  const add = (picked: File[]) => {
+    const firstProblem = picked.map(file => replyAttachmentProblem(file)).find(entry => entry !== null);
+    const fitting = picked.filter(file => replyAttachmentProblem(file) === null);
+    const room = MessengerLimits.attachmentsPerMessage - files.length;
+    setFiles([...files, ...fitting.slice(0, room)]);
+    setProblem(
+      firstProblem ??
+        (fitting.length > room ? `A message carries up to ${MessengerLimits.attachmentsPerMessage} files.` : null),
+    );
+  };
+
+  const send = async () => {
+    setProblem(null);
+    try {
+      const attachmentIds = await attachments.upload(files);
+      await write.mutateAsync({
+        workspaceId,
+        projectId,
+        conversationId,
+        body: trimmed,
+        internal: isNote,
+        ...(attachmentIds.length > 0 && { attachmentIds }),
+      });
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : 'The message could not be sent.');
+    }
+  };
 
   return (
     <form
@@ -87,7 +128,7 @@ function Composer({ workspaceId, projectId, conversationId }: Props) {
       )}
       onSubmit={event => {
         event.preventDefault();
-        write.mutate({ workspaceId, projectId, conversationId, body: trimmed, internal: isNote });
+        fireAndForget(send());
       }}>
       <div role="radiogroup" aria-label="Kind" className="flex gap-1 text-sm">
         {[
@@ -121,10 +162,73 @@ function Composer({ workspaceId, projectId, conversationId }: Props) {
         }}
         className={cn(inputClass, 'h-auto py-2')}
       />
-      {write.error ? <p className="text-sm text-destructive">{errorMessage(write.error)}</p> : null}
-      <Button type="submit" pending={write.isPending} disabled={trimmed === ''} className="w-fit text-sm">
-        {isNote ? 'Add note' : 'Send reply'}
-      </Button>
+      {files.length === 0 ? null : (
+        <ul aria-label="Attached files" className="flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <li
+              key={`${file.name}-${String(index)}`}
+              className="flex max-w-64 items-center gap-2 rounded-lg border border-border bg-background px-2 py-1 text-sm">
+              {file.type.startsWith('image/') ? (
+                <ImageIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <FileTextIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="truncate">{file.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.size)}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${file.name}`}
+                className="rounded text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setFiles(files.filter((_, at) => at !== index));
+                }}>
+                <XIcon aria-hidden className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(problem ?? errorMessage(write.error)) === null ? null : (
+        <p className="text-sm text-destructive">{problem ?? errorMessage(write.error)}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="submit"
+          pending={write.isPending || attachments.isUploading}
+          disabled={trimmed === ''}
+          className="w-fit text-sm">
+          {isNote ? 'Add note' : 'Send reply'}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="text-sm"
+          disabled={isFull}
+          onClick={() => {
+            pickerRef.current?.click();
+          }}>
+          <PaperclipIcon aria-hidden className="size-4" />
+          Attach
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          Images or PDFs, up to {MessengerLimits.attachmentsPerMessage}, 10 MB each
+        </span>
+        <input
+          ref={pickerRef}
+          type="file"
+          accept={ATTACHMENT_CONTENT_TYPES.join(',')}
+          multiple
+          hidden
+          aria-label="Files to attach"
+          onChange={event => {
+            add([...(event.target.files ?? [])]);
+            // Picking the same file again should add it again.
+            if (pickerRef.current !== null) {
+              pickerRef.current.value = '';
+            }
+          }}
+        />
+      </div>
     </form>
   );
 }
@@ -210,6 +314,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
             {messages.map(message => {
               const isNote = message.visibility === MessageVisibilities.internal;
               const isTeam = message.authorKind !== 'contact';
+              const author = isTeam ? (message.authorName ?? 'Your team') : who;
               return (
                 <li key={message.id} className={cn('flex flex-col gap-1', isTeam ? 'items-end' : 'items-start')}>
                   <div
@@ -239,7 +344,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={attachment.url}
-                                alt={`Attachment ${index + 1} from ${who}`}
+                                alt={`Attachment ${index + 1} from ${author}`}
                                 className="h-32 w-auto max-w-full object-contain"
                               />
                             </a>
@@ -249,7 +354,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
                               key={attachment.id}
                               href={attachment.url}
                               download={attachment.filename}
-                              aria-label={`Download ${attachment.filename} from ${who}`}
+                              aria-label={`Download ${attachment.filename} from ${author}`}
                               className="flex max-w-64 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-foreground hover:bg-muted">
                               <FileTextIcon aria-hidden className="size-5 shrink-0 text-muted-foreground" />
                               <span className="flex min-w-0 flex-col">
@@ -266,7 +371,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {isTeam ? (message.authorName ?? 'Your team') : who} · <Ago date={message.createdAt} />
+                    {author} · <Ago date={message.createdAt} />
                   </span>
                 </li>
               );

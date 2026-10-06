@@ -8,6 +8,7 @@ import type { Db } from '@backend/infra/db/types';
 export type AttachmentRow = typeof schema.messengerAttachments.$inferSelect;
 
 const a = schema.messengerAttachments;
+const o = schema.objects;
 
 /** Data access for mocco_messenger_attachments. Scoped by workspace and contact. */
 export class MessengerAttachmentRepo {
@@ -17,17 +18,35 @@ export class MessengerAttachmentRepo {
     return expectOne(await this.db.insert(a).values(row).returning());
   }
 
-  /** The contact's attachments among `ids` that no message has claimed yet. */
-  async findUnclaimed(workspaceId: string, contactId: string, ids: readonly string[]): Promise<AttachmentRow[]> {
+  /**
+   * The attachments among `ids` reserved for the contact that no message has claimed
+   * yet, and uploaded by `uploadedBy`: a team member's id (their uploads, from the
+   * inbox, are kept on the storage object's `created_by_user_id`), or null for the
+   * contact's own. So neither side can send what the other reserved.
+   */
+  async findUnclaimed(
+    workspaceId: string,
+    contactId: string,
+    ids: readonly string[],
+    uploadedBy: string | null,
+  ): Promise<AttachmentRow[]> {
     if (ids.length === 0) {
       return [];
     }
-    return await this.db
-      .select()
+    const rows = await this.db
+      .select({ attachment: a })
       .from(a)
+      .innerJoin(o, and(eq(o.id, a.objectId), eq(o.workspaceId, a.workspaceId)))
       .where(
-        and(eq(a.workspaceId, workspaceId), eq(a.contactId, contactId), inArray(a.id, [...ids]), isNull(a.messageId)),
+        and(
+          eq(a.workspaceId, workspaceId),
+          eq(a.contactId, contactId),
+          inArray(a.id, [...ids]),
+          isNull(a.messageId),
+          uploadedBy === null ? isNull(o.createdByUserId) : eq(o.createdByUserId, uploadedBy),
+        ),
       );
+    return rows.map(row => row.attachment);
   }
 
   /** Attach them to a message; answers how many were still unclaimed (a concurrent

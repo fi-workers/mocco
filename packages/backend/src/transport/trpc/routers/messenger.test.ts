@@ -1,8 +1,12 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { AuditActions } from '@mocco/common/audit';
 import { ExecutorIds } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -26,7 +30,13 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
-import { auditLog } from '@backend/infra/db/schema';
+import { createMessengerDomain } from '@backend/domain/messenger/compose';
+import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
+import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
+import { StorageUrlSigner } from '@backend/domain/storage/signing';
+import { StorageService } from '@backend/domain/storage/StorageService';
+import { SecretBox } from '@backend/infra/crypto/secret-box';
+import { auditLog, messengerAttachments, objects } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
@@ -46,15 +56,26 @@ describe('messenger router on pglite', () => {
   let t: TestDb;
   let auth: AuthService;
   let workspace: WorkspaceService;
+  let root: string;
+  let store: FilesystemObjectStore;
+  let storage: StorageService;
 
   beforeEach(async () => {
     t = await createTestDb();
     const provider = await createTestProvider(t.db);
     auth = new AuthService(provider);
     workspace = new WorkspaceService(provider);
+    root = await mkdtemp(path.join(tmpdir(), 'mocco-messenger-router-'));
+    store = new FilesystemObjectStore({
+      root,
+      baseUrl: 'https://storage.test/api/ext/internal/storage',
+      signer: new StorageUrlSigner('router-signing-key'),
+    });
+    storage = new StorageService({ objects: new ObjectRepo(t.db), store });
   });
   afterEach(async () => {
     await t.close();
+    await rm(root, { recursive: true, force: true });
   });
 
   const makeAudit = (): AuditService => new AuditService({ audit: new AuditRepo(t.db) });
@@ -93,8 +114,15 @@ describe('messenger router on pglite', () => {
       audit: makeAudit(),
     });
     const grants = new GrantService({ grants: new CredentialGrantRepo(t.db) });
+    const box = new SecretBox([{ id: 'test', key: randomBytes(32) }]);
     const ctx = {
       ...contextServices(t.db),
+      // The messenger with object storage, so attachments work.
+      ...createMessengerDomain(t.db, {
+        audit: makeAudit(),
+        box: () => box,
+        storage,
+      }),
       auth,
       workspace,
       runs,
@@ -210,5 +238,71 @@ describe('messenger router on pglite', () => {
     await expect(
       attacker.api.messenger.conversation({ ...owner.scope, conversationId: started.id }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it("attaches the caller's own uploads to a reply, and nothing from another workspace", async () => {
+    const owner = await setup();
+    await owner.api.product.enable({ workspaceId: owner.scope.workspaceId, product: Products.messenger });
+    const { identitySecret } = await owner.api.messenger.enable(owner.scope);
+    const session = await owner.ctx.contactMessenger.createSession(owner.scope, {
+      userId: 'minji',
+      userHash: createHmac('sha256', identitySecret).update('minji').digest('hex'),
+    });
+    const principal = await owner.ctx.contactMessenger.authenticate(session.sessionToken);
+    if (principal === undefined) {
+      throw new Error('no session');
+    }
+    const started = await owner.ctx.contactMessenger.startConversation(principal, {
+      body: 'Where is my receipt?',
+      clientMessageId: 'client-message-3',
+    });
+    const conversation = { ...owner.scope, conversationId: started.id };
+    const pdf = new TextEncoder().encode('%PDF-1.7\n%%EOF\n');
+    const reserved = await owner.api.messenger.createAttachment({
+      ...conversation,
+      contentType: 'application/pdf',
+      sizeBytes: pdf.length,
+      filename: 'Receipt.pdf',
+    });
+    const [row] = await t.db
+      .select({ key: objects.key })
+      .from(messengerAttachments)
+      .innerJoin(objects, eq(objects.id, messengerAttachments.objectId))
+      .where(eq(messengerAttachments.id, reserved.attachmentId));
+    await store.put(row?.key ?? '', pdf, { contentType: 'application/pdf', visibility: 'private' });
+    const attacker = await setup('attacker@example.com');
+    await attacker.api.product.enable({ workspaceId: attacker.scope.workspaceId, product: Products.messenger });
+
+    await expect(
+      owner.api.messenger.createAttachment({ ...conversation, contentType: 'image/svg+xml' as never, sizeBytes: 10 }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      owner.api.messenger.write({
+        ...conversation,
+        body: 'x',
+        attachmentIds: Array.from({ length: 4 }, () => reserved.attachmentId),
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      attacker.api.messenger.createAttachment({
+        ...attacker.scope,
+        conversationId: started.id,
+        contentType: 'image/png',
+        sizeBytes: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      attacker.api.messenger.write({ ...conversation, body: 'x', attachmentIds: [reserved.attachmentId] }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await owner.api.messenger.write({ ...conversation, body: 'Attached', attachmentIds: [reserved.attachmentId] });
+    const detail = await owner.api.messenger.conversation(conversation);
+    expect(detail.messages[1]?.attachments).toMatchObject([
+      { id: reserved.attachmentId, contentType: 'application/pdf', filename: 'receipt.pdf' },
+    ]);
+    // Sent once: it can't go out again.
+    await expect(
+      owner.api.messenger.write({ ...conversation, body: 'Again', attachmentIds: [reserved.attachmentId] }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });

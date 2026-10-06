@@ -1,5 +1,6 @@
 // /v1/messenger (#95) end to end on pglite: sessions for server-signed users, starting
-// and continuing conversations, the team's replies, and the isolation between users.
+// and continuing conversations, the team's replies (with attachments, #430), and the
+// isolation between users, projects and workspaces.
 import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,10 +17,16 @@ import { createApiKeyService } from '@backend/domain/apikey/instance';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
+import {
+  AttachmentContentMismatchError,
+  AttachmentNotFoundError,
+  ConversationNotFoundError,
+} from '@backend/domain/messenger/errors';
 import { userHashOf } from '@backend/domain/messenger/identity';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
 import { FilesystemObjectStore } from '@backend/domain/storage/drivers/filesystem';
+import { StorageContentTypeNotAllowedError, StorageObjectTooLargeError } from '@backend/domain/storage/errors';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
 import { StorageUrlSigner } from '@backend/domain/storage/signing';
 import { StorageService } from '@backend/domain/storage/StorageService';
@@ -113,6 +120,49 @@ describe('/v1/messenger (pglite)', () => {
   /** Follow a served link through the filesystem driver's route. */
   const fetchStored = async (url: string) =>
     await new Hono().basePath('/api/ext').route('/', createStorageRoutes({ store, signer })).fetch(new Request(url));
+
+  const teamReply = async (
+    conversationId: string,
+    attachmentIds: string[],
+    opts: { internal?: boolean; userId?: string; scope?: { workspaceId: string; projectId: string } } = {},
+  ) => {
+    const scope = opts.scope ?? { workspaceId, projectId };
+    return await messenger.inbox.write(scope.workspaceId, scope.projectId, opts.userId ?? operatorId, {
+      conversationId,
+      body: 'Here you go',
+      internal: opts.internal ?? false,
+      attachmentIds,
+    });
+  };
+  const addOperator = async (name: string) =>
+    expectOne(
+      await t.db
+        .insert(users)
+        .values({ email: `${randomUUID()}@acme.test`, name })
+        .returning(),
+    ).id;
+  /** A conversation a contact started in another project (and workspace, when given). */
+  const conversationElsewhere = async (otherWorkspaceId = workspaceId) => {
+    const other = await createProjectDomain(t.db).projects.create(otherWorkspaceId, {
+      name: 'Other',
+      handle: `other-${randomUUID().slice(0, 8)}`,
+    });
+    const scope = { workspaceId: otherWorkspaceId, projectId: other.id };
+    const { identitySecret } = await messenger.messengerSettings.enable(otherWorkspaceId, other.id, operatorId);
+    const session = await messenger.contactMessenger.createSession(scope, {
+      userId: 'elsewhere',
+      userHash: userHashOf(identitySecret, 'elsewhere'),
+    });
+    const principal = await messenger.contactMessenger.authenticate(session.sessionToken);
+    if (principal === undefined) {
+      throw new Error('no session');
+    }
+    const started = await messenger.contactMessenger.startConversation(principal, {
+      body: 'Hello from the other app',
+      clientMessageId: randomUUID(),
+    });
+    return { scope, conversationId: started.id };
+  };
 
   /** The storage key of an attachment's bytes. */
   const keyOf = async (attachmentId: string) => {
@@ -817,6 +867,169 @@ describe('/v1/messenger (pglite)', () => {
       // The unclaimed one is still minji's to send.
       const later = await sendWith(minji, second, [unclaimed.attachmentId]);
       expect(later.status).toBe(201);
+    });
+
+    describe('from the team (#430)', () => {
+      /** Reserve an attachment from the inbox and upload `bytes` the way the console would PUT them. */
+      const teamAttach = async (
+        conversationId: string,
+        opts: {
+          bytes?: Uint8Array;
+          declared?: { contentType: 'image/png' | 'application/pdf'; filename: string };
+          userId?: string;
+          scope?: { workspaceId: string; projectId: string };
+        } = {},
+      ) => {
+        const bytes = opts.bytes ?? PNG;
+        const declared = opts.declared ?? { contentType: 'image/png' as const, filename: 'Repro steps.png' };
+        const scope = opts.scope ?? { workspaceId, projectId };
+        const reserved = await messenger.inbox.createAttachment(
+          scope.workspaceId,
+          scope.projectId,
+          opts.userId ?? operatorId,
+          { conversationId, ...declared, sizeBytes: bytes.length },
+        );
+        await store.put(await keyOf(reserved.attachmentId), bytes, {
+          contentType: declared.contentType,
+          visibility: 'private',
+        });
+        return reserved;
+      };
+      const teamPdf = { contentType: 'application/pdf' as const, filename: 'Refund receipt.pdf' };
+      it("sends a reply's image and PDF to the user's app like any attachment", async () => {
+        const token = await sessionFor('u1');
+        const conversationId = conversationOf(await start(token));
+        const png = await teamAttach(conversationId);
+        const pdf = await teamAttach(conversationId, { bytes: PDF, declared: teamPdf });
+
+        const message = await teamReply(conversationId, [png.attachmentId, pdf.attachmentId]);
+        const listed = await call('GET', `/conversations/${conversationId}/messages`, { token });
+        const [, received] = (
+          listed.body as unknown as { messages: { seq: number; author: string; attachments: AttachmentDto[] }[] }
+        ).messages;
+        const served = new Map(received?.attachments.map(attachment => [attachment.contentType, attachment]));
+        const pdfRead = await fetchStored(served.get('application/pdf')?.url ?? '');
+        const team = await messenger.inbox.get(workspaceId, projectId, conversationId);
+        const [object] = await t.db
+          .select()
+          .from(objects)
+          .where(eq(objects.key, await keyOf(pdf.attachmentId)));
+
+        expect(png.upload).toMatchObject({ method: 'PUT', headers: { 'content-type': 'image/png' } });
+        expect(received).toMatchObject({ seq: message.seq, author: 'operator' });
+        expect(served.get('image/png')).toMatchObject({ id: png.attachmentId, filename: 'repro-steps.png' });
+        expect(served.get('application/pdf')).toMatchObject({ id: pdf.attachmentId, filename: 'refund-receipt.pdf' });
+        // A PDF from the team is a download too.
+        expect(pdfRead.headers.get('content-disposition')).toBe('attachment; filename="refund-receipt.pdf"');
+        expect(new Uint8Array(await pdfRead.arrayBuffer())).toEqual(PDF);
+        expect(team.messages.map(entry => entry.attachments.length)).toEqual([0, 2]);
+        expect(object).toMatchObject({ projectId, product: 'messenger', visibility: 'private', status: 'ready' });
+        expect(object?.createdByUserId).toBe(operatorId);
+      });
+
+      it("keeps an internal note's attachment in the inbox, and erases the team's files with the user", async () => {
+        const token = await sessionFor('u1');
+        const conversationId = conversationOf(await start(token));
+        const noted = await teamAttach(conversationId, { bytes: PDF, declared: teamPdf });
+        await teamReply(conversationId, [noted.attachmentId], { internal: true });
+        const objectKey = await keyOf(noted.attachmentId);
+
+        const listed = await call('GET', `/conversations/${conversationId}/messages`, { token });
+        const team = await messenger.inbox.get(workspaceId, projectId, conversationId);
+        expect(JSON.stringify(listed.body)).not.toContain(noted.attachmentId);
+        expect(team.messages[1]?.attachments).toMatchObject([{ id: noted.attachmentId }]);
+
+        await messenger.inbox.eraseContact(workspaceId, projectId, operatorId, team.contact.id);
+        expect(await store.get(objectKey)).toBeNull();
+        expect(await t.db.select().from(messengerAttachments)).toEqual([]);
+      });
+
+      it("checks the team's uploads like a user's: type, size, bytes and claim", async () => {
+        const token = await sessionFor('u1');
+        const conversationId = conversationOf(await start(token));
+        const reserve = async (contentType: string, sizeBytes: number) =>
+          await messenger.inbox.createAttachment(workspaceId, projectId, operatorId, {
+            conversationId,
+            contentType: contentType as 'image/png',
+            sizeBytes,
+          });
+        const html = new TextEncoder().encode('<html><script>alert(1)</script></html>');
+        const disguised = await teamAttach(conversationId, { bytes: html });
+        const disguisedKey = await keyOf(disguised.attachmentId);
+        const used = await teamAttach(conversationId);
+        await teamReply(conversationId, [used.attachmentId]);
+        const colleagues = await teamAttach(conversationId, { userId: await addOperator('Grace') });
+        const usersOwn = await attach(token);
+
+        await expect(reserve('image/svg+xml', 10)).rejects.toBeInstanceOf(StorageContentTypeNotAllowedError);
+        await expect(reserve('image/png', 10 * 1024 * 1024 + 1)).rejects.toBeInstanceOf(StorageObjectTooLargeError);
+        await expect(reserve('application/pdf', 10 * 1024 * 1024)).resolves.toMatchObject({
+          attachmentId: expect.any(String),
+        });
+        await expect(teamReply(conversationId, [disguised.attachmentId])).rejects.toBeInstanceOf(
+          AttachmentContentMismatchError,
+        );
+        expect(await store.get(disguisedKey)).toBeNull();
+        // Already sent; another team member's; the user's own: none of them is the caller's to send.
+        await Promise.all(
+          [used.attachmentId, colleagues.attachmentId, usersOwn.attachmentId].map(async attachmentId => {
+            await expect(teamReply(conversationId, [attachmentId])).rejects.toBeInstanceOf(AttachmentNotFoundError);
+          }),
+        );
+        // Nor can the user send what the team reserved.
+        const fresh = await teamAttach(conversationId);
+        const fromApp = await sendWith(token, conversationId, [fresh.attachmentId]);
+        expect(fromApp.status).toBe(400);
+        // A refused reply wrote nothing: the opening message and the one reply.
+        const team = await messenger.inbox.get(workspaceId, projectId, conversationId);
+        expect(team.messages.map(entry => entry.seq)).toEqual([1, 2]);
+        await expect(teamReply(conversationId, [fresh.attachmentId])).resolves.toMatchObject({ seq: 3 });
+      });
+
+      it('never reserves in or attaches across projects, workspaces or conversations', async () => {
+        const token = await sessionFor('u1');
+        const conversationId = conversationOf(await start(token));
+        const junsConversation = conversationOf(await start(await sessionFor('jun')));
+        const sameWorkspace = await conversationElsewhere();
+        const otherWorkspaceId = expectOne(
+          await t.db.insert(workspaces).values({ name: 'Rival', slug: randomUUID() }).returning(),
+        ).id;
+        const otherWorkspace = await conversationElsewhere(otherWorkspaceId);
+        const here = await teamAttach(conversationId);
+        const there = await teamAttach(sameWorkspace.conversationId, { scope: sameWorkspace.scope });
+
+        await Promise.all(
+          [sameWorkspace, otherWorkspace].map(async elsewhere => {
+            // Reserving reaches a conversation only through its own project.
+            await expect(teamAttach(elsewhere.conversationId)).rejects.toBeInstanceOf(ConversationNotFoundError);
+            await expect(
+              messenger.inbox.createAttachment(elsewhere.scope.workspaceId, elsewhere.scope.projectId, operatorId, {
+                conversationId,
+                contentType: 'image/png',
+                sizeBytes: PNG.length,
+              }),
+            ).rejects.toBeInstanceOf(ConversationNotFoundError);
+            // This project's upload can't go into another project's conversation.
+            await expect(
+              teamReply(elsewhere.conversationId, [here.attachmentId], { scope: elsewhere.scope }),
+            ).rejects.toBeInstanceOf(AttachmentNotFoundError);
+          }),
+        );
+        // Another project's upload can't be claimed here, nor this conversation's in another.
+        await expect(teamReply(conversationId, [there.attachmentId])).rejects.toBeInstanceOf(AttachmentNotFoundError);
+        await expect(teamReply(junsConversation, [here.attachmentId])).rejects.toBeInstanceOf(AttachmentNotFoundError);
+        await expect(teamReply(sameWorkspace.conversationId, [here.attachmentId])).rejects.toBeInstanceOf(
+          ConversationNotFoundError,
+        );
+
+        const stored = await t.db.select().from(messengerAttachments);
+        expect(stored.every(row => row.messageId === null)).toBe(true);
+        // Each is still its own conversation's to send.
+        await expect(teamReply(conversationId, [here.attachmentId])).resolves.toMatchObject({ seq: 2 });
+        await expect(
+          teamReply(sameWorkspace.conversationId, [there.attachmentId], { scope: sameWorkspace.scope }),
+        ).resolves.toMatchObject({ seq: 2 });
+      });
     });
 
     it('lets storage collect an upload nobody sent after 24 hours', async () => {
