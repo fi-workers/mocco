@@ -760,6 +760,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feature-map.md`, `customer/status/subscribers.md`, `customer/status/status-page.md`, `log.md`
 - Source: branch `feat/status-subscribers-webhooks` (issue #156)
 
+## 2026-10-06 — Stage0: the canary and the external heartbeat
+
+- Documented stage0 (#245, relay design §11): the `stage0.canary` platform schedule sends a signed synthetic GitHub
+  push to a designated canary source's public ingest URL every five minutes; a rule routes it to a private channel;
+  once `notification.deliver` settles it `sent`, the Discord message is deleted and `OPS_HEARTBEAT_URL` is pinged, so
+  a broken ingest route, DB, queue or Discord sender stops the pings and an external dead-man switch alerts the team.
+  [Notifications](./reference/notifications.md#stage0-canary) describes the canary path and
+  [env](./reference/env.md#ops-stage0-vars) the `OPS_HEARTBEAT_URL` and `OPS_CANARY_SOURCE_ID` vars with the
+  operator's steps to turn it on (a 5-minute period and 10-minute grace on the dead-man switch). No migration.
+- Docs touched: `reference/notifications.md`, `reference/env.md`, `log.md`
+- Source: branch `feat/ops-stage0-canary` (issue #245)
+
 ## 2026-10-06 — Status: quorum floor, location health, TLS expiry warnings, hosted probe config
 
 - Documented #151 in the [status page model](./reference/status.md#verdicts-and-the-state-machine): a `majority` or

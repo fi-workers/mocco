@@ -37,6 +37,8 @@ code_refs:
   - packages/backend/src/domain/notification/senders/smtp.ts
   - packages/backend/src/domain/notification/email-config.ts
   - packages/backend/src/domain/notification/senders/webhook.ts
+  - packages/backend/src/domain/ops/Stage0CanaryService.ts
+  - packages/backend/src/domain/ops/heartbeat.ts
 ---
 
 # Notifications
@@ -306,6 +308,21 @@ ended before the delivery settled`) up to 500 `queued` or `sending` deliveries t
 their job died of consuming failures (429s, transient errors) or was pruned. A schedule was chosen
 over a runner `onDead` hook because it also catches jobs lost for any other reason, and it keeps
 the job runner free of domain callbacks.
+
+### Stage0 canary
+
+With stage0 on (`OPS_HEARTBEAT_URL` and `OPS_CANARY_SOURCE_ID`, [env](./env.md#ops-stage0-vars)), the
+`stage0.canary` platform schedule (every 5 minutes, `domain/ops/`) sends a synthetic GitHub push, signed with
+the canary source's secret, to that source's public ingest URL over HTTP (`Stage0CanaryService`). It is a
+delivery like any vendor's: the route verifies and records it, the fan-out matches the rule that routes it to a
+private channel, and `notification.deliver` posts it. When a delivery of an event from the canary source
+(`payload.sourceId`) settles `sent`, `DeliveryService` deletes the Discord message (best-effort: a failed
+delete is logged and its rate limit recorded) and then pings the heartbeat (`HttpHeartbeat`, one `GET`,
+10 s timeout, never thrown, the URL never logged). The ping comes only after the `sent` row is written, so a
+broken ingest route, DB, queue or Discord sender all stop it, and the external dead-man switch alerts the team
+outside Mocco. The canary job's delivery id is `stage0-<job id>`, so a retried job that already got through is
+a duplicate receipt, not a second canary. Without stage0 the schedule isn't registered; the handler stays, so a
+schedule left from before is a no-op.
 
 ### Prune
 

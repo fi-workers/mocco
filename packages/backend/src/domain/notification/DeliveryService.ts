@@ -16,8 +16,24 @@ import type { DiscordRateLimitRepo } from '@backend/domain/notification/repos/di
 import type { DiscordApi, DiscordFailure, DiscordSent } from '@backend/domain/notification/senders/discord';
 import type { DeliveryStatus } from '@mocco/common/notification';
 
-/** The part of the Discord client a delivery needs. */
-export type DiscordMessenger = Pick<DiscordApi, 'sendMessage'>;
+/** The part of the Discord client a delivery needs (delete: the stage0 canary cleans up). */
+export type DiscordMessenger = Pick<DiscordApi, 'sendMessage' | 'deleteMessage'>;
+
+/** Something that tells an external dead-man switch Mocco is alive. Never throws. */
+export interface Heartbeat {
+  ping(): Promise<void>;
+}
+
+/**
+ * The stage0 canary (relay design §11): deliveries of events received by this inbound
+ * source are canaries. Once one is sent, its Discord message is deleted and the
+ * heartbeat is pinged, so the pings stop when any step from the ingest route to the
+ * Discord post breaks.
+ */
+export interface CanaryWatch {
+  sourceId: string;
+  heartbeat: Heartbeat;
+}
 
 export interface DeliveryServiceDeps {
   deliveries: DeliveryRepo;
@@ -27,6 +43,8 @@ export interface DeliveryServiceDeps {
   discord: DiscordMessenger | undefined;
   /** [0, 1), for the jitter of workspace-limit wake-ups. */
   random: () => number;
+  /** The stage0 canary; undefined when OPS_CANARY_SOURCE_ID and OPS_HEARTBEAT_URL are unset. */
+  canary?: CanaryWatch;
 }
 
 /** Which run of the delivery job this is (from the job context). */
@@ -126,7 +144,13 @@ export class DeliveryService {
     return { at, reason: DeliveryReasons.workspaceLimit, isFree: true };
   }
 
-  private async sent(delivery: DeliveryRow, result: DiscordSent, now: Date): Promise<void> {
+  private async sent(
+    delivery: DeliveryRow,
+    channel: ChannelRow,
+    result: DiscordSent,
+    discord: DiscordMessenger,
+    now: Date,
+  ): Promise<void> {
     await this.settle(delivery, DeliveryStatuses.sending, {
       status: DeliveryStatuses.sent,
       externalMessageId: result.messageId,
@@ -137,6 +161,30 @@ export class DeliveryService {
     if (result.bucket?.blockedUntil !== undefined) {
       await this.deps.rateLimits.block(result.bucket.key, result.bucket.blockedUntil);
     }
+    const { canary } = this.deps;
+    if (canary !== undefined && (await this.deps.deliveries.findEventSourceId(delivery.eventId)) === canary.sourceId) {
+      await this.deleteCanary(channel, result.messageId, discord);
+      // Only after the delivery is recorded sent: a DB that cannot settle it stops the pings too.
+      await canary.heartbeat.ping();
+    }
+  }
+
+  /**
+   * Delete a sent canary's message, best-effort: the post already proved the sender
+   * works, so a failed delete is logged (and its rate limit recorded) but still pings.
+   */
+  private async deleteCanary(channel: ChannelRow, messageId: string, discord: DiscordMessenger): Promise<void> {
+    const deleted = await discord.deleteMessage(channel.externalId, messageId);
+    if (deleted.kind === DiscordResultKinds.deleted) {
+      if (deleted.bucket?.blockedUntil !== undefined) {
+        await this.deps.rateLimits.block(deleted.bucket.key, deleted.bucket.blockedUntil);
+      }
+      return;
+    }
+    if (deleted.kind === DiscordResultKinds.rate_limited) {
+      await this.deps.rateLimits.block(deleted.bucketKey ?? discordChannelBucket(channel.externalId), deleted.retryAt);
+    }
+    console.warn(`[notification] deleting a stage0 canary message failed: ${deleted.kind}`);
   }
 
   private async failed(
@@ -265,7 +313,7 @@ export class DeliveryService {
       nonce: deliveryNonce(claimed.id),
     });
     if (result.kind === DiscordResultKinds.sent) {
-      await this.sent(claimed, result, now);
+      await this.sent(claimed, channel, result, discord, now);
       return;
     }
     await this.failed(claimed, channel, result, attempt);
