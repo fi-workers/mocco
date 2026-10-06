@@ -28,7 +28,9 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * `status:write` lets an agent run a monitor's ad-hoc check as its person, stepped up for
  * the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
  * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
- * an agent move a feedback post to another status as its person, stepped up for the same way.
+ * an agent move, comment on, vote on and merge feedback posts as its person, and `help:write`
+ * accept and redo help center translations and change the glossary as its person, each stepped
+ * up for the same way.
  * The keys are camel-cased because the values follow OAuth's `resource:action` form.
  */
 export const McpScopes = {
@@ -36,6 +38,7 @@ export const McpScopes = {
   statusWrite: 'status:write',
   messengerWrite: 'messenger:write',
   feedbackWrite: 'feedback:write',
+  helpWrite: 'help:write',
 } as const;
 export type McpScope = (typeof McpScopes)[keyof typeof McpScopes];
 

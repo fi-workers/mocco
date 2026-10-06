@@ -214,6 +214,9 @@ has several servers loaded.
 | `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
 | `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
 | `mocco_feedback_post_merge` | Merge a duplicate post into another as the caller (`feedback:write`) |
+| `mocco_help_translation_accept` | Accept the machine draft beside a stale reviewed translation as the caller (`help:write`) |
+| `mocco_help_translation_retranslate` | Translate one language again by machine, replacing a reviewed one only when confirmed (`help:write`) |
+| `mocco_help_glossary_set` | Add, change or remove a help center glossary term as the caller (`help:write`) |
 
 ### Search, not list
 
@@ -264,6 +267,7 @@ still refuses what the role refuses.
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
 | `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
+| `help:write` | On MCP, accept and redo help center translations and change the glossary (`mocco_help_translation_accept`, `_translation_retranslate`, `mocco_help_glossary_set`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -575,6 +579,28 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   team member. Both reads page with `limit` and `nextOffset`.
 - **Nothing the console can't do.** `vote`, `createComment` and `mergePost` in the `feedback`
   router call the same methods; a merge is audited as `feedback.post.merged` naming the caller.
+
+### How the help center changes are built (issue #480)
+
+- **One scope for help center changes.** `mocco_help_translation_accept`,
+  `mocco_help_translation_retranslate` and `mocco_help_glossary_set` (`tools/help-write.ts`) go
+  through `openDecision` with `help:write`: they change what a public help site says in some
+  language, which none of the other scopes covers. The consent line is **Accept and redo
+  your help center's translations and change its glossary, as you**.
+- **Each confirmation is bound to the state it showed.** Accept: the draft's revision id and
+  the published source revision. Retranslate: the language's state and its current text
+  revision. Glossary set: the term's id and value, or its absence. `review` gained
+  `sourceRevisionId`, `textRevisionId` and `isAvailable` so the tools can bind to them without
+  a second read.
+- **The console's explicit confirm, and no more.** Replacing a reviewed language needs
+  `confirm` in `HelpTranslationService.retranslate`. The tool passes it only when the state the
+  person confirmed was `reviewed`; a language that became reviewed after the re-read is refused
+  by the service rather than overwritten.
+- **Once.** A second answer to the same confirmation changes nothing: the accepted draft is
+  gone, the language is `pending` and answers without asking, and the term has its new value.
+- **The window.** `acceptProposal` re-checks the draft and source under the translation's
+  lock. The glossary service writes by id without comparing the old value, so an edit landing
+  between the re-read and the write is overwritten, as with two console edits; both are audited.
 
 ## Evaluating it
 

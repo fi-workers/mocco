@@ -11,7 +11,8 @@
 // site. The paging here only narrows what the service returned; it decides nothing.
 //
 // `mocco_help_glossary_list` reads the glossary the translations follow (#214), over
-// `HelpGlossaryService.list`; changing it stays in the console.
+// `HelpGlossaryService.list`. Accepting a draft, translating again and changing the glossary
+// are the changing tools in `help-write.ts` (#480).
 import {
   GlossaryRules,
   HELP_LOCALES,
@@ -378,7 +379,7 @@ export function registerHelpTools(server: McpServer, deps: HelpToolDeps): void {
     {
       title: 'List the help center glossary',
       description:
-        "A project's help center glossary, which every translation follows: terms kept as written in every language (product names, UI labels) and terms translated one fixed way per language, filtered by text, rule and language, paged. Read-only: changing the glossary stays in the console.",
+        "A project's help center glossary, which every translation follows: terms kept as written in every language (product names, UI labels) and terms translated one fixed way per language, filtered by text, rule and language, paged. Read-only: mocco_help_glossary_set changes it.",
       inputSchema: glossaryInput,
       annotations: { readOnlyHint: true },
     },
@@ -402,7 +403,7 @@ export function registerHelpTools(server: McpServer, deps: HelpToolDeps): void {
     {
       title: 'Read a help article translation',
       description:
-        'One published help article in one language, for review: its state, who reviewed it and when, whether a machine draft waits, and the source segments that changed since it was made (before and after). Detailed adds the source, the translation and the draft as Markdown. Read-only: accepting a draft or reviewing stays in the console.',
+        'One published help article in one language, for review: its state, who reviewed it and when, whether a machine draft waits, and the source segments that changed since it was made (before and after). Detailed adds the source, the translation and the draft as Markdown. Read-only: mocco_help_translation_accept accepts the draft, and mocco_help_translation_retranslate translates again.',
       inputSchema: translationInput,
       annotations: { readOnlyHint: true },
     },

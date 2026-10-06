@@ -783,6 +783,11 @@ export class HelpTranslationService {
       state: row?.state ?? null,
       isStale,
       lastError: row?.lastError ?? null,
+      /** Whether asking the machine again would translate anything (a translator and a queue are configured). */
+      isAvailable: this.isAvailable,
+      /** The published source revision and the current text's revision: what a change can be bound to. */
+      sourceRevisionId: source?.id ?? null,
+      textRevisionId: current?.id ?? null,
       source: textOf(source),
       text: textOf(current),
       /** What the current text is: `machine`, or a person's `human_edit`. */
