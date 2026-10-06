@@ -92,15 +92,6 @@ to it in the console. Apart from checking a monitor now (below), they only read;
 incident, post an update, schedule maintenance, and add, pause or change a monitor or a
 location in the console.
 
-**Checking a monitor now.** `mocco_monitors_check` runs an HTTP or TCP monitor's next round
-right away, for example after a deploy, instead of waiting for its interval; the probes then
-report and `mocco_status_monitors_get` shows the verdict. It is what a pipeline step does with
-`POST /v1/monitors/{id}/check`. It changes no setting and only reads your service, so it does
-not ask you to confirm and does not need the workspace to allow agents to decide. It does need
-one more permission the first time: your client opens the consent screen again with **Run your
-status monitors' checks now, as you**. A heartbeat (its job pings it) and a paused monitor are
-refused.
-
 The notification and webhook source tools read the whole workspace, with no project to
 pick, and answer for any member, as the console does. They never return a signing
 secret or a token: a source says whether it has a secret, and the detailed answer gives
@@ -124,6 +115,7 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_inbound_sources_create` | Adds a GitHub webhook source; its signing secret is never shown to the agent |
 | `mocco_inbound_sources_pause` / `_resume` | Pauses a webhook source (its deliveries are refused) or resumes it |
 | `mocco_inbound_sources_delete` | Deletes a webhook source and the deliveries it received |
+| `mocco_monitors_check` | Runs an HTTP or TCP monitor's next round now, for example right after a deploy, instead of at its interval |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -146,6 +138,16 @@ To find the channel to connect, `mocco_notifications_discord_channels_search` li
 text channels the Mocco bot sees in your server and which are connected already; it is a
 read, but owners and admins only, because it spends the shared bot's Discord calls.
 Installing the bot in a Discord server and removing a channel stay in the console for now.
+
+**Checking a monitor now.** `mocco_monitors_check` is what a pipeline step does with
+`POST /v1/monitors/{id}/check`: the probes check your service right away, and
+`mocco_status_monitors_get` shows the verdict once they report. It moves the monitor's next
+round, so it follows the same rules as the other changes: the workspace must allow agents to
+make changes, and your client first shows the monitor, what it checks, its state and when its
+next round is due. Nothing runs until you answer yes. It needs its own permission, asked for the
+first time it is used: **Run your status monitors' checks now, as you**. Any member of the
+project may check its monitors, as in the console. A heartbeat (its job pings it) and a paused
+monitor are refused before you are asked anything.
 
 Webhook source changes follow the same rules, and a signing secret never passes through
 your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the
@@ -277,8 +279,9 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not vote in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "This connection may not vote" | The app was never allowed to vote. Reconnect it and allow the voting permission when asked |
 | "This connection may not run checks" | The app was never allowed to run checks. Reconnect it and allow the checks permission when asked |
+| "Agents may not run checks in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… is a heartbeat; its job pings it" | A heartbeat has no rounds to run. Its last ping is in `mocco_status_monitors_search` |
-| "… is paused; resume it to check it" | Resume the monitor in the console first |
+| "… is paused; resume it in the console to check it" | Resume the monitor in the console first |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
 | "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |

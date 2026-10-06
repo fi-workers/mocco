@@ -11,11 +11,10 @@
 // `MonitorService.requestCheck`, what `POST /v1/monitors/:id/check` calls, behind the same
 // `ProjectScope`.
 //
-// The check needs `status:write`, stepped up for like the deciding tools' scope, but it is no
-// decision: it changes no setting and says nothing to anyone, it only moves the next round of
-// probes to now — the round they would run anyway within the monitor's interval. So it has
-// neither the workspace's opt-in nor a confirmation round trip; the scope is the person's
-// consent that this app may ask for checks.
+// The check changes state — it moves the monitor's next round — so it is behind the same
+// locks as every changing tool (`openDecision`, `confirmThenApply` in `deciding.ts`): its own
+// `status:write` scope, stepped up for per tool, the workspace's opt-in, and a confirmation
+// round trip that names the monitor before anything moves.
 //
 // What a monitor checks can carry secrets: a URL's credentials or query string, or a request
 // body. So a monitor's target is only the URL's host (with its port) or a TCP host and port,
@@ -28,7 +27,7 @@ import { z } from 'zod';
 
 import { ConflictError, NotFoundError } from '@backend/domain/errors';
 import { monitorTargetOf } from '@backend/domain/status/monitor-target';
-import { refused, requireScope } from '@backend/transport/mcp/tools/deciding';
+import { confirmThenApply, openDecision, refused, requireScope } from '@backend/transport/mcp/tools/deciding';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 import {
   componentsOf,
@@ -45,11 +44,12 @@ import type { MonitorService, MonitorView } from '@backend/domain/status/Monitor
 import type { LocationRow } from '@backend/domain/status/repos/location.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
+import type { DecidingToolDeps } from '@backend/transport/mcp/tools/deciding';
 import type { LocationKind, MonitorComponent, MonitorSpec, MonitorState } from '@mocco/common/status';
-import type { CallToolResult, McpServer, ServerContext } from '@modelcontextprotocol/server';
+import type { CallToolResult, InputRequiredResult, McpServer, ServerContext } from '@modelcontextprotocol/server';
 
-export interface StatusMonitorToolDeps {
-  statusMonitors: Pick<MonitorService, 'list' | 'get' | 'requestCheck'>;
+export interface StatusMonitorToolDeps extends DecidingToolDeps {
+  statusMonitors: Pick<MonitorService, 'list' | 'get' | 'find' | 'requestCheck'>;
   statusLocations: Pick<LocationService, 'list'>;
   /** For the names of the components a monitor reports on. */
   statusPages: Pick<StatusPageService, 'listPages' | 'getPage'>;
@@ -333,33 +333,72 @@ export async function searchStatusLocations(
   };
 }
 
-/** Run the monitor's next round now. Refusals come back as tool errors the model can act on. */
+export const MONITOR_CHECK_TOOL = 'mocco_monitors_check';
+
+/** The refusals of a check (not found — another tenant's monitor reads the same —, a heartbeat,
+ * a paused monitor) as the model reads them; anything else is rethrown. */
+function checkRefusal(error: unknown): CallToolResult {
+  if (error instanceof NotFoundError || error instanceof ConflictError) {
+    return refused(error.message);
+  }
+  throw error;
+}
+
+/**
+ * Run the monitor's next round now, once the person confirms. A heartbeat or a paused monitor
+ * is refused before anything is asked: there is no round to run.
+ */
 export async function checkMonitor(
   deps: StatusMonitorToolDeps,
   args: CheckMonitorArgs,
   ctx: ServerContext,
-): Promise<CallToolResult> {
-  // The HTTP layer has already challenged a token without the scope; checked again here, where
-  // the check is asked for, in case anything ever routes around it.
-  if (!(ctx.http?.authInfo?.scopes.includes(McpScopes.statusWrite) ?? false)) {
-    return refused(
-      "This connection may not run checks. Reconnect the app and allow it to run your status monitors' checks.",
-    );
-  }
-  const scope = await resolveStatusProject(deps, userIdOf(ctx), args);
+): Promise<CallToolResult | InputRequiredResult> {
   try {
-    const round = await deps.statusMonitors.requestCheck(scope, args.monitorId);
-    return asJson({
-      monitorId: round.monitorId,
-      roundAt: round.roundAt,
-      next: 'The probes run this round now; its verdict follows when they report. Read it with `mocco_status_monitors_get` (detailed) in a minute or so.',
+    const opened = await openDecision(deps, ctx, args.workspaceId, {
+      verb: 'run checks',
+      doing: 'Checking a monitor',
+      scope: { name: McpScopes.statusWrite, allows: "run your status monitors' checks" },
+      // The console has no "check now"; a pipeline step does it with a secret key.
+      instead: 'a pipeline step can ask for one with `POST /v1/monitors/{id}/check` and a `status:write` key',
+    });
+    if ('content' in opened) {
+      return opened;
+    }
+    const { userId, workspaceId, confirmations } = opened;
+    const scope = await resolveStatusProject(deps, userId, { workspaceId, projectId: args.projectId });
+    // A heartbeat or a paused monitor has no round to run: refused before anything is asked.
+    // The service makes the same checks again when the check is applied.
+    const monitor = await deps.statusMonitors.find(scope, args.monitorId);
+    if (!isProbeSpec(monitor.spec)) {
+      return refused(
+        `Monitor ${monitor.id} is a heartbeat; its job pings it, so it has no rounds to check. Its last ping is in \`mocco_status_monitors_search\`.`,
+      );
+    }
+    if (monitor.state === MonitorStates.paused) {
+      return refused(`Monitor ${monitor.id} is paused; resume it in the console to check it.`);
+    }
+    const question = [
+      "Run this monitor's next round now, as you?",
+      `Monitor: ${monitor.name} (${monitor.kind}, ${monitorTargetOf(monitor.spec) ?? 'no target'}, ${monitor.id})`,
+      `Now: ${monitor.state}; next round due ${monitor.nextRoundAt.toISOString()}`,
+      'Its probes check the service right away instead of at that time. Its settings do not change.',
+    ].join('\n');
+    const change = { tool: MONITOR_CHECK_TOOL, ...scope, monitorId: args.monitorId };
+    return await confirmThenApply(ctx, confirmations, change, {
+      label: 'Run this check now',
+      ask: async () => await Promise.resolve(question),
+      apply: async () => {
+        const round = await deps.statusMonitors.requestCheck(scope, args.monitorId);
+        return asJson({
+          changed: true,
+          monitorId: round.monitorId,
+          roundAt: round.roundAt,
+          next: 'The probes run this round now; its verdict follows when they report. Read it with `mocco_status_monitors_get` (detailed) in a minute or so.',
+        });
+      },
     });
   } catch (error) {
-    // Not found (another tenant's monitor reads the same), a heartbeat, or a paused monitor.
-    if (error instanceof NotFoundError || error instanceof ConflictError) {
-      return refused(error.message);
-    }
-    throw error;
+    return checkRefusal(error);
   }
 }
 
@@ -401,14 +440,14 @@ export function registerStatusMonitorTools(server: McpServer, deps: StatusMonito
   );
 
   server.registerTool(
-    'mocco_monitors_check',
+    MONITOR_CHECK_TOOL,
     {
       title: 'Check a monitor now',
       description:
-        "Run an HTTP or TCP monitor's next round now instead of waiting for its interval, e.g. right after a deploy, as the signed-in person; the answer says when the round is, and its verdict follows when the probes report. A round already due is not moved. Changes no setting and needs no confirmation. Refused for a heartbeat (its job pings it) and for a paused monitor.",
+        "Run an HTTP or TCP monitor's next round now instead of waiting for its interval, e.g. right after a deploy, as the signed-in person; the answer says when the round is, and its verdict follows when the probes report. A round already due is not moved, and no setting changes. The person is asked to confirm in their client first, and it only works where the workspace allows agents to make changes. Refused for a heartbeat (its job pings it) and for a paused monitor.",
       inputSchema: checkInput,
-      // It runs probes against the monitored service, and a second call while the round is
-      // due changes nothing.
+      // It moves the next round and runs probes against the monitored service; a second call
+      // while the round is due changes nothing.
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       scopeChallenge: requireScope(
         McpScopes.statusWrite,

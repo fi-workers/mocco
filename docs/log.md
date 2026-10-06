@@ -711,8 +711,9 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 
 - Documented `mocco_monitors_check` (#454) in the [status page model](./reference/status.md#mcp): the MCP side of
   `POST /v1/monitors/{id}/check`, over `MonitorService.requestCheck` behind `ProjectScope`, with a new `status:write`
-  OAuth scope stepped up for like `approvals:write`. It decides nothing and changes no setting, so it has neither the
-  workspace's opt-in nor a confirmation; heartbeats and paused monitors are refused. The monitor reads now show a
+  OAuth scope stepped up for like `approvals:write`. It moves the monitor's next round, so it is behind the workspace's
+  opt-in and confirms through the protocol's round trip like every changing tool; heartbeats and paused monitors are
+  refused before anything is asked. The monitor reads now show a
   heartbeat's period, grace, last ping and last run in both shapes (never its token), and the incident reads show
   `origin` and the `suspectedRun` a deploy watch attributed, with a link to the run. The
   [connect guide](./customer/mcp/connect.md) and the [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md) say the same.

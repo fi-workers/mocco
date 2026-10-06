@@ -972,9 +972,13 @@ product, `ProjectScope.resolveWorkspace`), which any member may read; it never r
 the same `ProjectScope`, so any member of a project with the status product may ask, as in the console, and another
 tenant's monitor reads like one that does not exist. It needs the `status:write` OAuth scope, which a client is not
 asked for when it connects: the tool declares it as a `scopeChallenge`, so a token without it gets a 403
-`insufficient_scope` naming its scopes plus `status:write`, and the tool checks the scope again itself. It is not a
-deciding tool: it changes no setting and moves only the next round to now, so it needs neither the workspace's
-`agents_may_decide` opt-in nor a confirmation round trip. A round already due is not moved, and a heartbeat
-(`MonitorKindError`) or a paused monitor (`MonitorPausedError`) is refused as a tool error. Nothing on MCP declares or
+`insufficient_scope` naming its scopes plus `status:write`, and the tool checks the scope again itself. It changes
+state (the next round moves to now), so it has the locks of every changing tool (`openDecision` and `confirmThenApply`
+in `transport/mcp/tools/deciding.ts`): the workspace's `agents_may_decide` opt-in, a server able to sign, and a
+confirmation round trip whose question names the monitor, its target, its state and when its next round is due. The
+signed state records the tool, the workspace, the project and the monitor, so a confirmation for one monitor is
+refused for another. A heartbeat or a paused monitor is refused before anything is asked, and the service checks both
+again when a confirmed check is applied (`MonitorKindError`, `MonitorPausedError`). A round already due is not
+moved. Nothing on MCP declares or
 updates an incident, or changes a monitor's settings or a location. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).

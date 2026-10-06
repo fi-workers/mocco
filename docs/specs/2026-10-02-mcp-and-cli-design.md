@@ -349,7 +349,8 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    Issue #454 then added an action and the newer fields (*shipped*): `mocco_monitors_check` runs
    `MonitorService.requestCheck`, the ad-hoc round `POST /v1/monitors/{id}/check` asks for, behind
    `ProjectScope` and a new `status:write` OAuth scope stepped up for like `approvals:write`. It
-   decides nothing and changes no setting, so it has neither the opt-in nor a confirmation. The
+   moves the monitor's next round, so it goes through `openDecision` (that scope, the opt-in, a
+   server able to sign) and `confirmThenApply`, like every changing tool. The
    monitor reads show a heartbeat's period, grace, last ping and last run (never its token), and
    the incident reads its `origin` and the `suspectedRun` a deploy watch attributed, with a link.
 

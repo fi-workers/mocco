@@ -4,8 +4,10 @@
 // A monitor's spec can carry secrets (a URL's credentials and query, a request body), a
 // heartbeat has a ping token and a location has a token hash, so besides what a caller cannot
 // see (another workspace's monitors and locations, a workspace without the status product),
-// these tests check that none of that ever reaches an answer. The check needs `status:write`:
-// a token without it is challenged for it and nothing moves.
+// these tests check that none of that ever reaches an answer. The check changes state (it
+// moves the next round), so it has every lock a changing tool has: `status:write` (a token
+// without it is challenged for it), the workspace's opt-in, and a confirmation that names the
+// monitor; until the person says yes, nothing moves.
 import { randomUUID } from 'node:crypto';
 
 import { Products } from '@mocco/common/project';
@@ -26,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { MembershipRepo } from '@backend/domain/auth/repos/membership.repo';
+import { createMcpSettingsService } from '@backend/domain/mcp/instance';
 import { ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import { createProjectDomain } from '@backend/domain/project/instance';
@@ -36,9 +39,11 @@ import { TimeSeriesRetention } from '@backend/domain/status/TimeSeriesRetention'
 import { expectOne } from '@backend/infra/db/rows';
 import { members, statusLocations, statusMonitors, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
+import { createConfirmations } from '@backend/transport/mcp/confirmation';
 import { createMcpHttpHandler } from '@backend/transport/mcp/server';
 import { MCP_USER_ID } from '@backend/transport/mcp/tools/runs';
 
+import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
 import type { ProjectDomain } from '@backend/domain/project/instance';
 import type { StatusDomain } from '@backend/domain/status/compose';
 import type { ProbeLocation } from '@backend/domain/status/ProbeService';
@@ -51,7 +56,8 @@ const RESOURCE = 'https://mocco.test/api/mcp';
 const envelope = {
   'io.modelcontextprotocol/protocolVersion': PROTOCOL_VERSION,
   'io.modelcontextprotocol/clientInfo': { name: 'test', version: '0' },
-  'io.modelcontextprotocol/clientCapabilities': {},
+  // The check confirms through a form elicitation.
+  'io.modelcontextprotocol/clientCapabilities': { elicitation: { form: {} } },
 };
 
 const refuse = () => {
@@ -61,9 +67,26 @@ const refuse = () => {
 interface RpcAnswer {
   status?: number;
   wwwAuthenticate?: string;
-  result?: { isError?: boolean; content?: { type: string; text: string }[] };
+  result?: {
+    resultType?: string;
+    isError?: boolean;
+    content?: { type: string; text: string }[];
+    inputRequests?: Record<string, { method: string; params: { message: string } }>;
+    requestState?: string;
+  };
   error?: { code: number; message: string };
 }
+
+/** A retry's answer to the confirmation, and the state it echoes. */
+interface Round {
+  requestState?: string;
+  inputResponses?: Record<string, unknown>;
+}
+
+/** The person's answer to the confirmation, as a client sends it back. */
+const accepting = (isConfirmed: boolean) => ({ confirm: { action: 'accept', content: { confirm: isConfirmed } } });
+
+const messageOf = (answer: RpcAnswer) => answer.result?.inputRequests?.confirm?.params.message ?? '';
 
 const SIGN_IN = ['openid', 'profile', 'email', 'offline_access'];
 const WITH_STATUS_WRITE = [...SIGN_IN, 'status:write'];
@@ -106,8 +129,15 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
   let database: string;
   let marketing: string;
   let theirMonitor: string;
+  let settings: McpSettingsService;
 
-  async function call(tool: string, args: Record<string, unknown>, userId = ada, scopes = SIGN_IN): Promise<RpcAnswer> {
+  async function call(
+    tool: string,
+    args: Record<string, unknown>,
+    userId = ada,
+    scopes = SIGN_IN,
+    round: Round = {},
+  ): Promise<RpcAnswer> {
     const request = new Request(RESOURCE, {
       method: 'POST',
       headers: {
@@ -121,7 +151,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/call',
-        params: { name: tool, arguments: args, _meta: envelope },
+        params: { name: tool, arguments: args, _meta: envelope, ...round },
       }),
     });
     const response = await handler.fetch(request, {
@@ -142,8 +172,21 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
   }
 
   /** `mocco_monitors_check` with a token that may run checks, unless told otherwise. */
-  const check = async (args: Record<string, unknown>, scopes = WITH_STATUS_WRITE) =>
-    await call('mocco_monitors_check', args, ada, scopes);
+  const check = async (args: Record<string, unknown>, scopes = WITH_STATUS_WRITE, round: Round = {}) =>
+    await call('mocco_monitors_check', args, ada, scopes, round);
+
+  /** The first round, which must ask; returns the answer and the state to echo. */
+  async function ask(args: Record<string, unknown>) {
+    const asked = await check(args);
+    expect(asked.result?.resultType, textOf(asked)).toBe('input_required');
+    return { asked, requestState: asked.result?.requestState ?? '' };
+  }
+
+  /** Ask, then answer: the whole round trip. */
+  async function confirmed(args: Record<string, unknown>, isConfirmed = true) {
+    const { requestState } = await ask(args);
+    return await check(args, WITH_STATUS_WRITE, { requestState, inputResponses: accepting(isConfirmed) });
+  }
 
   const nextRoundOf = async (id: string) =>
     expectOne(await t.db.select().from(statusMonitors).where(eq(statusMonitors.id, id))).nextRoundAt;
@@ -281,6 +324,10 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
     await failingRound();
     await failingRound();
 
+    // The workspace allows agents to make changes; one test turns it off.
+    settings = createMcpSettingsService(t.db, new AuditService({ audit: new AuditRepo(t.db) }));
+    await settings.setAgentsMayDecide(mine.workspaceId, true, ada);
+
     const scope = new WorkspaceScope({ memberships: new MembershipRepo(t.db) });
     handler = createMcpHttpHandler({
       runs: { searchInWorkspace: refuse, get: refuse },
@@ -303,8 +350,8 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       helpFeedback: { helpfulness: refuse },
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
-      settings: { agentsMayDecide: refuse },
-      confirmations: undefined,
+      settings,
+      confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });
   afterEach(async () => {
@@ -484,23 +531,77 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
   });
 
   describe('mocco_monitors_check', () => {
-    it("runs an HTTP monitor's next round now, and says when", async () => {
+    it('asks first, naming the monitor, and moves nothing until the person answers', async () => {
+      const before = await nextRoundOf(apiHealth);
+
+      const { asked } = await ask({ monitorId: apiHealth });
+
+      expect(messageOf(asked)).toContain('API health');
+      expect(messageOf(asked)).toContain('api.acme.test:8443');
+      expect(messageOf(asked)).toContain(`next round due ${before.toISOString()}`);
+      expect(await nextRoundOf(apiHealth)).toEqual(before);
+    });
+
+    it("runs an HTTP monitor's next round now once confirmed, and says when", async () => {
       expect((await nextRoundOf(apiHealth)) > clock).toBe(true);
 
-      const body = bodyOf(await check({ monitorId: apiHealth }));
+      const body = bodyOf(await confirmed({ monitorId: apiHealth }));
 
-      expect(body).toEqual({ monitorId: apiHealth, roundAt: clock.toISOString(), next: expect.any(String) });
+      expect(body).toEqual({
+        changed: true,
+        monitorId: apiHealth,
+        roundAt: clock.toISOString(),
+        next: expect.any(String),
+      });
       expect(await nextRoundOf(apiHealth)).toEqual(clock);
+    });
+
+    it('moves nothing when the person says no', async () => {
+      const before = await nextRoundOf(apiHealth);
+
+      const body = bodyOf(await confirmed({ monitorId: apiHealth }, false));
+
+      expect(body).toMatchObject({ changed: false });
+      expect(await nextRoundOf(apiHealth)).toEqual(before);
+    });
+
+    it("refuses one monitor's confirmation for another", async () => {
+      const { requestState } = await ask({ monitorId: apiHealth });
+      const before = await nextRoundOf(database);
+
+      const replayed = await check({ monitorId: database }, WITH_STATUS_WRITE, {
+        requestState,
+        inputResponses: accepting(true),
+      });
+
+      expect(replayed.result?.isError).toBe(true);
+      expect(textOf(replayed)).toContain('different change');
+      expect(await nextRoundOf(database)).toEqual(before);
     });
 
     it('leaves a round that is already due where it is', async () => {
       const due = await nextRoundOf(database);
       expect(due <= clock).toBe(true);
 
-      const body = bodyOf(await check({ monitorId: database }));
+      const body = bodyOf(await confirmed({ monitorId: database }));
 
       expect(body).toMatchObject({ monitorId: database, roundAt: due.toISOString() });
       expect(await nextRoundOf(database)).toEqual(due);
+    });
+
+    it('refuses in a workspace that has not allowed agents to make changes, and says where to change it', async () => {
+      await settings.setAgentsMayDecide(mine.workspaceId, false, ada);
+      const before = await nextRoundOf(apiHealth);
+
+      const answer = await check({ monitorId: apiHealth });
+
+      expect(answer.result?.isError).toBe(true);
+      expect(answer.result?.resultType).not.toBe('input_required');
+      expect(textOf(answer)).toContain('Agents may not run checks in this workspace');
+      expect(textOf(answer)).toContain('Settings → Agents');
+      // The console has no "check now", so the refusal points to the API instead.
+      expect(textOf(answer)).toContain('POST /v1/monitors/{id}/check');
+      expect(await nextRoundOf(apiHealth)).toEqual(before);
     });
 
     it('challenges a token without status:write for it, keeping the scopes it has, and moves nothing', async () => {
@@ -533,6 +634,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       const throughTheirProject = await check({ monitorId: theirMonitor, projectId: theirs.projectId });
 
       expect(foreign.result?.isError).toBe(true);
+      expect(foreign.result?.resultType).not.toBe('input_required');
       expect(textOf(foreign)).toContain('was not found');
       expect(textOf(foreign).replace(theirMonitor, '<id>')).toBe(textOf(missing).replace(nowhere, '<id>'));
       expect(throughTheirProject.result?.isError).toBe(true);
@@ -540,7 +642,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       expect(await nextRoundOf(theirMonitor)).toEqual(before);
     });
 
-    it('refuses a heartbeat, which its job pings, and a paused monitor', async () => {
+    it('refuses a heartbeat, which its job pings, and a paused monitor, before asking anything', async () => {
       const { id } = await pingedHeartbeat();
       const heartbeatDeadline = await nextRoundOf(id);
       const pausedRound = await nextRoundOf(marketing);
@@ -548,6 +650,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       const heartbeat = await check({ monitorId: id });
       const paused = await check({ monitorId: marketing });
 
+      expect([heartbeat.result?.resultType, paused.result?.resultType]).not.toContain('input_required');
       expect(heartbeat.result?.isError).toBe(true);
       expect(textOf(heartbeat)).toContain('is a heartbeat');
       expect(paused.result?.isError).toBe(true);
@@ -565,7 +668,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       expect(textOf(answer)).toContain('not enabled');
     });
 
-    it('is an action, not a read, and not destructive', async () => {
+    it('is a change, not a read, and not destructive', async () => {
       const response = await handler.fetch(
         new Request(RESOURCE, {
           method: 'POST',
