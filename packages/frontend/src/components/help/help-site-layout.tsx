@@ -1,5 +1,6 @@
 // The frame of a public help center (pages/_sites/**): the site's name, a language
-// switcher and the article tree. Links are plain anchors: the pages are served on the
+// switcher (to the same page in each language where it exists, else that language's home)
+// and the article tree. Links are plain anchors: the pages are served on the
 // site's own host, where paths are `/{locale}/...`.
 import { HELP_LOCALE_NAMES } from '@mocco/common/help';
 import Head from 'next/head';
@@ -15,6 +16,7 @@ export default function HelpSiteLayout({
   nav,
   title,
   currentPath,
+  languages,
   seo,
   noindex = false,
   children,
@@ -22,6 +24,8 @@ export default function HelpSiteLayout({
   nav: HelpSiteNav;
   title: string;
   currentPath?: string;
+  /** Where the switcher sends each language; each language's home without it. */
+  languages?: readonly { locale: string; path: string }[];
   /**
    * What search engines and link previews get: this page's path, a description, the page in
    * every language it exists in, and JSON-LD. Canonical and hreflang URLs are absolute on the
@@ -45,6 +49,7 @@ export default function HelpSiteLayout({
   const fullTitle = title === nav.name ? title : `${title} · ${nav.name}`;
   const { origin } = nav;
   const source = nav.locales[0];
+  const switcher = languages ?? nav.locales.map(locale => ({ locale, path: `/${locale}` }));
   return (
     <>
       {seo === undefined || origin === null ? (
@@ -94,13 +99,14 @@ export default function HelpSiteLayout({
               />
             </form>
           </div>
-          {nav.locales.length > 1 ? (
-            <nav aria-label="Language" className="flex flex-wrap items-center gap-1 text-sm">
-              {nav.locales.map(locale => (
+          {switcher.length > 1 ? (
+            <nav aria-label={wordsFor(nav.locale).language} className="flex flex-wrap items-center gap-1 text-sm">
+              {switcher.map(({ locale, path }) => (
                 <a
                   key={locale}
-                  href={`/${locale}`}
+                  href={path}
                   hrefLang={locale}
+                  lang={locale}
                   aria-current={locale === nav.locale ? 'true' : undefined}
                   className={cn(
                     'rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground',

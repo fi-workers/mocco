@@ -883,3 +883,17 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
   `log.md`
 - Source: branch `feat/feedback-core` (issue #172)
+
+## 2026-10-06 — Help center: translations on the public site
+
+- Finished #212 in the [help center reference](./reference/help-center.md#translation): public articles say
+  **Automatically translated** on a machine translation nobody reviewed, and show the design's default stale policy
+  (serve the older text with a banner linking the article in the source language) when a translation was made from an
+  older source. `HelpPublicReadService.article` returns `sourceLocale` and `translation` (`isMachine`, `isStale`). The
+  language switcher goes to the same article in each language it is served in. hreflang alternates and per-language
+  sitemap entries were already there (#363, #365). The job runner now builds `HelpTranslationService` with the same
+  `onTranslated` as the request path (`helpPublicRefresh`), so a translation a job finishes rebuilds its pages at once.
+  No migration. The [customer guide](./customer/help/help-center.md#translate) shows the label, banner and switcher,
+  and the [feature map](./reference/feature-map.md) says the same.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `customer/help/help-center.md`, `log.md`
+- Source: branch `feat/help-translation-public` (issue #212)

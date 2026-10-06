@@ -68,6 +68,8 @@ const deps = (): AgentFileDeps => ({
               modifiedAt: null,
               locales: ['ko'],
               canonicalPath: '/ko/articles/abc123-widget',
+              sourceLocale: 'ko',
+              translation: null,
             }
           : undefined,
       ),

@@ -2,12 +2,11 @@
 import { createHash } from 'node:crypto';
 
 import { getAudit } from '@backend/domain/audit/instance';
-import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
 import { HELP_FEEDBACK_RATE_LIMIT, helpFeedbackSecret } from '@backend/domain/helpcenter/HelpFeedbackService';
 import { indexNowKey } from '@backend/domain/helpcenter/indexnow';
 import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
-import { HttpHelpRevalidator } from '@backend/domain/helpcenter/revalidate-http';
+import { helpRevalidatorFromEnv } from '@backend/domain/helpcenter/revalidate-http';
 import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { getJobQueue } from '@backend/domain/jobs/instance';
@@ -24,15 +23,7 @@ export function getHelpDomain(): HelpDomain {
   const storage = getStorageDomain()?.storage;
   const env = getEnv();
   const translator = translatorFromEnv(env);
-  // The job tick's secret also guards /api/help/revalidate: both are this deployment calling itself.
-  const secret = env.CRON_SECRET ?? env.JOBS_TICK_SECRET;
-  const revalidator =
-    secret === undefined
-      ? undefined
-      : new HttpHelpRevalidator({
-          origin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
-          secret,
-        });
+  const revalidator = helpRevalidatorFromEnv(env);
   state.help ??= createHelpDomain(getDb(), {
     audit: getAudit().audit,
     queue: getJobQueue(),

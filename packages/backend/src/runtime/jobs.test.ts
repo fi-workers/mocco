@@ -9,9 +9,15 @@ import { DeliveryStatuses } from '@mocco/common/notification';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { AuditService } from '@backend/domain/audit/AuditService';
+import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { EventJobKinds } from '@backend/domain/events/EventBus';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { FlagJobKinds } from '@backend/domain/flags/jobs';
+import { createHelpDomain } from '@backend/domain/helpcenter/compose';
+import { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
+import { HelpJobKinds } from '@backend/domain/helpcenter/jobs';
+import { FakeTranslator } from '@backend/domain/helpcenter/translate/testing/fake-translator';
 import { InboundJobKinds } from '@backend/domain/inbound/jobs';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobKinds } from '@backend/domain/jobs/prune';
@@ -21,6 +27,7 @@ import { DiscordApi } from '@backend/domain/notification/senders/discord';
 import { createFakeDiscordFetch, jsonResponse } from '@backend/domain/notification/testing/fake-discord-fetch';
 import { seedChannel, seedRule, seedWorkspace } from '@backend/domain/notification/testing/seed';
 import { OtaJobKinds } from '@backend/domain/ota/jobs';
+import { createProjectDomain } from '@backend/domain/project/instance';
 import { ReleaseJobKinds } from '@backend/domain/project/jobs';
 import { RateLimitJobKinds } from '@backend/domain/ratelimit/jobs';
 import { StatusJobKinds } from '@backend/domain/status/jobs';
@@ -29,7 +36,8 @@ import { StorageJobKinds } from '@backend/domain/storage/jobs';
 import { ObjectRepo } from '@backend/domain/storage/repos/object.repo';
 import { StorageUrlSigner } from '@backend/domain/storage/signing';
 import { StorageService } from '@backend/domain/storage/StorageService';
-import { jobs, jobSchedules, notificationDeliveries } from '@backend/infra/db/schema';
+import { expectOne } from '@backend/infra/db/rows';
+import { jobs, jobSchedules, notificationDeliveries, users } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createJobRunner } from '@backend/runtime/jobs';
 
@@ -218,5 +226,97 @@ describe('job runtime composition (pglite)', () => {
     const [request] = fake.requests;
     expect(request?.body).toContain('Released: fi-workers/api');
     expect(request?.body).toContain('Since abc1234.');
+  });
+
+  it('refreshes the public help pages when a background job finishes a translation', async () => {
+    const workspaceId = await seedWorkspace(t.db);
+    const authorId = expectOne(
+      await t.db
+        .insert(users)
+        .values({ email: `${randomUUID()}@acme.test`, name: 'Ada' })
+        .returning(),
+    ).id;
+    const project = await createProjectDomain(t.db).projects.create(workspaceId, { name: 'SYT', handle: 'syt' });
+    const rebuilt: string[][] = [];
+    const submitted: string[][] = [];
+    const kicked: Promise<unknown>[] = [];
+    const runner = createJobRunner(t.db, {
+      now: () => T0,
+      random: () => 0,
+      workerId: 'test',
+      waitUntil: promise => {
+        kicked.push(promise);
+      },
+      appOrigin: 'https://mocco.test',
+      discord: undefined,
+      storage: undefined,
+      translator: new FakeTranslator(),
+      helpRevalidator: {
+        revalidate: async paths => {
+          rebuilt.push([...paths]);
+          await Promise.resolve();
+        },
+      },
+      helpIndexNow: new HelpIndexNow({
+        db: t.db,
+        secret: 'indexnow-secret',
+        originOf: slug => `https://${slug}.help.mocco.test`,
+        sender: {
+          submit: async submission => {
+            submitted.push([...submission.urls]);
+            await Promise.resolve();
+          },
+        },
+      }),
+    });
+    // The console's domain publishes; it only queues the translation (its kicks are dropped).
+    const help = createHelpDomain(t.db, {
+      audit: new AuditService({ audit: new AuditRepo(t.db) }),
+      translator: new FakeTranslator(),
+      queue: new PostgresJobQueue({
+        jobs: new JobRepo(t.db),
+        now: () => T0,
+        runOne: async () => {},
+        waitUntil: () => {},
+      }),
+    });
+    await help.helpSites.enable(workspaceId, project.id, authorId, {
+      slug: 'syt',
+      sourceLocale: 'ko',
+      locales: ['en'],
+    });
+    const collection = await help.helpAuthoring.createCollection(workspaceId, project.id, {
+      title: 'Start',
+      slug: 'start',
+    });
+    const section = await help.helpAuthoring.createSection(workspaceId, project.id, {
+      collectionId: collection.id,
+      title: 'Basics',
+    });
+    const article = await help.helpAuthoring.createArticle(workspaceId, project.id, authorId, {
+      sectionId: section.id,
+      title: 'Widget',
+      slug: 'widget',
+    });
+    await help.helpAuthoring.saveDraft(workspaceId, project.id, authorId, {
+      articleId: article.id,
+      title: 'Widget',
+      body: 'Hello.',
+    });
+    await help.helpAuthoring.publish(workspaceId, project.id, authorId, article.id);
+
+    await runner.tick({ budgetMs: 10_000, maxJobs: 50 });
+    await Promise.all(kicked);
+
+    const english = `/_sites/syt/en/articles/${article.shortId}-widget`;
+    expect(rebuilt).toContainEqual(expect.arrayContaining(['/_sites/syt/en', english]));
+    const queued = await t.db.select().from(jobs);
+    const translated = queued.filter(job => job.kind === HelpJobKinds.translate);
+    expect(translated.map(job => job.status)).toEqual([JobStatuses.succeeded]);
+    // The IndexNow submission rides its own job, as on the request path.
+    expect(queued.some(job => job.kind === HelpJobKinds.indexNow)).toBe(true);
+    expect(submitted).toContainEqual(
+      expect.arrayContaining([`https://syt.help.mocco.test/en/articles/${article.shortId}-widget`]),
+    );
   });
 });
