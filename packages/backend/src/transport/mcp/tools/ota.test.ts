@@ -193,6 +193,8 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
+      feedbackBoards: { listBoards: refuse, getBoard: refuse },
+      feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

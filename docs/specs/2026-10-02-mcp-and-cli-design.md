@@ -182,6 +182,9 @@ has several servers loaded.
 | `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages and 30-day helpfulness |
 | `mocco_messenger_conversations_search` | A project's inbox, newest activity first (status, assignee or unassigned, contact) |
 | `mocco_messenger_conversation_get` | One conversation's thread, notes marked, attachments as metadata only (never a signed link) |
+| `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
+| `mocco_feedback_posts_search` | A board's posts (status, category; by status or newest), offset-paged |
+| `mocco_feedback_post_get` | One feedback post with its status history; the body cut short unless detailed |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -202,6 +205,7 @@ has several servers loaded.
 | `mocco_monitors_check` | Run a monitor's next round now (`status:write`) |
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
+| `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
 
 ### Search, not list
 
@@ -251,6 +255,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, move a feedback post to another status (`mocco_feedback_post_set_status`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -385,6 +390,13 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    `mocco_messenger_reply` and `mocco_messenger_assign` over `InboxService.write` / `assign`.
    Still to come: attaching a file, internal notes, closing and blocking from an agent.
 
+   The feedback board's tools follow (*shipped*, issue #468; see *How the feedback change is
+   built* below): `mocco_feedback_boards_list`, `mocco_feedback_posts_search` and
+   `mocco_feedback_post_get` over `BoardService.listBoards` / `getBoard` and
+   `PostService.list` / `get` behind `ProjectScope` with `Products.feedback`, and
+   `mocco_feedback_post_set_status` over `PostService.setStatus`. Voting, merging and
+   accepting a ship suggestion get their tools in the slices that build them.
+
 ### How the vote is built (slice 6b)
 
 - **Scope.** The authorization server knows `approvals:write` alongside the sign-in
@@ -509,6 +521,25 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   to whoever has it already answers without asking.
 - **No links out.** `InboxService.get` signs a short-lived download link per attachment for
   the console; the read tool keeps only the id, file name, type and size.
+
+### How the feedback change is built (issue #468)
+
+- **Its own scope.** `mocco_feedback_post_set_status` goes through `openDecision` with
+  `feedback:write`: moving a post changes what a public board and roadmap show, which is
+  neither approving a deploy nor writing to a customer, and the consent line says what it
+  allows (**Move your feedback posts to another status, as you**). The opt-in and the
+  confirmation round trip are the ones every change uses.
+- **Bound to the status it was asked from.** The change records the post's status when the
+  person was asked (`from`), so if anyone moves the post before the answer, the retry reads a
+  different change and is refused. The re-read and the write are not one step, so the tool
+  passes the same `from` to `PostService.setStatus`, which checks it again under the post's
+  row lock and throws `FeedbackStatusMovedError` (CONFLICT) when it no longer holds. The
+  console's `setPostStatus` does not pass it and behaves as before.
+- **Once.** Answering the same confirmation twice moves the post once: the second answer finds
+  the post in the new status already and says so without writing. Asking for the status a post
+  has already answers without asking.
+- **No code path the console lacks.** Every tool calls the same services the `feedback` router
+  does; the change is recorded as `feedback.post.status_changed` with the caller as the actor.
 
 ## Evaluating it
 

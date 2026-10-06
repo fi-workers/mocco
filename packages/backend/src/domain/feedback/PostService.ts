@@ -7,6 +7,7 @@ import { FeedbackPostStatuses, FeedbackStatusChangeReasons } from '@mocco/common
 import {
   FeedbackBoardNotFoundError,
   FeedbackPostNotFoundError,
+  FeedbackStatusMovedError,
   FeedbackStatusUnchangedError,
 } from '@backend/domain/feedback/errors';
 import { FeedbackBoardRepo } from '@backend/domain/feedback/repos/board.repo';
@@ -125,18 +126,25 @@ export class PostService {
   /**
    * Move the post to `status` (any status to any other) and record the change. Entering shipped
    * sets `shippedAt`; leaving it clears it. The same status again is FeedbackStatusUnchangedError.
+   * With `from`, the change applies only while the post is still in that status (checked under
+   * the post's lock), else FeedbackStatusMovedError: a change confirmed from one status never
+   * lands on a post that has moved since.
    */
   async setStatus(
     scope: FeedbackScope,
     actorUserId: string,
     postId: string,
     status: FeedbackPostStatus,
+    options: { from?: FeedbackPostStatus } = {},
   ): Promise<{ post: FeedbackPostRow; change: FeedbackStatusChangeRow }> {
     const result = await this.deps.db.transaction(async tx => {
       const posts = new FeedbackPostRepo(tx);
       const current = await posts.findForUpdate(scope, postId);
       if (current === undefined) {
         throw new FeedbackPostNotFoundError(postId);
+      }
+      if (options.from !== undefined && current.status !== options.from) {
+        throw new FeedbackStatusMovedError(options.from, current.status);
       }
       if (current.status === status) {
         throw new FeedbackStatusUnchangedError(status);
