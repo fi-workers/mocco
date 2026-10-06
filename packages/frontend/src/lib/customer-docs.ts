@@ -36,6 +36,7 @@ const ORDER: Record<GuideSet, readonly string[]> = {
   [GuideSets.flags]: ['quickstart', 'browsers-and-apps', 'flags-as-code', 'stale-flags'],
   [GuideSets.messenger]: ['contact-us'],
   [GuideSets.help]: ['help-center'],
+  [GuideSets.feedback]: ['public-board'],
   [GuideSets.status]: ['status-page', 'monitor-your-service', 'subscribers'],
   [GuideSets.mcp]: ['connect'],
 };

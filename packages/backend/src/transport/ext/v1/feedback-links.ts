@@ -21,7 +21,7 @@ import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/tr
 
 import type { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
 
 export const FeedbackLinkRateLimits = {
@@ -54,12 +54,14 @@ export function createFeedbackLinkRoutes(
       Pick<EmailVoteService, 'canSendMail' | 'start' | 'confirm' | 'describeUnsubscribe' | 'unsubscribe'> | undefined;
     answer: (work: () => Promise<Response>) => Promise<Response>;
     send: <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status?: 200 | 201 | 202) => Response;
+    /** Who may start an email vote: a key with feedback:write, or a public board's site. */
+    write?: MiddlewareHandler<V1Env>;
   },
 ): Hono<V1Env> {
   const app = new Hono<V1Env>();
   const { emailVotes } = links;
 
-  app.post('/identify/email', requireKey(deps, { scope: ApiScopes.feedbackWrite }), async c => {
+  app.post('/identify/email', links.write ?? requireKey(deps, { scope: ApiScopes.feedbackWrite }), async c => {
     if (emailVotes?.canSendMail() !== true) {
       return mailUnavailable();
     }
