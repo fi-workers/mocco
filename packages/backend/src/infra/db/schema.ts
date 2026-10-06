@@ -1,6 +1,13 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
-import { FeedbackPostStatuses, FeedbackStatusChangeReasons } from '@mocco/common/feedback';
+import {
+  FeedbackCommentAuthorKinds,
+  FeedbackLimits,
+  FeedbackPostStatuses,
+  FeedbackStatusChangeReasons,
+  FeedbackVoteSources,
+  FeedbackVoteStates,
+} from '@mocco/common/feedback';
 import {
   ChangesetSources,
   ChangesetStates,
@@ -78,7 +85,13 @@ import type { ApiKeyKind, ApiScope } from '@mocco/common/apikey';
 import type { AuditAction } from '@mocco/common/audit';
 import type { ReleaseGate } from '@mocco/common/events';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
-import type { FeedbackPostStatus, FeedbackStatusChangeReason } from '@mocco/common/feedback';
+import type {
+  FeedbackCommentAuthorKind,
+  FeedbackPostStatus,
+  FeedbackStatusChangeReason,
+  FeedbackVoteSource,
+  FeedbackVoteState,
+} from '@mocco/common/feedback';
 import type {
   AttributeClause,
   ChangeDiffEntry,
@@ -4226,7 +4239,8 @@ export const statusSubscriberDeliveries = pgTable(
 // Feedback board (#98, slice #172): a project's boards, their categories, posts and each post's
 // status history. Every row carries `workspace_id`; children reach their board through composite
 // FKs on (board_id, workspace_id, project_id), so a row can never point at another tenant's board.
-// Votes, comments, merges, GitHub links and shipping come in later slices.
+// Votes and comments came with #173; subscriptions, merges, GitHub links and shipping come in
+// later slices.
 // ─────────────────────────────────────────────────────────────
 
 /** A feedback board of a project. `slug` is unique within the project. */
@@ -4305,6 +4319,10 @@ export const feedbackPosts = pgTable(
     shippedAt: timestamp('shipped_at'),
     // The staff member who wrote it. End-user authors come with the end-user identity foundation.
     authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Denormalized: the post's `counted` votes and its public (not internal) comments, changed in
+    // the same transaction as the vote or comment (FeedbackVoteRepo, FeedbackCommentRepo).
+    voteCount: integer('vote_count').notNull().default(0),
+    commentCount: integer('comment_count').notNull().default(0),
     createdAt,
     updatedAt,
   },
@@ -4330,6 +4348,8 @@ export const feedbackPosts = pgTable(
       sql`(${t.status} IN (${sqlInList([FeedbackPostStatuses.shipped])})) = (${t.shippedAt} IS NOT NULL)`,
     ),
     check('mocco_feedback_posts_number_check', sql`${t.number} >= 1`),
+    check('mocco_feedback_posts_vote_count_check', sql`${t.voteCount} >= 0`),
+    check('mocco_feedback_posts_comment_count_check', sql`${t.commentCount} >= 0`),
   ],
 );
 
@@ -4367,5 +4387,83 @@ export const feedbackStatusChanges = pgTable(
       'mocco_feedback_status_changes_reason_check',
       sql`${t.reason} IN (${sqlInList(Object.values(FeedbackStatusChangeReasons))})`,
     ),
+  ],
+);
+
+/** An end user's vote on a post: one per (post, end user). Only `counted` votes are in the post's
+ * `vote_count`; a `pending` one waits for its voter to confirm their email. */
+export const feedbackVotes = pgTable(
+  'mocco_feedback_votes',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    // The app's id for the end user (feedbackEndUserIdSchema); end-user identity (#100) indexes it.
+    endUserId: text('end_user_id').notNull(),
+    state: text().$type<FeedbackVoteState>().notNull(),
+    source: text().$type<FeedbackVoteSource>().notNull(),
+    // The team member who recorded it on the end user's behalf (source `staff`).
+    recordedByUserId: uuid('recorded_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    countedAt: timestamp('counted_at'),
+  },
+  t => [
+    uniqueIndex('mocco_feedback_votes_post_end_user_uq').on(t.postId, t.endUserId),
+    index('mocco_feedback_votes_post_created_idx').on(t.postId, t.createdAt.desc()),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_votes_post_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_votes_state_check', sql`${t.state} IN (${sqlInList(Object.values(FeedbackVoteStates))})`),
+    check('mocco_feedback_votes_source_check', sql`${t.source} IN (${sqlInList(Object.values(FeedbackVoteSources))})`),
+    check(
+      'mocco_feedback_votes_counted_check',
+      sql`(${t.state} IN (${sqlInList([FeedbackVoteStates.counted])})) = (${t.countedAt} IS NOT NULL)`,
+    ),
+    check(
+      'mocco_feedback_votes_end_user_check',
+      sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
+    ),
+  ],
+);
+
+/** A comment on a post, by a team member or an end user. A team member's may be the official
+ * response (public) or an internal note (team only); an end user's is neither (DB-checked). */
+export const feedbackComments = pgTable(
+  'mocco_feedback_comments',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    authorKind: text('author_kind').$type<FeedbackCommentAuthorKind>().notNull(),
+    // Set for a team member's comment; SET NULL keeps the comment when the person goes.
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Set exactly for an end user's comment.
+    authorEndUserId: text('author_end_user_id'),
+    body: text().notNull(),
+    isOfficial: boolean('is_official').notNull().default(false),
+    isInternal: boolean('is_internal').notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    index('mocco_feedback_comments_post_created_idx').on(t.postId, t.createdAt),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_comments_post_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_comments_author_kind_check',
+      sql`${t.authorKind} IN (${sqlInList(Object.values(FeedbackCommentAuthorKinds))})`,
+    ),
+    check(
+      'mocco_feedback_comments_author_check',
+      sql`CASE WHEN ${t.authorKind} IN (${sqlInList([FeedbackCommentAuthorKinds.endUser])})
+        THEN ${t.authorEndUserId} IS NOT NULL AND ${t.authorUserId} IS NULL AND NOT ${t.isOfficial} AND NOT ${t.isInternal}
+        ELSE ${t.authorEndUserId} IS NULL END`,
+    ),
+    check('mocco_feedback_comments_visibility_check', sql`NOT (${t.isOfficial} AND ${t.isInternal})`),
   ],
 );

@@ -914,3 +914,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
   `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/mcp-feedback-tools` (issue #468)
+
+## 2026-10-06 — Feedback: votes and comments
+
+- Documented the first half of #173 in the [feedback board model](./reference/feedback.md#votes): migration 0077 with
+  `mocco_feedback_votes` (one per post and end user, `pending` or `counted`) and `mocco_feedback_comments` (by a team
+  member or an end user; official or internal), and `vote_count` and `comment_count` on posts. `VoteService` is
+  idempotent and moves `vote_count` in the same transaction as the vote, under the post's row lock, so it equals the
+  counted votes after any sequence of writes. `CommentService` has a team projection and a public one without internal
+  notes or staff ids. The `feedback` router gains `votes`, `vote`, `unvote`, `comments` and `createComment`, each in
+  the cross-tenant table.
+- End users are the app's own user ids until end-user identity (#100) lands. Subscriptions and merging duplicates are
+  the second half of #173; the MCP tools for votes and comments are named in the
+  [spec](./specs/2026-09-24-feedback-design.md#61-mcp-tools-adr-0025) and come in the slice after.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `index.md`,
+  `log.md`
+- Source: branch `feat/feedback-votes` (issue #173)

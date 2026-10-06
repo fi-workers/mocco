@@ -1,5 +1,11 @@
 import { ExecutorIds } from '@mocco/common/execution';
-import { FeedbackPostSorts, FeedbackPostStatuses, FeedbackStatusChangeReasons } from '@mocco/common/feedback';
+import {
+  FeedbackPostSorts,
+  FeedbackPostStatuses,
+  FeedbackStatusChangeReasons,
+  FeedbackVoteSources,
+  FeedbackVoteStates,
+} from '@mocco/common/feedback';
 import { Products } from '@mocco/common/project';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -71,6 +77,12 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
   updatePost: async (api, scope, ids) => await api.feedback.updatePost({ ...scope, postId: ids.postId, title: 'x' }),
   setPostStatus: async (api, scope, ids) =>
     await api.feedback.setPostStatus({ ...scope, postId: ids.postId, status: FeedbackPostStatuses.closed }),
+  votes: async (api, scope, ids) => await api.feedback.votes({ ...scope, postId: ids.postId }),
+  vote: async (api, scope, ids) => await api.feedback.vote({ ...scope, postId: ids.postId, endUserId: 'stuffed' }),
+  unvote: async (api, scope, ids) => await api.feedback.unvote({ ...scope, postId: ids.postId, endUserId: 'voter' }),
+  comments: async (api, scope, ids) => await api.feedback.comments({ ...scope, postId: ids.postId }),
+  createComment: async (api, scope, ids) =>
+    await api.feedback.createComment({ ...scope, postId: ids.postId, body: 'x', isOfficial: true }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
@@ -86,7 +98,7 @@ const outcome = async (run: () => Promise<unknown>): Promise<string | undefined>
   }
 };
 
-/** A board with a category and a categorized post. */
+/** A board with a category and a categorized post, which one end user voted for. */
 const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
   const { board } = await api.feedback.createBoard({ ...scope, slug, name: 'Ideas' });
   const { category } = await api.feedback.createCategory({ ...scope, boardId: board.id, slug: 'mobile', name: 'M' });
@@ -96,6 +108,7 @@ const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
     title: 'Dark mode',
     categoryId: category.id,
   });
+  await api.feedback.vote({ ...scope, postId: post.id, endUserId: 'voter' });
   return { boardId: board.id, categoryId: category.id, postId: post.id };
 };
 
@@ -220,6 +233,41 @@ describe('feedback router on pglite', () => {
     await expect(api.feedback.post({ ...scope, postId: ids.postId })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
+  it('records votes on behalf of end users and takes the team comments', async () => {
+    const { api, scope } = await setup('owner@example.com', 'acme');
+    const ids = await seed(api, scope, 'ideas');
+
+    const again = await api.feedback.vote({ ...scope, postId: ids.postId, endUserId: 'voter' });
+    expect(again.post.voteCount).toBe(1);
+    const second = await api.feedback.vote({ ...scope, postId: ids.postId, endUserId: 'customer-42' });
+    expect(second.vote).toMatchObject({ source: FeedbackVoteSources.staff, state: FeedbackVoteStates.counted });
+    expect(second.post.voteCount).toBe(2);
+    const { votes } = await api.feedback.votes({ ...scope, postId: ids.postId });
+    expect(votes.map(vote => vote.endUserId)).toEqual(['customer-42', 'voter']);
+    const unvoted = await api.feedback.unvote({ ...scope, postId: ids.postId, endUserId: 'voter' });
+    expect(unvoted.post.voteCount).toBe(1);
+
+    const { comment } = await api.feedback.createComment({
+      ...scope,
+      postId: ids.postId,
+      body: 'Planned for Q4',
+      isOfficial: true,
+    });
+    expect(comment).toMatchObject({ isOfficial: true, isInternal: false });
+    await api.feedback.createComment({ ...scope, postId: ids.postId, body: 'Needs design', isInternal: true });
+    const { comments } = await api.feedback.comments({ ...scope, postId: ids.postId });
+    expect(comments.map(row => [row.body, row.isInternal])).toEqual([
+      ['Planned for Q4', false],
+      ['Needs design', true],
+    ]);
+    await expect(
+      api.feedback.createComment({ ...scope, postId: ids.postId, body: 'x', isOfficial: true, isInternal: true }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(api.feedback.vote({ ...scope, postId: ids.postId, endUserId: ' ' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('covers every feedback procedure in the cross-tenant table', () => {
     expect(new Set(Object.keys(calls))).toEqual(new Set(Object.keys(feedbackRouter._def.procedures)));
   });
@@ -259,6 +307,11 @@ describe('feedback router on pglite', () => {
       categoryId: victim.categoryId,
     });
     expect(post.history).toHaveLength(1);
+    expect(post.post).toMatchObject({ voteCount: 1, commentCount: 0 });
+    const { votes } = await owner.api.feedback.votes({ ...owner.scope, postId: victim.postId });
+    expect(votes.map(vote => vote.endUserId)).toEqual(['voter']);
+    const { comments } = await owner.api.feedback.comments({ ...owner.scope, postId: victim.postId });
+    expect(comments).toEqual([]);
     const { posts } = await owner.api.feedback.posts({ ...owner.scope, boardId: victim.boardId });
     expect(posts.map(row => row.id)).toEqual([victim.postId]);
     const { boards } = await attacker.api.feedback.boards(attacker.scope);

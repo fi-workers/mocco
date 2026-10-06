@@ -96,6 +96,23 @@ export class FeedbackPostRepo {
     );
   }
 
+  /** Add `delta` (negative to take away) to the post's vote or comment count, in the
+   * transaction that wrote the vote or comment, so the count never drifts from the rows. */
+  async addToCount(
+    scope: FeedbackScope,
+    id: string,
+    counter: 'voteCount' | 'commentCount',
+    delta: number,
+  ): Promise<FeedbackPostRow> {
+    return expectOne(
+      await this.db
+        .update(p)
+        .set({ [counter]: sql`${p[counter]} + ${delta}` })
+        .where(and(scoped(scope), eq(p.id, id)))
+        .returning(),
+    );
+  }
+
   /** Uncategorize the category's posts, before the category is deleted. */
   async uncategorize(scope: FeedbackScope, categoryId: string): Promise<void> {
     await this.db
