@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools with those planned next.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, and the feedback MCP tools.
 type: reference
 status: active
 created: 2026-10-06
@@ -22,6 +22,7 @@ code_refs:
   - packages/backend/src/domain/feedback/errors.ts
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
+  - packages/backend/src/transport/mcp/tools/feedback-engagement.ts
 ---
 
 # Feedback board model
@@ -149,10 +150,14 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), four tools
 
 `mocco_feedback_post_set_status` has the locks of every changing MCP tool: the `feedback:write` scope (a token without it is challenged for it), the workspace's **Settings → Agents** opt-in, and a confirmation round trip that names the post, its status now and the status it would get. The signed confirmation records that `from` status, so a post moved by anyone before the answer is refused as a different change, and the tool passes `from` to `setStatus` so the service re-checks it under the post's lock. A second answer to the same confirmation finds the post moved already and writes nothing; asking for the status a post already has answers without asking. The change is the console's: a history row with reason `manual` and a `feedback.post.status_changed` audit entry naming the caller.
 
-The rest of #173 gets its tools in the next slice, over `VoteService`, `CommentService` and `MergeService`:
+Five more (`transport/mcp/tools/feedback-engagement.ts`, #473) sit over `VoteService`, `CommentService` and `MergeService` behind the same `ProjectScope` check:
 
-- `mocco_feedback_votes_list`: a post's votes, paged, concise or detailed.
-- `mocco_feedback_comments_list`: a post's comments as the team sees them, internal notes included, paged.
-- `mocco_feedback_comment_create`: comment as the caller, plainly, as the official response or as an internal note. It changes data, so it sits behind `feedback:write`, the opt-in and the confirmation round trip.
-- `mocco_feedback_post_vote`: record an end user's vote on their behalf, behind the same locks.
-- `mocco_feedback_post_merge`: merge a duplicate into another post as the caller, behind the same locks, with a confirmation bound to both posts being unmerged when it was asked.
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_feedback_votes_list` | `VoteService.list` | A post's votes, newest first: end user, `counted` or `pending`, when; detailed adds the id, source, `countedAt` and the team member who recorded it. `limit` up to 99, `offset`, `nextOffset` |
+| `mocco_feedback_comments_list` | `CommentService.listForStaff` | A post's comments, oldest first, internal notes included and marked; concise cuts each body at 500 characters, detailed has it whole with the author ids. Paged the same way |
+| `mocco_feedback_comment_create` | `CommentService.createAsStaff` | Comments as the caller: public, the official response, or an internal note |
+| `mocco_feedback_post_vote` | `VoteService.vote` | Records an end user's vote on their behalf (`source: staff`), counted at once |
+| `mocco_feedback_post_merge` | `MergeService.merge` | Merges a duplicate into another post on its board as the caller |
+
+The three changes have the locks of `mocco_feedback_post_set_status`: `feedback:write`, the opt-in and a confirmation round trip. Each confirmation is bound to what it showed. A comment is bound to its text and kind. A vote is bound to whether the end user had a pending vote or none; one that counts already answers without asking. A merge is bound to both posts, their board and each post's vote count, so a vote on either before the answer asks again. A post merged in between, a post into itself, or a post on another board is refused before asking. The services check the same rules again under their locks ([Merging duplicates](#merging-duplicates)).

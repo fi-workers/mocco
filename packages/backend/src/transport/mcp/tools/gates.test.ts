@@ -289,6 +289,9 @@ describe('mocco_gates_resume (pglite, over HTTP)', () => {
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
+      feedbackVotes: { list: refuse, find: refuse, vote: refuse },
+      feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
+      feedbackMerges: { merge: refuse },
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });
   });

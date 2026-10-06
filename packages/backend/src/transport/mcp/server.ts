@@ -11,11 +11,17 @@
 // here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) has the
 // same locks under its own `status:write` scope, and `mocco_messenger_reply` and
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
-// `mocco_feedback_post_set_status` (in `tools/feedback.ts`) under `feedback:write`.
+// `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
+// `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
+// under `feedback:write`.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
 import { registerFeedbackTools, type FeedbackToolDeps } from '@backend/transport/mcp/tools/feedback';
+import {
+  registerFeedbackEngagementTools,
+  type FeedbackEngagementToolDeps,
+} from '@backend/transport/mcp/tools/feedback-engagement';
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
@@ -44,6 +50,7 @@ export type McpToolDeps = RunToolDeps &
   HelpToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
+  FeedbackEngagementToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -71,6 +78,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerHelpTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);
+  registerFeedbackEngagementTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);
