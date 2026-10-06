@@ -732,6 +732,34 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feature-map.md`, `log.md`
 - Source: branch `feat/status-subscribers` (issue #156)
 
+## 2026-10-06 — MCP: check a monitor now, heartbeat details, incident origin
+
+- Documented `mocco_monitors_check` (#454) in the [status page model](./reference/status.md#mcp): the MCP side of
+  `POST /v1/monitors/{id}/check`, over `MonitorService.requestCheck` behind `ProjectScope`, with a new `status:write`
+  OAuth scope stepped up for like `approvals:write`. It moves the monitor's next round, so it is behind the workspace's
+  opt-in and confirms through the protocol's round trip like every changing tool; heartbeats and paused monitors are
+  refused before anything is asked. The monitor reads now show a
+  heartbeat's period, grace, last ping and last run in both shapes (never its token), and the incident reads show
+  `origin` and the `suspectedRun` a deploy watch attributed, with a link to the run. The
+  [connect guide](./customer/mcp/connect.md) and the [MCP spec](./specs/2026-10-02-mcp-and-cli-design.md) say the same.
+- Docs touched: `reference/status.md`, `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
+- Source: branch `feat/mcp-status-tools` (issue #454)
+
+## 2026-10-06 — Status: webhook subscribers and the page's sign-up form
+
+- Documented the rest of #156 in the [status page model](./reference/status.md#subscribers): webhook subscribers
+  (`{ channel: "webhook", url }`, the `whsec_` secret shown once and sealed by SecretBox, the confirmation event, Standard
+  Webhooks signatures, the address check at sign-up and in the socket's lookup, no redirects, `410` unsubscribes) and the
+  **Get updates** form on the public page, which posts without JavaScript and, with it, only changes its own message when
+  the sign-up fails. The address policy moved to `@mocco/common/address-policy`, shared by the probe and the webhook
+  sender. The [public API](./reference/public-api.md#routes), [notifications](./reference/notifications.md#webhooks-out),
+  [env](./reference/env.md#email-vars) and the feature map (Subscribers is live) say so, and the new customer guide
+  [Let visitors subscribe](./customer/status/subscribers.md) has screenshots of the form, its answer and the
+  confirmation page; [Run a status page](./customer/status/status-page.md) links it.
+- Docs touched: `reference/status.md`, `reference/public-api.md`, `reference/notifications.md`, `reference/env.md`,
+  `reference/feature-map.md`, `customer/status/subscribers.md`, `customer/status/status-page.md`, `log.md`
+- Source: branch `feat/status-subscribers-webhooks` (issue #156)
+
 ## 2026-10-06 — Stage0: the canary and the external heartbeat
 
 - Documented stage0 (#245, relay design §11): the `stage0.canary` platform schedule sends a signed synthetic GitHub

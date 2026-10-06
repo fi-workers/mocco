@@ -553,13 +553,18 @@ export const SubscriberMailKinds = {
 } as const;
 export type SubscriberMailKind = (typeof SubscriberMailKinds)[keyof typeof SubscriberMailKinds];
 
-export const SubscriberLimits = { emailMax: 254, componentsMax: 100, honeypotMax: 500 } as const;
+export const SubscriberLimits = { emailMax: 254, webhookUrlMax: 2000, componentsMax: 100, honeypotMax: 500 } as const;
+
+/** The components to hear about; leave it out for the whole page. */
+const subscriberComponentIds = z.array(z.uuid()).min(1).max(SubscriberLimits.componentsMax).optional();
 
 /**
- * `POST /v1/status-pages/{slug}/subscribers`. `website` is the form's honeypot: hidden from
- * people, so a filled one is a bot, answered like a person and otherwise ignored.
+ * An email sign-up on `POST /v1/status-pages/{slug}/subscribers` (the page's form posts this).
+ * `website` is the form's honeypot: hidden from people, so a filled one is a bot, answered like a
+ * person and otherwise ignored.
  */
-export const statusSubscribeInputSchema = z.object({
+export const statusEmailSubscribeInputSchema = z.object({
+  channel: z.literal(SubscriberChannels.email).optional(),
   email: z
     .string()
     .trim()
@@ -567,9 +572,23 @@ export const statusSubscribeInputSchema = z.object({
     .pipe(z.email())
     // eslint-disable-next-line sonarjs/null-dereference -- the piped schema yields a string
     .transform(email => email.toLowerCase()),
-  /** The components to hear about; leave it out for the whole page. */
-  componentIds: z.array(z.uuid()).min(1).max(SubscriberLimits.componentsMax).optional(),
+  componentIds: subscriberComponentIds,
   locale: subscriberLocaleSchema.optional(),
   website: z.string().max(SubscriberLimits.honeypotMax).optional(),
 });
+
+/** A webhook sign-up: an https URL without credentials. The server also refuses one whose host
+ * is not a public address, when it is signed up and again on every delivery. */
+export const statusWebhookSubscribeInputSchema = z.object({
+  channel: z.literal(SubscriberChannels.webhook),
+  url: z
+    .url({ protocol: /^https$/u })
+    .max(SubscriberLimits.webhookUrlMax)
+    .refine(url => !/^https:\/\/[^/]*@/u.test(url), 'A webhook URL carries no credentials'),
+  componentIds: subscriberComponentIds,
+});
+
+export const statusSubscribeInputSchema = z.union([statusWebhookSubscribeInputSchema, statusEmailSubscribeInputSchema]);
 export type StatusSubscribeInput = z.infer<typeof statusSubscribeInputSchema>;
+export type StatusEmailSubscribeInput = z.infer<typeof statusEmailSubscribeInputSchema>;
+export type StatusWebhookSubscribeInput = z.infer<typeof statusWebhookSubscribeInputSchema>;

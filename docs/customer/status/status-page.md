@@ -16,7 +16,7 @@ related:
 
 A status page tells your users whether your service works. You list the parts of your service as **components**, report **incidents** against them while something is wrong, and announce **maintenance** before you do it. Mocco works out what each component shows from what you report.
 
-The page is managed from the console today. The public page your users open comes later.
+You manage the page from the console, and Mocco publishes it as the public page your users open. They can follow it by email, signed webhook or its Atom feed ([Let visitors subscribe](./subscribers.md)).
 
 ## 1. Turn on the status page
 

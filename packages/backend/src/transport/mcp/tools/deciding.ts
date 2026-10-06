@@ -3,7 +3,8 @@
 // checked again here), the workspace's opt-in, and a server able to sign a confirmation.
 // None of them replaces the role check — the domain service still decides who may decide.
 // The tools that change notification settings use the same checks and the same round
-// trip (`confirmThenApply`).
+// trip (`confirmThenApply`), and so does the monitor check, under its own `status:write`
+// scope.
 import { isDeepStrictEqual } from 'node:util';
 
 import { McpScopes } from '@mocco/common/mcp';
@@ -15,6 +16,7 @@ import { userIdOf } from '@backend/transport/mcp/tools/runs';
 import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
 import type { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import type { Confirmations } from '@backend/transport/mcp/confirmation';
+import type { McpScope } from '@mocco/common/mcp';
 import type {
   CallToolResult,
   InputRequiredResult,
@@ -40,18 +42,22 @@ export const CONFIRM = 'confirm';
  * and every client renders it as the yes/no it is. */
 export const confirmationSchema = (label: string) => z.object({ confirm: z.boolean().describe(label) });
 
-/** A deciding tool needs `approvals:write`. A token without it is challenged for it
+/** A tool that needs a scope beyond sign-in. A token without it is challenged for it
  * (HTTP 403, `insufficient_scope`) — every scope it already has plus this one, because
  * the client re-authorizes with exactly the set the challenge names. */
-export function requireApprovalsWrite(errorDescription: string): ScopeChallengeHandler {
+export function requireScope(scope: McpScope, errorDescription: string): ScopeChallengeHandler {
   // eslint-disable-next-line sonarjs/function-return-type -- the SDK's contract: a challenge, or undefined for none
   return ({ authInfo }) => {
-    if (authInfo === undefined || authInfo.scopes.includes(McpScopes.approvalsWrite)) {
+    if (authInfo === undefined || authInfo.scopes.includes(scope)) {
       return undefined;
     }
-    return { scopes: [McpScopes.approvalsWrite, ...authInfo.scopes], errorDescription };
+    return { scopes: [scope, ...authInfo.scopes], errorDescription };
   };
 }
+
+/** A deciding tool needs `approvals:write`. */
+export const requireApprovalsWrite = (errorDescription: string): ScopeChallengeHandler =>
+  requireScope(McpScopes.approvalsWrite, errorDescription);
 
 /** How a tool names what it would do, in its refusals. */
 export interface DecisionWords {
@@ -59,7 +65,14 @@ export interface DecisionWords {
   verb: string;
   /** "Voting", "Resuming or rejecting a run". */
   doing: string;
+  /** The scope the tool needs, and what the person allows by granting it; `approvals:write`
+   * ("approve and reject as you") unless the tool says otherwise. */
+  scope?: { name: McpScope; allows: string };
+  /** Where the person can do it meanwhile; "<verb> in the Mocco console" unless the tool says otherwise. */
+  instead?: string;
 }
+
+const APPROVALS_WRITE = { name: McpScopes.approvalsWrite, allows: 'approve and reject as you' } as const;
 
 export interface OpenDecision {
   userId: string;
@@ -78,17 +91,17 @@ export async function openDecision(
   words: DecisionWords,
 ): Promise<OpenDecision | CallToolResult> {
   const userId = userIdOf(ctx);
+  const scope = words.scope ?? APPROVALS_WRITE;
   // The HTTP layer has already challenged a token without the scope; this is the same
   // rule checked where the decision is made, in case anything ever routes around it.
-  if (!(ctx.http?.authInfo?.scopes.includes(McpScopes.approvalsWrite) ?? false)) {
-    return refused(
-      `This connection may not ${words.verb}. Reconnect the app and allow it to approve and reject as you.`,
-    );
+  if (!(ctx.http?.authInfo?.scopes.includes(scope.name) ?? false)) {
+    return refused(`This connection may not ${words.verb}. Reconnect the app and allow it to ${scope.allows}.`);
   }
   const workspaceId = await deps.scope.resolve(userId, workspaceArgument);
   if (!(await deps.settings.agentsMayDecide(workspaceId))) {
+    const instead = words.instead ?? `${words.verb} in the Mocco console`;
     return refused(
-      `Agents may not ${words.verb} in this workspace. An owner or admin can allow it in Settings → Agents; until then, ${words.verb} in the Mocco console.`,
+      `Agents may not ${words.verb} in this workspace. An owner or admin can allow it in Settings → Agents; until then, ${instead}.`,
     );
   }
   const { confirmations } = deps;

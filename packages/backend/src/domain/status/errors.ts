@@ -105,3 +105,11 @@ export class SubscriberDeliveryRetryError extends Error {
     this.name = 'SubscriberDeliveryRetryError';
   }
 }
+
+/** A webhook sign-up whose URL Mocco won't call (its host is an address that isn't public) — BAD_REQUEST. */
+export class SubscriberWebhookUrlError extends BadRequestError {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`This webhook URL can't be used: ${reason}`, options);
+    this.name = 'SubscriberWebhookUrlError';
+  }
+}

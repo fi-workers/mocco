@@ -166,7 +166,9 @@ from the round verdicts and the state changes. See [time series](./status.md#tim
 (`Acme Status <status@acme.example>`); both are required with it. `log` is the development sink: each mail, links
 included, is written to the server log and nothing is sent, so never use it in production. Unset, nothing is sent and
 status page sign-ups answer `503`. For a real SMTP round trip in development, point `smtp` at a local catcher such as
-Mailpit (`smtp://localhost:1025`). Status subscriber links are signed with a key derived from `AUTH_SECRET`.
+Mailpit (`smtp://localhost:1025`). Status subscriber links are signed with a key derived from `AUTH_SECRET`; status webhook subscribers also
+need `SECRETS_ENCRYPTION_KEYS`, which seals their signing secrets. The public page shows its sign-up form only when
+`EMAIL_DRIVER` is set.
 
 ## Messenger vars
 

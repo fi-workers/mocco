@@ -2,8 +2,9 @@
 // honeypot, the answers that never tell who follows a page, the limits per client and per
 // address, and the pages the mail's links open (confirm; unsubscribe asks before a POST does
 // it). What a sign-up and its mail do is pinned in domain/status/SubscriberService.test.ts.
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
+import { isPublicAddress } from '@mocco/common/address-policy';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,12 +14,14 @@ import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
+import { WebhookSender } from '@backend/domain/notification/senders/webhook';
 import { createRecordingEmailSender } from '@backend/domain/notification/testing/recording-email';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
 import { createStatusDomain } from '@backend/domain/status/compose';
 import { SubscriberTokenPurposes, SubscriberTokens } from '@backend/domain/status/subscriber-token';
 import { SubscriberRateLimits } from '@backend/domain/status/SubscriberService';
+import { SecretBox } from '@backend/infra/crypto/secret-box';
 import { expectOne } from '@backend/infra/db/rows';
 import { statusSubscribers, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
@@ -31,14 +34,27 @@ const BASE = 'https://www.mocco.test/api/ext/v1/status-pages';
 
 const unsubscribeLink = (token: string) => `${BASE}/acme/subscribers/unsubscribe?token=${encodeURIComponent(token)}`;
 
+const postForm = async (app: Hono, body: string, ip: string) =>
+  await app.request(`${BASE}/acme/subscribers`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'text/html,application/xhtml+xml',
+      referer: 'https://status.acme.example/acme/',
+      'x-forwarded-for': ip,
+    },
+    body,
+  });
+
 describe('/v1/status-pages/:slug/subscribers (pglite)', () => {
   let t: TestDb;
   let clock: Date;
   let tokens: SubscriberTokens;
   let componentIds: { api: string; foreign: string };
 
-  /** The ext app mounted as in production, over a status domain with `email` as its sender. */
-  const appWith = async (email: EmailSender | undefined) => {
+  /** The ext app mounted as in production, over a status domain with `email` as its sender
+   * (and webhooks, unless `hasWebhooks` is false). */
+  const appWith = async (email: EmailSender | undefined, hasWebhooks = true) => {
     const audit = new AuditService({ audit: new AuditRepo(t.db) });
     const queue = new PostgresJobQueue({
       jobs: new JobRepo(t.db),
@@ -50,7 +66,14 @@ describe('/v1/status-pages/:slug/subscribers (pglite)', () => {
       audit,
       queue,
       appOrigin: 'https://www.mocco.test',
-      subscribers: { tokens, email },
+      subscribers: {
+        tokens,
+        email,
+        ...(hasWebhooks && {
+          box: new SecretBox([{ id: 'a', key: randomBytes(32) }]),
+          webhooks: new WebhookSender({ policy: isPublicAddress }),
+        }),
+      },
       now: () => clock,
     });
     const { projects } = createProjectDomain(t.db);
@@ -246,5 +269,55 @@ describe('/v1/status-pages/:slug/subscribers (pglite)', () => {
     expect(oneClick.status).toBe(200);
     const after = await t.db.select().from(statusSubscribers).where(eq(statusSubscribers.pageId, kim.pageId));
     expect(after.every(row => row.unsubscribedAt !== null)).toBe(true);
+  });
+
+  it('signs a webhook up with its secret shown once, and refuses what it would never call', async () => {
+    const hook = 'https://hooks.example.com/status';
+    const first = await post('acme/subscribers', { channel: 'webhook', url: hook });
+    expect(first.status).toBe(202);
+    const answer = (await first.json()) as { status: string; secret: string };
+    expect(answer).toEqual({ status: 'pending_confirmation', secret: expect.stringMatching(/^whsec_/u) });
+    const again = await post(
+      'acme/subscribers',
+      { channel: 'webhook', url: hook },
+      { 'x-forwarded-for': '203.0.113.9' },
+    );
+    expect(again.status).toBe(202);
+
+    const kinds = await Promise.all(
+      [
+        // eslint-disable-next-line unicorn/prefer-https -- plain http is the case refused
+        { channel: 'webhook', url: 'http://hooks.example.com/status' },
+        { channel: 'webhook', url: 'https://user:pass@hooks.example.com/status' },
+        { channel: 'webhook', url: 'https://169.254.169.254/latest' },
+      ].map(async (body, n) => {
+        const response = await post('acme/subscribers', body, { 'x-forwarded-for': `198.51.100.${String(n)}` });
+        return response.status;
+      }),
+    );
+    expect(kinds).toEqual([400, 400, 400]);
+    const rows = await subscriberRows();
+    expect(rows.map(row => [row.channel, row.webhookUrl])).toEqual([['webhook', hook]]);
+  });
+
+  it('takes no webhook sign-up without a SecretBox, while email sign-ups go on', async () => {
+    const built = await appWith(createRecordingEmailSender(), false);
+    app = built.app;
+    const webhook = await post('acme/subscribers', { channel: 'webhook', url: 'https://hooks.example.com/s' });
+    const email = await post('acme/subscribers', { email: 'kim@example.test' });
+    expect([webhook.status, email.status]).toEqual([503, 202]);
+  });
+
+  it('answers the form posted without the script with a page, and a failure with one too', async () => {
+    const done = await postForm(app, 'email=kim%40example.test&website=', '203.0.113.20');
+    expect(done.status).toBe(202);
+    expect(done.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    const html = await done.text();
+    expect(html).toContain('Check your inbox: we sent you a link to confirm your subscription.');
+    expect(html).toContain('<a href="https://status.acme.example/acme/">Back to the status page</a>');
+
+    const failed = await postForm(app, 'email=not-an-address', '203.0.113.21');
+    expect(failed.status).toBe(400);
+    expect(await failed.text()).toContain('We couldn&#39;t sign you up right now.');
   });
 });

@@ -22,9 +22,8 @@ import { VerdictEvaluator } from '@backend/domain/status/VerdictEvaluator';
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { EventPublisher } from '@backend/domain/events/ports';
 import type { JobQueue } from '@backend/domain/jobs/ports';
-import type { EmailSender } from '@backend/domain/notification/senders/email';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
-import type { SubscriberTokens } from '@backend/domain/status/subscriber-token';
+import type { SubscriberEnvDeps } from '@backend/domain/status/subscriber-config';
 import type { ObjectStore } from '@backend/domain/storage/ports';
 import type { Db } from '@backend/infra/db/types';
 
@@ -53,7 +52,7 @@ export interface StatusDomainDeps {
   appOrigin?: string;
   /** What subscribers need beyond the queue: the key their links are signed with, and the email
    * sender (undefined when none is configured: deliveries then fail). */
-  subscribers?: { tokens: SubscriberTokens; email: EmailSender | undefined };
+  subscribers?: SubscriberEnvDeps;
   now?: () => Date;
 }
 
@@ -127,6 +126,8 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
             queue: deps.queue,
             tokens: deps.subscribers.tokens,
             email: deps.subscribers.email,
+            ...(deps.subscribers.box !== undefined && { box: deps.subscribers.box }),
+            ...(deps.subscribers.webhooks !== undefined && { webhooks: deps.subscribers.webhooks }),
             appOrigin: deps.appOrigin,
             ...now,
           }),
@@ -139,7 +140,7 @@ export function createStatusDomain(db: Db, deps: StatusDomainDeps): StatusDomain
 // eslint-disable-next-line sonarjs/function-return-type
 export function createSnapshotService(
   db: Db,
-  deps: { store: ObjectStore | undefined; queue: JobQueue; now?: () => Date },
+  deps: { store: ObjectStore | undefined; queue: JobQueue; subscribeOrigin?: string; now?: () => Date },
 ): SnapshotService | undefined {
   if (deps.store === undefined) {
     return undefined;
@@ -149,6 +150,7 @@ export function createSnapshotService(
     publisher: new StaticPublisher(deps.store),
     scheduler: new SnapshotScheduler({ db, queue: deps.queue, now: deps.now ?? (() => new Date()) }),
     componentStatus: new ComponentStatusService({ db }),
+    ...(deps.subscribeOrigin !== undefined && { subscribeOrigin: deps.subscribeOrigin }),
     ...(deps.now !== undefined && { now: deps.now }),
   });
 }

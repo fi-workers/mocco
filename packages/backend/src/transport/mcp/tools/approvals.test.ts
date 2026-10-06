@@ -186,7 +186,7 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       statusPages: { listPages: refuse, getPage: refuse },
       statusIncidents: { list: refuse, get: refuse },
       statusMaintenances: { list: refuse },
-      statusMonitors: { list: refuse, get: refuse },
+      statusMonitors: { list: refuse, get: refuse, find: refuse, requestCheck: refuse },
       statusLocations: { list: refuse },
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
