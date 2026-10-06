@@ -86,6 +86,37 @@ export type SegmentOrigin = (typeof SegmentOrigins)[keyof typeof SegmentOrigins]
 export const SegmentChanges = { same: 'same', changed: 'changed', added: 'added', removed: 'removed' } as const;
 export type SegmentChange = (typeof SegmentChanges)[keyof typeof SegmentChanges];
 
+/** Which articles the translations dashboard lists (#213). */
+export const TranslationFilters = {
+  /** Every published article. */
+  all: 'all',
+  /** An article with a language made from an older source. */
+  stale: 'stale',
+  /** An article with a language whose last run was refused. */
+  failed: 'failed',
+  /** Stale, failed or not translated: what someone should look at. */
+  attention: 'attention',
+} as const;
+export type TranslationFilter = (typeof TranslationFilters)[keyof typeof TranslationFilters];
+export const translationFilterSchema = z.enum([
+  TranslationFilters.all,
+  TranslationFilters.stale,
+  TranslationFilters.failed,
+  TranslationFilters.attention,
+]);
+
+/** The dashboard's page size: the console's default and the most one page holds. */
+export const TranslationGridLimits = { pageDefault: 50, pageMax: 200 } as const;
+
+export const translationGridInputSchema = z.object({
+  filter: translationFilterSchema.default(TranslationFilters.all),
+  /** Only these languages (columns, and the ones the filter looks at); every offered one without. */
+  locales: z.array(helpLocaleSchema).max(HELP_LOCALES.length).optional(),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(TranslationGridLimits.pageMax).default(TranslationGridLimits.pageDefault),
+});
+export type TranslationGridInput = z.input<typeof translationGridInputSchema>;
+
 export const translationInputSchema = z.object({
   articleId: z.uuid(),
   locale: helpLocaleSchema,

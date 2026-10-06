@@ -69,8 +69,34 @@ export const Routes = {
     `/workspaces/${id}/p/${projectId}/inbox/${conversationId}`,
   /** The project's help center (#96): setup, then its collections, sections and articles. */
   projectHelp: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help`,
-  projectHelpArticle: (id: string, projectId: string, articleId: string) =>
-    `/workspaces/${id}/p/${projectId}/help/${articleId}`,
+  /** An article's editor; `review` opens that language's review (#213). */
+  projectHelpArticle: (id: string, projectId: string, articleId: string, review?: string) => {
+    const path = `/workspaces/${id}/p/${projectId}/help/${articleId}`;
+    return review === undefined ? path : `${path}?review=${encodeURIComponent(review)}`;
+  },
+  /**
+   * The translations dashboard (#213): every published article × language. `filter` is a
+   * TranslationFilter, `locale` narrows to one language, `page` counts from 1.
+   */
+  projectHelpTranslations: (
+    id: string,
+    projectId: string,
+    view: { filter?: string; locale?: string; page?: number } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (view.filter !== undefined) {
+      query.set('filter', view.filter);
+    }
+    if (view.locale !== undefined) {
+      query.set('locale', view.locale);
+    }
+    if (view.page !== undefined && view.page > 1) {
+      query.set('page', String(view.page));
+    }
+    const path = `/workspaces/${id}/p/${projectId}/help/translations`;
+    const search = query.toString();
+    return search === '' ? path : `${path}?${search}`;
+  },
   /**
    * The project's status pages (#148); `pageId` selects the page shown, `tab` its components,
    * incidents, maintenance or the project's monitors, and `filter` which incidents are listed.

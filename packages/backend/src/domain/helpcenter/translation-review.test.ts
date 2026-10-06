@@ -243,6 +243,28 @@ describe('help center translation review (pglite)', () => {
     ).rejects.toBeInstanceOf(HelpNoProposalError);
   });
 
+  it('saves a translation of an article that repeats a paragraph (one memory entry per source text)', async () => {
+    const help = domain();
+    const article = await translated(help);
+    const repeated = '## Tip\n\nRestart the app.\n\n## Tip\n\nRestart the app.';
+    await republish(help, article.id, repeated);
+
+    await help.helpTranslations.saveTranslation(workspaceId, projectId, reviewerId, {
+      articleId: article.id,
+      locale: 'ko',
+      title: '위젯',
+      body: '## 팁\n\n앱을 다시 시작하세요.\n\n## 팁\n\n앱을 다시 시작하세요.',
+    });
+    const memory = await new HelpSegmentMemoryRepo(t.db).lookup(
+      { workspaceId, projectId, locale: 'ko' },
+      segmentsOf('Widget', repeated).map(({ hash }) => hash),
+      ['human'],
+    );
+
+    expect(new Set(memory.map(entry => entry.text))).toEqual(new Set(['앱을 다시 시작하세요.', '위젯', '팁']));
+    expect(memory).toHaveLength(3);
+  });
+
   it('refuses a draft that is not the article’s current one', async () => {
     const help = domain();
     const article = await translated(help);

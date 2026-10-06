@@ -17,7 +17,13 @@
 // reviewed text only when confirmed. Each is audited, and the text lands as a new revision,
 // so history keeps every person's and machine's version.
 import { AuditActions } from '@mocco/common/audit';
-import { RevisionKinds, SegmentOrigins, TranslationStates } from '@mocco/common/help';
+import {
+  ArticleStatuses,
+  RevisionKinds,
+  SegmentOrigins,
+  translationGridInputSchema,
+  TranslationStates,
+} from '@mocco/common/help';
 
 import { revisionText } from '@backend/domain/helpcenter/content';
 import {
@@ -39,6 +45,7 @@ import { HelpTranslationRepo } from '@backend/domain/helpcenter/repos/translatio
 import { HelpTreeRepo } from '@backend/domain/helpcenter/repos/tree.repo';
 import { alignedSegments } from '@backend/domain/helpcenter/translate/align';
 import { segmentDiff } from '@backend/domain/helpcenter/translate/diff';
+import { translationGrid } from '@backend/domain/helpcenter/translate/grid';
 import { charactersOf, distinctByHash, translateMisses } from '@backend/domain/helpcenter/translate/pipeline';
 import {
   ClaimDecisions,
@@ -55,13 +62,14 @@ import type { Segment } from '@backend/domain/helpcenter/markdown/segment';
 import type { HelpArticleRow, HelpRevisionRow } from '@backend/domain/helpcenter/repos/article.repo';
 import type { HelpNode } from '@backend/domain/helpcenter/repos/node-translation.repo';
 import type { HelpTranslationRow } from '@backend/domain/helpcenter/repos/translation.repo';
+import type { GridArticle } from '@backend/domain/helpcenter/translate/grid';
 import type { MachineResult } from '@backend/domain/helpcenter/translate/pipeline';
 import type { TranslationOutcome } from '@backend/domain/helpcenter/translate/state';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
 import type { AuditAction } from '@mocco/common/audit';
-import type { TranslationInput, TranslationState } from '@mocco/common/help';
+import type { TranslationGridInput, TranslationInput, TranslationState } from '@mocco/common/help';
 
 export interface HelpTranslationDeps {
   db: Db;
@@ -672,6 +680,107 @@ export class HelpTranslationService {
       /** Null when the text follows the source, or the source it was made from isn't kept. */
       changes:
         before === undefined || source === undefined ? null : segmentDiff(segmentsOf(before), segmentsOf(source)),
+    };
+  }
+
+  /** `review` by the article's short id (its public URL key), as agents know it; another project's reads like none. */
+  async reviewByShortId(workspaceId: string, projectId: string, shortId: string, locale: string) {
+    const article = await new HelpArticleRepo(this.deps.db).findByShortId(projectId, shortId);
+    if (article?.workspaceId !== workspaceId) {
+      throw new HelpNodeNotFoundError('article', shortId);
+    }
+    return {
+      article: { id: article.id, shortId: article.shortId },
+      ...(await this.review(workspaceId, projectId, article.id, locale)),
+    };
+  }
+
+  /**
+   * The translations dashboard: per-language counts over every published article, and the
+   * articles the filter lists, in the tree's order and paged, with each language's state.
+   * `locales` narrows the languages (an unoffered one is HelpLocaleNotOfferedError).
+   */
+  async grid(workspaceId: string, projectId: string, input: TranslationGridInput) {
+    const { filter, locales: asked, offset, limit } = translationGridInputSchema.parse(input);
+    const site = await this.deps.sites.require(workspaceId, projectId);
+    const offered: readonly string[] = site.locales;
+    const unoffered = asked?.find(locale => !offered.includes(locale));
+    if (unoffered !== undefined) {
+      throw new HelpLocaleNotOfferedError(unoffered);
+    }
+    const wanted = new Set<string>(asked);
+    const locales = asked === undefined ? offered : offered.filter(locale => wanted.has(locale));
+    const treeRepo = new HelpTreeRepo(this.deps.db);
+    const articleRepo = new HelpArticleRepo(this.deps.db);
+    const collections = await treeRepo.collections(workspaceId, projectId);
+    const sections = await treeRepo.sections(
+      workspaceId,
+      collections.map(collection => collection.id),
+    );
+    const sectionOrder = new Map(sections.map((section, i) => [section.id, i]));
+    const collectionOrder = new Map(collections.map((collection, i) => [collection.id, i]));
+    const found = await articleRepo.inSections(
+      workspaceId,
+      sections.map(section => section.id),
+    );
+    const published = found.filter(
+      (article): article is HelpArticleRow & { publishedRevisionId: string } =>
+        article.status === ArticleStatuses.published && article.publishedRevisionId !== null,
+    );
+    const sourceRows = await articleRepo.revisionsByIds(published.map(article => article.publishedRevisionId));
+    const sources = new Map(sourceRows.map(revision => [revision.id, revision]));
+    const sectionsById = new Map(sections.map(section => [section.id, section]));
+    const collectionsById = new Map(collections.map(collection => [collection.id, collection]));
+    const placeOf = (article: HelpArticleRow) => {
+      const section = sectionsById.get(article.sectionId);
+      return [collectionOrder.get(section?.collectionId ?? '') ?? 0, sectionOrder.get(article.sectionId) ?? 0];
+    };
+    const articles: GridArticle[] = published
+      .toSorted((a, b) => {
+        const [ca = 0, sa = 0] = placeOf(a);
+        const [cb = 0, sb = 0] = placeOf(b);
+        return ca - cb || sa - sb || a.position - b.position;
+      })
+      .flatMap(article => {
+        const source = sources.get(article.publishedRevisionId);
+        const section = sectionsById.get(article.sectionId);
+        if (source === undefined || section === undefined) {
+          return [];
+        }
+        return [
+          {
+            id: article.id,
+            shortId: article.shortId,
+            title: source.title,
+            collection: collectionsById.get(section.collectionId)?.title ?? '',
+            section: section.title,
+            sourceHash: source.contentHash,
+          },
+        ];
+      });
+    const translations = await new HelpTranslationRepo(this.deps.db).forArticles(
+      workspaceId,
+      articles.map(article => article.id),
+    );
+    const { counts, rows } = translationGrid(articles, translations, locales, filter);
+    const page = rows.slice(offset, offset + limit);
+    return {
+      isAvailable: this.isAvailable,
+      sourceLocale: site.sourceLocale,
+      locales,
+      filter,
+      counts,
+      /** Articles the filter lists, across every page. */
+      total: rows.length,
+      articles: page.map(({ article, cells }) => ({
+        id: article.id,
+        shortId: article.shortId,
+        title: article.title,
+        collection: article.collection,
+        section: article.section,
+        languages: cells,
+      })),
+      nextOffset: offset + page.length < rows.length ? offset + page.length : null,
     };
   }
 }

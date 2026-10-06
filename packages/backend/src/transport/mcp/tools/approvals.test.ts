@@ -191,6 +191,7 @@ describe('mocco_approvals_vote (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },
+      helpTranslations: { grid: refuse, reviewByShortId: refuse },
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },

@@ -9,6 +9,7 @@ import {
   helpSiteInputSchema,
   helpLocaleSchema,
   sectionInputSchema,
+  translationGridInputSchema,
   translationInputSchema,
 } from '@mocco/common/help';
 import { importBundleSchema } from '@mocco/common/help-import';
@@ -185,6 +186,14 @@ export const helpRouter = router({
       async ({ ctx, input }) =>
         await ctx.helpTranslations.saveTranslation(input.workspaceId, input.projectId, ctx.session.user.id, input),
     ),
+
+  /** The translations dashboard: per-language counts and the published articles × languages, filtered and paged. */
+  translationGrid: helpProcedure
+    .input(projectInput.extend(translationGridInputSchema.shape))
+    .query(async ({ ctx, input }) => {
+      const { workspaceId, projectId, ...grid } = input;
+      return await ctx.helpTranslations.grid(workspaceId, projectId, grid);
+    }),
 
   /** One language for review: source beside text, reviewer, machine draft and the source's segment diff. */
   translationReview: helpProcedure

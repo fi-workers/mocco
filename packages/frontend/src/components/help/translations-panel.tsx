@@ -2,7 +2,8 @@
 // machine-translated, reviewed by a person, out of date with the source, or failed —
 // and the review editor for one (translation-review.tsx; a person's text is never
 // overwritten by the machine unless they confirm it).
-import { useState } from 'react';
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 
 import TranslationReview, { languageName } from '@frontend/components/help/translation-review';
 import { errorMessage, Spinner, StatusBadge, Tones } from '@frontend/components/notifications/notification-ui';
@@ -64,7 +65,19 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
       await utils.help.translations.invalidate({ workspaceId, projectId, articleId });
     },
   });
-  const [editing, setEditing] = useState<string | null>(null);
+  // `?review=<locale>` (a link from the translations dashboard) opens that language's review
+  // until the person opens or closes another one.
+  const router = useRouter();
+  const requested = typeof router.query.review === 'string' ? router.query.review : null;
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
+  const editing = chosen === undefined ? requested : chosen;
+  const setEditing = setChosen;
+  const isLoaded = translationsQuery.data !== undefined;
+  useEffect(() => {
+    if (requested !== null && isLoaded) {
+      document.querySelector(`#translation-${requested}`)?.scrollIntoView({ block: 'start' });
+    }
+  }, [requested, isLoaded]);
   const [confirming, setConfirming] = useState<string | null>(null);
 
   if (translationsQuery.isPending) {
@@ -92,7 +105,7 @@ export default function TranslationsPanel({ workspaceId, projectId, articleId, s
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border text-sm">
           {locales.map(entry => (
-            <li key={entry.locale} className="flex flex-col gap-2 px-3 py-2">
+            <li key={entry.locale} id={`translation-${entry.locale}`} className="flex flex-col gap-2 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="min-w-28 font-medium">{languageName(entry.locale)}</span>
                 <StateBadges entry={entry} />

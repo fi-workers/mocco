@@ -206,6 +206,75 @@ describe('help router on pglite', () => {
     });
   });
 
+  describe('translations dashboard', () => {
+    it('lists published articles in the tree’s order, paged, with counts, and only to the project', async () => {
+      const owner = await setup('owner@example.com', 'acme');
+      await owner.api.help.updateSite({ ...owner.scope, slug: 'acme', sourceLocale: 'en', locales: ['ko', 'ja'] });
+      const first = await owner.api.help.createCollection({ ...owner.scope, title: 'Start', slug: 'start' });
+      const second = await owner.api.help.createCollection({ ...owner.scope, title: 'Guides', slug: 'guides' });
+      const later = await owner.api.help.createSection({ ...owner.scope, collectionId: second.id, title: 'Later' });
+      const sooner = await owner.api.help.createSection({ ...owner.scope, collectionId: first.id, title: 'Sooner' });
+      const publish = async (sectionId: string, title: string) => {
+        const article = await owner.api.help.createArticle({ ...owner.scope, sectionId, title });
+        await owner.api.help.saveDraft({ ...owner.scope, articleId: article.id, title, body: `${title}.` });
+        await owner.api.help.publish({ ...owner.scope, articleId: article.id });
+        return article;
+      };
+      // Written out of order: the grid follows collections, then sections, then articles.
+      const guide = await publish(later.id, 'Guide');
+      const intro = await publish(sooner.id, 'Intro');
+      const unpublished = await owner.api.help.createArticle({ ...owner.scope, sectionId: sooner.id, title: 'Draft' });
+      await owner.api.help.saveDraft({ ...owner.scope, articleId: unpublished.id, title: 'Draft', body: 'Soon.' });
+      await owner.api.help.saveTranslation({
+        ...owner.scope,
+        articleId: intro.id,
+        locale: 'ko',
+        title: '소개',
+        body: '소개.',
+      });
+      const intruder = await setup('intruder@example.com', 'intruder');
+
+      const grid = await owner.api.help.translationGrid({ ...owner.scope, limit: 1 });
+      const rest = await owner.api.help.translationGrid({ ...owner.scope, offset: 1 });
+      const korean = await owner.api.help.translationGrid({ ...owner.scope, locales: ['ko'], filter: 'attention' });
+
+      expect(grid).toMatchObject({
+        sourceLocale: 'en',
+        locales: ['ko', 'ja'],
+        total: 2,
+        nextOffset: 1,
+        counts: [
+          { locale: 'ko', articles: 2, reviewed: 1, notTranslated: 1 },
+          { locale: 'ja', articles: 2, notTranslated: 2 },
+        ],
+        articles: [
+          {
+            id: intro.id,
+            title: 'Intro',
+            collection: 'Start',
+            section: 'Sooner',
+            languages: [
+              { locale: 'ko', state: 'reviewed', isStale: false },
+              { locale: 'ja', state: null },
+            ],
+          },
+        ],
+      });
+      expect([rest.articles.map(article => article.id), rest.nextOffset]).toEqual([[guide.id], null]);
+      expect(korean.articles.map(article => article.id)).toEqual([guide.id]);
+      await expect(owner.api.help.translationGrid({ ...owner.scope, locales: ['fr'] })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(intruder.api.help.translationGrid(owner.scope)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(
+        intruder.api.help.translationGrid({
+          workspaceId: intruder.scope.workspaceId,
+          projectId: owner.scope.projectId,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
   describe('translation review', () => {
     it('reviews as the signed-in member, confirms replacing a reviewed text, and is closed to other workspaces', async () => {
       const owner = await setup('owner@example.com', 'acme');

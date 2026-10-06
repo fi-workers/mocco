@@ -269,7 +269,7 @@ In-process for the messenger AI (no HTTP): `helpSearchService.search({ siteId, l
 
 ### MCP tools for translation review
 
-Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translation review (#213) ships these tools, thin adapters over `HelpTranslationService` behind `ProjectScope` with `Products.helpcenter`. None is built in the review slice; the read tool lands with the translations dashboard.
+Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translation review (#213) ships these tools, thin adapters over `HelpTranslationService` behind `ProjectScope` with `Products.helpcenter`. The two reads shipped with the translations dashboard; the two changes come later.
 
 | Tool | Kind | Over |
 | --- | --- | --- |

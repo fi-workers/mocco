@@ -55,7 +55,12 @@ function bodyOf(answer: RpcAnswer): Record<string, unknown> {
 
 type Row = Record<string, unknown>;
 
-const HELP_TOOLS = ['mocco_help_articles_get', 'mocco_help_articles_search'];
+const HELP_TOOLS = [
+  'mocco_help_articles_get',
+  'mocco_help_articles_search',
+  'mocco_help_translation_get',
+  'mocco_help_translations_list',
+];
 
 describe('mocco_help_articles_* (pglite, over HTTP)', () => {
   let t: TestDb;
@@ -66,6 +71,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
   let mine: { workspaceId: string; projectId: string };
   let theirs: { workspaceId: string; projectId: string };
   let widget: string;
+  let widgetId: string;
   let camera: string;
   let draft: string;
   let pulled: string;
@@ -101,6 +107,16 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
 
   const call = async (tool: string, args: Record<string, unknown>) =>
     await rpc(ada, 'tools/call', { name: tool, arguments: args });
+
+  /** The widget article published again with one sentence changed: its reviewed Korean is stale. */
+  const editSource = async () => {
+    await help.helpAuthoring.saveDraft(mine.workspaceId, mine.projectId, ada, {
+      articleId: widgetId,
+      title: 'Add a widget',
+      body: `Touch and hold the home screen. ${'More words. '.repeat(80)}`,
+    });
+    await help.helpAuthoring.publish(mine.workspaceId, mine.projectId, ada, widgetId);
+  };
 
   async function addWorkspace(memberId?: string) {
     const workspaceId = expectOne(
@@ -162,6 +178,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
     const { write } = await writeSite(mine, `syt${randomUUID().slice(0, 6)}`);
     const added = await write('Add a widget', `Long-press the home screen. ${'More words. '.repeat(80)}`, true);
     widget = added.shortId;
+    widgetId = added.id;
     await help.helpTranslations.saveTranslation(mine.workspaceId, mine.projectId, ada, {
       articleId: added.id,
       locale: 'ko',
@@ -197,6 +214,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       statusCorrelation: { list: refuse },
       helpPublic: help.helpPublic,
       helpFeedback: help.helpFeedback,
+      helpTranslations: help.helpTranslations,
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
@@ -210,7 +228,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
     await t.close();
   });
 
-  it('lists both tools as read-only', async () => {
+  it('lists every help tool as read-only', async () => {
     const listed = await rpc(ada, 'tools/list', {});
     const tools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_help_')) ?? [];
 
@@ -261,6 +279,94 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       expect(JSON.stringify(searched)).not.toMatch(/Upcoming|Old widget|secret/u);
       expect(foreign.result?.isError).toBe(true);
       expect(textOf(foreign)).not.toContain('secret');
+    });
+  });
+
+  describe('mocco_help_translations_*', () => {
+    it('counts each language and lists what needs attention, concise or detailed, paged', async () => {
+      const before = bodyOf(await call('mocco_help_translations_list', {}));
+      await editSource();
+      const after = bodyOf(await call('mocco_help_translations_list', {}));
+      const page = bodyOf(await call('mocco_help_translations_list', { filter: 'all', limit: 1 }));
+      const next = bodyOf(await call('mocco_help_translations_list', { filter: 'all', limit: 1, offset: 1 }));
+      const stale = bodyOf(await call('mocco_help_translations_list', { filter: 'stale', responseFormat: 'detailed' }));
+
+      // Drafts and unpublished articles aren't counted: two published articles.
+      expect(before).toMatchObject({
+        sourceLocale: 'en',
+        filter: 'attention',
+        counts: [{ locale: 'ko', articles: 2, reviewed: 1, notTranslated: 1, stale: 0 }],
+        total: 1,
+        articles: [{ id: camera, title: 'Camera settings', languages: { ko: 'not_translated' } }],
+      });
+      expect(after).toMatchObject({ counts: [{ locale: 'ko', stale: 1 }], total: 2 });
+      expect((after.articles as Row[])[0]).toEqual({
+        id: widget,
+        title: 'Add a widget',
+        languages: { ko: 'reviewed, stale' },
+      });
+      expect([(page.articles as Row[]).map(each => each.id), page.nextOffset]).toEqual([[widget], 1]);
+      expect([(next.articles as Row[]).map(each => each.id), next.nextOffset]).toEqual([[camera], undefined]);
+      expect(stale.articles).toEqual([
+        {
+          id: widget,
+          title: 'Add a widget',
+          collection: 'Getting started',
+          section: 'Basics',
+          languages: [{ locale: 'ko', state: 'reviewed', isStale: true, hasProposal: false, lastError: null }],
+        },
+      ]);
+    });
+
+    it('reads one language for review, with the source segments that changed', async () => {
+      await editSource();
+      const concise = bodyOf(await call('mocco_help_translation_get', { articleId: widget, locale: 'ko' }));
+      const detailed = bodyOf(
+        await call('mocco_help_translation_get', {
+          articleId: `${widget}-add-a-widget`,
+          locale: 'ko',
+          responseFormat: 'detailed',
+        }),
+      );
+
+      expect(concise).toMatchObject({
+        id: widget,
+        locale: 'ko',
+        state: 'reviewed',
+        isStale: true,
+        textKind: 'human_edit',
+        reviewedBy: 'Ada',
+        hasProposal: false,
+        changes: [
+          {
+            change: 'changed',
+            kind: 'paragraph',
+            before: expect.stringMatching(/^Long-press the home screen\./u),
+            after: expect.stringMatching(/^Touch and hold the home screen\./u),
+          },
+        ],
+      });
+      expect(concise.source).toBeUndefined();
+      expect(detailed).toMatchObject({
+        text: { title: '위젯 추가하기', body: '홈 화면을 길게 누르세요.' },
+        proposal: null,
+      });
+      expect(String((detailed.source as Row).body)).toMatch(/^Touch and hold/u);
+    });
+
+    it('never reads another workspace’s help center, nor a language the site doesn’t offer', async () => {
+      const foreignList = await call('mocco_help_translations_list', { ...theirs, filter: 'all' });
+      const foreignGet = await call('mocco_help_translation_get', { ...theirs, articleId: theirArticle, locale: 'ko' });
+      const crossed = await call('mocco_help_translation_get', { articleId: theirArticle, locale: 'ko' });
+      const unoffered = await call('mocco_help_translation_get', { articleId: widget, locale: 'ja' });
+
+      expect([foreignList, foreignGet, crossed, unoffered].map(answer => answer.result?.isError)).toEqual([
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect([textOf(foreignList), textOf(foreignGet), textOf(crossed)].join(' ')).not.toContain('secret');
     });
   });
 

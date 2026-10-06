@@ -963,3 +963,20 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
   `customer/help/help-center.md`, `log.md`
 - Source: branch `feat/help-translation-review` (issue #213)
+
+## 2026-10-06 — Help center: translations dashboard
+
+- Finished #213 in the [help center reference](./reference/help-center.md#translation). `help.translationGrid`
+  (`HelpTranslationService.grid`, pure decisions in `translate/grid.ts`) counts each offered language's published
+  articles by state, stale and draft ready. It lists the articles × languages in the tree's order, filtered to
+  `attention`, `stale`, `failed` or `all`, narrowed by language and offset-paged. Staleness stays derived in memory, with
+  no `is_stale` column and no migration. The console's **Translations** page shows it with the filter, language and
+  page in the URL, and each cell opens that language's review (`?review=<locale>`).
+- MCP: `mocco_help_translations_list` and `mocco_help_translation_get` (by short id), read-only, concise or detailed,
+  behind `ProjectScope`. The changing tools named in the
+  [design](./specs/2026-09-24-help-center-design.md#mcp-tools-for-translation-review) wait.
+- Fixed: saving a translation of an article that repeats a paragraph failed in translation memory (one upsert touched
+  the same row twice); `HelpSegmentMemoryRepo.put` now keeps one entry per source text.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
+  `specs/2026-10-02-mcp-and-cli-design.md`, `customer/help/help-center.md`, `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/help-translation-dashboard` (issue #213)

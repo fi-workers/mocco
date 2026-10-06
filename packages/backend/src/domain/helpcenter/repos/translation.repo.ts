@@ -36,6 +36,17 @@ export class HelpTranslationRepo {
     return found === undefined ? undefined : { row: found.row, reviewer: found.name ?? found.email };
   }
 
+  /** Every translation of these articles, in any language. */
+  async forArticles(workspaceId: string, articleIds: readonly string[]): Promise<HelpTranslationRow[]> {
+    if (articleIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(t)
+      .where(and(eq(t.workspaceId, workspaceId), inArray(t.articleId, [...articleIds])));
+  }
+
   async forArticle(workspaceId: string, articleId: string): Promise<HelpTranslationRow[]> {
     return await this.db
       .select()
