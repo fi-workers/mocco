@@ -10,7 +10,7 @@ import {
   StaleKinds,
 } from '@mocco/common/flags';
 import { ApprovalDecisions, ApprovalKinds, ApprovalStates, GateStates } from '@mocco/common/governance';
-import { ArticleStatuses, RevisionKinds, TranslationStates } from '@mocco/common/help';
+import { ArticleStatuses, RevisionKinds, SegmentOrigins, TranslationStates } from '@mocco/common/help';
 import { InboundKinds, InboundOutcomes, InboundSourceStatuses } from '@mocco/common/inbound';
 import { JobStatuses } from '@mocco/common/jobs';
 import { AuthorKinds, ConversationStatuses, MessageVisibilities } from '@mocco/common/messenger';
@@ -99,7 +99,7 @@ import type {
   GateState,
   ResumeDecision,
 } from '@mocco/common/governance';
-import type { ArticleStatus, RevisionKind, SegmentRef, TranslationState } from '@mocco/common/help';
+import type { ArticleStatus, RevisionKind, SegmentOrigin, SegmentRef, TranslationState } from '@mocco/common/help';
 import type { InboundKind, InboundOutcome, InboundSourceStatus } from '@mocco/common/inbound';
 import type { Provider } from '@mocco/common/integration';
 import type { JobStatus } from '@mocco/common/jobs';
@@ -3138,8 +3138,14 @@ export const helpTranslations = pgTable(
     revisionId: uuid('revision_id'),
     // The published source's content hash this text was made from; a newer source makes it stale.
     sourceHash: text('source_hash'),
+    // Why it failed, or why it waits (`pending` past the monthly allowance).
     lastError: text('last_error'),
     reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // A stale reviewed translation's machine draft (a `proposal` revision) and the source hash it drafts.
+    proposalRevisionId: uuid('proposal_revision_id'),
+    proposalSourceHash: text('proposal_source_hash'),
+    // A job run holds the translation until then (claimed under an advisory lock); null when free.
+    claimedUntil: timestamp('claimed_until'),
     createdAt,
     updatedAt,
   },
@@ -3152,6 +3158,51 @@ export const helpTranslations = pgTable(
     }).onDelete('cascade'),
     check('mocco_help_translations_state_check', sql`${t.state} IN (${sqlInList(Object.values(TranslationStates))})`),
   ],
+);
+
+/**
+ * Translation memory (#212): one segment's translation into a language, keyed by the hash
+ * of its protected source text (domain/helpcenter/markdown/segment.ts). A source edit
+ * re-translates only segments without an entry; a person's entry wins over the machine's.
+ */
+export const helpSegmentMemory = pgTable(
+  'mocco_help_segment_memory',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    locale: text().notNull(),
+    sourceHash: text('source_hash').notNull(),
+    // The translated text, with the source segment's placeholders.
+    text: text().notNull(),
+    origin: text().$type<SegmentOrigin>().notNull(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_help_segment_memory_key_uq').on(t.projectId, t.locale, t.sourceHash, t.origin),
+    foreignKey({
+      columns: [t.projectId],
+      foreignColumns: [helpSites.projectId],
+      name: 'mocco_help_segment_memory_site_fk',
+    }).onDelete('cascade'),
+    check('mocco_help_segment_memory_origin_check', sql`${t.origin} IN (${sqlInList(Object.values(SegmentOrigins))})`),
+  ],
+);
+
+/** Characters a workspace sent to the translator in a month (#212): metering, and the allowance's counter. */
+export const helpTranslationUsage = pgTable(
+  'mocco_help_translation_usage',
+  {
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // The first day of the month (UTC).
+    month: date({ mode: 'string' }).notNull(),
+    characters: integer().notNull().default(0),
+    updatedAt,
+  },
+  t => [primaryKey({ columns: [t.workspaceId, t.month], name: 'mocco_help_translation_usage_pk' })],
 );
 
 /** A collection's or section's title in another language (machine-translated with its articles). */

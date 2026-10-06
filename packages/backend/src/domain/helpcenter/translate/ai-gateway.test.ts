@@ -17,25 +17,49 @@ const answering = (content: string, status = 200) => {
   return { requests, fetch: fakeFetch };
 };
 
-const input = { sourceLocale: 'ko', targetLocale: 'en', title: '위젯', body: '## 추가하기' };
+const input = {
+  sourceLocale: 'ko',
+  targetLocale: 'en',
+  segments: [
+    { id: 'title', text: '위젯' },
+    { id: 's0', text: '⟦0⟧설정⟦/0⟧을 엽니다' },
+  ],
+};
+
+/** The system and user messages a request carried. */
+const messagesOf = (request: { body: Record<string, unknown> } | undefined) =>
+  (request?.body.messages ?? []) as { role: string; content: string }[];
 
 describe('AiGatewayTranslator', () => {
-  it('sends the article to the configured model and reads the JSON answer', async () => {
-    const gateway = answering(JSON.stringify({ title: 'Widget', body: '## Add it' }));
+  it('sends only segment ids and placeholder text to the configured model and reads the JSON answer', async () => {
+    const segments = [
+      { id: 'title', text: 'Widget' },
+      { id: 's0', text: 'Open ⟦0⟧Settings⟦/0⟧' },
+    ];
+    const gateway = answering(JSON.stringify({ segments }));
     const translator = new AiGatewayTranslator({
       apiKey: 'key-1',
       model: 'anthropic/claude-sonnet-5',
       fetch: gateway.fetch,
     });
 
-    const result = await translator.translate(input);
+    const result = await translator.translateSegments(input);
+    await translator.translateSegments({ ...input, isRetry: true });
 
-    expect(result).toEqual({ title: 'Widget', body: '## Add it' });
+    expect(result).toEqual(segments);
     expect(gateway.requests[0]).toMatchObject({
       url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
       auth: 'Bearer key-1',
       body: { model: 'anthropic/claude-sonnet-5', response_format: { type: 'json_object' } },
     });
+    const [system, user] = messagesOf(gateway.requests[0]);
+    expect(JSON.parse(user?.content ?? '')).toEqual({
+      sourceLanguage: 'ko',
+      targetLanguage: 'en',
+      segments: input.segments,
+    });
+    expect(system?.content).not.toContain('refused');
+    expect(messagesOf(gateway.requests[1])[0]?.content).toContain('refused');
   });
 
   it('rejects an answer that is not the JSON it asked for, and throws plainly on an outage', async () => {
@@ -43,9 +67,9 @@ describe('AiGatewayTranslator', () => {
     const empty = new AiGatewayTranslator({ apiKey: 'k', fetch: answering('{"text":"x"}').fetch });
     const down = new AiGatewayTranslator({ apiKey: 'k', fetch: answering('', 503).fetch });
 
-    await expect(prose.translate(input)).rejects.toBeInstanceOf(TranslationRejectedError);
-    await expect(empty.translate(input)).rejects.toBeInstanceOf(TranslationRejectedError);
-    await expect(down.translate(input)).rejects.not.toBeInstanceOf(TranslationRejectedError);
+    await expect(prose.translateSegments(input)).rejects.toBeInstanceOf(TranslationRejectedError);
+    await expect(empty.translateSegments(input)).rejects.toBeInstanceOf(TranslationRejectedError);
+    await expect(down.translateSegments(input)).rejects.not.toBeInstanceOf(TranslationRejectedError);
   });
 
   it('exists only with an API key', () => {

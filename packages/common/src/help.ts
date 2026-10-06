@@ -36,6 +36,8 @@ export const RevisionKinds = {
   import: 'import',
   machine: 'machine',
   humanEdit: 'human_edit',
+  /** A machine draft for a stale reviewed translation: the person's segments kept, the changed ones drafted. Never served. */
+  proposal: 'proposal',
 } as const;
 export type RevisionKind = (typeof RevisionKinds)[keyof typeof RevisionKinds];
 
@@ -57,17 +59,24 @@ export interface SegmentRef {
 }
 
 /**
- * A translation's state per article and language. `auto` is machine output, `reviewed`
- * a person's text (never overwritten by the machine). Whether it is stale (made from an
- * older source) is derived from the source hash it was made from.
+ * A translation's state per article and language. `pending` waits for a run (or for the
+ * monthly allowance, with the reason in `last_error`), `translating` is being made,
+ * `auto` is machine output, `reviewed` a person's text (never overwritten by the
+ * machine) and `failed` a translation that was refused. Whether it is stale (made from
+ * an older source) is derived from the source hash it was made from.
  */
 export const TranslationStates = {
   pending: 'pending',
+  translating: 'translating',
   auto: 'auto',
   reviewed: 'reviewed',
   failed: 'failed',
 } as const;
 export type TranslationState = (typeof TranslationStates)[keyof typeof TranslationStates];
+
+/** Who wrote a translation-memory entry; a person's text wins over the machine's. */
+export const SegmentOrigins = { machine: 'machine', human: 'human' } as const;
+export type SegmentOrigin = (typeof SegmentOrigins)[keyof typeof SegmentOrigins];
 
 export const translationInputSchema = z.object({
   articleId: z.uuid(),

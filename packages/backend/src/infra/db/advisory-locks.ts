@@ -24,5 +24,7 @@ export const AdvisoryLockNamespaces = {
   statusMonitor: 3,
   /** Serializes round-robin assignment in one project's messenger inbox (`MessengerInboxMemberRepo.takeTurn`). */
   messengerAssign: 4,
+  /** Serializes claims and results of one help article's translation into one language (`HelpTranslationRepo.lock`). */
+  helpTranslation: 5,
 } as const;
 export type AdvisoryLockNamespace = (typeof AdvisoryLockNamespaces)[keyof typeof AdvisoryLockNamespaces];

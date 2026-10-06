@@ -96,6 +96,8 @@ const schema = z.object({
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),
   // The model help centers translate with (an AI Gateway model id); default anthropic/claude-sonnet-5.
   HELP_TRANSLATION_MODEL: z.string().min(1).optional(),
+  // Characters a workspace may send to the translator per month (UTC); past it, languages wait as pending. Unset: unlimited.
+  HELP_TRANSLATION_MONTHLY_CHARACTERS: z.coerce.number().int().positive().optional(),
   STORAGE_BUCKET: z.string().min(1).optional(),
   /** Custom S3 endpoint (R2: `https://<account>.r2.cloudflarestorage.com`); omit for AWS. */
   STORAGE_ENDPOINT: z.url().optional(),

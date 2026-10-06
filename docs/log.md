@@ -853,3 +853,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/messenger.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`,
   `reference/feature-map.md`, `customer/messenger/contact-us.md`, `log.md`
 - Source: branch `feat/mcp-messenger-tools` (issue #462)
+
+## 2026-10-06 — Help center: segment translation jobs and the translation state machine
+
+- Documented #212 in the [help center reference](./reference/help-center.md#translation): the `help.translate` job
+  now translates segment by segment. Translation memory (`mocco_help_segment_memory`, migration 0075) keyed by segment
+  hash supplies known segments, a person's over the machine's, so a source edit sends only what it changed. Each
+  answer is validated per segment and retried up to three times before the language is `failed` with nothing
+  published. A state table covers `pending`, the new `translating`, `auto`, `reviewed` and `failed`; a reviewed
+  translation is never replaced, and a stale one gets a `proposal` revision instead. Runs claim under a new
+  `helpTranslation` advisory lock (a held claim defers with a free `RetryAt`) and are no-ops for an unchanged source
+  hash. Characters sent are metered per workspace and month (`mocco_help_translation_usage`), with an optional cap
+  (`HELP_TRANSLATION_MONTHLY_CHARACTERS`) that leaves languages `pending` with the reason. The `Translator` port takes
+  segments. The [feature map](./reference/feature-map.md) and [env](./reference/env.md) say the same.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `reference/env.md`, `log.md`
+- Source: branch `feat/help-translation-jobs` (issue #212)

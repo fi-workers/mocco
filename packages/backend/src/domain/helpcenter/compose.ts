@@ -34,6 +34,8 @@ export function createHelpDomain(
     storage?: HelpImageStorage;
     queue?: Pick<JobQueue, 'enqueue' | 'kick'>;
     translator?: Translator;
+    /** Characters a workspace may send to the translator per month; unlimited without. */
+    translationMonthlyCharacters?: number;
     /** Rebuilds public pages right after a change; without one they refresh within a minute. */
     revalidator?: HelpPageRevalidator;
     /** Queue an IndexNow submission after each public change (production only, #367). */
@@ -65,6 +67,8 @@ export function createHelpDomain(
     sites: helpSites,
     ...(deps.translator !== undefined && { translator: deps.translator }),
     ...(deps.queue !== undefined && { queue: deps.queue }),
+    ...(deps.translationMonthlyCharacters !== undefined && { monthlyCharacters: deps.translationMonthlyCharacters }),
+    ...(deps.now !== undefined && { now: deps.now }),
     onTranslated: refresh,
   });
   const helpAuthoring = new HelpAuthoringService({

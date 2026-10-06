@@ -38,6 +38,9 @@ export function getHelpDomain(): HelpDomain {
     queue: getJobQueue(),
     indexNow: helpIndexNowFromEnv(getDb(), env) !== undefined,
     feedbackSecret: () => helpFeedbackSecret(getEnv().AUTH_SECRET),
+    ...(env.HELP_TRANSLATION_MONTHLY_CHARACTERS !== undefined && {
+      translationMonthlyCharacters: env.HELP_TRANSLATION_MONTHLY_CHARACTERS,
+    }),
     ...(storage !== undefined && { storage }),
     ...(translator !== undefined && { translator }),
     ...(revalidator !== undefined && { revalidator }),

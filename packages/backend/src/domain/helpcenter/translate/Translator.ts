@@ -1,18 +1,27 @@
-// The help center's translation port (#96): one article's title and Markdown into one
-// language. The production driver calls an LLM (ai-gateway.ts); tests pass a fake.
+// The help center's translation port (#96, #212): segments of an article (markdown/segment.ts)
+// into one language. The production driver calls an LLM (ai-gateway.ts); tests pass a
+// fake (testing/fake-translator.ts). Only ids and placeholder text cross it: what the
+// placeholders stand for never leaves Mocco.
 
-export interface TranslateInput {
+export interface TranslatableSegment {
+  readonly id: string;
+  /** Text with `⟦n⟧` and `⟦n⟧…⟦/n⟧` placeholders, which the answer must carry verbatim. */
+  readonly text: string;
+}
+
+export interface TranslateSegmentsInput {
   sourceLocale: string;
   targetLocale: string;
-  title: string;
-  /** Markdown; the result must keep its structure (see validate.ts). */
-  body: string;
+  segments: readonly TranslatableSegment[];
+  /** These segments' last answers were refused (a placeholder lost or a link added): ask more strictly. */
+  isRetry?: boolean;
 }
 
 export interface Translator {
   /** A short name for what translated (the model), stored nowhere secret. */
   readonly name: string;
-  translate(input: TranslateInput): Promise<{ title: string; body: string }>;
+  /** One answer per segment it could translate, by id; a missing one counts as refused. */
+  translateSegments(input: TranslateSegmentsInput): Promise<TranslatableSegment[]>;
 }
 
 /** The translator answered, but not with a usable translation — don't retry the same input. */
