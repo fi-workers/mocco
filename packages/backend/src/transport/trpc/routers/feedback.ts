@@ -1,12 +1,17 @@
-// Feedback router (#172): a project's boards, categories and posts, and moving posts through
-// statuses. Every procedure requires the feedback product to be enabled and the project to belong
-// to the workspace (`productProcedure`, which asserts membership), and the same chain maps the
-// domain's error families (FeedbackBoardNotFoundError and the other not-founds → NOT_FOUND,
-// FeedbackSlugTakenError and FeedbackStatusUnchangedError → CONFLICT). Entities are looked up
-// within the caller's workspace and project, so another tenant's id is NOT_FOUND.
+// Feedback router (#172): a project's boards, categories and posts, moving posts through
+// statuses, and their votes and comments (#173). Every procedure requires the feedback product to
+// be enabled and the project to belong to the workspace (`productProcedure`, which asserts
+// membership), and the same chain maps the domain's error families (FeedbackBoardNotFoundError
+// and the other not-founds → NOT_FOUND, FeedbackSlugTakenError and FeedbackStatusUnchangedError →
+// CONFLICT, FeedbackOfficialInternalError → BAD_REQUEST). Entities are looked up within the
+// caller's workspace and project, so another tenant's id is NOT_FOUND.
 import {
+  FeedbackVoteSources,
   feedbackBoardInputSchema,
   feedbackCategoryInputSchema,
+  feedbackCommentInputSchema,
+  feedbackEndUserIdSchema,
+  feedbackPageInputSchema,
   feedbackPostCreateInputSchema,
   feedbackPostListInputSchema,
   feedbackPostStatusSchema,
@@ -140,4 +145,45 @@ export const feedbackRouter = router({
       async ({ ctx, input }) =>
         await ctx.feedbackPosts.setStatus(scopeOf(input), ctx.session.user.id, input.postId, input.status),
     ),
+
+  /** The post's votes, newest first, pending ones included. */
+  votes: feedbackProcedure.input(postInput.extend(feedbackPageInputSchema.shape)).query(async ({ ctx, input }) => ({
+    votes: await ctx.feedbackVotes.list(scopeOf(input), input.postId, { limit: input.limit, offset: input.offset }),
+  })),
+
+  /** Record an end user's vote on their behalf (a customer asked by email, on a call…); it counts
+   * at once. Voting again is a no-op. */
+  vote: feedbackProcedure.input(postInput.extend({ endUserId: feedbackEndUserIdSchema })).mutation(
+    async ({ ctx, input }) =>
+      await ctx.feedbackVotes.vote(scopeOf(input), input.postId, input.endUserId, {
+        source: FeedbackVoteSources.staff,
+        recordedByUserId: ctx.session.user.id,
+      }),
+  ),
+
+  /** Take an end user's vote back; no vote is no change. */
+  unvote: feedbackProcedure
+    .input(postInput.extend({ endUserId: feedbackEndUserIdSchema }))
+    .mutation(async ({ ctx, input }) => ({
+      post: await ctx.feedbackVotes.unvote(scopeOf(input), input.postId, input.endUserId),
+    })),
+
+  /** The post's comments, oldest first, internal notes included. */
+  comments: feedbackProcedure.input(postInput.extend(feedbackPageInputSchema.shape)).query(async ({ ctx, input }) => ({
+    comments: await ctx.feedbackComments.listForStaff(scopeOf(input), input.postId, {
+      limit: input.limit,
+      offset: input.offset,
+    }),
+  })),
+
+  /** Comment as the caller: plainly, as the official response, or as an internal note. */
+  createComment: feedbackProcedure
+    .input(postInput.extend(feedbackCommentInputSchema.shape))
+    .mutation(async ({ ctx, input }) => ({
+      comment: await ctx.feedbackComments.createAsStaff(scopeOf(input), ctx.session.user.id, input.postId, {
+        body: input.body,
+        isOfficial: input.isOfficial,
+        isInternal: input.isInternal,
+      }),
+    })),
 });

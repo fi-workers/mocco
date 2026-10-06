@@ -1,4 +1,4 @@
-import { ConflictError, NotFoundError } from '@backend/domain/errors';
+import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
 import type { FeedbackPostStatus } from '@mocco/common/feedback';
 
@@ -48,5 +48,21 @@ export class FeedbackStatusMovedError extends ConflictError {
   constructor(expected: FeedbackPostStatus, current: FeedbackPostStatus, options?: ErrorOptions) {
     super(`The post is ${current} now, not ${expected}`, options);
     this.name = 'FeedbackStatusMovedError';
+  }
+}
+
+/** Confirming a vote the end user doesn't have on the post — NOT_FOUND. */
+export class FeedbackVoteNotFoundError extends NotFoundError {
+  constructor(postId: string, options?: ErrorOptions) {
+    super(`The end user has no vote on feedback post ${postId}`, options);
+    this.name = 'FeedbackVoteNotFoundError';
+  }
+}
+
+/** A comment that is both the official response (public) and an internal note — BAD_REQUEST. */
+export class FeedbackOfficialInternalError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('An official response is public, so it cannot be internal', options);
+    this.name = 'FeedbackOfficialInternalError';
   }
 }

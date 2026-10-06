@@ -135,7 +135,8 @@ The first slice of the [feedback design](../specs/2026-09-24-feedback-design.md)
 |---|---|---|
 | Boards, categories and posts | Not drawn | Built so far (#172): a project's boards and categories, posts numbered per board, and staff moving a post between any two statuses (under review, planned, in progress, shipped, closed), each change a row in the post's history and in the audit log; the `feedback.*` tRPC procedures, with the staff list sorted by status or date. No console screen yet |
 | MCP tools | Live | Agents list a project's boards and categories, search a board's posts (status, category, by status or newest, paged) and read one post with its history, and move a post to another status as the caller behind `feedback:write`, the workspace's opt-in and a confirmation bound to the post's status (#468, [MCP tools](./feedback.md#mcp-tools)) |
-| Votes, comments, merge, GitHub links, ship on deploy, changelog, public board | Not drawn | Later slices of the design |
+| Votes and comments | Not drawn | Built (#173): one vote per post and end user, pending until an email-only voter confirms, `vote_count` kept equal to the counted votes; the team records a vote on an end user's behalf, and comments plainly, as the official response, or as an internal note the public projection leaves out ([votes](./feedback.md#votes), [comments](./feedback.md#comments)). Their MCP tools are the next slice |
+| Subscriptions, merge, GitHub links, ship on deploy, changelog, public board | Not drawn | Later slices of the design |
 
 ### Status page (#103)
 
