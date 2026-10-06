@@ -1,23 +1,34 @@
 // `mocco_status_monitors_*` and `mocco_status_locations_search` — which checks a project
-// runs, what state each is in and why it changed, and where the probes run. Read-only:
-// creating, editing, pausing and resuming a monitor, and issuing a location's token, stay in
-// the console.
+// runs, what state each is in and why it changed, and where the probes run — and
+// `mocco_monitors_check`, which asks for a monitor's next round now. Creating, editing,
+// pausing and resuming a monitor, and issuing a location's token, stay in the console.
 //
 // Thin adapters (ADR 0025) over the services the console's `status` router reads through:
 // `MonitorService.list` / `get` for a project (behind `ProjectScope` with `Products.status`,
 // so another tenant's monitor reads exactly like one that does not exist) and
 // `LocationService.list` for the workspace, behind the same membership and product checks as
-// the console's workspace-level `locations` query, which any member may read.
+// the console's workspace-level `locations` query, which any member may read. The check is
+// `MonitorService.requestCheck`, what `POST /v1/monitors/:id/check` calls, behind the same
+// `ProjectScope`.
+//
+// The check needs `status:write`, stepped up for like the deciding tools' scope, but it is no
+// decision: it changes no setting and says nothing to anyone, it only moves the next round of
+// probes to now — the round they would run anyway within the monitor's interval. So it has
+// neither the workspace's opt-in nor a confirmation round trip; the scope is the person's
+// consent that this app may ask for checks.
 //
 // What a monitor checks can carry secrets: a URL's credentials or query string, or a request
 // body. So a monitor's target is only the URL's host (with its port) or a TCP host and port,
 // and nothing else of its spec but the method and the timeouts ever leaves here. A location's
-// token hash is never read out either.
+// token hash, and a heartbeat's ping token and its hash, are never read out either.
+import { McpScopes } from '@mocco/common/mcp';
 import { Products } from '@mocco/common/project';
 import { isProbeSpec, LocationKinds, MonitorKinds, MonitorStates } from '@mocco/common/status';
 import { z } from 'zod';
 
+import { ConflictError, NotFoundError } from '@backend/domain/errors';
 import { monitorTargetOf } from '@backend/domain/status/monitor-target';
+import { refused, requireScope } from '@backend/transport/mcp/tools/deciding';
 import { asJson, userIdOf, workspaceArg } from '@backend/transport/mcp/tools/runs';
 import {
   componentsOf,
@@ -35,10 +46,10 @@ import type { LocationRow } from '@backend/domain/status/repos/location.repo';
 import type { MonitorStateChangeRow } from '@backend/domain/status/repos/monitor-state-change.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
 import type { LocationKind, MonitorComponent, MonitorSpec, MonitorState } from '@mocco/common/status';
-import type { McpServer } from '@modelcontextprotocol/server';
+import type { CallToolResult, McpServer, ServerContext } from '@modelcontextprotocol/server';
 
 export interface StatusMonitorToolDeps {
-  statusMonitors: Pick<MonitorService, 'list' | 'get'>;
+  statusMonitors: Pick<MonitorService, 'list' | 'get' | 'requestCheck'>;
   statusLocations: Pick<LocationService, 'list'>;
   /** For the names of the components a monitor reports on. */
   statusPages: Pick<StatusPageService, 'listPages' | 'getPage'>;
@@ -100,9 +111,16 @@ const locationsInput = z.object({
   ),
 });
 
+const checkInput = z.object({
+  monitorId: z.uuid().describe('The HTTP or TCP monitor to check, as `mocco_status_monitors_search` returns it.'),
+  workspaceId: workspaceArg,
+  projectId: projectArg,
+});
+
 export type SearchStatusMonitorsArgs = z.infer<typeof monitorsInput>;
 export type GetStatusMonitorArgs = z.infer<typeof monitorInput>;
 export type SearchStatusLocationsArgs = z.infer<typeof locationsInput>;
+export type CheckMonitorArgs = z.infer<typeof checkInput>;
 
 /** The settings an agent may see: the HTTP method and the timeouts, never the URL, body or keyword. */
 const checkOf = (spec: MonitorSpec) =>
@@ -163,8 +181,10 @@ function monitorOf(
       name: names.components.get(component.componentId)?.name ?? null,
       impactWhenDown: component.impactWhenDown,
     })),
+    // A heartbeat checks nothing itself, so when its job last pinged is what says it is alive.
+    ...(!isProbeSpec(monitor.spec) && { heartbeat: heartbeatOf(monitor) }),
     ...(locations !== undefined && {
-      ...(isProbeSpec(monitor.spec) ? checkOf(monitor.spec) : heartbeatOf(monitor)),
+      ...(isProbeSpec(monitor.spec) && checkOf(monitor.spec)),
       intervalSeconds: monitor.intervalSeconds,
       confirmations: monitor.confirmations,
       recoveryConfirmations: monitor.recoveryConfirmations,
@@ -313,13 +333,43 @@ export async function searchStatusLocations(
   };
 }
 
+/** Run the monitor's next round now. Refusals come back as tool errors the model can act on. */
+export async function checkMonitor(
+  deps: StatusMonitorToolDeps,
+  args: CheckMonitorArgs,
+  ctx: ServerContext,
+): Promise<CallToolResult> {
+  // The HTTP layer has already challenged a token without the scope; checked again here, where
+  // the check is asked for, in case anything ever routes around it.
+  if (!(ctx.http?.authInfo?.scopes.includes(McpScopes.statusWrite) ?? false)) {
+    return refused(
+      "This connection may not run checks. Reconnect the app and allow it to run your status monitors' checks.",
+    );
+  }
+  const scope = await resolveStatusProject(deps, userIdOf(ctx), args);
+  try {
+    const round = await deps.statusMonitors.requestCheck(scope, args.monitorId);
+    return asJson({
+      monitorId: round.monitorId,
+      roundAt: round.roundAt,
+      next: 'The probes run this round now; its verdict follows when they report. Read it with `mocco_status_monitors_get` (detailed) in a minute or so.',
+    });
+  } catch (error) {
+    // Not found (another tenant's monitor reads the same), a heartbeat, or a paused monitor.
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
+      return refused(error.message);
+    }
+    throw error;
+  }
+}
+
 export function registerStatusMonitorTools(server: McpServer, deps: StatusMonitorToolDeps): void {
   server.registerTool(
     'mocco_status_monitors_search',
     {
       title: 'Find status monitors',
       description:
-        "A project's HTTP, TCP and heartbeat monitors by name: what each checks (host only; none for a heartbeat, which its job pings), its state (up, suspect, down, recovering, degraded, paused or pending) and since when, and the components it reports on. Filter by state, e.g. the ones down. Read-only.",
+        "A project's HTTP, TCP and heartbeat monitors by name: what each checks (host only; none for a heartbeat, which its job pings, so a heartbeat shows its period, grace and last ping and run instead), its state (up, suspect, down, recovering, degraded, paused or pending) and since when, and the components it reports on. Filter by state, e.g. the ones down. Read-only.",
       inputSchema: monitorsInput,
       annotations: { readOnlyHint: true },
     },
@@ -348,5 +398,23 @@ export function registerStatusMonitorTools(server: McpServer, deps: StatusMonito
       annotations: { readOnlyHint: true },
     },
     async (args, ctx) => asJson(await searchStatusLocations(deps, args, userIdOf(ctx))),
+  );
+
+  server.registerTool(
+    'mocco_monitors_check',
+    {
+      title: 'Check a monitor now',
+      description:
+        "Run an HTTP or TCP monitor's next round now instead of waiting for its interval, e.g. right after a deploy, as the signed-in person; the answer says when the round is, and its verdict follows when the probes report. A round already due is not moved. Changes no setting and needs no confirmation. Refused for a heartbeat (its job pings it) and for a paused monitor.",
+      inputSchema: checkInput,
+      // It runs probes against the monitored service, and a second call while the round is
+      // due changes nothing.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      scopeChallenge: requireScope(
+        McpScopes.statusWrite,
+        "Checking a monitor needs your permission for this app to run your status monitors' checks",
+      ),
+    },
+    async (args, ctx) => await checkMonitor(deps, args, ctx),
   );
 }

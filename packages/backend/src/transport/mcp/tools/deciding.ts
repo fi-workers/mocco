@@ -15,6 +15,7 @@ import { userIdOf } from '@backend/transport/mcp/tools/runs';
 import type { McpSettingsService } from '@backend/domain/mcp/McpSettingsService';
 import type { WorkspaceScope } from '@backend/domain/mcp/WorkspaceScope';
 import type { Confirmations } from '@backend/transport/mcp/confirmation';
+import type { McpScope } from '@mocco/common/mcp';
 import type {
   CallToolResult,
   InputRequiredResult,
@@ -40,18 +41,22 @@ export const CONFIRM = 'confirm';
  * and every client renders it as the yes/no it is. */
 export const confirmationSchema = (label: string) => z.object({ confirm: z.boolean().describe(label) });
 
-/** A deciding tool needs `approvals:write`. A token without it is challenged for it
+/** A tool that needs a scope beyond sign-in. A token without it is challenged for it
  * (HTTP 403, `insufficient_scope`) — every scope it already has plus this one, because
  * the client re-authorizes with exactly the set the challenge names. */
-export function requireApprovalsWrite(errorDescription: string): ScopeChallengeHandler {
+export function requireScope(scope: McpScope, errorDescription: string): ScopeChallengeHandler {
   // eslint-disable-next-line sonarjs/function-return-type -- the SDK's contract: a challenge, or undefined for none
   return ({ authInfo }) => {
-    if (authInfo === undefined || authInfo.scopes.includes(McpScopes.approvalsWrite)) {
+    if (authInfo === undefined || authInfo.scopes.includes(scope)) {
       return undefined;
     }
-    return { scopes: [McpScopes.approvalsWrite, ...authInfo.scopes], errorDescription };
+    return { scopes: [scope, ...authInfo.scopes], errorDescription };
   };
 }
+
+/** A deciding tool needs `approvals:write`. */
+export const requireApprovalsWrite = (errorDescription: string): ScopeChallengeHandler =>
+  requireScope(McpScopes.approvalsWrite, errorDescription);
 
 /** How a tool names what it would do, in its refusals. */
 export interface DecisionWords {

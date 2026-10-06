@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -244,6 +244,7 @@ still refuses what the role refuses.
 | `runs:read` | List and read runs, steps and gates |
 | `approvals:read` | List and read approval requests and their votes |
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
+| `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -344,6 +345,13 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    token hash is never read out. Still to come: declaring an incident and posting its
    updates, which are said to customers and need their own design pass before an agent
    may do them, and any tool that changes a monitor or a location.
+
+   Issue #454 then added an action and the newer fields (*shipped*): `mocco_monitors_check` runs
+   `MonitorService.requestCheck`, the ad-hoc round `POST /v1/monitors/{id}/check` asks for, behind
+   `ProjectScope` and a new `status:write` OAuth scope stepped up for like `approvals:write`. It
+   decides nothing and changes no setting, so it has neither the opt-in nor a confirmation. The
+   monitor reads show a heartbeat's period, grace, last ping and last run (never its token), and
+   the incident reads its `origin` and the `suspectedRun` a deploy watch attributed, with a link.
 
    The notification reads follow (*shipped*, issue #246 part 1):
    `mocco_notifications_channels_search`, `mocco_notifications_rules_search`,

@@ -25,10 +25,13 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * `approvals:write` lets an agent vote as its person. It is not asked for when a client
  * first connects: the client is challenged for it (step-up) the first time it calls a
  * deciding tool, so the person grants it at the moment a decision is actually wanted.
+ * `status:write` lets an agent run a monitor's ad-hoc check as its person, stepped up for
+ * the same way the first time a tool needs it.
  * The keys are camel-cased because the values follow OAuth's `resource:action` form.
  */
 export const McpScopes = {
   approvalsWrite: 'approvals:write',
+  statusWrite: 'status:write',
 } as const;
 export type McpScope = (typeof McpScopes)[keyof typeof McpScopes];
 

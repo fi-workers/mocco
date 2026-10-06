@@ -8,7 +8,8 @@
 // notification settings (`tools/notifications-write.ts`) and four change webhook sources
 // (`tools/inbound-write.ts`); each is gated by scope, by the
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
-// here, before any tool sees it.
+// here, before any tool sees it. One acts without deciding anything (`mocco_monitors_check`,
+// in `tools/status-monitors.ts`): it is gated by its scope alone.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';

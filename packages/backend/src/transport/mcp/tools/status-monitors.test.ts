@@ -1,10 +1,11 @@
-// `mocco_status_monitors_*` and `mocco_status_locations_search` over a real database,
-// through the real HTTP handler.
+// `mocco_status_monitors_*`, `mocco_status_locations_search` and `mocco_monitors_check` over
+// a real database, through the real HTTP handler.
 //
-// A monitor's spec can carry secrets (a URL's credentials and query, a request body) and a
-// location has a token hash, so besides what a caller cannot see (another workspace's
-// monitors and locations, a workspace without the status product), these tests check that
-// none of that ever reaches an answer.
+// A monitor's spec can carry secrets (a URL's credentials and query, a request body), a
+// heartbeat has a ping token and a location has a token hash, so besides what a caller cannot
+// see (another workspace's monitors and locations, a workspace without the status product),
+// these tests check that none of that ever reaches an answer. The check needs `status:write`:
+// a token without it is challenged for it and nothing moves.
 import { randomUUID } from 'node:crypto';
 
 import { Products } from '@mocco/common/project';
@@ -58,9 +59,14 @@ const refuse = () => {
 };
 
 interface RpcAnswer {
+  status?: number;
+  wwwAuthenticate?: string;
   result?: { isError?: boolean; content?: { type: string; text: string }[] };
   error?: { code: number; message: string };
 }
+
+const SIGN_IN = ['openid', 'profile', 'email', 'offline_access'];
+const WITH_STATUS_WRITE = [...SIGN_IN, 'status:write'];
 
 const textOf = (answer: RpcAnswer) => answer.result?.content?.map(each => each.text).join('\n') ?? '';
 
@@ -101,7 +107,7 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
   let marketing: string;
   let theirMonitor: string;
 
-  async function call(tool: string, args: Record<string, unknown>, userId = ada): Promise<RpcAnswer> {
+  async function call(tool: string, args: Record<string, unknown>, userId = ada, scopes = SIGN_IN): Promise<RpcAnswer> {
     const request = new Request(RESOURCE, {
       method: 'POST',
       headers: {
@@ -122,14 +128,25 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       authInfo: {
         token: '',
         clientId: 'agent',
-        scopes: ['openid', 'profile', 'email', 'offline_access'],
+        scopes,
         resource: new URL(RESOURCE),
         extra: { [MCP_USER_ID]: userId },
       },
     });
     const text = await response.text();
-    return (text === '' ? {} : JSON.parse(text)) as RpcAnswer;
+    return {
+      status: response.status,
+      wwwAuthenticate: response.headers.get('www-authenticate') ?? undefined,
+      ...((text === '' ? {} : JSON.parse(text)) as RpcAnswer),
+    };
   }
+
+  /** `mocco_monitors_check` with a token that may run checks, unless told otherwise. */
+  const check = async (args: Record<string, unknown>, scopes = WITH_STATUS_WRITE) =>
+    await call('mocco_monitors_check', args, ada, scopes);
+
+  const nextRoundOf = async (id: string) =>
+    expectOne(await t.db.select().from(statusMonitors).where(eq(statusMonitors.id, id))).nextRoundAt;
 
   async function addWorkspace(memberId?: string): Promise<StatusScope> {
     const workspaceId = expectOne(
@@ -148,6 +165,22 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
 
   const monitor = async (scope: StatusScope, input: Record<string, unknown>) =>
     await status.statusMonitors.create(scope, ada, monitorInputSchema.parse(input));
+
+  /** A heartbeat in the project, with a start and a finish 42 seconds later. */
+  async function pingedHeartbeat() {
+    const created = await monitor(mine, {
+      name: 'Nightly export',
+      spec: { kind: MonitorKinds.heartbeat, periodSeconds: 3600, graceSeconds: 600 },
+    });
+    const token = created.heartbeatToken ?? '';
+    const startedAt = new Date(clock.getTime() + 60_000);
+    const finishedAt = new Date(startedAt.getTime() + 42_000);
+    clock = startedAt;
+    await status.statusHeartbeats.ping(token, { signal: 'start' });
+    clock = finishedAt;
+    await status.statusHeartbeats.ping(token, { signal: 'success' });
+    return { id: created.id, token, startedAt, finishedAt };
+  }
 
   /** Move the clock past the API monitor's next round and have fra report a failure. */
   async function failingRound() {
@@ -399,6 +432,167 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       expect(textOf(foreign)).toContain('was not found');
       expect(textOf(foreign).replace(theirMonitor, '<id>')).toBe(textOf(missing).replace(nowhere, '<id>'));
       expect(textOf(foreign)).not.toContain('Their secret monitor');
+    });
+  });
+
+  describe('heartbeat monitors', () => {
+    it('show their period, grace and last ping and run in both shapes, and never the token', async () => {
+      const { id, token, startedAt, finishedAt } = await pingedHeartbeat();
+      const heartbeat = {
+        periodSeconds: 3600,
+        graceSeconds: 600,
+        lastPingAt: finishedAt.toISOString(),
+        lastStartAt: startedAt.toISOString(),
+        lastDurationMs: 42_000,
+      };
+
+      const concise = bodyOf(await call('mocco_status_monitors_search', { query: 'nightly' }));
+      const detailed = bodyOf(
+        await call('mocco_status_monitors_search', { query: 'nightly', responseFormat: 'detailed' }),
+      );
+      const read = bodyOf(await call('mocco_status_monitors_get', { monitorId: id, responseFormat: 'detailed' }));
+
+      expect(concise.monitors).toEqual([
+        {
+          id,
+          name: 'Nightly export',
+          kind: MonitorKinds.heartbeat,
+          target: null,
+          state: MonitorStates.up,
+          stateChangedAt: expect.any(String),
+          components: [],
+          heartbeat,
+        },
+      ]);
+      expect((detailed.monitors as Row[])[0]).toMatchObject({ heartbeat, intervalSeconds: expect.any(Number) });
+      expect((detailed.monitors as Row[])[0]).not.toHaveProperty('timeoutMs');
+      expect(read.monitor).toMatchObject({ id, heartbeat });
+      // A probe monitor has no heartbeat.
+      expect(
+        (bodyOf(await call('mocco_status_monitors_search', { query: 'API' })).monitors as Row[])[0],
+      ).not.toHaveProperty('heartbeat');
+
+      const { heartbeatTokenHash } = expectOne(
+        await t.db.select().from(statusMonitors).where(eq(statusMonitors.id, id)),
+      );
+      const answered = [concise, detailed, read].map(body => JSON.stringify(body)).join('\n');
+      expect(heartbeatTokenHash).toEqual(expect.any(String));
+      expect(
+        [token, heartbeatTokenHash ?? token, 'heartbeatToken', 'tokenHash'].filter(secret => answered.includes(secret)),
+      ).toEqual([]);
+    });
+  });
+
+  describe('mocco_monitors_check', () => {
+    it("runs an HTTP monitor's next round now, and says when", async () => {
+      expect((await nextRoundOf(apiHealth)) > clock).toBe(true);
+
+      const body = bodyOf(await check({ monitorId: apiHealth }));
+
+      expect(body).toEqual({ monitorId: apiHealth, roundAt: clock.toISOString(), next: expect.any(String) });
+      expect(await nextRoundOf(apiHealth)).toEqual(clock);
+    });
+
+    it('leaves a round that is already due where it is', async () => {
+      const due = await nextRoundOf(database);
+      expect(due <= clock).toBe(true);
+
+      const body = bodyOf(await check({ monitorId: database }));
+
+      expect(body).toMatchObject({ monitorId: database, roundAt: due.toISOString() });
+      expect(await nextRoundOf(database)).toEqual(due);
+    });
+
+    it('challenges a token without status:write for it, keeping the scopes it has, and moves nothing', async () => {
+      const before = await nextRoundOf(apiHealth);
+
+      const answer = await check({ monitorId: apiHealth }, SIGN_IN);
+      // approvals:write is not status:write.
+      const deciding = await check({ monitorId: apiHealth }, [...SIGN_IN, 'approvals:write']);
+
+      expect(answer.status).toBe(403);
+      expect(answer.wwwAuthenticate).toContain('error="insufficient_scope"');
+      expect(answer.wwwAuthenticate).toContain('scope="status:write openid profile email offline_access"');
+      expect(answer.wwwAuthenticate).toContain(
+        'resource_metadata="https://mocco.test/.well-known/oauth-protected-resource/api/mcp"',
+      );
+      expect(deciding.status).toBe(403);
+      expect(deciding.wwwAuthenticate).toContain(
+        'scope="status:write openid profile email offline_access approvals:write"',
+      );
+      expect(await nextRoundOf(apiHealth)).toEqual(before);
+    });
+
+    it("refuses another workspace's monitor exactly as one that does not exist, and moves nothing", async () => {
+      const nowhere = randomUUID();
+      const before = await nextRoundOf(theirMonitor);
+      clock = new Date(before.getTime() - 1000);
+
+      const foreign = await check({ monitorId: theirMonitor });
+      const missing = await check({ monitorId: nowhere });
+      const throughTheirProject = await check({ monitorId: theirMonitor, projectId: theirs.projectId });
+
+      expect(foreign.result?.isError).toBe(true);
+      expect(textOf(foreign)).toContain('was not found');
+      expect(textOf(foreign).replace(theirMonitor, '<id>')).toBe(textOf(missing).replace(nowhere, '<id>'));
+      expect(throughTheirProject.result?.isError).toBe(true);
+      expect(textOf(throughTheirProject)).toContain('was not found');
+      expect(await nextRoundOf(theirMonitor)).toEqual(before);
+    });
+
+    it('refuses a heartbeat, which its job pings, and a paused monitor', async () => {
+      const { id } = await pingedHeartbeat();
+      const heartbeatDeadline = await nextRoundOf(id);
+      const pausedRound = await nextRoundOf(marketing);
+
+      const heartbeat = await check({ monitorId: id });
+      const paused = await check({ monitorId: marketing });
+
+      expect(heartbeat.result?.isError).toBe(true);
+      expect(textOf(heartbeat)).toContain('is a heartbeat');
+      expect(paused.result?.isError).toBe(true);
+      expect(textOf(paused)).toContain('is paused');
+      expect(await nextRoundOf(id)).toEqual(heartbeatDeadline);
+      expect(await nextRoundOf(marketing)).toEqual(pausedRound);
+    });
+
+    it('refuses where the status product is off, as the console does', async () => {
+      await project.products.disable(mine.workspaceId, Products.status);
+
+      const answer = await check({ monitorId: apiHealth });
+
+      expect(answer.result?.isError).toBe(true);
+      expect(textOf(answer)).toContain('not enabled');
+    });
+
+    it('is an action, not a read, and not destructive', async () => {
+      const response = await handler.fetch(
+        new Request(RESOURCE, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'mcp-protocol-version': PROTOCOL_VERSION,
+            'mcp-method': 'tools/list',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: envelope } }),
+        }),
+        {
+          authInfo: {
+            token: '',
+            clientId: 'agent',
+            scopes: SIGN_IN,
+            resource: new URL(RESOURCE),
+            extra: { [MCP_USER_ID]: ada },
+          },
+        },
+      );
+      const listed = (await response.json()) as {
+        result: { tools: { name: string; annotations?: Record<string, boolean> }[] };
+      };
+      const tool = listed.result.tools.find(each => each.name === 'mocco_monitors_check');
+
+      expect(tool?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     });
   });
 

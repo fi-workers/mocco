@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-05
+updated: 2026-10-06
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -48,10 +48,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_ota_adoption_get` | How many devices checked in during the last 24 hours, per channel and release, and the app's monthly active devices |
 | `mocco_ota_version_policies_search` | The minimum supported, recommended and blocked versions of each iOS and Android app, and whether tightening them needs approval |
 | `mocco_status_pages_get` | What a status page says right now: each component and the status it shows, counting open incidents and maintenance in progress |
-| `mocco_status_incidents_search` | Which incidents are open (or were), newest first, by status, severity, page or title text |
-| `mocco_status_incidents_get` | One incident: every update posted to it, the components it affects and how badly, its postmortem, and the deploys linked to it |
+| `mocco_status_incidents_search` | Which incidents are open (or were), newest first, by status, severity, page or title text, and whether each was opened by hand, by a monitor or by a deploy watch |
+| `mocco_status_incidents_get` | One incident: where it came from, the run a deploy watch suspects (with a link to it), every update posted to it, the components it affects and how badly, its postmortem, and the deploys linked to it |
 | `mocco_status_maintenances_search` | Which maintenance windows are scheduled or in progress, and the components each covers |
-| `mocco_status_monitors_search` | Which HTTP and TCP monitors a project has, what each checks (the host only), its state (for example the ones down) and since when, and the components it reports on |
+| `mocco_status_monitors_search` | Which HTTP, TCP and heartbeat monitors a project has, what each checks (the host only), its state (for example the ones down) and since when, the components it reports on, and for a heartbeat its period, grace, last ping and last run |
 | `mocco_status_monitors_get` | One monitor: its latest state changes and why, its latest rounds, and the incident it opened that is still open |
 | `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
 | `mocco_help_articles_search` | Which published help center articles match a question (every word, or any word for a customer's message), or every article in order, in a language where translated |
@@ -84,9 +84,22 @@ page is turned on. `mocco_status_pages_get` reads one page: leave `pageId` out w
 project has one, or the tool names the pages to pick from. The incident and maintenance
 searches read every page of the project unless you name one. A monitor shows only the
 host it checks: its full URL, request body and keyword stay on the server, since they can
-hold credentials. The location tool reads the whole workspace for any member and never
-returns a location's token. They only read; declare an incident, post an update, schedule
-maintenance, and add, pause or change a monitor or a location in the console.
+hold credentials. A heartbeat shows its period, grace, when its job last pinged and how long
+its last run took, never its ping token. The location tool reads the whole workspace for any
+member and never returns a location's token. An incident says whether it was opened by hand,
+by a monitor or by a deploy watch; for a deploy watch's, it names the run it suspects and links
+to it in the console. Apart from checking a monitor now (below), they only read; declare an
+incident, post an update, schedule maintenance, and add, pause or change a monitor or a
+location in the console.
+
+**Checking a monitor now.** `mocco_monitors_check` runs an HTTP or TCP monitor's next round
+right away, for example after a deploy, instead of waiting for its interval; the probes then
+report and `mocco_status_monitors_get` shows the verdict. It is what a pipeline step does with
+`POST /v1/monitors/{id}/check`. It changes no setting and only reads your service, so it does
+not ask you to confirm and does not need the workspace to allow agents to decide. It does need
+one more permission the first time: your client opens the consent screen again with **Run your
+status monitors' checks now, as you**. A heartbeat (its job pings it) and a paused monitor are
+refused.
 
 The notification and webhook source tools read the whole workspace, with no project to
 pick, and answer for any member, as the console does. They never return a signing
@@ -263,6 +276,9 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | `405 Method Not Allowed` on connect | The client is trying `GET` or `DELETE`. It is on the old transport — upgrade it |
 | "Agents may not vote in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "This connection may not vote" | The app was never allowed to vote. Reconnect it and allow the voting permission when asked |
+| "This connection may not run checks" | The app was never allowed to run checks. Reconnect it and allow the checks permission when asked |
+| "… is a heartbeat; its job pings it" | A heartbeat has no rounds to run. Its last ping is in `mocco_status_monitors_search` |
+| "… is paused; resume it to check it" | Resume the monitor in the console first |
 | "not in a role authorized to approve" | Your roles do not cover this request. Someone in one of the roles `mocco_approvals_get` lists has to vote |
 | "Agents may not resume or reject runs in this workspace" | Deciding is off for that workspace. An owner or admin can turn it on in **Settings → Agents** |
 | "No pending gate at index …" | The run is not paused at that gate any more — it moved on, was decided, or is in another workspace. `mocco_runs_get` shows what it waits on now |

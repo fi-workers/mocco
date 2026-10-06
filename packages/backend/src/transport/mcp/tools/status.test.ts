@@ -8,7 +8,14 @@ import { randomUUID } from 'node:crypto';
 
 import { RunStates } from '@mocco/common/execution';
 import { Products } from '@mocco/common/project';
-import { ComponentStatuses, IncidentRunRelations, IncidentSeverities, IncidentStatuses } from '@mocco/common/status';
+import {
+  ComponentStatuses,
+  IncidentOrigins,
+  IncidentRunRelations,
+  IncidentSeverities,
+  IncidentStatuses,
+} from '@mocco/common/status';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '@backend/domain/audit/AuditService';
@@ -20,7 +27,7 @@ import { createProjectDomain } from '@backend/domain/project/instance';
 import { createStatusDomain } from '@backend/domain/status/compose';
 import { seedRelease, seedRepo, seedRun } from '@backend/domain/status/testing/deploys';
 import { expectOne } from '@backend/infra/db/rows';
-import { members, users, workspaces } from '@backend/infra/db/schema';
+import { members, statusIncidents, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { createMcpHttpHandler } from '@backend/transport/mcp/server';
 import { MCP_USER_ID } from '@backend/transport/mcp/tools/runs';
@@ -337,6 +344,7 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
         title: 'Elevated errors',
         status: IncidentStatuses.identified,
         severity: IncidentSeverities.major,
+        origin: IncidentOrigins.manual,
         startedAt: minutes(10).toISOString(),
         resolvedAt: null,
       });
@@ -427,6 +435,8 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
         title: 'Login outage',
         status: IncidentStatuses.resolved,
         severity: IncidentSeverities.critical,
+        origin: IncidentOrigins.manual,
+        suspectedRun: null,
         startedAt: T0.toISOString(),
         identifiedAt: null,
         resolvedAt: minutes(1).toISOString(),
@@ -508,6 +518,60 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
           run: expect.objectContaining({ commitSha: fixSha, finishedAt: minutes(16).toISOString() }),
         }),
       );
+    });
+
+    it('says a deploy watch opened it and links the run it suspects, in both shapes', async () => {
+      const repoId = await seedRepo(t.db, mine.workspaceId, 'api', [mine.projectId]);
+      const { runId } = await seedRun(t.db, { workspaceId: mine.workspaceId, repoId, finishedAt: minutes(9) });
+      // What the deploy watch writes when the monitor it watches goes down (#155).
+      await t.db
+        .update(statusIncidents)
+        .set({ origin: IncidentOrigins.deployWatch, suspectedRunId: runId })
+        .where(eq(statusIncidents.id, elevatedErrors));
+      const suspectedRun = {
+        runId,
+        url: `https://mocco.test/workspaces/${mine.workspaceId}/runs/${runId}`,
+      };
+
+      const concise = bodyOf(await call('mocco_status_incidents_get', { incidentId: elevatedErrors }));
+      const detailed = bodyOf(
+        await call('mocco_status_incidents_get', { incidentId: elevatedErrors, responseFormat: 'detailed' }),
+      );
+      const searched = bodyOf(await call('mocco_status_incidents_search', {}));
+      const searchedInDetail = bodyOf(await call('mocco_status_incidents_search', { responseFormat: 'detailed' }));
+
+      expect(concise.incident).toMatchObject({ origin: IncidentOrigins.deployWatch, suspectedRun });
+      expect(detailed.incident).toMatchObject({ origin: IncidentOrigins.deployWatch, suspectedRun });
+      expect(searched.incidents).toEqual([
+        expect.objectContaining({ id: slowDashboard, origin: IncidentOrigins.manual }),
+        expect.objectContaining({ id: elevatedErrors, origin: IncidentOrigins.deployWatch }),
+      ]);
+      expect((searched.incidents as Row[])[1]).not.toHaveProperty('suspectedRun');
+      expect(searchedInDetail.incidents).toEqual([
+        expect.objectContaining({ id: slowDashboard, suspectedRun: null }),
+        expect.objectContaining({ id: elevatedErrors, suspectedRun }),
+      ]);
+    });
+
+    it("never shows the run another workspace's deploy watch suspects", async () => {
+      const theirRepo = await seedRepo(t.db, theirs.workspaceId, 'secret', [theirs.projectId]);
+      const { runId: theirRun } = await seedRun(t.db, {
+        workspaceId: theirs.workspaceId,
+        repoId: theirRepo,
+        finishedAt: minutes(39),
+      });
+      await t.db
+        .update(statusIncidents)
+        .set({ origin: IncidentOrigins.deployWatch, suspectedRunId: theirRun })
+        .where(eq(statusIncidents.id, theirIncident));
+
+      const read = await call('mocco_status_incidents_get', { incidentId: theirIncident });
+      const searched = await call('mocco_status_incidents_search', { status: 'all', responseFormat: 'detailed' });
+
+      expect(read.result?.isError).toBe(true);
+      expect(textOf(read)).toContain('was not found');
+      expect(textOf(read)).not.toContain(theirRun);
+      expect(textOf(searched)).not.toContain(theirRun);
     });
 
     it("refuses another workspace's incident exactly as one that does not exist", async () => {
