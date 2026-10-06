@@ -533,6 +533,13 @@
       "when": 1791264773152,
       "tag": "0075_majestic_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1791268725283,
+      "tag": "0076_burly_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

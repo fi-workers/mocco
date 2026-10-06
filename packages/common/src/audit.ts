@@ -87,6 +87,10 @@ export const AuditActions = {
   apiKeyRevoked: 'apikey.revoked',
   /** A workspace turned the MCP deciding tools on or off. */
   mcpAgentsMayDecideChanged: 'mcp.agents_may_decide.changed',
+  feedbackBoardCreated: 'feedback.board.created',
+  feedbackBoardDeleted: 'feedback.board.deleted',
+  /** Staff moved a feedback post to another status; the payload carries both. */
+  feedbackPostStatusChanged: 'feedback.post.status_changed',
   statusPageCreated: 'status.page.created',
   statusPageDeleted: 'status.page.deleted',
   /** An operator set a component's status by hand. */
@@ -210,6 +214,9 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
   [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',
+  [AuditActions.feedbackBoardCreated]: 'Feedback board created',
+  [AuditActions.feedbackBoardDeleted]: 'Feedback board deleted',
+  [AuditActions.feedbackPostStatusChanged]: 'Feedback post status changed',
   [AuditActions.statusPageCreated]: 'Status page created',
   [AuditActions.statusPageDeleted]: 'Status page deleted',
   [AuditActions.statusComponentStatusChanged]: 'Component status set by hand',
