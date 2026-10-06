@@ -15,8 +15,9 @@ export type NewInboundSource = Pick<
 export type InboundSourcePatch = Partial<Pick<InboundSourceRow, 'name' | 'status' | 'secretSealed'>>;
 
 /** Data access for mocco_inbound_sources (ADR 0012). Reads and writes by id are scoped
- * by `workspace_id`; the one platform-scoped read is `findByIngestKey`, since the key
- * is how a delivery finds its tenant. */
+ * by `workspace_id`; the platform-scoped reads are `findByIngestKey`, since the key is
+ * how a delivery finds its tenant, and `findById`, for the operator-configured stage0
+ * canary source (`OPS_CANARY_SOURCE_ID`). */
 export class InboundSourceRepo {
   constructor(private readonly db: Db) {}
 
@@ -40,6 +41,13 @@ export class InboundSourceRepo {
       .from(inboundSources)
       .where(and(eq(inboundSources.id, sourceId), eq(inboundSources.workspaceId, workspaceId)));
     return getOrThrow(rows, `Inbound source ${sourceId} was not found`);
+  }
+
+  /** The source with this id in any workspace, or undefined (the stage0 canary's source,
+   * which the operator names by id). */
+  async findById(sourceId: string): Promise<InboundSourceRow | undefined> {
+    const [row] = await this.db.select().from(inboundSources).where(eq(inboundSources.id, sourceId));
+    return row;
   }
 
   /** The source a delivery URL names, or undefined. */

@@ -118,6 +118,13 @@ const schema = z.object({
   STATUS_PROBE_CONCURRENCY: z.coerce.number().int().min(1).max(200).default(20),
   /** Days of raw status check results kept, today included; older days' partitions are dropped. */
   STATUS_RAW_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(14),
+  // Stage0 (relay design §11): Mocco's own watchdog. Both set → every five minutes a
+  // signed canary goes through the ingest route to Discord, and each sent canary pings
+  // the heartbeat URL (an external dead-man switch). Either unset → stage0 is off.
+  /** The dead-man switch's ping URL, e.g. a Mocco heartbeat monitor on another install. */
+  OPS_HEARTBEAT_URL: z.url().optional(),
+  /** The id of the GitHub inbound source the canary is sent to. */
+  OPS_CANARY_SOURCE_ID: z.uuid().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

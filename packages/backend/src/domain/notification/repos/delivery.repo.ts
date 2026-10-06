@@ -145,6 +145,16 @@ export class DeliveryRepo {
       .limit(options.limit);
   }
 
+  /** The inbound source an event came from (`payload.sourceId`), or undefined for an
+   * event that has none (a Mocco event) or that is gone. */
+  async findEventSourceId(eventId: string): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ sourceId: sql<string | null>`${domainEvents.payload} ->> 'sourceId'` })
+      .from(domainEvents)
+      .where(eq(domainEvents.id, eventId));
+    return row?.sourceId ?? undefined;
+  }
+
   async findById(id: string): Promise<DeliveryRow | undefined> {
     const [row] = await this.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, id));
     return row;

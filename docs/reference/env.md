@@ -172,6 +172,41 @@ Mailpit (`smtp://localhost:1025`). Status subscriber links are signed with a key
 
 `EXPO_ACCESS_TOKEN` (optional) is sent to Expo's push service with messenger reply notifications, for Expo projects that require an access token ("enhanced push security"). Without it, pushes go out unauthenticated, which Expo accepts unless the project requires one. Attachments use [object storage](./storage.md). See [Messenger](./messenger.md#push).
 
+## Ops (stage0) vars
+
+Stage0 is Mocco's own watchdog ([notification relay design §11](../superpowers/specs/2026-09-25-notification-relay-design.md#11-dogfooding-moving-the-team-relay-onto-mocco),
+[stage0 canary](./notifications.md#stage0-canary)). Every five minutes the `stage0.canary` job sends a signed
+synthetic GitHub push through Mocco's public ingest route; a rule routes it to a private Discord channel; once the
+message is posted (and deleted again), Mocco pings `OPS_HEARTBEAT_URL`. If the ingest route, the DB, the job queue or
+the Discord sender breaks, the pings stop and the dead-man switch behind the URL alerts the team, outside Mocco.
+
+- `OPS_HEARTBEAT_URL`: the ping URL of an external dead-man switch, pinged with a `GET`. It carries a token, so keep
+  it secret; Mocco never logs it. For example a [heartbeat monitor](./status.md#heartbeat-monitors) on a separate
+  Mocco install (`https://<other-install>/api/ext/v1/ping/mhb_…`) or a healthchecks.io check
+  (`https://hc-ping.com/<uuid>`). Never point it at the same install it watches.
+- `OPS_CANARY_SOURCE_ID`: the id (uuid) of the GitHub inbound source the canary goes to.
+
+Both unset, stage0 is off and nothing is scheduled. Only one set, it stays off and the job runner logs a warning. The
+canary also needs `SECRETS_ENCRYPTION_KEYS` (to sign with the source's secret), `DISCORD_BOT_TOKEN` and the job tick.
+
+Turning it on (operations, no deploy of code):
+
+1. In an operator workspace (not a customer's), create an inbound source of kind **GitHub** named `stage0 canary`. Use
+   it for nothing else: every delivery from it is treated as a canary, deleted from Discord and pinged for. Copy its id.
+2. Add a private Discord channel (only the bot and operators can see it) to that workspace as a notification channel.
+3. Add a rule on that channel: event `github.push`, limited to the canary source.
+4. Create the dead-man switch with a **5-minute period and a 10-minute grace**, so it alerts at most 15 minutes after
+   the last canary got through, and point its alerts somewhere that doesn't depend on Mocco (its own Discord, email
+   or phone integration). On another Mocco install that is a heartbeat monitor with period 5 and grace 10 minutes.
+5. Set `OPS_HEARTBEAT_URL` and `OPS_CANARY_SOURCE_ID` in the production env and redeploy, so the next tick picks them
+   up.
+6. Check it within ten minutes: the source shows a receipt every five minutes, the channel's deliveries are `sent`, the
+   channel itself stays empty, and the dead-man switch shows pings. Then watch it for a few days before moving Mocco's
+   own alerts onto Mocco.
+
+To turn it off, unset both variables. Pausing the canary source also stops the pings (and so alerts), which is how to
+test the alert path end to end.
+
 ## Scripts
 
 - `yarn dev` (→ `run-frontend`), `yarn db:generate`, `yarn db:migrate` all run through `with-env`, so `next dev`/`drizzle-kit` see the merged `env/.env.local` → `env/.env`.

@@ -45,6 +45,9 @@ import { ChannelRepo } from '@backend/domain/notification/repos/channel.repo';
 import { DeliveryRepo } from '@backend/domain/notification/repos/delivery.repo';
 import { DiscordConnectStateRepo } from '@backend/domain/notification/repos/discord-connect-state.repo';
 import { DiscordRateLimitRepo } from '@backend/domain/notification/repos/discord-rate-limit.repo';
+import { stage0FromEnv } from '@backend/domain/ops/config';
+import { createOpsHandlers, stage0CanarySchedule } from '@backend/domain/ops/jobs';
+import { Stage0CanaryService } from '@backend/domain/ops/Stage0CanaryService';
 import { createOtaHandlers, otaMetricsSchedules, pruneUploadSessionsSchedule } from '@backend/domain/ota/jobs';
 import { OtaMetricsService } from '@backend/domain/ota/OtaMetricsService';
 import { OtaAppRepo } from '@backend/domain/ota/repos/ota-app.repo';
@@ -75,6 +78,7 @@ import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
+import type { Stage0Deps } from '@backend/domain/ops/config';
 import type { SubscriberEnvDeps } from '@backend/domain/status/subscriber-config';
 import type { Db } from '@backend/infra/db/types';
 
@@ -103,6 +107,9 @@ export interface JobRunnerRuntimeDeps {
   statusRawRetentionDays?: number;
   /** Status subscriber links' signing key and the email sender; without it subscriber jobs do nothing. */
   statusSubscribers?: SubscriberEnvDeps;
+  /** The stage0 canary and heartbeat (relay design §11); undefined (off) without
+   * OPS_HEARTBEAT_URL and OPS_CANARY_SOURCE_ID. */
+  stage0?: Stage0Deps;
 }
 
 /** Build the runner with every domain's handlers over a db. Production binds it once
@@ -160,6 +167,18 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...(deps.statusSubscribers !== undefined && { subscribers: deps.statusSubscribers }),
     now: deps.now,
   });
+  const { stage0 } = deps;
+  const canary =
+    stage0 === undefined
+      ? undefined
+      : new Stage0CanaryService({
+          sources: new InboundSourceRepo(db),
+          box: stage0.box,
+          fetch: stage0.fetch,
+          appOrigin: deps.appOrigin,
+          sourceId: stage0.sourceId,
+          now: deps.now,
+        });
   const handlers: JobHandler[] = [
     ...createPruneHandlers(jobs),
     ...createEventHandlers({ bus, events: new DomainEventRepo(db) }),
@@ -171,7 +190,9 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       discord: deps.discord,
       random: deps.random,
       connectStates: new DiscordConnectStateRepo(db),
+      ...(stage0 !== undefined && { canary: { sourceId: stage0.sourceId, heartbeat: stage0.heartbeat } }),
     }),
+    ...createOpsHandlers({ canary }),
     ...createStorageHandlers({ storage: deps.storage }),
     ...createFlagHandlers({ governance: flagGovernance, stale: staleFlags }),
     ...createMessengerHandlers({
@@ -231,6 +252,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       ...flagSchedules,
       ...statusSchedules,
       ...(deps.storage === undefined ? [] : [storageGcSchedule, snapshotSafetySchedule]),
+      ...(stage0 === undefined ? [] : [stage0CanarySchedule]),
     ],
   });
   return self.runner;
@@ -262,6 +284,8 @@ export function getJobRunner(): JobRunner {
       helpIndexNow: helpIndexNowFromEnv(getDb(), env),
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
       statusSubscribers: subscriberDepsFromEnv(env),
+      // The box is resolved only when a canary is signed, like the inbound jobs' above.
+      stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),
     });
   }
   return state.runner;
