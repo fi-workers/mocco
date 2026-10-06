@@ -27,7 +27,8 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts. The plan is in the
+> assigning messenger conversations, moving, commenting on, voting on and merging feedback posts, and reviewing
+> help center translations and the glossary. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -145,6 +146,9 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
 | `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
 | `mocco_feedback_post_merge` | Merges a duplicate feedback post into the post it repeats, as you; votes and followers move over |
+| `mocco_help_translation_accept` | Accepts the machine draft waiting beside an out-of-date reviewed translation as the reviewed text, as you |
+| `mocco_help_translation_retranslate` | Has the machine translate one language of a help article again; a language a person reviewed is replaced only when you confirm exactly that |
+| `mocco_help_glossary_set` | Adds, changes or removes a term in the help center glossary every translation follows |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -219,6 +223,25 @@ switch cover three more changes, each confirmed in your client first:
   is closed, keeping its comments and history. A merge can't be undone. If either post gets a
   vote before you answer, you are asked again with the new counts; if either is merged
   elsewhere, the merge is refused.
+
+**Reviewing help center translations.** Three changes share one permission, asked for the
+first time any is used: **Accept and redo your help center's translations and change its
+glossary, as you**. Each needs the workspace to allow agents to make changes and is confirmed
+in your client first; any member of the project may make them, as in the console.
+
+- `mocco_help_translation_accept` shows the machine draft and whose reviewed text it replaces.
+  If a newer draft arrives, or the article is published again, before you answer, the answer
+  is refused and you are asked afresh.
+- `mocco_help_translation_retranslate` asks the machine again for one language, from the
+  original and without reusing earlier translations. On a language a person reviewed, the
+  confirmation says so and names them; their text stays in the history. If someone reviews or
+  edits the language before you answer, you are asked again about that text. A language being
+  translated already answers without asking.
+- `mocco_help_glossary_set` shows the term as it is now and as it would be. Translations then
+  redo the sentences that contain it (a reviewed language gets a draft beside its text). If the
+  term changes before you answer, you are asked again.
+
+Writing a translation yourself, and editing or publishing articles, stay in the console.
 
 Webhook source changes follow the same rules, and a signing secret never passes through
 your agent. `mocco_inbound_sources_create` adds a GitHub source but does not return the

@@ -55,7 +55,7 @@ const CONSENT_PAGE = '/auth/consent';
 
 /**
  * Every scope the authorization server can grant: the vendor's sign-in defaults plus
- * `approvals:write`, `status:write`, `messenger:write` and `feedback:write`. A registered
+ * `approvals:write`, `status:write`, `messenger:write`, `feedback:write` and `help:write`. A registered
  * client's capability set is this list (the vendor persists it at registration), so a client can
  * later step up to any without registering again. Clients stored before the scope existed lack
  * it until their Client ID Metadata Document is fetched again — the vendor re-persists the
@@ -67,6 +67,7 @@ const MCP_SCOPES = [
   McpScopes.statusWrite,
   McpScopes.messengerWrite,
   McpScopes.feedbackWrite,
+  McpScopes.helpWrite,
 ];
 
 /**

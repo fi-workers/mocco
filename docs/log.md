@@ -1064,3 +1064,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   [reference](./reference/help-center.md#glossary) and the feature map say the console is live.
 - Docs touched: `customer/help/help-center.md`, `reference/help-center.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/help-glossary-ui` (issue #214)
+
+## 2026-10-06 — MCP: help center translation and glossary changes
+
+- `mocco_help_translation_accept`, `mocco_help_translation_retranslate` and `mocco_help_glossary_set`
+  (`transport/mcp/tools/help-write.ts`) over `HelpTranslationService.acceptProposal` / `retranslate` and
+  `HelpGlossaryService.addTerm` / `updateTerm` / `removeTerm`, acting as the caller behind a new `help:write`
+  scope (grantable, on the consent screen), the workspace's opt-in and the confirmation round trip.
+- Each confirmation is bound to the state it showed: the draft and the published source revision; the language's
+  state and text revision (the console's `confirm` is passed only for a confirmed reviewed state); the term's value.
+  `HelpTranslationService.review` now returns `sourceRevisionId`, `textRevisionId` and `isAvailable`. No migration.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
+  `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-help-change-tools` (issue #480)

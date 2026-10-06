@@ -13,7 +13,8 @@
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
-// under `feedback:write`.
+// under `feedback:write`, and `mocco_help_translation_accept`, `mocco_help_translation_retranslate`
+// and `mocco_help_glossary_set` (in `tools/help-write.ts`) under `help:write`.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
@@ -25,6 +26,7 @@ import {
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
+import { registerHelpWriteTools, type HelpWriteToolDeps } from '@backend/transport/mcp/tools/help-write';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
 import { registerMessengerTools, type MessengerToolDeps } from '@backend/transport/mcp/tools/messenger';
@@ -48,6 +50,7 @@ export type McpToolDeps = RunToolDeps &
   StatusToolDeps &
   StatusMonitorToolDeps &
   HelpToolDeps &
+  HelpWriteToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
   FeedbackEngagementToolDeps &
@@ -76,6 +79,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerStatusTools(server, deps);
   registerStatusMonitorTools(server, deps);
   registerHelpTools(server, deps);
+  registerHelpWriteTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);
   registerFeedbackEngagementTools(server, deps);
