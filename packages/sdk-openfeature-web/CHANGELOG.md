@@ -1,5 +1,17 @@
 # @mocco/openfeature-web
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [3f4d603]
+- Updated dependencies [b010c94]
+- Updated dependencies [a358655]
+- Updated dependencies [29a7b09]
+- Updated dependencies [1b64c71]
+- Updated dependencies [b967209]
+  - @mocco/sdk-core@0.4.0
+
 ## 0.1.2
 
 ### Patch Changes

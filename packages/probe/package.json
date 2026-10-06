@@ -1,6 +1,6 @@
 {
   "name": "@mocco/probe",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The Mocco status probe: leases uptime checks from Mocco, runs them from where it is, and reports the results.",
   "type": "module",
   "bin": {

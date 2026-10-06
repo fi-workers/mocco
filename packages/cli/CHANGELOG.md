@@ -2,6 +2,18 @@
 
 > Renamed from `@mocco/ota-cli` before its first publish; the entries below predate the rename.
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [3f4d603]
+- Updated dependencies [b010c94]
+- Updated dependencies [a358655]
+- Updated dependencies [29a7b09]
+- Updated dependencies [1b64c71]
+- Updated dependencies [b967209]
+  - @mocco/sdk-core@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

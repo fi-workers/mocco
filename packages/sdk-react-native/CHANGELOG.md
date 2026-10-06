@@ -1,5 +1,23 @@
 # @mocco/react-native
 
+## 0.4.0
+
+### Minor Changes
+
+- 3f4d603: `HelpClient.sendFeedback(id, { helpful, locale?, comment? })` answers "Was this helpful?" for a published article. Pass a `visitorId` the app keeps (such as an install id) to `createHelp` so Mocco counts one answer per reader, article and day; without one the client makes a random id for its own lifetime. Mocco stores only a hash of it.
+- b010c94: `HelpClient` reads a project's published help center as well as searching it: `getSite` (name, languages and the collections → sections → articles), `getCollection(slug)` and `getArticle(id)`, each in the reader's language where translated, with `locale` on the answer saying which was served. `getArticle` and `getCollection` answer `null` for what isn't published. `@mocco/js` exports `createHelp` and `HelpClient`; `@mocco/react-native/messenger` exports the new types.
+- a358655: Messenger attachments can be PDFs: `MessengerClient.attach` takes `contentType: 'application/pdf'` (up to 10 MB, like screenshots), and every served attachment carries its `filename`. A PDF's `url` is a download link, never one to open in a browser tab. The bytes must be the declared type, or the message that carries them is refused.
+
+### Patch Changes
+
+- Updated dependencies [3f4d603]
+- Updated dependencies [b010c94]
+- Updated dependencies [a358655]
+- Updated dependencies [29a7b09]
+- Updated dependencies [1b64c71]
+- Updated dependencies [b967209]
+  - @mocco/sdk-core@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

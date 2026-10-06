@@ -1,6 +1,6 @@
 {
   "name": "@mocco/react-native",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate), in-app contact (messenger hooks) and the Expo config plugin.",
   "license": "MIT",
   "type": "commonjs",
