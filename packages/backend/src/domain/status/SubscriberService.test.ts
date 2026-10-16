@@ -480,8 +480,9 @@ describe('status subscribers (pglite)', () => {
     await setUp();
     await subscribers.subscribe('acme', { email: 'pending@example.test' });
     await follow('acme', 'kim@example.test');
-    // `created_at` is the database's own clock, not the test's: leave two days of room either side.
-    const later = new Date(T0.getTime() + SubscriberPolicy.deliveryRetentionMs + 2 * 24 * 60 * 60 * 1000);
+    // `created_at` is the database's own clock, not the test's, so "later" counts from the
+    // real now (a fixed date turns this into a time bomb once it is in the past), with two days of room.
+    const later = new Date(Date.now() + SubscriberPolicy.deliveryRetentionMs + 2 * 24 * 60 * 60 * 1000);
 
     expect(await subscribers.prune(later)).toEqual({ subscribers: 1, deliveries: 1 });
     const left = await t.db.select().from(statusSubscribers);
