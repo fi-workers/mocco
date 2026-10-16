@@ -5,23 +5,28 @@
 import Head from 'next/head';
 
 import SeoHead from '@frontend/components/seo-head';
+import { cn } from '@frontend/lib/utils';
 
 import type { FeedbackPageBoard, FeedbackPageSite } from '@mocco/backend/sites/feedback';
 import type { ReactNode } from 'react';
 
 export const boardPath = (board: string) => `/feedback/${board}`;
+export const roadmapPath = (board: string) => `/feedback/${board}/roadmap`;
 export const postPath = (board: string, number: number) => `/feedback/${board}/${String(number)}`;
 
 export default function FeedbackSiteLayout({
   site,
   board,
   title,
+  current,
   seo,
   children,
 }: {
   site: FeedbackPageSite;
   board: FeedbackPageBoard;
   title: string;
+  /** Which of the board's pages this is, for the header's links. */
+  current: 'board' | 'roadmap' | 'post';
   seo: {
     path: string;
     description: string;
@@ -70,8 +75,31 @@ export default function FeedbackSiteLayout({
           <a href={boardPath(board.slug)} className="truncate text-sm font-medium hover:underline">
             {board.name}
           </a>
+          <nav aria-label="Board" className="ml-auto flex items-center gap-1 text-sm">
+            {(
+              [
+                ['board', 'Ideas', boardPath(board.slug)],
+                ['roadmap', 'Roadmap', roadmapPath(board.slug)],
+              ] as const
+            ).map(([section, label, href]) => (
+              <a
+                key={section}
+                href={href}
+                aria-current={current === section ? 'page' : undefined}
+                className={cn(
+                  'rounded-md px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground',
+                  current === section && 'bg-muted font-medium text-foreground',
+                )}>
+                {label}
+              </a>
+            ))}
+          </nav>
         </header>
-        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-8 md:px-6 md:py-10">
+        <main
+          className={cn(
+            'mx-auto flex w-full flex-1 flex-col gap-8 px-4 py-8 md:px-6 md:py-10',
+            current === 'roadmap' ? 'max-w-6xl' : 'max-w-3xl',
+          )}>
           {children}
         </main>
       </div>

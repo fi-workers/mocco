@@ -4,7 +4,7 @@ description: How Mocco stores a project's feedback boards — boards, categories
 type: reference
 status: active
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [reference, feedback, boards, posts]
@@ -229,9 +229,9 @@ Every feedback mail carries a signed unsubscribe link, `/unsubscribe/{token}`, i
 
 ## Public board pages
 
-A project's public boards have pages on its help center's site (#175, [ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/feedback/<board>` lists a board and `/feedback/<board>/<number>` shows one post, so `showyourtime.help.mocco.club/feedback/ideas/12`, or the site's custom domain. The help site is the project's one public host so far; the site's slug names the project the way a key does on `/v1`. A project without a help site has no board pages. Customer guide: [Open a public feedback board](../customer/feedback/public-board.md).
+A project's public boards have pages on its help center's site (#175, [ADR 0015](../adr/0015-public-sites-use-isr-on-the-pages-router.md)): `/feedback/<board>` lists a board, `/feedback/<board>/roadmap` shows its roadmap and `/feedback/<board>/<number>` shows one post, so `showyourtime.help.mocco.club/feedback/ideas/12`, or the site's custom domain. The help site is the project's one public host so far; the site's slug names the project the way a key does on `/v1`. A project without a help site has no board pages. Customer guide: [Open a public feedback board](../customer/feedback/public-board.md).
 
-**Rendering.** `pages/_sites/[site]/feedback/[board]/index.tsx` and `[number].tsx` are ISR (`getStaticProps`, `fallback: 'blocking'`, 60 seconds), so a crawler or a browser without JavaScript reads the board and its posts. Their data comes from `@mocco/backend/sites/feedback` (`transport/sites/feedback.ts`), which reads through `PublicBoardService` and parses every post, comment and board through the same `@mocco/common/feedback-v1` schemas `/v1` answers with. A private or missing board, an unknown number and an unknown site are 404. A merged duplicate's number redirects permanently (308) to the post it was merged into (`PublicBoardService.postOnBoard`, a post by its number on the board). A post's Markdown becomes the render tree on the server, with links and images shown as their text, so the board is no place to plant links. Comments are plain text.
+**Rendering.** `pages/_sites/[site]/feedback/[board]/index.tsx`, `roadmap.tsx` and `[number].tsx` are ISR (`getStaticProps`, `fallback: 'blocking'`, 60 seconds), so a crawler or a browser without JavaScript reads the board and its posts. Their data comes from `@mocco/backend/sites/feedback` (`transport/sites/feedback.ts`), which reads through `PublicBoardService` and parses every post, comment and board through the same `@mocco/common/feedback-v1` schemas `/v1` answers with. A private or missing board, an unknown number and an unknown site are 404. A merged duplicate's number redirects permanently (308) to the post it was merged into (`PublicBoardService.postOnBoard`, a post by its number on the board). A post's Markdown becomes the render tree on the server, with links and images shown as their text, so the board is no place to plant links. Comments are plain text.
 
 **SEO.** Each page has its canonical and Open Graph URLs on the site's origin (`helpSiteOrigin`), a signed share card (ADR 0030), a `BreadcrumbList`, and on a post a `DiscussionForumPosting` with its vote and comment counts. Pages carry `referrer: no-referrer`. Without `HELP_SITES_DOMAIN` (no origin to be canonical on) a page is `noindex`.
 
@@ -241,4 +241,8 @@ A project's public boards have pages on its help center's site (#175, [ADR 0015]
 
 A test (`transport/ext/sites/feedback.test.ts`) builds both pages' data and calls the routes after an internal note, an official response, another end user's comment and a post written by an email-like end-user id, and checks that none of the note, the team member's id, the end users' ids, the email or the workspace, project and board ids is in any page or answer.
 
-Not built yet: the roadmap page, the sitemap entries, and the console's inbox.
+**Roadmap.** `/feedback/<board>/roadmap` shows the planned, in progress and shipped columns side by side, the 50 most voted posts of each (`PublicBoardService.roadmap`, the same columns `GET /boards/{slug}/roadmap` answers), merged duplicates left out. The category filter (`?category=<slug>`) is in the address and narrows the columns already on the page in the browser, so a filtered roadmap can be shared as a link; without JavaScript, and for crawlers, every category shows, and the canonical URL has no filter.
+
+**Sitemap.** The help site's `/sitemap.xml` also lists each public board, its roadmap and its live posts (merged duplicates left out), with their last change as `lastmod`, at most 10,000 posts per project, the most recently changed first (`PublicBoardService.sitemap`). Board pages are served in one language, so they carry no `hreflang` alternates.
+
+Not built yet: the console's inbox.

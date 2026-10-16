@@ -1,13 +1,15 @@
 // The data of the public feedback board pages (#175, ADR 0015): a project's public boards, served
-// on its help center's site at /feedback/<board>. The pages' getStaticProps call these; nothing
-// here needs a session. Every post and comment goes through the same @mocco/common/feedback-v1
-// schemas the /v1 routes answer with, so no field outside the public projection (a team
-// member's id, an internal note, an end user's id) can reach a page.
+// on its help center's site at /feedback/<board> (and its roadmap and posts), plus what the site's
+// sitemap lists of them. The pages' getStaticProps call these; nothing here needs a session.
+// Every post and comment goes through the same @mocco/common/feedback-v1 schemas the /v1 routes
+// answer with, so no field outside the public projection (a team member's id, an internal note,
+// an end user's id) can reach a page.
 import {
   feedbackV1BoardSchema,
   feedbackV1CommentListSchema,
   feedbackV1PostListSchema,
   feedbackV1PostSchema,
+  feedbackV1RoadmapSchema,
   FeedbackPublicSorts,
 } from '@mocco/common/feedback-v1';
 import { z } from 'zod';
@@ -21,6 +23,7 @@ import { wireComment, wirePost } from '@backend/transport/ext/v1/feedback';
 
 import type { PublicBoardService } from '@backend/domain/feedback/PublicBoardService';
 import type { HelpPublicReadService } from '@backend/domain/helpcenter/HelpPublicReadService';
+import type { RoadmapColumn } from '@mocco/common/feedback';
 import type { FeedbackV1Post } from '@mocco/common/feedback-v1';
 
 /** How many posts a board page lists before "Load more", and how many comments a post page shows. */
@@ -50,13 +53,20 @@ export interface FeedbackPostPage {
   hasMoreComments: boolean;
 }
 
+/** A board's roadmap: the most voted posts of each of planned, in progress and shipped. */
+export interface FeedbackRoadmapPage {
+  site: FeedbackPageSite;
+  board: FeedbackPageBoard;
+  columns: Record<RoadmapColumn, FeedbackV1Post[]>;
+}
+
 /** A post page's answer: the page, a merged duplicate's target number, or nothing (404). */
 export type FeedbackPostPageResult =
   { kind: 'page'; page: FeedbackPostPage } | { kind: 'merged'; intoNumber: number } | { kind: 'missing' };
 
 export interface FeedbackPagesDeps {
   sites: Pick<HelpPublicReadService, 'projectOf'>;
-  boards: Pick<PublicBoardService, 'board' | 'posts' | 'postOnBoard' | 'comments'>;
+  boards: Pick<PublicBoardService, 'board' | 'posts' | 'postOnBoard' | 'comments' | 'roadmap' | 'sitemap'>;
   /** Where a site is served (its custom domain, else its subdomain), or null when sites aren't served. */
   originOf: (site: string) => string | null;
 }
@@ -137,6 +147,45 @@ export function createFeedbackPages(deps: FeedbackPagesDeps) {
         }
         throw error;
       }
+    },
+
+    /** A board's roadmap page: the most voted posts of each roadmap column, or undefined (404). */
+    async roadmapPage(site: string, boardSlug: string): Promise<FeedbackRoadmapPage | undefined> {
+      try {
+        const found = await frame(site, boardSlug);
+        if (found === undefined) {
+          return undefined;
+        }
+        const roadmap = await deps.boards.roadmap(found.scope, boardSlug);
+        const parsed = feedbackV1RoadmapSchema.parse({
+          roadmap: Object.fromEntries(
+            Object.entries(roadmap).map(([column, posts]) => [column, posts.map(post => wirePost(post))]),
+          ),
+        });
+        return { site: found.site, board: found.board, columns: parsed.roadmap };
+      } catch (error) {
+        if (isMissing(error)) {
+          return undefined;
+        }
+        throw error;
+      }
+    },
+
+    /** The board pages a site's sitemap lists: each public board, its roadmap and its live posts. */
+    async sitemapPages(site: string): Promise<{ path: string; lastModified: Date }[]> {
+      const project = await deps.sites.projectOf(site);
+      if (project === undefined) {
+        return [];
+      }
+      const boards = await deps.boards.sitemap({ workspaceId: project.workspaceId, projectId: project.projectId });
+      return boards.flatMap(board => [
+        { path: `/feedback/${board.slug}`, lastModified: board.updatedAt },
+        { path: `/feedback/${board.slug}/roadmap`, lastModified: board.updatedAt },
+        ...board.posts.map(post => ({
+          path: `/feedback/${board.slug}/${String(post.number)}`,
+          lastModified: post.updatedAt,
+        })),
+      ]);
     },
   };
 }

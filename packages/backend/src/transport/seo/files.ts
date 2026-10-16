@@ -1,8 +1,9 @@
 // What /robots.txt and /sitemap.xml answer on each host (#363). The app's host lists the
 // public pages the frontend names (the landing and the customer guides) and keeps crawlers
 // out of the signed-in console; a help center's host lists that site's published pages in
-// every language they are served in, under the site's canonical origin (its custom domain
-// when it has one), and keeps AI training crawlers out when the site says so. Pure over
+// every language they are served in, and its public feedback boards (#175), under the site's
+// canonical origin (its custom domain when it has one), and keeps AI training crawlers out when
+// the site says so. Pure over
 // its inputs, so the Next route stays a thin adapter.
 
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';
@@ -45,6 +46,8 @@ export interface SeoFileDeps {
   help: Pick<HelpPublicReadService, 'site' | 'sitemap'>;
   /** A help site's IndexNow key (#367), or null when none can be derived. */
   indexNowKeyOf: (slug: string) => string | null;
+  /** The project's public feedback board pages on a help site (#175): boards, roadmaps, posts. */
+  feedbackPages?: (slug: string) => Promise<readonly { path: string; lastModified: Date }[]>;
 }
 
 export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): Promise<SeoFileResponse> {
@@ -88,7 +91,10 @@ export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): P
     }
     const map = await deps.help.sitemap(slug);
     const pages = withLanguageVersions(origin, [map.homes, ...map.articles], map.sourceLocale);
-    return { status: 200, contentType: XML, body: sitemapXml(pages) };
+    // Feedback boards are served in one language, so they have no alternates.
+    const boards = (await deps.feedbackPages?.(slug)) ?? [];
+    const boardPages = boards.map(page => ({ loc: `${origin}${page.path}`, lastModified: page.lastModified }));
+    return { status: 200, contentType: XML, body: sitemapXml([...pages, ...boardPages]) };
   } catch (error) {
     if (error instanceof HelpSiteNotFoundError) {
       return { status: 404, contentType: TEXT, body: 'Not found\n' };

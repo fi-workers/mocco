@@ -207,6 +207,58 @@ describe('public feedback board pages (pglite)', () => {
         ].toSorted(byText),
       );
     });
+
+    it('groups the roadmap by column, most voted first, without merged duplicates or other statuses', async () => {
+      const quiet = await post('Quiet plan');
+      const loud = await post('Loud plan');
+      const building = await post('Building');
+      const duplicate = await post('Same as loud');
+      await post('Still under review');
+      await Promise.all(
+        (
+          [
+            [quiet, 'planned'],
+            [loud, 'planned'],
+            [building, 'in_progress'],
+            [duplicate, 'planned'],
+          ] as const
+        ).map(async ([item, status]) => await feedback.feedbackPosts.setStatus(scope, operatorId, item.id, status)),
+      );
+      await feedback.feedbackVotes.vote(scope, loud.id, 'u1', { source: 'staff', recordedByUserId: operatorId });
+      await feedback.feedbackMerges.merge(scope, operatorId, duplicate.id, loud.id);
+      const page = await pages.roadmapPage('acme', 'ideas');
+      expect({
+        planned: page?.columns.planned.map(item => item.title),
+        inProgress: page?.columns.in_progress.map(item => item.title),
+        shipped: page?.columns.shipped.map(item => item.title),
+      }).toEqual({ planned: ['Loud plan', 'Quiet plan'], inProgress: ['Building'], shipped: [] });
+      expect(await pages.roadmapPage('acme', 'nope')).toBeUndefined();
+      expect(await pages.roadmapPage('nope', 'ideas')).toBeUndefined();
+    });
+
+    it("lists a site's public boards, roadmaps and live posts for its sitemap", async () => {
+      const kept = await post('Kept');
+      const duplicate = await post('Duplicate');
+      await feedback.feedbackMerges.merge(scope, operatorId, duplicate.id, kept.id);
+      const hidden = await feedback.feedbackBoards.createBoard(scope, operatorId, {
+        slug: 'internal',
+        name: 'Internal',
+        isPublic: false,
+      });
+      await feedback.feedbackPosts.create(scope, operatorId, { boardId: hidden.id, title: 'Secret' });
+      const listed = await pages.sitemapPages('acme');
+      expect(listed.map(page => page.path)).toEqual([
+        '/feedback/ideas',
+        '/feedback/ideas/roadmap',
+        `/feedback/ideas/${String(kept.number)}`,
+      ]);
+      // A board's pages change when its newest post does.
+      expect(listed.every(page => page.lastModified instanceof Date)).toBe(true);
+      const [board, roadmap, only] = listed;
+      expect(board?.lastModified.getTime()).toBe(only?.lastModified.getTime());
+      expect(roadmap?.lastModified.getTime()).toBe(only?.lastModified.getTime());
+      expect(await pages.sitemapPages('nope')).toEqual([]);
+    });
   });
 
   describe('routes', () => {
