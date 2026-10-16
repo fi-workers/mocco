@@ -48,6 +48,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_ota_releases_search` | Which OTA releases CI uploaded, newest first, by message or commit, runtime version, state or platform |
 | `mocco_ota_adoption_get` | How many devices checked in during the last 24 hours, per channel and release, and the app's monthly active devices |
 | `mocco_ota_version_policies_search` | The minimum supported, recommended and blocked versions of each iOS and Android app, and whether tightening them needs approval |
+| `mocco_projects_search` | The workspace's projects with their apps, and which product lines the workspace has on |
+| `mocco_projects_create` | Creates a project in the workspace |
+| `mocco_projects_apps_add` | Adds an app (React Native, iOS, Android, web or server) to a project |
+| `mocco_products_enable` | Turns a product line, such as OTA, on for the workspace |
 | `mocco_ota_setup_get` | A project's React Native apps and, for each one Mocco hosts, its manifest URL and `expo.updates` block, channels, signing certificates and trusted repositories, and what is still missing before the first update |
 | `mocco_ota_apps_host` | Hosts OTA updates on Mocco for a React Native app, and answers its manifest URL |
 | `mocco_ota_channels_create` | Adds an open channel, such as `staging`, to a hosted app |
@@ -224,6 +228,13 @@ switch cover three more changes, each confirmed in your client first:
   is closed, keeping its comments and history. A merge can't be undone. If either post gets a
   vote before you answer, you are asked again with the new counts; if either is merged
   elsewhere, the merge is refused.
+
+**Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
+a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product
+line on. Each is confirmed in your client first and needs the workspace to allow agents to
+make changes and its own permission, asked for the first time one is used: **Create projects,
+add apps to them and turn products on, as you**. Any member may do these, as in the console.
+Archiving a project, removing an app and turning a product off stay in the console.
 
 **Setting up OTA hosting.** An agent working in your app's repository can connect it the
 way the **Hosted by Mocco** tab does: `mocco_ota_setup_get` says what the app has and what is
