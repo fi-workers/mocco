@@ -357,6 +357,14 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    asked. A channel is created open: protecting it names who must approve, which is a
    governance choice that stays in the console.
 
+   The project setup that comes before it follows (*shipped*), because that first customer
+   started from an empty workspace: `mocco_projects_search` (read) and
+   `mocco_projects_create`, `mocco_projects_apps_add` and `mocco_products_enable`
+   (`tools/projects.ts`), over `ProjectService.create` / `addApp` and
+   `ProductEnablementService.enable`, under their own `projects:write` scope with the same
+   opt-in and confirmation. Membership is the console's rule for all three. Archiving,
+   removing an app and turning a product off stay in the console.
+
    The status page reads follow the status backend, as ADR 0025 asks of every product
    (*shipped*): `mocco_status_pages_get`, `mocco_status_incidents_search`,
    `mocco_status_incidents_get` and `mocco_status_maintenances_search`, read-only, behind
