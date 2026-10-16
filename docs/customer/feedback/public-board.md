@@ -4,7 +4,7 @@ description: Put a project's feedback board on the web for your users, where the
 type: guide
 status: active
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [customer, feedback, guide]
@@ -28,9 +28,17 @@ https://showyourtime.help.mocco.club/feedback/<board>
 
 When the help center has its own domain, such as `help.showyourtime.app`, the board is there too: `https://help.showyourtime.app/feedback/<board>`.
 
-Boards are public when they are created. A board marked private has no public page.
+## 2. Create a board
 
-## 2. What visitors see
+Turn on **Feedback board** on the workspace's **Products** page. The project then has a **Feedback** section. A project without boards opens on the form for its first one: give it a name, and its address follows the name (`Feature requests` → `/feedback/feature-requests`) unless you change it.
+
+**Manage boards** lists every board with its public address. There you rename a board, change its address, make it private, delete it, and add or rename its categories. Users pick a category when they post, and the board and roadmap filter by it. Deleting a category keeps its posts, uncategorized.
+
+![Managing boards and their categories](./images/feedback-console-boards.png)
+
+Boards are public when they are created. A board marked private has no public page. Changing a board's address changes its public link, so links shared before stop working.
+
+## 3. What visitors see
 
 The board lists its posts, most voted first. Anyone can read it, and search engines index it. Each post shows its votes, its status and how many comments it has.
 
@@ -44,7 +52,7 @@ A post's page has its description, the team's official response, and the public 
 
 A merged duplicate's address sends the reader to the post it was merged into.
 
-## 3. Sign your users in from your app
+## 4. Sign your users in from your app
 
 Posting and commenting need to know who the user is. Your app's server signs a short-lived token for its signed-in user, the same token your app sends to the feedback API (see [In-app contact with Mocco Messenger](../messenger/contact-us.md) for the identity secret). It is an HS256 JWT signed with the project's identity secret (the one Messenger setup shows), with the user's id as `sub` and an expiry at most an hour ahead.
 
@@ -73,7 +81,7 @@ A signed-in user can post an idea. While they type a title, the board shows simi
 
 On a post, a signed-in user votes with one click, and clicking again takes the vote back. The count updates at once. They can also comment.
 
-## 4. Visitors without an account
+## 5. Visitors without an account
 
 Someone your app hasn't signed in can still vote, with their email address. Mocco mails them a link, and the vote counts once they open it. They can't post or comment.
 
@@ -81,7 +89,13 @@ Someone your app hasn't signed in can still vote, with their email address. Mocc
 
 Voting by email needs Mocco to send mail. On a self-hosted Mocco without an email sender, the form says it isn't available.
 
-## 5. Limits
+## 6. Triage in the inbox
+
+The **Feedback** section opens on the inbox: one board's posts, under review and newest first. Pick another board, a status (or **All**), a category and an order (**Newest**, **Most voted** or **By status**). The choice stays in the address, so you can bookmark a view or send it to a teammate. Each post shows its votes, its number on the board, its status, how many public comments it has and whether your team or a user posted it. The list refreshes every 30 seconds while open.
+
+![The inbox: every status, most voted first](./images/feedback-console-inbox.png)
+
+## 7. Limits
 
 Each user can vote 30 times, comment 20 times and post 5 times an hour, and one network address can make 120 changes an hour, whoever signs in. An email address gets 3 vote mails an hour.
 

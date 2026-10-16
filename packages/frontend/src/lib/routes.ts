@@ -67,6 +67,21 @@ export const Routes = {
     `/workspaces/${id}/p/${projectId}/inbox${status === 'closed' ? '?status=closed' : ''}`,
   projectConversation: (id: string, projectId: string, conversationId: string) =>
     `/workspaces/${id}/p/${projectId}/inbox/${conversationId}`,
+  /**
+   * The project's feedback inbox (#175): one board's posts; `filters` (board and category slugs,
+   * status, sort) are kept in the address so a filtered inbox can be shared.
+   */
+  projectFeedback: (
+    id: string,
+    projectId: string,
+    filters: Readonly<Partial<Record<'board' | 'status' | 'category' | 'sort', string>>> = {},
+  ) => {
+    const query = new URLSearchParams(filters).toString();
+    const path = `/workspaces/${id}/p/${projectId}/feedback`;
+    return query === '' ? path : `${path}?${query}`;
+  },
+  /** The project's feedback boards: create, rename, publish or delete them, and their categories. */
+  projectFeedbackBoards: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/feedback/boards`,
   /** The project's help center (#96): setup, then its collections, sections and articles. */
   projectHelp: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/help`,
   /** An article's editor; `review` opens that language's review (#213). */
