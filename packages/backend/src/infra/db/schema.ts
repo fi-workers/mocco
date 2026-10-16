@@ -4,6 +4,7 @@ import {
   ChangelogEntryStates,
   ChangelogTags,
   FeedbackCommentAuthorKinds,
+  FeedbackStatusMailStates,
   FeedbackLimits,
   FeedbackPostStatuses,
   FeedbackStatusChangeReasons,
@@ -91,6 +92,7 @@ import type {
   ChangelogEntryState,
   ChangelogTag,
   FeedbackCommentAuthorKind,
+  FeedbackStatusMailState,
   FeedbackPostStatus,
   FeedbackStatusChangeReason,
   FeedbackVoteSource,
@@ -4436,10 +4438,16 @@ export const feedbackStatusChanges = pgTable(
     reason: text().$type<FeedbackStatusChangeReason>().notNull(),
     // SET NULL: the history outlives the person; the audit chain keeps who.
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When its followers' mail was settled (#180): queued, or decided against (superseded by a
+    // newer change, a private board, a status no one hears about). Null while it waits.
+    notifiedAt: timestamp('notified_at'),
     createdAt,
   },
   t => [
     index('mocco_feedback_status_changes_post_created_idx').on(t.postId, t.createdAt),
+    index('mocco_feedback_status_changes_unnotified_idx')
+      .on(t.createdAt)
+      .where(sql`${t.notifiedAt} IS NULL`),
     foreignKey({
       columns: [t.postId, t.workspaceId],
       foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
@@ -4675,6 +4683,38 @@ export const feedbackChangelogReads = pgTable(
     check(
       'mocco_feedback_changelog_reads_end_user_check',
       sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
+    ),
+  ],
+);
+
+/** One mail telling one end user about one status change of a post they follow (#180). Unique
+ * per (status change, end user), so a repeated fan-out queues nothing new. */
+export const feedbackStatusMails = pgTable(
+  'mocco_feedback_status_mails',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    statusChangeId: uuid('status_change_id')
+      .notNull()
+      .references(() => feedbackStatusChanges.id, { onDelete: 'cascade' }),
+    endUserId: text('end_user_id').notNull(),
+    state: text().$type<FeedbackStatusMailState>().notNull().default(FeedbackStatusMailStates.queued),
+    // Sends tried; a transient failure queues it again until StatusMailPolicy.maxAttempts.
+    attempts: integer().notNull().default(0),
+    claimedAt: timestamp('claimed_at'),
+    sentAt: timestamp('sent_at'),
+    error: text(),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_status_mails_change_end_user_uq').on(t.statusChangeId, t.endUserId),
+    // The send job's scan: queued mails, oldest first.
+    index('mocco_feedback_status_mails_queued_idx')
+      .on(t.createdAt)
+      .where(sql`${t.state} = '${sql.raw(FeedbackStatusMailStates.queued)}'`),
+    check(
+      'mocco_feedback_status_mails_state_check',
+      sql`${t.state} IN (${sqlInList(Object.values(FeedbackStatusMailStates))})`,
     ),
   ],
 );

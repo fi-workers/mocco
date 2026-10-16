@@ -17,7 +17,10 @@ import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { BoardService } from '@backend/domain/feedback/BoardService';
 import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
+import { feedbackUnsubscribeUrl } from '@backend/domain/feedback/EmailVoteService';
 import { createFeedbackHandlers, feedbackSchedules } from '@backend/domain/feedback/jobs';
+import { feedbackLinkDepsFromEnv } from '@backend/domain/feedback/link-config';
+import { StatusMailService } from '@backend/domain/feedback/StatusMailService';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createFlagHandlers, flagSchedules } from '@backend/domain/flags/jobs';
 import { ApprovalService } from '@backend/domain/governance/ApprovalService';
@@ -30,6 +33,7 @@ import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslati
 import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { createHelpHandlers } from '@backend/domain/helpcenter/jobs';
 import { helpRevalidatorFromEnv } from '@backend/domain/helpcenter/revalidate-http';
+import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
@@ -79,6 +83,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
@@ -117,6 +122,10 @@ export interface JobRunnerRuntimeDeps {
   statusRawRetentionDays?: number;
   /** Status subscriber links' signing key and the email sender; without it subscriber jobs do nothing. */
   statusSubscribers?: SubscriberEnvDeps;
+  /** Feedback mail links' signing key and the email sender; without it no status mail goes out. */
+  feedbackLinks?: FeedbackLinkEnvDeps;
+  /** Where a help site is served (its custom domain or subdomain), for links in feedback mail. */
+  helpSiteOriginOf?: (slug: string) => string | null;
   /** The stage0 canary and heartbeat (relay design §11); undefined (off) without
    * OPS_HEARTBEAT_URL and OPS_CANARY_SOURCE_ID. */
   stage0?: Stage0Deps;
@@ -207,6 +216,26 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createFlagHandlers({ governance: flagGovernance, stale: staleFlags }),
     ...createFeedbackHandlers({
       changelog: new ChangelogService({ db, audit, boards: new BoardService({ db, audit }), now: deps.now }),
+      statusMail: new StatusMailService({
+        db,
+        email: deps.feedbackLinks?.email,
+        unsubscribeUrlOf: (scope, postId, endUserId) =>
+          deps.feedbackLinks === undefined
+            ? ''
+            : feedbackUnsubscribeUrl(
+                { tokens: deps.feedbackLinks.tokens, appOrigin: deps.appOrigin },
+                scope,
+                postId,
+                endUserId,
+                deps.now(),
+              ),
+        publicUrlOf: async (scope, path) => {
+          const site = await new HelpSiteService({ db, audit }).get(scope.workspaceId, scope.projectId);
+          const origin = site === undefined ? null : (deps.helpSiteOriginOf?.(site.slug) ?? null);
+          return origin === null ? null : `${origin}${path}`;
+        },
+        now: deps.now,
+      }),
     }),
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
@@ -317,6 +346,8 @@ export function getJobRunner(): JobRunner {
       helpRevalidator: helpRevalidatorFromEnv(env),
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
       statusSubscribers: subscriberDepsFromEnv(env),
+      feedbackLinks: feedbackLinkDepsFromEnv(env),
+      helpSiteOriginOf: slug => helpSiteOrigin(slug, env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.
       stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),
     });

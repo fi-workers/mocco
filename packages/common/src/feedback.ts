@@ -210,3 +210,24 @@ export const changelogEntryListInputSchema = z.object({
   offset: z.int().min(0).default(0),
 });
 export type ChangelogEntryListQuery = z.output<typeof changelogEntryListInputSchema>;
+
+// ─── Status mail (#180) ──────────────────────────────────────────────────────
+
+/** Where one status-change mail to one end user is. A mail is sent at most once: it is claimed
+ * (`sending`) before it goes out; `skipped` means the end user stopped following first. */
+export const FeedbackStatusMailStates = {
+  queued: 'queued',
+  sending: 'sending',
+  sent: 'sent',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+export type FeedbackStatusMailState = (typeof FeedbackStatusMailStates)[keyof typeof FeedbackStatusMailStates];
+
+/** The statuses a post's followers hear about; moving back to under review mails no one. */
+export const FEEDBACK_NOTIFIED_STATUSES = [
+  FeedbackPostStatuses.planned,
+  FeedbackPostStatuses.inProgress,
+  FeedbackPostStatuses.shipped,
+  FeedbackPostStatuses.closed,
+] as const satisfies readonly FeedbackPostStatus[];
