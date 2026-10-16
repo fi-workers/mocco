@@ -1090,6 +1090,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-ota-setup`
 
+## 2026-10-16 — MCP: project setup tools
+
+- An agent can lay out an empty workspace: `mocco_projects_search` (read) and `mocco_projects_create`,
+  `mocco_projects_apps_add` and `mocco_products_enable`, thin adapters over `ProjectService` and
+  `ProductEnablementService`, under a new `projects:write` scope with the workspace's opt-in and a confirmation.
+- No migration.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
+- Source: branch `feat/mcp-project-setup`
+
 ## 2026-10-16 — Help center: rich text article editor
 
 - Articles open in a rich editor (editorcn's block editor on Tiptap 3, vendored) that stays Markdown in and out and
