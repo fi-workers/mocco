@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -344,8 +344,30 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    is an approval request, so the policy tool points at `mocco_approvals_search` instead
    of reading governance itself. Still to come: per-release adoption over time, a
    channel's deployment history, a stale flag filter (it lives in `StaleFlagDetector`, a
-   second service), and any tool that changes a flag or an OTA channel, which needs the
-   deciding machinery and its own design pass.
+   second service), and any tool that changes a flag or what an OTA channel serves, which
+   needs the deciding machinery and its own design pass.
+
+   OTA *setup* follows (*shipped*), because the first hosted customer connected its app
+   from an agent in the app's repository: `mocco_ota_setup_get` (read) and
+   `mocco_ota_apps_host`, `mocco_ota_channels_create`, `mocco_ota_certificates_add` and
+   `mocco_ota_trust_policies_create` (`tools/ota-setup.ts`), over the services the
+   console's `ota.hosting` router writes through (`OtaHostingService.createApp` /
+   `createChannel`, `SigningService.add`, `TrustPolicyService.create`). They change no
+   channel's head, so they borrow the deciding locks rather than the deciding machinery:
+   their own `ota:write` scope stepped up for per tool, the workspace's opt-in, and the
+   confirmation round trip. The console's roles carry over — any member hosts an app and
+   adds a channel (`otaProcedure`), an owner or admin adds a certificate or trust policy
+   (`adminOtaProcedure`) — and a PEM carrying a private key is refused before anything is
+   asked. A channel is created open: protecting it names who must approve, which is a
+   governance choice that stays in the console.
+
+   The project setup that comes before it follows (*shipped*), because that first customer
+   started from an empty workspace: `mocco_projects_search` (read) and
+   `mocco_projects_create`, `mocco_projects_apps_add` and `mocco_products_enable`
+   (`tools/projects.ts`), over `ProjectService.create` / `addApp` and
+   `ProductEnablementService.enable`, under their own `projects:write` scope with the same
+   opt-in and confirmation. Membership is the console's rule for all three. Archiving,
+   removing an app and turning a product off stay in the console.
 
    The status page reads follow the status backend, as ADR 0025 asks of every product
    (*shipped*): `mocco_status_pages_get`, `mocco_status_incidents_search`,

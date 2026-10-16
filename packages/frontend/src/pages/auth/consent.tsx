@@ -20,6 +20,9 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   [McpScopes.messengerWrite]: 'Reply to and assign your messenger conversations, as you',
   [McpScopes.feedbackWrite]: 'Move, comment on, vote on and merge your feedback posts, as you',
   [McpScopes.helpWrite]: "Accept and redo your help center's translations and change its glossary, as you",
+  [McpScopes.otaWrite]:
+    'Set up OTA hosting as you: host an app, add channels, register signing certificates and trust CI',
+  [McpScopes.projectsWrite]: 'Create projects, add apps to them and turn products on, as you',
 };
 
 const scopesOf = (scope: unknown): string[] =>

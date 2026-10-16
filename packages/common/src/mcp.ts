@@ -31,6 +31,11 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * an agent move, comment on, vote on and merge feedback posts as its person, and `help:write`
  * accept and redo help center translations and change the glossary as its person, each stepped
  * up for the same way.
+ * `ota:write` lets an agent set up OTA hosting as its person — host an app, add an open
+ * channel, register a signing certificate and trust a repository to publish — stepped up for
+ * the same way. It promotes, rolls out and rolls back nothing.
+ * `projects:write` lets an agent create a project, add an app to it and turn a product on as
+ * its person, stepped up for the same way.
  * The keys are camel-cased because the values follow OAuth's `resource:action` form.
  */
 export const McpScopes = {
@@ -39,6 +44,8 @@ export const McpScopes = {
   messengerWrite: 'messenger:write',
   feedbackWrite: 'feedback:write',
   helpWrite: 'help:write',
+  otaWrite: 'ota:write',
+  projectsWrite: 'projects:write',
 } as const;
 export type McpScope = (typeof McpScopes)[keyof typeof McpScopes];
 

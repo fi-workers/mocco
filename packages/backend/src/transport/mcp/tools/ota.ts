@@ -46,12 +46,12 @@ const MAX_LIMIT = 50;
 /** How many applied policy changes the detailed shape carries per app. */
 const RECENT_CHANGES = 5;
 
-const projectArg = z
+export const projectArg = z
   .uuid()
   .optional()
   .describe('The project the app belongs to. Omit it when the workspace has exactly one.');
 
-const hostedAppArg = z
+export const hostedAppArg = z
   .uuid()
   .optional()
   .describe("The hosted OTA app, by its id or its project app's id. Omit it when the project hosts exactly one.");
@@ -120,16 +120,23 @@ export type SearchOtaReleasesArgs = z.infer<typeof releasesInput>;
 export type GetOtaAdoptionArgs = z.infer<typeof adoptionInput>;
 export type SearchVersionPoliciesArgs = z.infer<typeof versionPoliciesInput>;
 
-const resolveOtaProject = async (deps: OtaToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
-  await deps.projects.resolve(userId, asked, Products.ota);
+export const resolveOtaProject = async (
+  deps: Pick<OtaToolDeps, 'projects'>,
+  userId: string,
+  asked: Partial<ProjectInScope>,
+) => await deps.projects.resolve(userId, asked, Products.ota);
 
 /**
  * The hosted app a call reads, inside the resolved project. It may be named by its own id
  * or by its project app's id (the one version policies use); left out when the project
  * hosts exactly one. Another project's app reads exactly like one that does not exist.
  */
-async function resolveHostedApp(
-  deps: OtaToolDeps,
+export async function resolveHostedApp(
+  deps: {
+    otaHosting: Pick<OtaHostingService, 'listApps' | 'requireApp'>;
+    projectApps: OtaToolDeps['projectApps'];
+    projects: OtaToolDeps['projects'];
+  },
   userId: string,
   args: { workspaceId?: string; projectId?: string; appId?: string },
 ): Promise<{ app: OtaAppRow; name: string }> {
