@@ -123,6 +123,31 @@ describe('seoFile', () => {
     expect(file.body).toContain('<loc>https://help.syt.app/ko/articles/def456-a&amp;b</loc>\n  </url>');
   });
 
+  it("adds the site's public feedback boards, roadmaps and posts, without alternates", async () => {
+    const changed = new Date('2026-10-05T00:00:00Z');
+    const file = await seoFile(
+      SeoFiles.sitemap,
+      'help.syt.app',
+      deps({
+        feedbackPages: async slug =>
+          await Promise.resolve(
+            slug === 'syt'
+              ? [
+                  { path: '/feedback/ideas', lastModified: changed },
+                  { path: '/feedback/ideas/roadmap', lastModified: changed },
+                  { path: '/feedback/ideas/3', lastModified: changed },
+                ]
+              : [],
+          ),
+      }),
+    );
+    expect(file.body).toContain(
+      '<url>\n    <loc>https://help.syt.app/feedback/ideas/3</loc>\n    <lastmod>2026-10-05T00:00:00.000Z</lastmod>\n  </url>',
+    );
+    expect(file.body).toContain('<loc>https://help.syt.app/feedback/ideas/roadmap</loc>');
+    expect(file.body).toContain('<loc>https://help.syt.app/ko/articles/abc123-widget</loc>');
+  });
+
   it("serves a help site's IndexNow key on its host, and none on the app's", async () => {
     const help = await seoFile(SeoFiles.indexNowKey, 'help.syt.app', deps());
     const app = await seoFile(SeoFiles.indexNowKey, 'www.mocco.club', deps());

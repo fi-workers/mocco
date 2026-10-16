@@ -55,6 +55,9 @@ const wordsOf = (query: string): string[] => [
 /** How many posts each roadmap column shows (the most voted). */
 export const ROADMAP_COLUMN_LIMIT = 50;
 
+/** How many posts a project's sitemap lists at most (the most recently changed). */
+export const SITEMAP_POST_LIMIT = 10_000;
+
 /** A post as the public sees it. */
 export interface PublicPost {
   id: string;
@@ -318,6 +321,32 @@ export class PublicBoardService {
       ? await this.deps.subscriptions.subscribe(scope, postId, endUserId)
       : await this.deps.subscriptions.unsubscribe(scope, postId, endUserId);
     return { subscribed: row.unsubscribedAt === null };
+  }
+
+  /**
+   * What a sitemap lists for the project: each public board, when it last changed, and its live
+   * posts by number (merged duplicates left out), the most recently changed first, at most
+   * SITEMAP_POST_LIMIT across the boards.
+   */
+  async sitemap(
+    scope: FeedbackScope,
+  ): Promise<{ slug: string; updatedAt: Date; posts: { number: number; updatedAt: Date }[] }[]> {
+    const all = await new FeedbackBoardRepo(this.deps.db).list(scope);
+    const boards = all.filter(board => board.isPublic);
+    const posts = await new FeedbackPostRepo(this.deps.db).listForSitemap(
+      scope,
+      boards.map(board => board.id),
+      SITEMAP_POST_LIMIT,
+    );
+    return boards.map(board => {
+      const own = posts.filter(post => post.boardId === board.id);
+      const latest = new Date(Math.max(board.updatedAt.getTime(), ...own.map(post => post.updatedAt.getTime())));
+      return {
+        slug: board.slug,
+        updatedAt: latest,
+        posts: own.map(post => ({ number: post.number, updatedAt: post.updatedAt })),
+      };
+    });
   }
 
   /** The title of a post on a public board, for the pages its links open. */

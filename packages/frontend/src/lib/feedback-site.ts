@@ -8,9 +8,9 @@ import { markdownToBlocks } from '@frontend/lib/markdown-blocks';
 import { excerptOf } from '@frontend/lib/seo';
 
 import type { DocBlock } from '@frontend/lib/doc-ast';
-import type { FeedbackBoardPage, FeedbackPostPage } from '@mocco/backend/sites/feedback';
+import type { FeedbackBoardPage, FeedbackPostPage, FeedbackRoadmapPage } from '@mocco/backend/sites/feedback';
 
-export type { FeedbackBoardPage, FeedbackPostPage } from '@mocco/backend/sites/feedback';
+export type { FeedbackBoardPage, FeedbackPostPage, FeedbackRoadmapPage } from '@mocco/backend/sites/feedback';
 
 /** Pages regenerate at most this often after a request (ISR); the browser fetches live counts. */
 export const FEEDBACK_REVALIDATE_SECONDS = 60;
@@ -33,6 +33,10 @@ export function postBodyBlocks(markdown: string): DocBlock[] {
 
 export async function loadBoardPage(site: string, board: string): Promise<FeedbackBoardPage | undefined> {
   return await feedbackPages().boardPage(site, board);
+}
+
+export async function loadRoadmapPage(site: string, board: string): Promise<FeedbackRoadmapPage | undefined> {
+  return await feedbackPages().roadmapPage(site, board);
 }
 
 export async function loadPostPage(site: string, board: string, number: number) {

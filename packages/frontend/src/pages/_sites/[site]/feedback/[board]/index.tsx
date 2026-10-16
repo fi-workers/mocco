@@ -36,6 +36,7 @@ export default function FeedbackBoardPage({ page, card }: Props) {
     <FeedbackSiteLayout
       site={page.site}
       board={page.board}
+      current="board"
       title={page.board.name}
       seo={{
         path,

@@ -1099,6 +1099,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-project-setup`
 
+## 2026-10-16 — Feedback roadmap page and sitemap entries
+
+- A public board's roadmap at `/feedback/<board>/roadmap` (planned, in progress, shipped; most voted first; category
+  filter in the address), and the help site's sitemap now lists each public board, its roadmap and its live posts.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #484 (issue #175)
+
 ## 2026-10-17 — Feedback changelog: entries, states and the publish job
 
 - Changelog entries per board (draft, scheduled, published; tags; the posts they announce), the `changelog` tRPC

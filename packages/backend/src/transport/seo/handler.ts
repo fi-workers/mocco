@@ -7,6 +7,7 @@ import { helpSiteForHost, helpSiteOrigin } from '@backend/domain/helpcenter/site
 import { getEnv } from '@backend/infra/config/env';
 import { agentFile } from '@backend/transport/seo/agents';
 import { seoFile } from '@backend/transport/seo/files';
+import { feedbackPages } from '@backend/transport/sites/feedback';
 
 import type { AgentFileRequest, GuideSetForAgents } from '@backend/transport/seo/agents';
 import type { AppPage, SeoFile, SeoFileResponse } from '@backend/transport/seo/files';
@@ -29,6 +30,7 @@ export async function seoFileFor(
     helpSiteOrigin: slug => helpSiteOrigin(slug, env),
     help: getHelpDomain().helpPublic,
     indexNowKeyOf: helpIndexNowKeyFor,
+    feedbackPages: async slug => await feedbackPages().sitemapPages(slug),
   });
 }
 
