@@ -95,6 +95,16 @@ The **Feedback** section opens on the inbox: one board's posts, under review and
 
 ![The inbox: every status, most voted first](./images/feedback-console-inbox.png)
 
+Open a post to work on it:
+
+- **Status** moves it along. Everyone following it hears about the change, and planned, in progress and shipped posts appear on the roadmap.
+- **Category** files it, or **No category** takes it out of one.
+- **Comment** in one of three ways. A **Reply** is public. The **Official response** is your team's answer, highlighted among the public comments. An **Internal note** stays in Mocco, and visitors never see it.
+- **Votes** lists who voted. A pending vote waits for its email to be confirmed. When a user asks for something by email or on a call, record their vote with the id your app knows them by.
+- **Merge into another post…** handles duplicates. Search the board by title or number and pick the post to keep. The duplicate's votes and followers move there, each person counted once, and the duplicate's public address sends readers to it.
+
+![A post in Mocco: status, category, comments with an internal note and the official response, and votes](./images/feedback-console-post.png)
+
 ## 7. Limits
 
 Each user can vote 30 times, comment 20 times and post 5 times an hour, and one network address can make 120 changes an hour, whoever signs in. An email address gets 3 vote mails an hour.

@@ -136,6 +136,10 @@ export type FeedbackPostListQuery = z.output<typeof feedbackPostListInputSchema>
 /** An end user as the project's app knows them: the user id the app signs, the same id space as
  * a messenger contact's. End-user identity (#100) gives these ids a directory; until then a vote,
  * a comment and a subscription carry the id itself. */
+/** An email-only voter's end-user id is this prefix and the address, lowercased. Signed-in end
+ * users can't take ids in this space (the /v1 transport refuses a token whose `sub` starts with it). */
+export const FEEDBACK_EMAIL_END_USER_PREFIX = 'email:';
+
 export const feedbackEndUserIdSchema = z.string().trim().min(1).max(FeedbackLimits.endUserIdMax);
 
 export const feedbackPageInputSchema = z.object({

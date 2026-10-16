@@ -51,7 +51,7 @@ export const sortLabels: Record<FeedbackPostSort, string> = {
   [FeedbackPostSorts.status]: 'By status',
 };
 
-const statusTones: Record<FeedbackPostStatus, Tone> = {
+export const statusTones: Record<FeedbackPostStatus, Tone> = {
   [FeedbackPostStatuses.underReview]: Tones.neutral,
   [FeedbackPostStatuses.planned]: Tones.ok,
   [FeedbackPostStatuses.inProgress]: Tones.warn,
@@ -112,7 +112,7 @@ function FirstBoard({ workspaceId, projectId }: Props) {
 }
 
 /** One post in the inbox: its votes, number, title, status and what's around it. */
-function PostRow({ post, categoryName }: { post: Post; categoryName: string | undefined }) {
+function PostRow({ post, categoryName, href }: { post: Post; categoryName: string | undefined; href: string }) {
   return (
     <li className="flex items-start gap-3 px-4 py-3">
       <span className="flex w-12 shrink-0 flex-col items-center rounded-md border border-border py-0.5">
@@ -122,7 +122,9 @@ function PostRow({ post, categoryName }: { post: Post; categoryName: string | un
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-baseline gap-2">
           <span className="text-xs text-muted-foreground tabular-nums">#{post.number}</span>
-          <span className="text-sm font-medium">{post.title}</span>
+          <Link href={href} className="text-sm font-medium underline-offset-2 hover:underline">
+            {post.title}
+          </Link>
         </span>
         <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <StatusBadge tone={statusTones[post.status]}>{feedbackStatusLabels[post.status]}</StatusBadge>
@@ -348,6 +350,7 @@ function BoardInbox({
               key={post.id}
               post={post}
               categoryName={categories.find(entry => entry.id === post.categoryId)?.name}
+              href={Routes.projectFeedbackPost(workspaceId, projectId, post.id)}
             />
           ))}
         </ul>

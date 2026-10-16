@@ -3,7 +3,7 @@
 // every pending vote that address cast in the project in the last week. The same mail carries a
 // signed one-click unsubscribe link (List-Unsubscribe), which any later feedback mail can reuse.
 // Mail goes through the notifications email sender (EMAIL_DRIVER; `log` prints it instead).
-import { FeedbackVoteStates } from '@mocco/common/feedback';
+import { FeedbackVoteStates, FEEDBACK_EMAIL_END_USER_PREFIX } from '@mocco/common/feedback';
 
 import {
   FeedbackLinkInvalidError,
@@ -23,9 +23,8 @@ import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { EmailSender } from '@backend/domain/notification/senders/email';
 import type { Db } from '@backend/infra/db/types';
 
-/** An email-only voter's end-user id: `email:` and the address, lowercased. Signed-in end users
- * can't take ids in this space (the /v1 transport refuses a token whose `sub` starts with it). */
-export const EMAIL_END_USER_PREFIX = 'email:';
+/** An email-only voter's end-user id: `email:` and the address, lowercased (FEEDBACK_EMAIL_END_USER_PREFIX). */
+export const EMAIL_END_USER_PREFIX = FEEDBACK_EMAIL_END_USER_PREFIX;
 export const emailEndUserIdOf = (email: string): string =>
   // eslint-disable-next-line sonarjs/null-dereference -- email is a parsed string, never null
   `${EMAIL_END_USER_PREFIX}${email.trim().toLowerCase()}`;

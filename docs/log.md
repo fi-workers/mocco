@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -1077,3 +1077,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - No migration. The roadmap page and sitemap entries are the next slice.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-public-board` (issue #175)
+
+## 2026-10-16 — Feedback console: post page
+
+- Each feedback post has a console page: status and category, editing, replies, the official response and internal
+  notes, votes (record one for a user, remove one), followers, history, and merging into another post on the board.
+  This finishes #175.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-post-page` (issue #175)
