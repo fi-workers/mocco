@@ -13,7 +13,8 @@
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
-// under `feedback:write`.
+// under `feedback:write`, and the four OTA setup changes (in `tools/ota-setup.ts`) under
+// `ota:write`.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
@@ -34,6 +35,7 @@ import {
   type NotificationWriteToolDeps,
 } from '@backend/transport/mcp/tools/notifications-write';
 import { registerOtaTools, type OtaToolDeps } from '@backend/transport/mcp/tools/ota';
+import { registerOtaSetupTools, type OtaSetupToolDeps } from '@backend/transport/mcp/tools/ota-setup';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
 import { registerStatusMonitorTools, type StatusMonitorToolDeps } from '@backend/transport/mcp/tools/status-monitors';
@@ -45,6 +47,7 @@ export type McpToolDeps = RunToolDeps &
   GateToolDeps &
   FlagToolDeps &
   OtaToolDeps &
+  OtaSetupToolDeps &
   StatusToolDeps &
   StatusMonitorToolDeps &
   HelpToolDeps &
@@ -73,6 +76,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerGateTools(server, deps);
   registerFlagTools(server, deps);
   registerOtaTools(server, deps);
+  registerOtaSetupTools(server, deps);
   registerStatusTools(server, deps);
   registerStatusMonitorTools(server, deps);
   registerHelpTools(server, deps);
