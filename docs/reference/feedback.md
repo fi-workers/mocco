@@ -153,7 +153,7 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 
 ## Changelog
 
-A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. This slice is the model, the service, the `changelog` router and the publish job; the public page, RSS, `/v1` and the console come next.
+A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. Built so far: the model, the service, the `changelog` router and the publish job, and the public changelog (below). `/v1` and the console come next.
 
 **Tables.** `mocco_changelog_entries` (board-scoped through the boards' composite FK, so an entry can't point at another tenant's board; deleting the board deletes its entries): `slug` (unique per board, `CHANGELOG_SLUG_PATTERN`, 1–80 characters), `title`, `body_md`, `tags` (a `text[]` of `new`, `improved`, `fixed`, DB-checked; the design's separate tags table wasn't needed), `state` (`draft`, `scheduled`, `published`), `publish_at` (set exactly while scheduled) and `published_at` (set exactly while published), both held by one CHECK, and `created_by_user_id` (SET NULL). `mocco_changelog_entry_posts` links an entry to the posts it announces, in order (`position`); deleting either side removes the link. The widget's read cursors and the run that drafted an entry (#179) come with their slices.
 
@@ -169,6 +169,15 @@ A board's changelog (#176): entries the team writes in Markdown, each announcing
 **Audit.** `feedback.changelog.published` (by the team member, or with no actor from the job), `feedback.changelog.unpublished` (only from published) and `feedback.changelog.deleted`, each with the board, slug and title. Edits and scheduling aren't audited.
 
 **Router.** `changelog.entries`, `entry`, `create`, `update`, `publish`, `schedule` (`publishAt`), `unpublish` and `delete`, behind `productProcedure(Products.feedback)` like the feedback router. A test calls every procedure as a non-member and with another tenant's ids (NOT_FOUND).
+
+**Public changelog.** A public board's published entries are on its help site, beside its board and roadmap:
+
+- `/feedback/<board>/changelog` lists them newest first (`PublicBoardService.changelog`, 50 a page), each with its date, tags, text and the posts it shipped. `/feedback/<board>/changelog/<slug>` is one entry (`changelogEntry`). Both are ISR like the other board pages, and a draft, scheduled or missing entry is a 404. The header gets a **Changelog** link, and every board page has an RSS `<link rel="alternate">`.
+- A post's page lists the published entries that shipped it as **Shipped in** (`changelogForPost`, the newest 10).
+- Entries go through `feedbackV1ChangelogEntrySchema` (id, slug, title, body, tags, `publishedAt`, and the posts' id, number, title and status), so the author and drafts never reach a page. Ties on `published_at` order the newest-created first.
+- The body is the team's Markdown, rendered like a help article (`helpArticleBlocks`): http(s), mailto and site links, https images, raw HTML as text, so a `javascript:` link or a `<script>` renders as nothing that runs.
+- **RSS.** `/feedback/<board>/changelog.rss` is rewritten to `/api/seo/changelog`, which resolves the help site from the host like the sitemap (`changelogRssFor`). It's RSS 2.0 with an `atom:link rel="self"`, `lastBuildDate`, and an item per entry with a permalink `guid`, an RFC 822 `pubDate`, a `category` per tag and a plain-text `description` (`changelogPlainText`: the Markdown's words, no HTML, code blocks left out, at most 1000 characters). Every value is XML-escaped, and a test feeds it script tags, an `onerror` image, a `javascript:` link and inline HTML. Off a help site, or for a private or missing board, it is 404.
+- **Sitemap.** The help site's sitemap lists `/feedback/<board>/changelog` once the board has a published entry, and each published entry (the newest 1000 per project).
 
 ## MCP tools
 

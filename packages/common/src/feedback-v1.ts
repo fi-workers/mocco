@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import {
+  changelogTagSchema,
   FEEDBACK_SLUG_PATTERN,
   FeedbackCommentAuthorKinds,
   FeedbackLimits,
@@ -165,4 +166,31 @@ export const FeedbackIdentifyStatuses = { pendingConfirmation: 'pending_confirma
 
 export const feedbackV1IdentifyEmailResultSchema = z.object({
   status: z.literal(FeedbackIdentifyStatuses.pendingConfirmation),
+});
+
+/** A post a changelog entry announces, as the public sees it. */
+export const feedbackV1ChangelogPostSchema = z.object({
+  id: z.uuid(),
+  number: z.int(),
+  title: z.string(),
+  status: feedbackPostStatusSchema,
+});
+
+/** A published changelog entry (#176). Its author and drafts never reach the wire. */
+export const feedbackV1ChangelogEntrySchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  /** Markdown; render it without raw HTML. */
+  body: z.string(),
+  tags: z.array(changelogTagSchema),
+  publishedAt: timestamp,
+  posts: z.array(feedbackV1ChangelogPostSchema),
+});
+export type FeedbackV1ChangelogEntry = z.infer<typeof feedbackV1ChangelogEntrySchema>;
+
+export const feedbackV1ChangelogListSchema = z.object({
+  entries: z.array(feedbackV1ChangelogEntrySchema),
+  /** The offset of the next page, or null on the last. */
+  nextOffset: z.int().nullable(),
 });

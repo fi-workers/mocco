@@ -1,5 +1,6 @@
 // The frame of a public feedback board (pages/_sites/[site]/feedback/**, #175): the site's name
-// (back to its help center), the board, and the search and share metadata. Canonical and Open
+// (back to its help center), the board with its Ideas, Roadmap and Changelog, and the search and
+// share metadata. Canonical and Open
 // Graph URLs are absolute on the site's own origin (its custom domain when it has one). Links
 // are plain anchors: the pages are served on the site's host, under /feedback/<board>.
 import Head from 'next/head';
@@ -13,6 +14,8 @@ import type { ReactNode } from 'react';
 export const boardPath = (board: string) => `/feedback/${board}`;
 export const roadmapPath = (board: string) => `/feedback/${board}/roadmap`;
 export const postPath = (board: string, number: number) => `/feedback/${board}/${String(number)}`;
+export const changelogPath = (board: string) => `/feedback/${board}/changelog`;
+export const changelogEntryPath = (board: string, entry: string) => `/feedback/${board}/changelog/${entry}`;
 
 export default function FeedbackSiteLayout({
   site,
@@ -26,7 +29,7 @@ export default function FeedbackSiteLayout({
   board: FeedbackPageBoard;
   title: string;
   /** Which of the board's pages this is, for the header's links. */
-  current: 'board' | 'roadmap' | 'post';
+  current: 'board' | 'roadmap' | 'post' | 'changelog';
   seo: {
     path: string;
     description: string;
@@ -61,6 +64,14 @@ export default function FeedbackSiteLayout({
       <Head>
         {/* An app hands its signed-in user's token over in the address; never pass it on. */}
         <meta key="referrer" name="referrer" content="no-referrer" />
+        {/* Feed readers find the board's changelog from any of its pages. */}
+        <link
+          key="changelog-rss"
+          rel="alternate"
+          type="application/rss+xml"
+          title={`${board.name} changelog`}
+          href={`${changelogPath(board.slug)}.rss`}
+        />
       </Head>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="flex h-14 items-center gap-3 border-b border-border px-4 md:px-6">
@@ -80,6 +91,7 @@ export default function FeedbackSiteLayout({
               [
                 ['board', 'Ideas', boardPath(board.slug)],
                 ['roadmap', 'Roadmap', roadmapPath(board.slug)],
+                ['changelog', 'Changelog', changelogPath(board.slug)],
               ] as const
             ).map(([section, label, href]) => (
               <a

@@ -4,7 +4,7 @@ description: Put a project's feedback board on the web for your users, where the
 type: guide
 status: active
 created: 2026-10-06
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, feedback, guide]
@@ -48,7 +48,11 @@ The board's **Roadmap** page, at `/feedback/<board>/roadmap`, shows what your te
 
 ![The roadmap: planned, in progress and shipped, most voted first](./images/feedback-roadmap.png)
 
-Search engines find the board, its roadmap and every post through the help center's sitemap (`/sitemap.xml`), so you don't submit them yourself.
+The **Changelog** page, at `/feedback/<board>/changelog`, is where you announce what shipped. Each entry has a date, tags (New, Improved, Fixed), its text and the ideas it shipped, and each of those ideas then shows **Shipped in** with a link back. Only published entries appear. Readers can follow it in a feed reader at `/feedback/<board>/changelog.rss`.
+
+![The changelog: two entries with their tags and the ideas they shipped](./images/feedback-changelog.png)
+
+Search engines find the board, its roadmap, its changelog and every post through the help center's sitemap (`/sitemap.xml`), so you don't submit them yourself.
 
 ## 3. Sign your users in from your app
 

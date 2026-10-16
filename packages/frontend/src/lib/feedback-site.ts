@@ -4,13 +4,26 @@
 // Only getStaticProps calls this; nothing here reaches the browser bundle.
 import { feedbackPages } from '@mocco/backend/sites/feedback';
 
+import { helpArticleBlocks } from '@frontend/lib/help-markdown';
 import { markdownToBlocks } from '@frontend/lib/markdown-blocks';
 import { excerptOf } from '@frontend/lib/seo';
 
 import type { DocBlock } from '@frontend/lib/doc-ast';
-import type { FeedbackBoardPage, FeedbackPostPage, FeedbackRoadmapPage } from '@mocco/backend/sites/feedback';
+import type {
+  FeedbackBoardPage,
+  FeedbackChangelogEntryPage,
+  FeedbackChangelogPage,
+  FeedbackPostPage,
+  FeedbackRoadmapPage,
+} from '@mocco/backend/sites/feedback';
 
-export type { FeedbackBoardPage, FeedbackPostPage, FeedbackRoadmapPage } from '@mocco/backend/sites/feedback';
+export type {
+  FeedbackBoardPage,
+  FeedbackChangelogEntryPage,
+  FeedbackChangelogPage,
+  FeedbackPostPage,
+  FeedbackRoadmapPage,
+} from '@mocco/backend/sites/feedback';
 
 /** Pages regenerate at most this often after a request (ISR); the browser fetches live counts. */
 export const FEEDBACK_REVALIDATE_SECONDS = 60;
@@ -50,5 +63,33 @@ export async function loadPostPage(site: string, board: string, number: number) 
     page: result.page satisfies FeedbackPostPage,
     blocks,
     description: excerptOf(blocks) || result.page.post.title,
+  };
+}
+
+/** A changelog entry is the team's text: links and https images render as in a help article. */
+export const changelogBodyBlocks = (markdown: string): DocBlock[] => helpArticleBlocks(markdown);
+
+/** A board's changelog with each entry's body as a render tree. */
+export async function loadChangelogPage(site: string, board: string) {
+  const page = await feedbackPages().changelogPage(site, board);
+  if (page === undefined) {
+    return undefined;
+  }
+  return {
+    page: page satisfies FeedbackChangelogPage,
+    bodies: Object.fromEntries(page.entries.map(entry => [entry.id, changelogBodyBlocks(entry.body)])),
+  };
+}
+
+export async function loadChangelogEntryPage(site: string, board: string, entry: string) {
+  const page = await feedbackPages().changelogEntryPage(site, board, entry);
+  if (page === undefined) {
+    return undefined;
+  }
+  const blocks = changelogBodyBlocks(page.entry.body);
+  return {
+    page: page satisfies FeedbackChangelogEntryPage,
+    blocks,
+    description: excerptOf(blocks) || page.entry.title,
   };
 }

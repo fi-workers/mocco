@@ -7,12 +7,13 @@ import * as schema from '@backend/infra/db/schema';
 
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type { Db } from '@backend/infra/db/types';
-import type { ChangelogEntryState } from '@mocco/common/feedback';
+import type { ChangelogEntryState, FeedbackPostStatus } from '@mocco/common/feedback';
 
 export type ChangelogEntryRow = typeof schema.changelogEntries.$inferSelect;
 
 const e = schema.changelogEntries;
 const ep = schema.changelogEntryPosts;
+const posts = schema.feedbackPosts;
 const scoped = (scope: FeedbackScope) => and(eq(e.workspaceId, scope.workspaceId), eq(e.projectId, scope.projectId));
 
 /** Data access for mocco_changelog_entries and their posts. Scoped by workspace and project,
@@ -127,6 +128,78 @@ export class ChangelogEntryRepo {
             .where(inArray(ep.entryId, [...entryIds]))
             .orderBy(asc(ep.entryId), asc(ep.position));
     return new Map(entryIds.map(id => [id, rows.filter(row => row.entryId === id).map(row => row.postId)]));
+  }
+
+  /** A board's published entries, newest first. */
+  async listPublished(scope: FeedbackScope, boardId: string, page: { limit: number; offset: number }) {
+    return await this.db
+      .select()
+      .from(e)
+      .where(and(scoped(scope), eq(e.boardId, boardId), eq(e.state, ChangelogEntryStates.published)))
+      .orderBy(desc(e.publishedAt), desc(e.createdAt), desc(e.id))
+      .limit(page.limit)
+      .offset(page.offset);
+  }
+
+  /** The boards' published entries (slug and last change), newest first, for a sitemap. */
+  async listPublishedForSitemap(scope: FeedbackScope, boardIds: readonly string[], limit: number) {
+    return boardIds.length === 0
+      ? []
+      : await this.db
+          .select({ boardId: e.boardId, slug: e.slug, updatedAt: e.updatedAt })
+          .from(e)
+          .where(and(scoped(scope), inArray(e.boardId, [...boardIds]), eq(e.state, ChangelogEntryStates.published)))
+          .orderBy(desc(e.publishedAt), desc(e.createdAt))
+          .limit(limit);
+  }
+
+  /** The board's published entry with this slug (its public address). */
+  async findPublishedBySlug(scope: FeedbackScope, boardId: string, slug: string) {
+    const [row] = await this.db
+      .select()
+      .from(e)
+      .where(and(scoped(scope), eq(e.boardId, boardId), eq(e.slug, slug), eq(e.state, ChangelogEntryStates.published)));
+    return row;
+  }
+
+  /** The published entries that announce the post, newest first. */
+  async listPublishedForPost(scope: FeedbackScope, postId: string, limit: number) {
+    return await this.db
+      .select({ slug: e.slug, title: e.title, publishedAt: e.publishedAt })
+      .from(ep)
+      .innerJoin(e, and(eq(e.id, ep.entryId), eq(e.workspaceId, ep.workspaceId)))
+      .where(and(scoped(scope), eq(ep.postId, postId), eq(e.state, ChangelogEntryStates.published)))
+      .orderBy(desc(e.publishedAt), desc(e.createdAt))
+      .limit(limit);
+  }
+
+  /** The posts each entry announces (number, title, status), in the entry's order. */
+  async postsOf(
+    entryIds: readonly string[],
+  ): Promise<Map<string, { id: string; number: number; title: string; status: FeedbackPostStatus }[]>> {
+    const rows =
+      entryIds.length === 0
+        ? []
+        : await this.db
+            .select({
+              entryId: ep.entryId,
+              id: posts.id,
+              number: posts.number,
+              title: posts.title,
+              status: posts.status,
+            })
+            .from(ep)
+            .innerJoin(posts, and(eq(posts.id, ep.postId), eq(posts.workspaceId, ep.workspaceId)))
+            .where(inArray(ep.entryId, [...entryIds]))
+            .orderBy(asc(ep.entryId), asc(ep.position));
+    return new Map(
+      entryIds.map(id => [
+        id,
+        rows
+          .filter(row => row.entryId === id)
+          .map(row => ({ id: row.id, number: row.number, title: row.title, status: row.status })),
+      ]),
+    );
   }
 
   /** Make the entry announce exactly these posts, in this order. */

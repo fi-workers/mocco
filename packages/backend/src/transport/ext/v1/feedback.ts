@@ -42,7 +42,12 @@ import { parseJson, problemOf, problemResponse, ProblemCodes } from '@backend/tr
 
 import type { EndUserTokenService } from '@backend/domain/enduser/EndUserTokenService';
 import type { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
-import type { PublicBoardService, PublicComment, PublicPost } from '@backend/domain/feedback/PublicBoardService';
+import type {
+  PublicBoardService,
+  PublicChangelogEntry,
+  PublicComment,
+  PublicPost,
+} from '@backend/domain/feedback/PublicBoardService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { RoadmapColumn } from '@mocco/common/feedback';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -138,6 +143,11 @@ const wireRoadmap = (roadmap: Record<RoadmapColumn, PublicPost[]>) =>
   ) as Record<RoadmapColumn, ReturnType<typeof wirePost>[]>;
 
 export const wireComment = (comment: PublicComment) => ({ ...comment, createdAt: iso(comment.createdAt) });
+
+export const wireChangelogEntry = (entry: PublicChangelogEntry) => ({
+  ...entry,
+  publishedAt: iso(entry.publishedAt),
+});
 
 /** `body` narrowed by `schema`: a field the schema doesn't name is dropped. */
 const send = <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status: 200 | 201 | 202 = 200) =>

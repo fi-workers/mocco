@@ -1112,3 +1112,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   router and a one-minute job that publishes scheduled entries. Migration 0081.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/feedback-changelog-core` (issue #176)
+
+## 2026-10-17 — Feedback changelog: public pages and RSS
+
+- Published entries are public on the help site (`/feedback/<board>/changelog`, one page per entry), with an RSS
+  feed, a Changelog link in the board header, "Shipped in" on the posts they announce, and sitemap entries.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-changelog-public` (issue #176)

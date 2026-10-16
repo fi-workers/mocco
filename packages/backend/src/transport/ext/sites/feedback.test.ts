@@ -259,6 +259,67 @@ describe('public feedback board pages (pglite)', () => {
       expect(roadmap?.lastModified.getTime()).toBe(only?.lastModified.getTime());
       expect(await pages.sitemapPages('nope')).toEqual([]);
     });
+
+    it('shows only published changelog entries, newest first, and links them from the posts they shipped', async () => {
+      const shipped = await post('Dark mode');
+      const changelog = feedback.feedbackChangelog;
+      const older = await changelog.create(scope, operatorId, { boardId, title: 'September', postIds: [shipped.id] });
+      await changelog.publish(scope, operatorId, older.id);
+      const newer = await changelog.create(scope, operatorId, {
+        boardId,
+        title: 'Dark mode is here',
+        body: 'Turn it on in **Settings**.',
+        tags: ['new'],
+        postIds: [shipped.id],
+      });
+      await changelog.publish(scope, operatorId, newer.id);
+      const draft = await changelog.create(scope, operatorId, { boardId, title: 'Not yet', postIds: [shipped.id] });
+      const scheduled = await changelog.create(scope, operatorId, { boardId, title: 'Soon' });
+      await changelog.schedule(scope, scheduled.id, new Date(NOW.getTime() + 60 * 60 * 1000));
+
+      const page = await pages.changelogPage('acme', 'ideas');
+      expect(page?.entries.map(entry => entry.title)).toEqual(['Dark mode is here', 'September']);
+      expect(page?.entries[0]).toEqual({
+        id: newer.id,
+        slug: 'dark-mode-is-here',
+        title: 'Dark mode is here',
+        body: 'Turn it on in **Settings**.',
+        tags: ['new'],
+        publishedAt: NOW.toISOString(),
+        posts: [{ id: shipped.id, number: shipped.number, title: 'Dark mode', status: 'under_review' }],
+      });
+      const entryPage = await pages.changelogEntryPage('acme', 'ideas', 'dark-mode-is-here');
+      expect(entryPage?.entry.title).toBe('Dark mode is here');
+      expect(await pages.changelogEntryPage('acme', 'ideas', draft.slug)).toBeUndefined();
+      expect(await pages.changelogEntryPage('acme', 'ideas', scheduled.slug)).toBeUndefined();
+      const postPage = await pages.postPage('acme', 'ideas', shipped.number);
+      expect(postPage.kind === 'page' && postPage.page.changelog.map(entry => entry.slug)).toEqual([
+        'dark-mode-is-here',
+        'september',
+      ]);
+      // An entry carries no author or tenant ids.
+      expect(JSON.stringify(page)).not.toContain(operatorId);
+      expect(JSON.stringify(page)).not.toContain(scope.workspaceId);
+
+      // A private board has no changelog page.
+      await feedback.feedbackBoards.updateBoard(scope, boardId, { slug: 'ideas', name: 'Ideas', isPublic: false });
+      expect(await pages.changelogPage('acme', 'ideas')).toBeUndefined();
+      expect(await pages.changelogEntryPage('acme', 'ideas', 'september')).toBeUndefined();
+    });
+
+    it('lists the changelog and its published entries in the sitemap', async () => {
+      const entry = await feedback.feedbackChangelog.create(scope, operatorId, { boardId, title: 'Launch' });
+      const before = await pages.sitemapPages('acme');
+      expect(before.map(page => page.path)).toEqual(['/feedback/ideas', '/feedback/ideas/roadmap']);
+      await feedback.feedbackChangelog.publish(scope, operatorId, entry.id);
+      const after = await pages.sitemapPages('acme');
+      expect(after.map(page => page.path)).toEqual([
+        '/feedback/ideas',
+        '/feedback/ideas/roadmap',
+        '/feedback/ideas/changelog',
+        '/feedback/ideas/changelog/launch',
+      ]);
+    });
   });
 
   describe('routes', () => {
