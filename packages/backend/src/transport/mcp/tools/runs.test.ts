@@ -23,7 +23,14 @@ import {
   workspaces,
 } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
-import { getRun, searchRuns, userIdOf, MCP_USER_ID, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
+import {
+  getRun,
+  searchRuns,
+  userIdOf,
+  workspaceArg,
+  MCP_USER_ID,
+  type RunToolDeps,
+} from '@backend/transport/mcp/tools/runs';
 
 describe('mocco_runs_* (pglite)', () => {
   let t: TestDb;
@@ -152,6 +159,13 @@ describe('mocco_runs_* (pglite)', () => {
     await expect(searchRuns(deps, { workspaceId: theirs, limit: 20, responseFormat: 'concise' }, ada)).rejects.toThrow(
       /No workspace/u,
     );
+  });
+
+  it('takes a workspace only by id, so nothing else reaches the membership query', () => {
+    expect(workspaceArg.safeParse('?').success).toBe(false);
+    expect(workspaceArg.safeParse('acme').success).toBe(false);
+    expect(workspaceArg.safeParse(mine).success).toBe(true);
+    expect(workspaceArg.safeParse(undefined).success).toBe(true);
   });
 
   it('refuses with no signed-in person rather than reading anything', async () => {
