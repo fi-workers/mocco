@@ -25,10 +25,12 @@ export interface RunToolDeps {
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
+// A uuid, parsed here at the boundary: anything else used to reach the membership query,
+// whose database error (with the query and the caller's id) came back as the tool's answer.
 export const workspaceArg = z
-  .string()
+  .uuid()
   .optional()
-  .describe('The workspace to look in. Omit it when you belong to exactly one.');
+  .describe('The workspace to look in, by id. Omit it when you belong to exactly one.');
 
 export const responseFormatArg = z
   .enum(['concise', 'detailed'])
