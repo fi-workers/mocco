@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -1077,3 +1077,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - No migration. The roadmap page and sitemap entries are the next slice.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-public-board` (issue #175)
+
+## 2026-10-16 — Feedback roadmap page and sitemap entries
+
+- A public board's roadmap at `/feedback/<board>/roadmap` (planned, in progress, shipped; most voted first; category
+  filter in the address), and the help site's sitemap now lists each public board, its roadmap and its live posts.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #484 (issue #175)
