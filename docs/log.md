@@ -1078,6 +1078,18 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-public-board` (issue #175)
 
+## 2026-10-16 — MCP: OTA setup tools
+
+- An agent in an app's repository can now connect it to OTA hosting: `mocco_ota_setup_get` (read) and
+  `mocco_ota_apps_host`, `mocco_ota_channels_create`, `mocco_ota_certificates_add` and
+  `mocco_ota_trust_policies_create`, thin adapters over the services the console's `ota.hosting` router writes through.
+- New MCP scope `ota:write`, stepped up for per tool like the others; the changes also need the workspace's opt-in and a
+  confirmation. Certificates and trust policies stay owner/admin only, a private key is refused, and channels are
+  created open — protecting one stays in the console.
+- No migration.
+- Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
+- Source: branch `feat/mcp-ota-setup`
+
 ## 2026-10-16 — Feedback console: boards and inbox
 
 - The feedback product is available in the console: a Feedback section with an inbox (board, status, category and
