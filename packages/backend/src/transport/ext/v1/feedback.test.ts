@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
 import { FeedbackPostStatuses, FeedbackVoteSources } from '@mocco/common/feedback';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,7 +20,7 @@ import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
 import { SecretBox } from '@backend/infra/crypto/secret-box';
 import { expectOne } from '@backend/infra/db/rows';
-import { users, workspaces } from '@backend/infra/db/schema';
+import { changelogEntries, feedbackChangelogReads, users, workspaces } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { FeedbackRateLimits } from '@backend/transport/ext/v1/feedback';
 import { createV1Routes } from '@backend/transport/ext/v1/routes';
@@ -49,6 +50,8 @@ const tokenFor = async (
     .setIssuedAt(nowSeconds)
     .setExpirationTime(opts.exp ?? nowSeconds + 15 * 60)
     .sign(new TextEncoder().encode(secret));
+
+const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 60 * 60 * 1000);
 
 describe('/v1/feedback (pglite)', () => {
   let t: TestDb;
@@ -109,6 +112,26 @@ describe('/v1/feedback (pglite)', () => {
     title: string,
     extra: { status?: (typeof FeedbackPostStatuses)[keyof typeof FeedbackPostStatuses]; categoryId?: string } = {},
   ) => await feedback.feedbackPosts.create(scope, operatorId, { boardId, title, ...extra });
+
+  /** Three published entries, an hour apart (the newest an hour ago), and a draft. */
+  const publishThree = async () => {
+    const entries = await ['First', 'Second', 'Third'].reduce<Promise<string[]>>(async (previous, title) => {
+      const ids = await previous;
+      const entry = await feedback.feedbackChangelog.create(scope, operatorId, { boardId, title });
+      await feedback.feedbackChangelog.publish(scope, operatorId, entry.id);
+      return [...ids, entry.id];
+    }, Promise.resolve([]));
+    await Promise.all(
+      entries.map(
+        async (id, index) =>
+          await t.db
+            .update(changelogEntries)
+            .set({ publishedAt: hoursAgo(3 - index) })
+            .where(eq(changelogEntries.id, id)),
+      ),
+    );
+    await feedback.feedbackChangelog.create(scope, operatorId, { boardId, title: 'Draft' });
+  };
 
   beforeEach(async () => {
     t = await createTestDb();
@@ -472,6 +495,75 @@ describe('/v1/feedback (pglite)', () => {
         ip: '203.0.113.10',
       });
       expect(elsewhere).toBe(200);
+    });
+  });
+
+  describe('changelog', () => {
+    it('lists published entries newest first, without drafts or anything about the team', async () => {
+      await publishThree();
+      const list = await call('GET', '/boards/ideas/changelog?limit=2', { key });
+      expect(list.status).toBe(200);
+      const entries = list.body.entries as Json[];
+      expect(entries.map(entry => entry.title)).toEqual(['Third', 'Second']);
+      expect(list.body.nextOffset).toBe(2);
+      expect(new Set(Object.keys(entries[0] ?? {}))).toEqual(
+        new Set(['body', 'id', 'posts', 'publishedAt', 'slug', 'tags', 'title']),
+      );
+      expect(list.text).not.toContain(operatorId);
+      const next = await bodyOf('GET', '/boards/ideas/changelog?offset=2', { key });
+      expect((next.entries as Json[]).map(entry => entry.title)).toEqual(['First']);
+      await feedback.feedbackBoards.updateBoard(scope, boardId, { slug: 'ideas', name: 'Ideas', isPublic: false });
+      expect(await statusOf('GET', '/boards/ideas/changelog', { key })).toBe(404);
+      expect(await statusOf('GET', '/boards/ideas/changelog/unread', { key })).toBe(404);
+    });
+
+    it('counts what is new since the end user last looked, or since a visitor says', async () => {
+      await publishThree();
+      expect(await bodyOf('GET', '/boards/ideas/changelog/unread', { key })).toEqual({ count: 3, lastSeenAt: null });
+      const since = hoursAgo(1.5).toISOString();
+      expect(await bodyOf('GET', `/boards/ideas/changelog/unread?since=${since}`, { key })).toEqual({
+        count: 1,
+        lastSeenAt: since,
+      });
+      expect(await statusOf('GET', '/boards/ideas/changelog/unread?since=yesterday', { key })).toBe(400);
+
+      // A signed-in end user without a cursor yet counts from `since`; after "seen" from their cursor.
+      const token = await tokenFor(secret, 'u1');
+      expect(
+        await bodyOf('GET', `/boards/ideas/changelog/unread?since=${hoursAgo(2.5).toISOString()}`, { key, token }),
+      ).toMatchObject({ count: 2 });
+      const seen = await call('POST', '/boards/ideas/changelog/seen', { key, token });
+      expect(seen.body).toEqual({ lastSeenAt: NOW.toISOString() });
+      expect(
+        await bodyOf('GET', `/boards/ideas/changelog/unread?since=${hoursAgo(9).toISOString()}`, { key, token }),
+      ).toEqual({
+        count: 0,
+        lastSeenAt: NOW.toISOString(),
+      });
+      // Another end user is unaffected.
+      expect(
+        await bodyOf('GET', '/boards/ideas/changelog/unread', { key, token: await tokenFor(secret, 'u2') }),
+      ).toEqual({
+        count: 3,
+        lastSeenAt: null,
+      });
+    });
+
+    it('needs an end-user token and a write key to mark the changelog seen, and never moves the cursor back', async () => {
+      expect(await statusOf('POST', '/boards/ideas/changelog/seen', { key })).toBe(401);
+      const reader = await keyWith([ApiScopes.feedbackRead]);
+      const token = await tokenFor(secret, 'u1');
+      expect(await statusOf('POST', '/boards/ideas/changelog/seen', { key: reader, token })).toBe(403);
+      await t.db.insert(feedbackChangelogReads).values({
+        ...scope,
+        boardId,
+        endUserId: 'u1',
+        lastSeenAt: new Date(NOW.getTime() + 60_000),
+      });
+      expect(await bodyOf('POST', '/boards/ideas/changelog/seen', { key, token })).toEqual({
+        lastSeenAt: new Date(NOW.getTime() + 60_000).toISOString(),
+      });
+      expect(await statusOf('POST', '/boards/nope/changelog/seen', { key, token })).toBe(404);
     });
   });
 });

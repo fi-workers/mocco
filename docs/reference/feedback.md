@@ -153,7 +153,7 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 
 ## Changelog
 
-A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. Built so far: the model, the service, the `changelog` router and the publish job, and the public changelog (below). `/v1` and the console come next.
+A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. Built so far: the model, the service, the `changelog` router and the publish job, the public changelog and `/v1` (below). The console comes next.
 
 **Tables.** `mocco_changelog_entries` (board-scoped through the boards' composite FK, so an entry can't point at another tenant's board; deleting the board deletes its entries): `slug` (unique per board, `CHANGELOG_SLUG_PATTERN`, 1–80 characters), `title`, `body_md`, `tags` (a `text[]` of `new`, `improved`, `fixed`, DB-checked; the design's separate tags table wasn't needed), `state` (`draft`, `scheduled`, `published`), `publish_at` (set exactly while scheduled) and `published_at` (set exactly while published), both held by one CHECK, and `created_by_user_id` (SET NULL). `mocco_changelog_entry_posts` links an entry to the posts it announces, in order (`position`); deleting either side removes the link. The widget's read cursors and the run that drafted an entry (#179) come with their slices.
 
@@ -178,6 +178,8 @@ A board's changelog (#176): entries the team writes in Markdown, each announcing
 - The body is the team's Markdown, rendered like a help article (`helpArticleBlocks`): http(s), mailto and site links, https images, raw HTML as text, so a `javascript:` link or a `<script>` renders as nothing that runs.
 - **RSS.** `/feedback/<board>/changelog.rss` is rewritten to `/api/seo/changelog`, which resolves the help site from the host like the sitemap (`changelogRssFor`). It's RSS 2.0 with an `atom:link rel="self"`, `lastBuildDate`, and an item per entry with a permalink `guid`, an RFC 822 `pubDate`, a `category` per tag and a plain-text `description` (`changelogPlainText`: the Markdown's words, no HTML, code blocks left out, at most 1000 characters). Every value is XML-escaped, and a test feeds it script tags, an `onerror` image, a `javascript:` link and inline HTML. Off a help site, or for a private or missing board, it is 404.
 - **Sitemap.** The help site's sitemap lists `/feedback/<board>/changelog` once the board has a published entry, and each published entry (the newest 1000 per project).
+
+**`/v1` and the "what's new" badge.** `GET /boards/{slug}/changelog` pages published entries newest first (the same projection). `GET /boards/{slug}/changelog/unread` answers `{ count, lastSeenAt }`: the entries published after the end user's stored cursor when a token comes with the request; without one (or before their first "seen"), after `?since=`, which a widget keeps on the device for visitors; else every entry. It counts up to 100 (`CHANGELOG_UNREAD_CAP`). `POST /boards/{slug}/changelog/seen` needs `feedback:write` and an end-user token and moves the cursor to now, never back (`greatest`), in `mocco_feedback_changelog_reads` (one row per board and end user, board-scoped by the composite FK, deleted with the board). It has its own limit, 120 an hour per end user, so a widget opening often doesn't use up the address's write budget. Private and missing boards are 404, as everywhere on `/v1`.
 
 ## MCP tools
 

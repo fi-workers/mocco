@@ -4653,3 +4653,28 @@ export const changelogEntryPosts = pgTable(
     }).onDelete('cascade'),
   ],
 );
+
+/** How far an end user has read a board's changelog (#176): the "what's new" badge counts the
+ * entries published after `last_seen_at`. One row per (board, end user); it only moves forward. */
+export const feedbackChangelogReads = pgTable(
+  'mocco_feedback_changelog_reads',
+  {
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    endUserId: text('end_user_id').notNull(),
+    lastSeenAt: timestamp('last_seen_at').notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.boardId, t.endUserId], name: 'mocco_feedback_changelog_reads_pk' }),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_feedback_changelog_reads_board_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_changelog_reads_end_user_check',
+      sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
+    ),
+  ],
+);

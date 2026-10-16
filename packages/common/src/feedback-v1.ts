@@ -194,3 +194,14 @@ export const feedbackV1ChangelogListSchema = z.object({
   /** The offset of the next page, or null on the last. */
   nextOffset: z.int().nullable(),
 });
+
+/** `?since=` for a visitor without a token: when they last looked, kept on their device. */
+export const feedbackV1ChangelogUnreadQuerySchema = z.object({ since: z.iso.datetime().optional() });
+
+/** How many entries were published since the end user last looked (counted up to 100). */
+export const feedbackV1ChangelogUnreadSchema = z.object({
+  count: z.int(),
+  lastSeenAt: timestamp.nullable(),
+});
+
+export const feedbackV1ChangelogSeenSchema = z.object({ lastSeenAt: timestamp });

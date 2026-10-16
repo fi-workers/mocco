@@ -1119,3 +1119,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   feed, a Changelog link in the board header, "Shipped in" on the posts they announce, and sitemap entries.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-changelog-public` (issue #176)
+
+## 2026-10-17 — Feedback changelog on /v1
+
+- `/v1/feedback/boards/{slug}/changelog`, `…/changelog/unread` and `…/changelog/seen`, with a per-end-user read
+  cursor (migration 0082), for an app's "what's new" badge.
+- Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/feedback-changelog-v1` (issue #176)
