@@ -1078,6 +1078,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-public-board` (issue #175)
 
+## 2026-10-16 — Feedback console: boards and inbox
+
+- The feedback product is available in the console: a Feedback section with an inbox (board, status, category and
+  sort in the address) and a boards page (create, rename, publish, delete, categories); the staff list gains a
+  "Most voted" sort (`sort: top`).
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #487 (issue #175)
+
 ## 2026-10-16 — Feedback console: post page
 
 - Each feedback post has a console page: status and category, editing, replies, the official response and internal
