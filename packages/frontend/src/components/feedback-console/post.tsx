@@ -3,7 +3,6 @@
 // as an internal note the public never sees), record a vote for a user who asked by email or on a
 // call, and merge it into the post it duplicates. Reads and writes only through `feedback.*`.
 import {
-  FEEDBACK_EMAIL_END_USER_PREFIX,
   FeedbackCommentAuthorKinds,
   FeedbackLimits,
   FeedbackPostSorts,
@@ -14,8 +13,6 @@ import {
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { publicBoardUrl, useHelpSiteSlug } from '@frontend/components/feedback-console/boards';
-import { statusTones } from '@frontend/components/feedback-console/inbox';
 import {
   Ago,
   errorMessage,
@@ -27,6 +24,7 @@ import {
 } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
 import { feedbackStatusLabels } from '@frontend/lib/feedback-client';
+import { endUserLabel, publicBoardUrl, statusTones, useHelpSiteSlug } from '@frontend/lib/feedback-console';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
@@ -61,13 +59,6 @@ const reasonLabels: Record<FeedbackStatusChangeReason, string> = {
   [FeedbackStatusChangeReasons.autoApply]: 'Shipped by a deploy',
   [FeedbackStatusChangeReasons.merge]: 'Merged',
 };
-
-/** An end user as the team sees them: an email voter's address, else the app's user id. */
-export const endUserLabel = (endUserId: string) =>
-  // eslint-disable-next-line sonarjs/null-dereference -- endUserId is a string, never null
-  endUserId.startsWith(FEEDBACK_EMAIL_END_USER_PREFIX)
-    ? endUserId.slice(FEEDBACK_EMAIL_END_USER_PREFIX.length)
-    : endUserId;
 
 /** Team members' names by user id, for comments and history. */
 function useMemberNames(workspaceId: string): (userId: string | null) => string {
@@ -158,8 +149,7 @@ function MergeInto({ workspaceId, projectId, post }: Omit<Props, 'postId'> & { p
   const merge = trpc.feedback.mergePost.useMutation({
     onSuccess: async () => {
       setIsOpen(false);
-      await utils.feedback.post.invalidate();
-      await utils.feedback.posts.invalidate();
+      await Promise.all([utils.feedback.post.invalidate(), utils.feedback.posts.invalidate()]);
     },
   });
   // eslint-disable-next-line sonarjs/null-dereference -- search is a useState<string>, never null
@@ -261,8 +251,7 @@ function Triage({
 }: Omit<Props, 'postId'> & { post: Post; categories: readonly Category[] }) {
   const utils = trpc.useUtils();
   const refresh = async () => {
-    await utils.feedback.post.invalidate();
-    await utils.feedback.posts.invalidate();
+    await Promise.all([utils.feedback.post.invalidate(), utils.feedback.posts.invalidate()]);
   };
   const statusChange = trpc.feedback.setPostStatus.useMutation({ onSuccess: refresh });
   const update = trpc.feedback.updatePost.useMutation({ onSuccess: refresh });
@@ -336,8 +325,10 @@ function Comments({ workspaceId, projectId, postId }: Props) {
     onSuccess: async () => {
       setBody('');
       setKind(CommentKinds.reply);
-      await utils.feedback.comments.invalidate({ workspaceId, projectId, postId });
-      await utils.feedback.post.invalidate();
+      await Promise.all([
+        utils.feedback.comments.invalidate({ workspaceId, projectId, postId }),
+        utils.feedback.post.invalidate(),
+      ]);
     },
   });
   const comments = commentsQuery.data?.comments ?? [];
@@ -436,9 +427,11 @@ function Votes({
   });
   const [endUserId, setEndUserId] = useState('');
   const refresh = async () => {
-    await utils.feedback.votes.invalidate({ workspaceId, projectId, postId });
-    await utils.feedback.subscribers.invalidate({ workspaceId, projectId, postId });
-    await utils.feedback.post.invalidate();
+    await Promise.all([
+      utils.feedback.votes.invalidate({ workspaceId, projectId, postId }),
+      utils.feedback.subscribers.invalidate({ workspaceId, projectId, postId }),
+      utils.feedback.post.invalidate(),
+    ]);
   };
   const vote = trpc.feedback.vote.useMutation({
     onSuccess: async () => {

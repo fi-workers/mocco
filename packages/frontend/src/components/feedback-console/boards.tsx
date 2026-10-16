@@ -2,14 +2,13 @@
 // or private, delete it, and edit its categories. A public board's page lives on the project's
 // help center site (`/feedback/<slug>`), so the board links there when the project has one.
 import { FEEDBACK_SLUG_PATTERN, FeedbackLimits } from '@mocco/common/feedback';
-import { Products } from '@mocco/common/project';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-import { publicSiteHost } from '@frontend/components/help/help-center';
 import { errorMessage, inputClass, labelClass, Spinner } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
+import { feedbackSlugOf, publicBoardUrl, useHelpSiteSlug } from '@frontend/lib/feedback-console';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
@@ -23,35 +22,6 @@ interface BoardFields {
   slug: string;
   name: string;
   isPublic: boolean;
-}
-
-/** A board or category address from its name: `Feature requests` → `feature-requests`. */
-export function feedbackSlugOf(name: string): string {
-  // eslint-disable-next-line sonarjs/null-dereference -- name is a string, never null
-  const words = name
-    .toLowerCase()
-    .split(/[^a-z0-9]+/u)
-    .filter(word => word !== '');
-  let slug = words.join('-').slice(0, 40);
-  // eslint-disable-next-line sonarjs/null-dereference -- slug is a string, never null
-  while (slug.endsWith('-')) {
-    slug = slug.slice(0, -1);
-  }
-  return slug === '' ? 'ideas' : slug;
-}
-
-/** The project's help center slug, or null when it has none (or the help center is off). */
-export function useHelpSiteSlug(workspaceId: string, projectId: string): string | null {
-  const productsQuery = trpc.product.list.useQuery({ workspaceId });
-  const hasHelp = productsQuery.data?.products.includes(Products.helpcenter) ?? false;
-  const siteQuery = trpc.help.site.useQuery({ workspaceId, projectId }, { enabled: hasHelp, retry: false });
-  return siteQuery.data?.site?.slug ?? null;
-}
-
-/** Where a public board is served, or null when help sites aren't served here. */
-export function publicBoardUrl(siteSlug: string, boardSlug: string): string | null {
-  const site = publicSiteHost(siteSlug);
-  return site === null ? null : `${site.url}/feedback/${boardSlug}`;
 }
 
 /** Create a board, or edit `board`'s name, address and visibility. */

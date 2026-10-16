@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-import { BoardForm, publicBoardUrl, useHelpSiteSlug } from '@frontend/components/feedback-console/boards';
+import { BoardForm } from '@frontend/components/feedback-console/boards';
 import {
   Ago,
   errorMessage,
@@ -18,10 +18,10 @@ import {
 } from '@frontend/components/notifications/notification-ui';
 import { Button } from '@frontend/components/ui/button';
 import { feedbackStatusLabels } from '@frontend/lib/feedback-client';
+import { publicBoardUrl, sortLabels, statusTones, useHelpSiteSlug } from '@frontend/lib/feedback-console';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
-import type { Tone } from '@frontend/components/notifications/notification-ui';
 import type { AppRouter } from '@mocco/backend/trpc/root';
 import type { FeedbackPostSort, FeedbackPostStatus } from '@mocco/common/feedback';
 import type { inferRouterOutputs } from '@trpc/server';
@@ -34,7 +34,7 @@ interface Props {
 }
 
 /** How often the inbox looks for new posts and votes while open (no realtime in v1). */
-export const FEEDBACK_INBOX_REFRESH_MS = 30_000;
+const FEEDBACK_INBOX_REFRESH_MS = 30_000;
 
 /** Posts per page of the inbox. */
 const PAGE_SIZE = FeedbackLimits.listDefault;
@@ -44,20 +44,6 @@ const ALL = 'all';
 type StatusFilter = FeedbackPostStatus | typeof ALL;
 const statusFilters: readonly StatusFilter[] = [...Object.values(FeedbackPostStatuses), ALL];
 const statusFilterLabel = (filter: StatusFilter) => (filter === ALL ? 'All' : feedbackStatusLabels[filter]);
-
-export const sortLabels: Record<FeedbackPostSort, string> = {
-  [FeedbackPostSorts.newest]: 'Newest',
-  [FeedbackPostSorts.top]: 'Most voted',
-  [FeedbackPostSorts.status]: 'By status',
-};
-
-export const statusTones: Record<FeedbackPostStatus, Tone> = {
-  [FeedbackPostStatuses.underReview]: Tones.neutral,
-  [FeedbackPostStatuses.planned]: Tones.ok,
-  [FeedbackPostStatuses.inProgress]: Tones.warn,
-  [FeedbackPostStatuses.shipped]: Tones.ok,
-  [FeedbackPostStatuses.closed]: Tones.neutral,
-};
 
 const queryString = (value: unknown) => (typeof value === 'string' && value !== '' ? value : undefined);
 const isIn = <T extends string>(values: readonly T[], value: string | undefined): value is T =>
