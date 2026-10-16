@@ -8,6 +8,7 @@ import type { WorkspaceService } from '@backend/domain/auth/WorkspaceService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
@@ -128,6 +129,8 @@ export interface Context {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  /** A board's changelog (#176). */
+  feedbackChangelog: ChangelogService;
   /** The status page: pages and components, incidents, maintenance (#148). */
   statusPages: StatusPageService;
   statusIncidents: IncidentService;

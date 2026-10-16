@@ -1,6 +1,8 @@
 import { ApiKeyKinds } from '@mocco/common/apikey';
 import { RunStates, RunStepStatuses, TriggerSources } from '@mocco/common/execution';
 import {
+  ChangelogEntryStates,
+  ChangelogTags,
   FeedbackCommentAuthorKinds,
   FeedbackLimits,
   FeedbackPostStatuses,
@@ -86,6 +88,8 @@ import type { AuditAction } from '@mocco/common/audit';
 import type { ReleaseGate } from '@mocco/common/events';
 import type { RunState, RunStepStatus } from '@mocco/common/execution';
 import type {
+  ChangelogEntryState,
+  ChangelogTag,
   FeedbackCommentAuthorKind,
   FeedbackPostStatus,
   FeedbackStatusChangeReason,
@@ -4561,5 +4565,91 @@ export const feedbackSubscriptions = pgTable(
       'mocco_feedback_subscriptions_end_user_check',
       sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
     ),
+  ],
+);
+
+/** A changelog entry of a board (#176): what shipped, in Markdown. A draft is the team's; a
+ * scheduled entry goes public at `publish_at` (the publish job); a published one is public since
+ * `published_at`. Its slug is its address within the board. */
+export const changelogEntries = pgTable(
+  'mocco_changelog_entries',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    slug: text().notNull(),
+    title: text().notNull(),
+    bodyMd: text('body_md').notNull().default(''),
+    // Any of new, improved, fixed (DB-checked), in the order given.
+    tags: text()
+      .array()
+      .$type<ChangelogTag[]>()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    state: text().$type<ChangelogEntryState>().notNull().default(ChangelogEntryStates.draft),
+    // Set exactly while scheduled.
+    publishAt: timestamp('publish_at'),
+    // Set exactly while published.
+    publishedAt: timestamp('published_at'),
+    // SET NULL keeps the entry when its author leaves.
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_changelog_entries_board_slug_uq').on(t.boardId, t.slug),
+    index('mocco_changelog_entries_board_state_published_idx').on(t.boardId, t.state, t.publishedAt.desc()),
+    // The publish job's scan: scheduled entries by when they are due.
+    index('mocco_changelog_entries_due_idx')
+      .on(t.publishAt)
+      .where(sql`${t.state} = '${sql.raw(ChangelogEntryStates.scheduled)}'`),
+    unique('mocco_changelog_entries_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_changelog_entries_board_fk',
+    }).onDelete('cascade'),
+    check('mocco_changelog_entries_slug_check', sql`${t.slug} ~ '^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$'`),
+    check(
+      'mocco_changelog_entries_state_check',
+      sql`${t.state} IN (${sqlInList(Object.values(ChangelogEntryStates))})`,
+    ),
+    check(
+      'mocco_changelog_entries_tags_check',
+      sql`${t.tags} <@ ARRAY[${sqlInList(Object.values(ChangelogTags))}]::text[]`,
+    ),
+    check(
+      'mocco_changelog_entries_times_check',
+      sql`(${t.publishAt} IS NOT NULL) = (${t.state} = '${sql.raw(ChangelogEntryStates.scheduled)}')
+        AND (${t.publishedAt} IS NOT NULL) = (${t.state} = '${sql.raw(ChangelogEntryStates.published)}')`,
+    ),
+  ],
+);
+
+/** A post a changelog entry announces. The post and the entry are on the same board
+ * (ChangelogService checks it); deleting either removes the link. */
+export const changelogEntryPosts = pgTable(
+  'mocco_changelog_entry_posts',
+  {
+    entryId: uuid('entry_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    workspaceId: uuid('workspace_id').notNull(),
+    // The order the entry lists its posts in.
+    position: integer().notNull(),
+  },
+  t => [
+    primaryKey({ columns: [t.entryId, t.postId], name: 'mocco_changelog_entry_posts_pk' }),
+    index('mocco_changelog_entry_posts_post_idx').on(t.postId),
+    foreignKey({
+      columns: [t.entryId, t.workspaceId],
+      foreignColumns: [changelogEntries.id, changelogEntries.workspaceId],
+      name: 'mocco_changelog_entry_posts_entry_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_changelog_entry_posts_post_fk',
+    }).onDelete('cascade'),
   ],
 );

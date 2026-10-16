@@ -15,6 +15,9 @@ import { createEventHandlers, pruneEventsSchedule } from '@backend/domain/events
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { BoardService } from '@backend/domain/feedback/BoardService';
+import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
+import { createFeedbackHandlers, feedbackSchedules } from '@backend/domain/feedback/jobs';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createFlagHandlers, flagSchedules } from '@backend/domain/flags/jobs';
 import { ApprovalService } from '@backend/domain/governance/ApprovalService';
@@ -202,6 +205,9 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     ...createOpsHandlers({ canary }),
     ...createStorageHandlers({ storage: deps.storage }),
     ...createFlagHandlers({ governance: flagGovernance, stale: staleFlags }),
+    ...createFeedbackHandlers({
+      changelog: new ChangelogService({ db, audit, boards: new BoardService({ db, audit }), now: deps.now }),
+    }),
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
     }),
@@ -275,6 +281,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
       ...otaMetricsSchedules,
       ...flagSchedules,
       ...statusSchedules,
+      ...feedbackSchedules,
       ...(deps.storage === undefined ? [] : [storageGcSchedule, snapshotSafetySchedule]),
       ...(stage0 === undefined ? [] : [stage0CanarySchedule]),
     ],

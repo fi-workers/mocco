@@ -1,6 +1,7 @@
 // The feedback domain's services over a db (#172, #173, #174). Pure (no instance imports); instance.ts
 // binds the production deps, tests bind pglite.
 import { BoardService } from '@backend/domain/feedback/BoardService';
+import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import { CommentService } from '@backend/domain/feedback/CommentService';
 import { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
 import { MergeService } from '@backend/domain/feedback/MergeService';
@@ -20,6 +21,8 @@ export interface FeedbackDomain {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  /** A board's changelog entries (#176). */
+  feedbackChangelog: ChangelogService;
   /** What /v1/feedback serves (#174). */
   feedbackPublic: PublicBoardService;
   /** Voting by email and the signed mail links (#174); undefined without a link signing key. */
@@ -55,6 +58,7 @@ export function createFeedbackDomain(
     feedbackComments,
     feedbackSubscriptions,
     feedbackMerges: new MergeService({ db, audit: deps.audit, ...now }),
+    feedbackChangelog: new ChangelogService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
     feedbackPublic,
     feedbackEmailVotes:
       deps.links === undefined

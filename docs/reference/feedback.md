@@ -4,7 +4,7 @@ description: How Mocco stores a project's feedback boards — boards, categories
 type: reference
 status: active
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, feedback, boards, posts]
@@ -132,7 +132,7 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 
 ## Audit
 
-`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits. Category and post edits aren't audited.
+`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits. Category and post edits aren't audited. The changelog's audit actions are under [Changelog](#changelog).
 
 ## The feedback router
 
@@ -150,6 +150,25 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 | `subscribers` | A post's current subscribers, oldest first |
 | `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
+
+## Changelog
+
+A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. This slice is the model, the service, the `changelog` router and the publish job; the public page, RSS, `/v1` and the console come next.
+
+**Tables.** `mocco_changelog_entries` (board-scoped through the boards' composite FK, so an entry can't point at another tenant's board; deleting the board deletes its entries): `slug` (unique per board, `CHANGELOG_SLUG_PATTERN`, 1–80 characters), `title`, `body_md`, `tags` (a `text[]` of `new`, `improved`, `fixed`, DB-checked; the design's separate tags table wasn't needed), `state` (`draft`, `scheduled`, `published`), `publish_at` (set exactly while scheduled) and `published_at` (set exactly while published), both held by one CHECK, and `created_by_user_id` (SET NULL). `mocco_changelog_entry_posts` links an entry to the posts it announces, in order (`position`); deleting either side removes the link. The widget's read cursors and the run that drafted an entry (#179) come with their slices.
+
+**ChangelogService** (`domain/feedback/ChangelogService.ts`, `ctx.feedbackChangelog`):
+
+- `create` makes a draft. Without a slug, one comes from the title (`Dark mode is here!` → `dark-mode-is-here`, or the date when nothing ASCII is left), with `-2`, `-3`… added while the board has it; an explicit taken slug is `FeedbackSlugTakenError` (CONFLICT). Posts must be live posts of the entry's board (not another board's, not a merged duplicate), else `ChangelogPostsInvalidError` (BAD_REQUEST); duplicates collapse in order.
+- `update` edits in any state; `postIds` and `tags` replace the lists.
+- `publish` (draft or scheduled → published now), `schedule` (draft or scheduled → scheduled at a time ahead, else `ChangelogPublishAtPastError`, BAD_REQUEST), `unpublish` (published or scheduled → draft) and `delete`. A move the state doesn't allow is `ChangelogEntryStateError` (CONFLICT). Each locks the entry row first.
+- `list` is a board's entries, newest published, scheduled or edited first, optionally in one state.
+
+**Publish job.** `feedback.changelog.publish_due` runs every minute: it takes up to 100 scheduled entries whose `publish_at` has passed (`FOR UPDATE SKIP LOCKED`, so two runs never publish one twice) and publishes each as of its scheduled time.
+
+**Audit.** `feedback.changelog.published` (by the team member, or with no actor from the job), `feedback.changelog.unpublished` (only from published) and `feedback.changelog.deleted`, each with the board, slug and title. Edits and scheduling aren't audited.
+
+**Router.** `changelog.entries`, `entry`, `create`, `update`, `publish`, `schedule` (`publishAt`), `unpublish` and `delete`, behind `productProcedure(Products.feedback)` like the feedback router. A test calls every procedure as a non-member and with another tenant's ids (NOT_FOUND).
 
 ## MCP tools
 

@@ -1,6 +1,6 @@
 import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
-import type { FeedbackPostStatus } from '@mocco/common/feedback';
+import type { ChangelogEntryState, FeedbackPostStatus } from '@mocco/common/feedback';
 
 /** A board the project doesn't have — NOT_FOUND. */
 export class FeedbackBoardNotFoundError extends NotFoundError {
@@ -28,7 +28,7 @@ export class FeedbackPostNotFoundError extends NotFoundError {
 
 /** The project already has a board, or the board a category, with the slug — CONFLICT. */
 export class FeedbackSlugTakenError extends ConflictError {
-  constructor(kind: 'board' | 'category', slug: string, options?: ErrorOptions) {
+  constructor(kind: 'board' | 'category' | 'changelog entry', slug: string, options?: ErrorOptions) {
     super(`A ${kind} with the address "${slug}" already exists`, options);
     this.name = 'FeedbackSlugTakenError';
   }
@@ -104,5 +104,40 @@ export class FeedbackOfficialInternalError extends BadRequestError {
   constructor(options?: ErrorOptions) {
     super('An official response is public, so it cannot be internal', options);
     this.name = 'FeedbackOfficialInternalError';
+  }
+}
+
+/** A changelog entry the project doesn't have — NOT_FOUND. */
+export class ChangelogEntryNotFoundError extends NotFoundError {
+  constructor(entryId: string, options?: ErrorOptions) {
+    super(`Changelog entry ${entryId} was not found`, options);
+    this.name = 'ChangelogEntryNotFoundError';
+  }
+}
+
+/** A change the entry's state doesn't allow (publishing a published entry, unpublishing a
+ * draft) — CONFLICT, and nothing is written. */
+export class ChangelogEntryStateError extends ConflictError {
+  constructor(state: ChangelogEntryState, action: 'publish' | 'schedule' | 'unpublish', options?: ErrorOptions) {
+    const verb = { publish: 'be published', schedule: 'be scheduled', unpublish: 'be unpublished' }[action];
+    super(`A ${state} changelog entry can't ${verb}`, options);
+    this.name = 'ChangelogEntryStateError';
+  }
+}
+
+/** Scheduling an entry for a time that has passed — BAD_REQUEST (publish it instead). */
+export class ChangelogPublishAtPastError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('The publish time has passed; publish the entry now instead', options);
+    this.name = 'ChangelogPublishAtPastError';
+  }
+}
+
+/** An entry announcing a post that isn't a live post of its board (another board's, a merged
+ * duplicate, or missing) — BAD_REQUEST. */
+export class ChangelogPostsInvalidError extends BadRequestError {
+  constructor(postIds: readonly string[], options?: ErrorOptions) {
+    super(`These posts aren't live posts of the entry's board: ${postIds.join(', ')}`, options);
+    this.name = 'ChangelogPostsInvalidError';
   }
 }

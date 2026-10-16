@@ -46,6 +46,18 @@ export class FeedbackPostRepo {
     return row;
   }
 
+  /** Which of these posts are live posts of the board: on it, in the scope, not merged away. */
+  async liveIdsOnBoard(scope: FeedbackScope, boardId: string, ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .select({ id: p.id })
+      .from(p)
+      .where(and(scoped(scope), eq(p.boardId, boardId), inArray(p.id, [...ids]), isNull(p.mergedIntoPostId)));
+    return new Set(rows.map(row => row.id));
+  }
+
   /** The board's post with this number (its public address). */
   async findByNumber(scope: FeedbackScope, boardId: string, number: number): Promise<FeedbackPostRow | undefined> {
     const [row] = await this.db

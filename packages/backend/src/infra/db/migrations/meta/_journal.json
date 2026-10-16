@@ -568,6 +568,13 @@
       "when": 1791288168047,
       "tag": "0080_damp_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792162484363,
+      "tag": "0081_steep_human_torch",
+      "breakpoints": true
     }
   ]
 }

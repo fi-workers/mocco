@@ -101,6 +101,11 @@ export const AuditActions = {
   feedbackPostStatusChanged: 'feedback.post.status_changed',
   /** Staff merged a duplicate feedback post into another; its votes and subscribers moved. */
   feedbackPostMerged: 'feedback.post.merged',
+  /** A changelog entry went public, by a team member or at its scheduled time (no actor). */
+  changelogEntryPublished: 'feedback.changelog.published',
+  /** A published changelog entry was taken back to a draft. */
+  changelogEntryUnpublished: 'feedback.changelog.unpublished',
+  changelogEntryDeleted: 'feedback.changelog.deleted',
   statusPageCreated: 'status.page.created',
   statusPageDeleted: 'status.page.deleted',
   /** An operator set a component's status by hand. */
@@ -232,6 +237,9 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.feedbackBoardDeleted]: 'Feedback board deleted',
   [AuditActions.feedbackPostStatusChanged]: 'Feedback post status changed',
   [AuditActions.feedbackPostMerged]: 'Feedback post merged into another',
+  [AuditActions.changelogEntryPublished]: 'Changelog entry published',
+  [AuditActions.changelogEntryUnpublished]: 'Changelog entry unpublished',
+  [AuditActions.changelogEntryDeleted]: 'Changelog entry deleted',
   [AuditActions.statusPageCreated]: 'Status page created',
   [AuditActions.statusPageDeleted]: 'Status page deleted',
   [AuditActions.statusComponentStatusChanged]: 'Component status set by hand',

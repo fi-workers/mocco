@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -1098,3 +1098,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - No migration.
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-project-setup`
+
+## 2026-10-17 — Feedback changelog: entries, states and the publish job
+
+- Changelog entries per board (draft, scheduled, published; tags; the posts they announce), the `changelog` tRPC
+  router and a one-minute job that publishes scheduled entries. Migration 0081.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/feedback-changelog-core` (issue #176)
