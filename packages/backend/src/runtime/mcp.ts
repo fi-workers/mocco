@@ -46,6 +46,7 @@ export function getMcpHandler(): McpHttpHandler {
       otaReleases: ota.otaUploads,
       otaMetrics: ota.otaMetrics,
       versionPolicies: ota.versionPolicies,
+      otaSetup: { hosting: ota.otaHosting, signing: ota.otaSigning, trustPolicies: ota.otaTrustPolicies },
       projectApps: projects,
       statusPages: status.statusPages,
       statusIncidents: status.statusIncidents,

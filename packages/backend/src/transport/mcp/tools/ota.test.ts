@@ -17,6 +17,7 @@ import { expectOne } from '@backend/infra/db/rows';
 import { members, workspaces } from '@backend/infra/db/schema';
 import { API, createOtaFixture, RUNTIME } from '@backend/transport/ext/v1/testing/ota-fixture';
 import { createMcpHttpHandler } from '@backend/transport/mcp/server';
+import { OtaSetupTools } from '@backend/transport/mcp/tools/ota-setup';
 import { MCP_USER_ID } from '@backend/transport/mcp/tools/runs';
 
 import type { ProjectDomain } from '@backend/domain/project/instance';
@@ -211,7 +212,10 @@ describe('mocco_ota_* (pglite, over HTTP)', () => {
   it('declares every OTA tool read-only', async () => {
     const listed = await rpc(ada, 'tools/list', {});
 
-    const otaTools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_ota_')) ?? [];
+    // The setup changes (`ota-setup.test.ts`) share the prefix; these are the reads.
+    const setupTools = new Set<string>(Object.values(OtaSetupTools));
+    const otaTools =
+      listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_ota_') && !setupTools.has(tool.name)) ?? [];
     expect(new Set(otaTools.map(tool => tool.name))).toEqual(
       new Set([
         'mocco_ota_adoption_get',
