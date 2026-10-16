@@ -10,3 +10,5 @@ packages/frontend/public/
 **/dist/
 # Multi-agent SDD scratch (task briefs/reports) — gitignored, not committed, not a prettier target
 .superpowers/
+# Vendored editorcn block editor (#486): keeps upstream's formatting so updates diff cleanly
+packages/frontend/src/components/block-editor/

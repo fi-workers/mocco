@@ -1089,3 +1089,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - No migration.
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-ota-setup`
+
+## 2026-10-16 — Help center: rich text article editor
+
+- Articles open in a rich editor (editorcn's block editor on Tiptap 3, vendored) that stays Markdown in and out and
+  offers only what Markdown holds; the Markdown + preview mode stays a toggle. A round trip keeps every translation
+  segment, and opening an article saves nothing.
+- Docs touched: `reference/help-center.md`, `customer/help/help-center.md`, `log.md`
+- Source: branch `feat/help-rich-editor` (issue #486)

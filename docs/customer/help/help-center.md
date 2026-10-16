@@ -1,10 +1,10 @@
 ---
 title: Publish a help center
-description: Set up a public help site for a project, write articles in Markdown with a live preview, import from Mintlify, publish, translate into other languages with a glossary, and restore an earlier version — and how readers reach the site.
+description: Set up a public help site for a project, write articles in a rich text editor or in Markdown with a live preview, import from Mintlify, publish, translate into other languages with a glossary, and restore an earlier version — and how readers reach the site.
 type: guide
 status: active
 created: 2026-10-02
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [customer, help-center, guide]
@@ -15,7 +15,7 @@ related:
 
 # Publish a help center
 
-A help center is a public site with your product's help articles. You write them in Mocco in Markdown, see each one as readers will while you type, and publish when it's ready. Readers open the site in a browser, or from a link in your app.
+A help center is a public site with your product's help articles. You write them in Mocco, in a rich text editor or in Markdown, and publish when they're ready. Readers open the site in a browser, or from a link in your app.
 
 ## 1. Turn on the help center
 
@@ -57,7 +57,15 @@ When it's done, Mocco lists anything it couldn't bring over: images missing from
 
 ## 4. Write and publish
 
-The editor has the article's title and its text in Markdown on the left, and the article as readers will see it on the right, updated as you type. You can use headings (`##`), numbered and bulleted lists, **bold**, links, notes (lines starting with `>`) and tables. Links can go to web pages (`https://…`), email addresses (`mailto:…`) or other pages of the site (`/en/articles/…`). Images must be `https://` addresses, or images you add as below.
+The editor opens in **Rich text**: you write the article as readers will see it. Type `/` on an empty line for headings, lists, quotes, code, a divider, an image or a table. Select text to make it bold, italic, struck through, code or a link, or to turn its line into a heading. The handle to the left of a block moves it, and **+** adds a block below.
+
+![Typing / in the rich text editor: the Image item uploads a picture](./images/editor-rich-slash.png)
+
+![Selecting a heading shows the bubble menu: heading level, bold, italic, strikethrough, code and link](./images/editor-rich-bubble.png)
+
+Everything the editor offers is saved as Markdown, so the article reads the same on the site, in its translations and in your app. There's no underline, color or text alignment for that reason.
+
+**Markdown** switches to the text itself on the left, with the article as readers will see it on the right, updated as you type. Use it for anything the rich editor doesn't show, such as raw HTML. Switching back and forth changes nothing on its own: only an edit saves. You can use headings (`##`), numbered and bulleted lists, **bold**, links, notes (lines starting with `>`) and tables. Links can go to web pages (`https://…`), email addresses (`mailto:…`) or other pages of the site (`/en/articles/…`). Images must be `https://` addresses, or images you add as below.
 
 The draft saves itself a couple of seconds after you stop typing. Next to the title you see **Saving…**, then **All changes saved**. If a save fails, it says **Couldn't save** with **Try again**; your text stays in the editor. Saving never touches the site.
 
@@ -71,7 +79,7 @@ The draft saves itself a couple of seconds after you stop typing. Next to the ti
 
 ### Add images
 
-Paste a screenshot into the text, drop an image file on it, or pick files with **Add image**. Each image is uploaded and lands where the cursor is, as `![name](address)`, and shows in the preview at once. PNG, JPEG, WebP and GIF images up to 10 MB can be added; anything else is refused with a message saying why. Images are public once uploaded, like the published site, so don't paste anything you wouldn't publish.
+Paste a screenshot into the text, drop an image file on it, pick files with **Add image**, or choose **Image** from the `/` menu. Each image is uploaded and lands where the cursor is. In **Markdown** it lands as `![name](address)` and shows in the preview at once. PNG, JPEG, WebP and GIF images up to 10 MB can be added; anything else is refused with a message saying why. Images are public once uploaded, like the published site, so don't paste anything you wouldn't publish.
 
 ![Pasting a screenshot into an article: the image's Markdown in the text and the image in the preview](./images/editor-images.png)
 

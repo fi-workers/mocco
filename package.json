@@ -23,6 +23,7 @@
     "lint-react-doctor": "yarn frontend doctor",
     "test": "concurrently \"yarn:test-*\"",
     "test-common": "yarn common test",
+    "test-frontend": "yarn frontend test",
     "test-backend": "yarn backend test",
     "test-cli": "yarn cli test",
     "test-probe": "yarn probe test",

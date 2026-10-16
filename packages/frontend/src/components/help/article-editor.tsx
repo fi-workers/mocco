@@ -1,4 +1,5 @@
-// Writing one help article (#96): title and Markdown side by side with a live preview.
+// Writing one help article (#96): title and body, in the rich editor (#486) or as Markdown side
+// by side with a live preview.
 // The draft saves itself a moment after you stop typing (#208); one editing session is
 // one revision in History, and restoring one makes it the draft again. Publish puts the
 // draft on the public site. Images pasted, dropped or picked are uploaded and referenced
@@ -12,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import DocContent from '@frontend/components/doc-content';
 import { useEditorImages } from '@frontend/components/help/editor-images';
 import HelpfulnessPanel from '@frontend/components/help/helpfulness-panel';
+import RichBodyEditor from '@frontend/components/help/rich-body-editor';
 import TranslationsPanel from '@frontend/components/help/translations-panel';
 import {
   Ago,
@@ -27,6 +29,9 @@ import { helpArticleBlocks } from '@frontend/lib/help-markdown';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
 
+import type { RichBodyEditorHandle } from '@frontend/components/help/rich-body-editor';
+import type { RefObject } from 'react';
+
 /** Nothing but spaces. */
 // eslint-disable-next-line sonarjs/null-dereference -- value is a string, never null
 const isBlank = (value: string) => value.trim() === '';
@@ -37,8 +42,129 @@ interface Props {
   articleId: string;
 }
 
+/** How the body is edited: the rich editor, or Markdown beside a preview. */
+const BodyModes = { rich: 'rich', markdown: 'markdown' } as const;
+type BodyMode = (typeof BodyModes)[keyof typeof BodyModes];
+
 /** How long after the last keystroke the draft saves itself. */
 const AUTOSAVE_DELAY_MS = 2500;
+
+/** Switch between the rich editor and Markdown with a preview (not while images upload). */
+function ModeToggle({
+  mode,
+  disabled,
+  onChange,
+}: {
+  mode: BodyMode;
+  disabled: boolean;
+  onChange: (mode: BodyMode) => void;
+}) {
+  return (
+    <span role="group" aria-label="Editor" className="ml-auto flex rounded-lg border border-border p-0.5">
+      {Object.values(BodyModes).map(value => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={mode === value}
+          disabled={disabled}
+          onClick={() => {
+            onChange(value);
+          }}
+          className={`rounded-md px-2 py-0.5 ${mode === value ? 'bg-muted font-medium text-foreground' : ''}`}>
+          {value === BodyModes.rich ? 'Rich text' : 'Markdown'}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** Images that couldn't be added, one line each, until dismissed. */
+function ImageProblems({ problems, onDismiss }: { problems: readonly string[]; onDismiss: () => void }) {
+  if (problems.length === 0) {
+    return null;
+  }
+  return (
+    <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
+      <ul className="flex-1">
+        {problems.map(problem => (
+          <li key={problem}>{problem}</li>
+        ))}
+      </ul>
+      <Button variant="outline" className="h-7 text-xs" onClick={onDismiss}>
+        Dismiss
+      </Button>
+    </div>
+  );
+}
+
+/** The Markdown textarea beside a live preview; images pasted or dropped upload into it. */
+function MarkdownBody({
+  textareaRef,
+  title,
+  body,
+  setBody,
+  images,
+}: {
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  title: string;
+  body: string;
+  setBody: (body: string) => void;
+  images: ReturnType<typeof useEditorImages>;
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <textarea
+        ref={textareaRef}
+        aria-label="Article (Markdown)"
+        className={`${inputClass} min-h-[28rem] font-mono text-xs leading-6`}
+        value={body}
+        placeholder="Write in Markdown: ## headings, lists, **bold**, [links](https://…), > notes and tables."
+        onChange={event => {
+          setBody(event.target.value);
+        }}
+        onPaste={images.onPaste}
+        onDragOver={images.onDragOver}
+        onDrop={images.onDrop}
+      />
+      <div className="flex min-h-[28rem] flex-col gap-4 rounded-xl border border-border p-5" aria-label="Preview">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <DocContent blocks={helpArticleBlocks(body)} />
+      </div>
+    </div>
+  );
+}
+
+/** Images in whichever editor is showing: their uploads, problems, and adding picked files. */
+function useActiveImages(
+  mode: BodyMode,
+  markdownImages: ReturnType<typeof useEditorImages>,
+  richRef: RefObject<RichBodyEditorHandle | null>,
+) {
+  const [richPending, setRichPending] = useState(0);
+  const [richProblems, setRichProblems] = useState<string[]>([]);
+  if (mode === BodyModes.markdown) {
+    return {
+      setRichPending,
+      setRichProblems,
+      pending: markdownImages.pending,
+      problems: markdownImages.problems,
+      dismiss: markdownImages.dismiss,
+      add: markdownImages.add,
+    };
+  }
+  return {
+    setRichPending,
+    setRichProblems,
+    pending: richPending,
+    problems: richProblems,
+    dismiss: () => {
+      setRichProblems([]);
+    },
+    add: (files: readonly File[]) => {
+      richRef.current?.addImages(files);
+    },
+  };
+}
 
 function Editor({
   workspaceId,
@@ -53,11 +179,15 @@ function Editor({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
   const images = useEditorImages({ workspaceId, projectId, textareaRef, setBody });
-  const uploadingNoun = images.pending === 1 ? 'image' : 'images';
+  const [mode, setMode] = useState<BodyMode>(BodyModes.rich);
+  const richRef = useRef<RichBodyEditorHandle>(null);
+  const active = useActiveImages(mode, images, richRef);
+  const { pending } = active;
+  const uploadingNoun = pending === 1 ? 'image' : 'images';
   const imageHint =
-    images.pending === 0
+    pending === 0
       ? 'Paste or drop PNG, JPEG, WebP or GIF images up to 10 MB.'
-      : `Uploading ${images.pending} ${uploadingNoun}…`;
+      : `Uploading ${pending} ${uploadingNoun}…`;
   const refresh = async () => {
     await utils.help.article.invalidate({ workspaceId, projectId, articleId });
     await utils.help.history.invalidate({ workspaceId, projectId, articleId });
@@ -71,7 +201,7 @@ function Editor({
   // A failed save isn't retried until the text changes again (or Try again).
   const hasFailedOnThisText = save.isError && save.variables.title === title && save.variables.body === body;
   // A placeholder for an uploading image isn't saved; the finished image is.
-  const canAutosave = isChanged && !isBlank(title) && images.pending === 0 && !hasFailedOnThisText;
+  const canAutosave = isChanged && !isBlank(title) && pending === 0 && !hasFailedOnThisText;
 
   useEffect(() => {
     if (!canAutosave || isSaving) {
@@ -145,7 +275,7 @@ function Editor({
         <Button
           className="text-sm"
           pending={publish.isPending}
-          disabled={isBlank(title) || images.pending > 0 || isSaving}
+          disabled={isBlank(title) || pending > 0 || isSaving}
           onClick={() => {
             fireAndForget(saveAndPublish());
           }}>
@@ -159,7 +289,7 @@ function Editor({
         <Button
           variant="outline"
           className="h-7 text-xs"
-          pending={images.pending > 0}
+          pending={pending > 0}
           onClick={() => {
             pickerRef.current?.click();
           }}>
@@ -173,7 +303,7 @@ function Editor({
           hidden
           aria-label="Image files"
           onChange={event => {
-            images.add([...(event.target.files ?? [])]);
+            active.add([...(event.target.files ?? [])]);
             // Picking the same file again should upload it again.
             if (pickerRef.current !== null) {
               pickerRef.current.value = '';
@@ -181,38 +311,22 @@ function Editor({
           }}
         />
         <span role="status">{imageHint}</span>
+        <ModeToggle mode={mode} disabled={pending > 0} onChange={setMode} />
       </div>
-      {images.problems.length > 0 ? (
-        <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
-          <ul className="flex-1">
-            {images.problems.map(problem => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-          <Button variant="outline" className="h-7 text-xs" onClick={images.dismiss}>
-            Dismiss
-          </Button>
-        </div>
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <textarea
-          ref={textareaRef}
-          aria-label="Article (Markdown)"
-          className={`${inputClass} min-h-[28rem] font-mono text-xs leading-6`}
-          value={body}
-          placeholder="Write in Markdown: ## headings, lists, **bold**, [links](https://…), > notes and tables."
-          onChange={event => {
-            setBody(event.target.value);
-          }}
-          onPaste={images.onPaste}
-          onDragOver={images.onDragOver}
-          onDrop={images.onDrop}
+      <ImageProblems problems={active.problems} onDismiss={active.dismiss} />
+      {mode === BodyModes.rich ? (
+        <RichBodyEditor
+          ref={richRef}
+          workspaceId={workspaceId}
+          projectId={projectId}
+          initialMarkdown={body}
+          onChange={setBody}
+          onPendingChange={active.setRichPending}
+          onProblems={active.setRichProblems}
         />
-        <div className="flex min-h-[28rem] flex-col gap-4 rounded-xl border border-border p-5" aria-label="Preview">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <DocContent blocks={helpArticleBlocks(body)} />
-        </div>
-      </div>
+      ) : (
+        <MarkdownBody textareaRef={textareaRef} title={title} body={body} setBody={setBody} images={images} />
+      )}
     </div>
   );
 }
