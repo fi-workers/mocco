@@ -29,6 +29,9 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
  * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
  * an agent move a feedback post to another status as its person, stepped up for the same way.
+ * `ota:write` lets an agent set up OTA hosting as its person — host an app, add an open
+ * channel, register a signing certificate and trust a repository to publish — stepped up for
+ * the same way. It promotes, rolls out and rolls back nothing.
  * The keys are camel-cased because the values follow OAuth's `resource:action` form.
  */
 export const McpScopes = {
@@ -36,6 +39,7 @@ export const McpScopes = {
   statusWrite: 'status:write',
   messengerWrite: 'messenger:write',
   feedbackWrite: 'feedback:write',
+  otaWrite: 'ota:write',
 } as const;
 export type McpScope = (typeof McpScopes)[keyof typeof McpScopes];
 
