@@ -269,7 +269,7 @@ In-process for the messenger AI (no HTTP): `helpSearchService.search({ siteId, l
 
 ### MCP tools for translation review
 
-Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translation review (#213) ships these tools, thin adapters over `HelpTranslationService` behind `ProjectScope` with `Products.helpcenter`. The two reads shipped with the translations dashboard; the two changes come later.
+Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translation review (#213) ships these tools, thin adapters over `HelpTranslationService` behind `ProjectScope` with `Products.helpcenter`. The two reads shipped with the translations dashboard; the changes shipped in #480.
 
 | Tool | Kind | Over |
 | --- | --- | --- |
@@ -278,9 +278,11 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translatio
 | `mocco_help_translation_accept` | Change: accept the machine draft by its revision id | `acceptProposal` |
 | `mocco_help_translation_retranslate` | Change: ask the machine again; on a reviewed language the confirmation names that it replaces a person's text | `retranslate` |
 | `mocco_help_glossary_list` | Read: the glossary's terms, rules and translations, filtered by text, rule and language, paged, concise or detailed | `HelpGlossaryService.list` (#214, shipped with the glossary) |
-| `mocco_help_glossary_set` | Change: add, change or remove one term; the confirmation names the articles and languages it re-translates | `HelpGlossaryService.addTerm` / `updateTerm` / `removeTerm` |
+| `mocco_help_glossary_set` | Change: add, change or remove one term; the confirmation names the term before and after | `HelpGlossaryService.addTerm` / `updateTerm` / `removeTerm` |
 
 The two changing tools need a person's token, their own `help:write` scope, the workspace's opt-in and the confirmation round trip (`openDecision` / `confirmThenApply` in `transport/mcp/tools/deciding.ts`, as `mocco_feedback_post_set_status` uses them). The confirmation is bound to what the reviewer was shown: the proposal's revision id for accept, the translation's state for retranslate, so a draft or review that lands in between makes the answer no longer match. Saving a person's text stays in the console: an agent's text is a machine's, not a review.
+
+As built (#480, `tools/help-write.ts`): the three changes share `help:write`. Accept is bound to the draft's revision id and the published source revision; retranslate to the language's state and its current text revision, and passes the console's `confirm` only when the confirmed state was reviewed; glossary set to the term's id and value (or its absence). The glossary confirmation names the term before and after rather than the articles it re-translates: working those out would be a read the console's own save does not make, and the glossary page doesn't show it either. Details in the [reference](../reference/help-center.md#mcp-tools).
 
 Post-v1 management API (workspace API key): `PUT /v1/help/articles/{externalKey}` (upsert from Markdown), `POST /v1/help/import` (Zendesk/Intercom export), enabling a `mocco help sync ./docs` CLI or GitHub Action for docs-as-code.
 

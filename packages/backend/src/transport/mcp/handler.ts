@@ -14,9 +14,10 @@
 // execute, not on a header that merely names it. `mocco_monitors_check` does the same for
 // `status:write`, `mocco_messenger_reply` and `mocco_messenger_assign` for `messenger:write`,
 // and `mocco_feedback_post_set_status`, `mocco_feedback_comment_create`, `mocco_feedback_post_vote`
-// and `mocco_feedback_post_merge` for `feedback:write`, the OTA setup changes
-// (`tools/ota-setup.ts`) for `ota:write`, and the project setup changes (`tools/projects.ts`)
-// for `projects:write`.
+// and `mocco_feedback_post_merge` for `feedback:write`, `mocco_help_translation_accept`,
+// `mocco_help_translation_retranslate` and `mocco_help_glossary_set` for `help:write`, the OTA
+// setup changes (`tools/ota-setup.ts`) for `ota:write`, and the project setup changes
+// (`tools/projects.ts`) for `projects:write`.
 import { requireMcpAuth } from '@better-auth/mcp';
 import { mcpSignInScopes } from '@mocco/common/mcp';
 

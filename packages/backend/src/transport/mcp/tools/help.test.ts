@@ -55,13 +55,19 @@ function bodyOf(answer: RpcAnswer): Record<string, unknown> {
 
 type Row = Record<string, unknown>;
 
-const HELP_TOOLS = [
+const HELP_TOOLS = new Set([
   'mocco_help_articles_get',
   'mocco_help_articles_search',
   'mocco_help_glossary_list',
   'mocco_help_translation_get',
   'mocco_help_translations_list',
-];
+]);
+
+const HELP_CHANGE_TOOLS = new Set([
+  'mocco_help_glossary_set',
+  'mocco_help_translation_accept',
+  'mocco_help_translation_retranslate',
+]);
 
 describe('mocco_help_articles_* (pglite, over HTTP)', () => {
   let t: TestDb;
@@ -239,12 +245,16 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
     await t.close();
   });
 
-  it('lists every help tool as read-only', async () => {
+  it('lists every help read tool as read-only, and the changes as changes', async () => {
     const listed = await rpc(ada, 'tools/list', {});
     const tools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_help_')) ?? [];
+    const reads = tools.filter(tool => HELP_TOOLS.has(tool.name));
+    const changes = tools.filter(tool => HELP_CHANGE_TOOLS.has(tool.name));
 
-    expect(new Set(tools.map(tool => tool.name))).toEqual(new Set(HELP_TOOLS));
-    expect(tools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    expect([reads.length, changes.length]).toEqual([HELP_TOOLS.size, HELP_CHANGE_TOOLS.size]);
+    expect(reads.length + changes.length).toBe(tools.length);
+    expect(reads.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    expect(changes.map(tool => tool.annotations?.readOnlyHint)).toEqual([false, false, false]);
   });
 
   describe('mocco_help_articles_search', () => {
