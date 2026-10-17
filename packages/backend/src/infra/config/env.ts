@@ -92,8 +92,12 @@ const schema = z.object({
   // search builds article URLs from them.
   HELP_SITES_DOMAIN: z.string().min(1).optional(),
   HELP_CUSTOM_DOMAINS: z.string().min(1).optional(),
-  // Vercel AI Gateway key for help center translation; unset, help centers serve the source language.
+  // Vercel AI Gateway key for help center translation and feedback duplicate embeddings; unset, help
+  // centers serve the source language and duplicates are matched by title words only.
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),
+  // The model feedback posts are embedded with for duplicate detection (an AI Gateway embedding
+  // model id); default openai/text-embedding-3-small.
+  FEEDBACK_EMBEDDING_MODEL: z.string().min(1).optional(),
   // The model help centers translate with (an AI Gateway model id); default anthropic/claude-sonnet-5.
   HELP_TRANSLATION_MODEL: z.string().min(1).optional(),
   // Characters a workspace may send to the translator per month (UTC); past it, languages wait as pending. Unset: unlimited.

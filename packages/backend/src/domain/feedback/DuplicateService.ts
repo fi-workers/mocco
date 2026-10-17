@@ -3,17 +3,23 @@
 // title, and the close ones become open pairs in the board's queue ("#7 may be the same as #3").
 // Staff merge a pair (MergeService; a merged post leaves every pair it is in) or dismiss it, and a
 // dismissed pair is never suggested again. Matching is by shared title words, the same words the
-// public form's "similar posts" uses; embeddings are a later slice of #181.
+// public form's "similar posts" uses, and, with an embedder configured, by meaning: each sweep first
+// embeds the posts with no vector for their current words (within a budget, the ones about to be
+// compared first), then pairs a post with the older posts whose vectors are close to its own.
+import { createHash } from 'node:crypto';
+
 import { AuditActions } from '@mocco/common/audit';
 import { FeedbackDuplicateMethods } from '@mocco/common/feedback';
 
 import { FeedbackDuplicateNotFoundError } from '@backend/domain/feedback/errors';
 import { wordsOf } from '@backend/domain/feedback/PublicBoardService';
 import { FeedbackDuplicateCandidateRepo } from '@backend/domain/feedback/repos/duplicate-candidate.repo';
+import { FeedbackPostEmbeddingRepo } from '@backend/domain/feedback/repos/post-embedding.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { Embedder } from '@backend/domain/feedback/embed/Embedder';
 import type { FeedbackDuplicatePair } from '@backend/domain/feedback/repos/duplicate-candidate.repo';
 import type { FeedbackPostRow } from '@backend/domain/feedback/repos/post.repo';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
@@ -30,6 +36,14 @@ export const DuplicatePolicy = {
   minSharedWords: 2,
   /** ...and the share of the newer title's words they must cover. */
   minScore: 0.5,
+  /** Posts one sweep embeds (one call to the embedder). */
+  embedPerRun: 100,
+  /** Characters of a post (title, a blank line, body) sent to the embedder. */
+  embedMaxChars: 4000,
+  /** The cosine similarity of two posts' vectors that makes them a pair. */
+  minEmbeddingScore: 0.8,
+  /** Time one sweep spends comparing before leaving the rest to the next one. */
+  sweepBudgetMs: 20_000,
 } as const;
 
 /** Words too common in requests to say two titles are about the same thing. */
@@ -100,10 +114,29 @@ export function titleOverlap(words: readonly string[], otherTitle: string): { sh
   return { shared, score: shared / words.length };
 }
 
+/** The words a post's vector is made from. */
+const contentOf = (post: Pick<FeedbackPostRow, 'title' | 'body'>) => `${post.title}\n\n${post.body}`;
+
+/** What `content_hash` holds for a post: changed words make its vector stale. The repo hashes the
+ * same text in SQL (sha256 of title, a blank line and body). */
+export const contentHashOf = (post: Pick<FeedbackPostRow, 'title' | 'body'>): string =>
+  createHash('sha256').update(contentOf(post), 'utf8').digest('hex');
+
+/** `vector` scaled to length 1 (so cosine similarity is a dot product); all zeros stays as it is. */
+export function unitLength(vector: readonly number[]): number[] {
+  const length = Math.hypot(...vector);
+  return length === 0 ? [...vector] : vector.map(value => value / length);
+}
+
+/** A pair as the sweep inserts it. */
+type PairRow = Parameters<FeedbackDuplicateCandidateRepo['insertMany']>[0][number];
+
 export interface DuplicateServiceDeps {
   db: Db;
   audit: Pick<AuditService, 'record'>;
   boards: Pick<BoardService, 'requireBoard'>;
+  /** Matches posts by meaning too; without one, by title words only. */
+  embedder?: Embedder;
   now?: () => Date;
 }
 
@@ -114,7 +147,71 @@ export class DuplicateService {
     return this.deps.now?.() ?? new Date();
   }
 
-  private async pairsFor(post: FeedbackPostRow) {
+  /** Embed the posts with no vector for their current words from the embedder's model, up to the
+   * run's budget; an embedder that fails leaves them for the next sweep. */
+  private async embedDue(embedder: Embedder): Promise<void> {
+    const repo = new FeedbackPostEmbeddingRepo(this.deps.db);
+    const due = await repo.due(embedder.model, DuplicatePolicy.embedPerRun);
+    if (due.length === 0) {
+      return;
+    }
+    try {
+      const { model, dims, vectors } = await embedder.embed(
+        due.map(post => contentOf(post).slice(0, DuplicatePolicy.embedMaxChars)),
+      );
+      const at = this.now();
+      await repo.upsertMany(
+        due.flatMap((post, index) => {
+          const vector = vectors[index];
+          return vector === undefined || vector.length !== dims || dims === 0
+            ? []
+            : [
+                {
+                  postId: post.id,
+                  workspaceId: post.workspaceId,
+                  model,
+                  dims,
+                  embedding: unitLength(vector),
+                  contentHash: contentHashOf(post),
+                  createdAt: at,
+                },
+              ];
+        }),
+      );
+    } catch (error) {
+      // Title words still pair this sweep's posts; the vectors come with a later sweep.
+      console.warn(`[feedback] embedding ${String(due.length)} posts failed: ${String(error)}`);
+    }
+  }
+
+  private async pairsFor(post: FeedbackPostRow): Promise<PairRow[]> {
+    const byWords = await this.wordPairsFor(post);
+    const { embedder } = this.deps;
+    if (embedder === undefined || byWords.length >= DuplicatePolicy.pairsPerPost) {
+      return byWords;
+    }
+    // A pair the title words found keeps their score; meaning adds the ones they missed.
+    const found = new Set(byWords.map(pair => pair.candidatePostId));
+    const near = await new FeedbackPostEmbeddingRepo(this.deps.db).nearestOlder(post, embedder.model, {
+      minScore: DuplicatePolicy.minEmbeddingScore,
+      limit: DuplicatePolicy.pairsPerPost,
+    });
+    const byMeaning = near
+      .filter(match => !found.has(match.post.id))
+      .slice(0, DuplicatePolicy.pairsPerPost - byWords.length)
+      .map(match => ({
+        workspaceId: post.workspaceId,
+        projectId: post.projectId,
+        boardId: post.boardId,
+        postId: post.id,
+        candidatePostId: match.post.id,
+        score: Math.min(1, Math.max(0, match.score)),
+        method: FeedbackDuplicateMethods.embedding,
+      }));
+    return [...byWords, ...byMeaning];
+  }
+
+  private async wordPairsFor(post: FeedbackPostRow): Promise<PairRow[]> {
     const words = keyWordsOf(post.title);
     if (words.length < DuplicatePolicy.minSharedWords) {
       return [];
@@ -142,23 +239,32 @@ export class DuplicateService {
       }));
   }
 
-  /** Compare the posts not compared yet with their boards' older posts; returns how many. */
+  /** Compare the posts not compared yet with their boards' older posts, within the sweep's time
+   * budget; returns how many. */
   async detectDue(): Promise<number> {
+    if (this.deps.embedder !== undefined) {
+      await this.embedDue(this.deps.embedder);
+    }
     const repo = new FeedbackDuplicateCandidateRepo(this.deps.db);
     const due = await repo.unchecked(DuplicatePolicy.postsPerRun);
+    const started = this.now().getTime();
+    const checked: string[] = [];
     // One post at a time, so each sees the pairs of the ones before it settled.
     await due.reduce(async (previous, post) => {
       await previous;
+      // Comparing by meaning scans the board's vectors: past the budget, the rest wait for the
+      // next sweep (which always gets through one).
+      if (checked.length > 0 && this.now().getTime() - started > DuplicatePolicy.sweepBudgetMs) {
+        return;
+      }
       // A merged post is already someone's duplicate: nothing to suggest.
       if (post.mergedIntoPostId === null) {
         await repo.insertMany(await this.pairsFor(post));
       }
+      checked.push(post.id);
     }, Promise.resolve());
-    await repo.markChecked(
-      due.map(post => post.id),
-      this.now(),
-    );
-    return due.length;
+    await repo.markChecked(checked, this.now());
+    return checked.length;
   }
 
   /** A board's open pairs, the newest first, with both posts; another project's board is

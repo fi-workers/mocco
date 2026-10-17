@@ -19,6 +19,7 @@ import { BoardService } from '@backend/domain/feedback/BoardService';
 import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import { feedbackUnsubscribeUrl } from '@backend/domain/feedback/EmailVoteService';
+import { embedderFromEnv } from '@backend/domain/feedback/embed/ai-gateway';
 import { createFeedbackHandlers, feedbackSchedules } from '@backend/domain/feedback/jobs';
 import { feedbackLinkDepsFromEnv } from '@backend/domain/feedback/link-config';
 import { StatusMailService } from '@backend/domain/feedback/StatusMailService';
@@ -84,6 +85,7 @@ import { getEnv } from '@backend/infra/config/env';
 import { getSecretBox } from '@backend/infra/crypto/instance';
 import { getDb } from '@backend/infra/db/client';
 
+import type { Embedder } from '@backend/domain/feedback/embed/Embedder';
 import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
@@ -125,6 +127,8 @@ export interface JobRunnerRuntimeDeps {
   statusSubscribers?: SubscriberEnvDeps;
   /** Feedback mail links' signing key and the email sender; without it no status mail goes out. */
   feedbackLinks?: FeedbackLinkEnvDeps;
+  /** Embeds feedback posts so the duplicate sweep matches by meaning; undefined without an LLM configured. */
+  feedbackEmbedder?: Embedder;
   /** Where a help site is served (its custom domain or subdomain), for links in feedback mail. */
   helpSiteOriginOf?: (slug: string) => string | null;
   /** The stage0 canary and heartbeat (relay design §11); undefined (off) without
@@ -237,7 +241,13 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         },
         now: deps.now,
       }),
-      duplicates: new DuplicateService({ db, audit, boards: new BoardService({ db, audit }), now: deps.now }),
+      duplicates: new DuplicateService({
+        db,
+        audit,
+        boards: new BoardService({ db, audit }),
+        ...(deps.feedbackEmbedder !== undefined && { embedder: deps.feedbackEmbedder }),
+        now: deps.now,
+      }),
     }),
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
@@ -349,6 +359,7 @@ export function getJobRunner(): JobRunner {
       statusRawRetentionDays: env.STATUS_RAW_RETENTION_DAYS,
       statusSubscribers: subscriberDepsFromEnv(env),
       feedbackLinks: feedbackLinkDepsFromEnv(env),
+      feedbackEmbedder: embedderFromEnv(env),
       helpSiteOriginOf: slug => helpSiteOrigin(slug, env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.
       stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),

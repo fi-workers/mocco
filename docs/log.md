@@ -1173,3 +1173,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/messenger.md`, `reference/feature-map.md`,
   `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-intake` (issue #182)
+
+## 2026-10-17 — Feedback: duplicates by meaning
+
+- With `AI_GATEWAY_API_KEY` set, the duplicate sweep embeds posts (100 a minute, `FEEDBACK_EMBEDDING_MODEL`, default
+  `openai/text-embedding-3-small`) and also pairs posts whose vectors are close (method `embedding`, migration 0086,
+  `mocco_feedback_post_embeddings` as `real[]`). Without a key nothing changes. The public similar-posts search is
+  still by words.
+- Docs touched: `reference/feedback.md`, `reference/env.md`, `reference/feature-map.md`,
+  `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-embeddings` (issue #181)

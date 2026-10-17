@@ -245,8 +245,8 @@ export const FEEDBACK_NOTIFIED_STATUSES = [
 export const FeedbackDuplicateStates = { open: 'open', dismissed: 'dismissed' } as const;
 export type FeedbackDuplicateState = (typeof FeedbackDuplicateStates)[keyof typeof FeedbackDuplicateStates];
 
-/** How a pair was found: shared title words (embeddings come later, #181). */
-export const FeedbackDuplicateMethods = { fulltext: 'fulltext' } as const;
+/** How a pair was found: shared title words, or close meaning by the posts' embeddings (#181). */
+export const FeedbackDuplicateMethods = { fulltext: 'fulltext', embedding: 'embedding' } as const;
 export type FeedbackDuplicateMethod = (typeof FeedbackDuplicateMethods)[keyof typeof FeedbackDuplicateMethods];
 
 // ─── Intake (#182) ───────────────────────────────────────────────────────────
