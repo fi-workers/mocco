@@ -10,7 +10,8 @@
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
 // here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) and the
 // status page changes (`tools/status-incidents.ts`, `tools/status-maintenance.ts`,
-// `tools/status-pages.ts`) have the same locks under their own `status:write` scope, and `mocco_messenger_reply` and
+// `tools/status-pages.ts`, `tools/status-page-structure.ts`, `tools/status-monitor-changes.ts`,
+// `tools/status-gate-maintenance.ts`) have the same locks under their own `status:write` scope, and `mocco_messenger_reply` and
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
@@ -41,9 +42,12 @@ import { registerOtaSetupTools, type OtaSetupToolDeps } from '@backend/transport
 import { registerProjectTools, type ProjectToolDeps } from '@backend/transport/mcp/tools/projects';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
+import { registerStatusGateMaintenanceTools } from '@backend/transport/mcp/tools/status-gate-maintenance';
 import { registerStatusIncidentTools } from '@backend/transport/mcp/tools/status-incidents';
 import { registerStatusMaintenanceTools } from '@backend/transport/mcp/tools/status-maintenance';
+import { registerStatusMonitorChangeTools } from '@backend/transport/mcp/tools/status-monitor-changes';
 import { registerStatusMonitorTools, type StatusMonitorToolDeps } from '@backend/transport/mcp/tools/status-monitors';
+import { registerStatusStructureTools } from '@backend/transport/mcp/tools/status-page-structure';
 import { registerStatusPageTools } from '@backend/transport/mcp/tools/status-pages';
 
 import type { StatusWriteToolDeps } from '@backend/transport/mcp/tools/status-write';
@@ -92,6 +96,9 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerStatusIncidentTools(server, deps);
   registerStatusMaintenanceTools(server, deps);
   registerStatusPageTools(server, deps);
+  registerStatusStructureTools(server, deps);
+  registerStatusMonitorChangeTools(server, deps);
+  registerStatusGateMaintenanceTools(server, deps);
   registerHelpTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);

@@ -1183,16 +1183,25 @@ different change:
 | `mocco_status_maintenance_schedule` | `MaintenanceService.schedule` | The page, `PUBLIC`, the title, start and end in UTC, the components by name and the description verbatim; bound to the page's newest window |
 | `mocco_status_maintenance_cancel` | `MaintenanceService.cancel` | The window, its status and times, and that one in progress ends now; bound to its status and times |
 | `mocco_status_component_status_set` | `StatusPageService.setComponentStatus` | The status set by hand now and after, and what the page shows now; bound to the status set by hand |
+| `mocco_status_page_create` · `…_page_update` | `StatusPageService.createPage` · `updatePage` | The title and address, `PUBLIC`, and that links to an old address stop working; an update is bound to the title and address now (a taken address is the service's `StatusPageSlugTakenError`) |
+| `mocco_status_group_create` · `…_update` · `…_delete` | `createGroup` · `updateGroup` · `deleteGroup` | The page, the name and position (only what changes), and for a delete the components that stay ungrouped; bound to the page's groups, the group as it is, or its members |
+| `mocco_status_component_create` · `…_update` · `…_delete` | `createComponent` · `updateComponent` · `deleteComponent` | The page, name, description and group (an update names only what changes; a group of another page is refused), and for a delete that it leaves every incident, window and monitor that names it and loses its uptime history; bound to the page's components or the component as it is |
+| `mocco_status_monitor_create` | `MonitorService.create` | HTTP and TCP only: the target's host and port (never the URL's path, query or credentials), method, interval, confirmations, quorum, locations and components by name, and the incident policy, `PUBLIC` for `publish`; bound to the project's monitors |
+| `mocco_status_monitor_update` | `MonitorService.update` | Only the settings that change, before → after; the check is kept unless a new one is given, so it is never read out; bound to the monitor's `updatedAt` |
+| `mocco_status_monitor_pause` · `…_resume` · `…_delete` | `pause` · `resume` · `delete` | The monitor, its target and state, and for a delete that its history goes and its incidents stay; bound to its state or `updatedAt` (pausing a paused one answers `changed: false`) |
+| `mocco_status_gate_maintenance_set` · `…_delete` | `MaintenanceService.setGateMaintenance` · `deleteGateMaintenance` | The gate, page, title, minutes and components, `PUBLIC` (a later resume announces it), and the setting it replaces; bound to that setting |
 
 What is refused before anything is asked: a component of another page, a status move the lifecycle doesn't allow
 (naming the moves it does), an update to a resolved incident, a window that ends before it starts or is already over,
 and a run that isn't linked. A change that is already true (the same components, postmortem, link or status) answers
 `changed: false` without asking. `mocco_status_run_incidents_list` is the read the run page has
-(`CorrelationService.incidentsForRun`, behind membership and the status product): the incidents a run is linked to.
+(`CorrelationService.incidentsForRun`, behind membership and the status product): the incidents a run is linked to,
+and `mocco_status_gate_maintenances_search` lists a page's gates that announce maintenance
+(`MaintenanceService.listGateMaintenances`).
 
 What stays in the console, and why: deleting a page (it deletes every incident, window and component on it with no
 undo); creating and rotating a location's token and a heartbeat's ping token (a credential shown once, which must not
 pass through an agent's transcript; MCP never reads a token out), and disabling a location (it stops every monitor
-there across the workspace's projects, and needs an owner or admin); and, for now, the page, group and component
-structure, monitors' settings, pause, resume and delete, and the gates that announce maintenance. See
+there across the workspace's projects, and needs an owner or admin). Creating a heartbeat is refused for the same
+reason as its token (the console shows the ping URL once); changing a heartbeat's period and grace is allowed. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).

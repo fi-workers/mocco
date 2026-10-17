@@ -1141,3 +1141,16 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/status.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
   `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/mcp-status-coverage`
+
+## 2026-10-17 — MCP: setting up a status page from an agent
+
+- The rest of the status console gets its MCP tools (ADR 0025): pages (create, change title or address), component
+  groups and components (add, change, delete), monitors (create HTTP or TCP, change settings, pause, resume, delete)
+  and the gates that announce maintenance (list, set, remove), behind `status:write`, the workspace's opt-in and a
+  confirmation bound to the state shown. A monitor's check is never read back: confirmations name the host only, and
+  an update keeps the check unless a new one is given. Creating a heartbeat stays in the console (its ping URL is a
+  credential shown once).
+- No migration.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-status-config`

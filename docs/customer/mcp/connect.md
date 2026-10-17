@@ -65,6 +65,7 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_status_monitors_get` | One monitor: its latest state changes and why, its latest rounds, and the incident it opened that is still open |
 | `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
 | `mocco_status_run_incidents_list` | Which status incidents a run is linked to, across your projects |
+| `mocco_status_gate_maintenances_search` | Which pipeline gates announce maintenance on a status page, and what each announces |
 | `mocco_help_articles_search` | Which published help center articles match a question (every word, or any word for a customer's message), or every article in order, in a language where translated |
 | `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, the languages it is published in, and how readers answered "Was this helpful?" in the last 30 days (with their newest comments when detailed) |
 | `mocco_help_translations_list` | How far the help center is translated: per language, how many articles are reviewed, machine translated, out of date, failed or not translated, and which articles need attention (or are stale, or failed, or all), with each one's status per language |
@@ -157,6 +158,12 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_status_incident_runs_correlate` | Recomputes the deploys Mocco suggests for an incident; the ones people linked stay |
 | `mocco_status_maintenance_schedule` / `_cancel` | Schedules a maintenance window, or cancels one (one in progress ends now) |
 | `mocco_status_component_status_set` | Sets the status a component reports by hand |
+| `mocco_status_page_create` / `_page_update` | Creates a status page, or changes its title or address |
+| `mocco_status_group_create` / `_update` / `_delete` | Adds, renames or moves, and deletes a component group (its components stay, ungrouped) |
+| `mocco_status_component_create` / `_update` / `_delete` | Adds, changes and deletes a component |
+| `mocco_status_monitor_create` / `_update` | Creates an HTTP or TCP monitor, or changes a monitor's settings without ever reading its URL back |
+| `mocco_status_monitor_pause` / `_resume` / `_delete` | Pauses, resumes or deletes a monitor |
+| `mocco_status_gate_maintenance_set` / `_delete` | Makes a pipeline gate announce maintenance on a page, or stops it |
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
 | `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
@@ -201,8 +208,7 @@ let an agent do what the status page's incident and maintenance screens do: open
 post its updates up to resolved, change the components it affects, set its postmortem, link the
 deploy that caused or fixed it, schedule and cancel maintenance, and set a component's status.
 The permission is asked for the first time one of them is used: **Change your status pages as
-you: open and update incidents, schedule maintenance, set component statuses and run your
-monitors' checks**. Any member of the project may use them, as in the console, and each is
+you: incidents, maintenance, components and monitors, and run your monitors' checks**. Any member of the project may use them, as in the console, and each is
 recorded in the audit trail naming you.
 
 What your agent writes on a published incident is what your customers read, so your client
@@ -217,9 +223,14 @@ are asked again with what is there now, and answering the same confirmation twic
 things once. A move the incident can't make (back to investigating, or anything after resolved)
 is refused before you are asked, with the moves it can make.
 
+The same permission covers setting a page up: pages, component groups and components, monitors
+and the gates that announce maintenance. A monitor's URL can hold credentials or a token, so your
+agent never reads it back: confirmations and answers name the host only, and changing a monitor's
+settings keeps its check unless a new one is given. 
+
 Some things stay in the console on purpose: deleting a status page (it deletes everything on it,
-with no undo), issuing or rotating a location's token or a heartbeat's ping URL (a credential is
-shown once, and never to an agent), and disabling a location.
+with no undo), creating a heartbeat and issuing or rotating a location's token or a heartbeat's
+ping URL (a credential is shown once, and never to an agent), and disabling a location.
 
 **Replying and assigning in the messenger.** `mocco_messenger_reply` sends what the inbox's
 **Send** does: your user reads it in the app, and gets a push notification if they turned them

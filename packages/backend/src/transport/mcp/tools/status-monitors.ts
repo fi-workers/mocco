@@ -1,7 +1,8 @@
 // `mocco_status_monitors_*` and `mocco_status_locations_search` — which checks a project
 // runs, what state each is in and why it changed, and where the probes run — and
 // `mocco_monitors_check`, which asks for a monitor's next round now. Creating, editing,
-// pausing and resuming a monitor, and issuing a location's token, stay in the console.
+// pausing, resuming and deleting a monitor are in `status-monitor-changes.ts`; issuing a
+// location's token stays in the console.
 //
 // Thin adapters (ADR 0025) over the services the console's `status` router reads through:
 // `MonitorService.list` / `get` for a project (behind `ProjectScope` with `Products.status`,
