@@ -33,19 +33,24 @@ runs:
   using: composite
   steps:
     # `source` builds the CLI from the same commit as this action, so the two can't drift.
-    - name: Check out Mocco
-      if: inputs.cli-version == 'source'
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      with:
-        repository: ${{ github.action_repository || 'fi-workers/mocco' }}
-        ref: ${{ github.action_ref || 'main' }}
-        path: .mocco-cli
-
+    # The runner has already downloaded this repository at that commit to run the action,
+    # so the CLI is built from that copy (`github.action_path` is `actions/ota-publish`
+    # inside it) rather than checked out again. Two things that looked equivalent were not:
+    # `github.action_repository` / `action_ref` in a `uses:` step's `with:` name *that*
+    # step's action (actions/checkout itself), and a checkout inside the caller's workspace
+    # is refused by Yarn as an undeclared workspace of the caller's project. The copy goes to
+    # RUNNER_TEMP, outside both, and leaves the runner's action cache untouched.
     - name: Build the CLI
       if: inputs.cli-version == 'source'
       shell: bash
-      working-directory: .mocco-cli
+      env:
+        CLI_SOURCE: ${{ github.action_path }}/../..
+        CLI_CHECKOUT: ${{ runner.temp }}/mocco-cli
       run: |
+        rm -rf "$CLI_CHECKOUT"
+        mkdir -p "$CLI_CHECKOUT"
+        (cd "$CLI_SOURCE" && tar --exclude=node_modules -cf - .) | (cd "$CLI_CHECKOUT" && tar -xf -)
+        cd "$CLI_CHECKOUT"
         corepack enable
         yarn install --immutable
         yarn cli build
@@ -59,7 +64,7 @@ runs:
         INPUT_PLATFORM: ${{ inputs.platform }}
         INPUT_MESSAGE: ${{ inputs.message }}
         CLI_VERSION: ${{ inputs.cli-version }}
-        CLI_CHECKOUT: ${{ github.workspace }}/.mocco-cli
+        CLI_CHECKOUT: ${{ runner.temp }}/mocco-cli
       run: |
         args=(publish --oidc --platform "$INPUT_PLATFORM")
         if [ -n "$INPUT_APP_ID" ]; then args+=(--app-id "$INPUT_APP_ID"); fi
