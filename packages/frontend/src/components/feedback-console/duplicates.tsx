@@ -1,7 +1,8 @@
 // A board's suggested duplicates in the console (#181): pairs of posts whose titles share most of
-// their words, found by a sweep a minute or so after a post arrives. Each pair is merged (the
+// their words, or (with an embedding model configured) that mean much the same, found by a sweep a minute or so after a post arrives. Each pair is merged (the
 // newer post into the older one, as on the post page) or set aside as not the same request, and
 // a pair set aside isn't suggested again. The board is in the address, like the inbox's filters.
+import { FeedbackDuplicateMethods } from '@mocco/common/feedback';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
@@ -73,7 +74,9 @@ function PairRow({ workspaceId, projectId, pair }: Props & { pair: Pair }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">
-          {Math.round(pair.score * 100)}% of #{post.number}&apos;s title words are in #{original.number}&apos;s
+          {pair.method === FeedbackDuplicateMethods.embedding
+            ? `Close in meaning (${String(Math.round(pair.score * 100))}% alike)`
+            : `${String(Math.round(pair.score * 100))}% of #${String(post.number)}'s title words are in #${String(original.number)}'s`}
         </span>
         <Button
           className="ml-auto text-sm"
@@ -161,9 +164,9 @@ export default function FeedbackDuplicates({ workspaceId, projectId }: Props) {
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        New posts are compared with the board&apos;s older ones by the words in their titles. Merging moves the newer
-        post&apos;s votes and followers to the older one and closes it; a pair you mark as not the same isn&apos;t
-        suggested again.
+        New posts are compared with the board&apos;s older ones by the words in their titles and, where an embedding
+        model is set up, by meaning. Merging moves the newer post&apos;s votes and followers to the older one and closes
+        it; a pair you mark as not the same isn&apos;t suggested again.
       </p>
       {pairsQuery.isPending ? <Spinner /> : null}
       {pairsQuery.error ? <p className="text-sm text-destructive">{errorMessage(pairsQuery.error)}</p> : null}

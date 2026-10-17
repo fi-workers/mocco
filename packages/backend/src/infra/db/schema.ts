@@ -4791,6 +4791,33 @@ export const feedbackDuplicateCandidates = pgTable(
   ],
 );
 
+/** A post's embedding for the duplicate sweep (#181): one row per post, the vector of its title and
+ * body from the configured model, replaced when the model or the post's words change
+ * (`content_hash` is sha256 of title, a blank line and body). Stored unit-length as `real[]`, so cosine
+ * similarity is a dot product in SQL: pgvector isn't on every Postgres Mocco runs on (the local and
+ * self-host image, pglite in tests), and a board's few thousand posts don't need an index yet. */
+export const feedbackPostEmbeddings = pgTable(
+  'mocco_feedback_post_embeddings',
+  {
+    postId: uuid('post_id').primaryKey(),
+    workspaceId: uuid('workspace_id').notNull(),
+    model: text().notNull(),
+    dims: integer().notNull(),
+    embedding: real().array().notNull(),
+    contentHash: text('content_hash').notNull(),
+    // When this vector was made: a re-embed replaces it.
+    createdAt,
+  },
+  t => [
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_post_embeddings_post_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_post_embeddings_dims_check', sql`${t.dims} > 0 AND cardinality(${t.embedding}) = ${t.dims}`),
+  ],
+);
+
 /** Where a post came from outside the board (#182): a messenger conversation turned into it, with
  * the request's words at the time. One row per (source, post): converting the same source again
  * finds the post instead of making another. `source_id` is the source's own id (text, so each

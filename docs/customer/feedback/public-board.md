@@ -125,7 +125,7 @@ When a user asks for something in the Messenger inbox, open the conversation and
 
 ### Possible duplicates
 
-Mocco compares each new post with the board's older ones, within a minute or so of its arrival. When most of the words in its title are in an older post's title, the pair shows up under **Possible duplicates** in the inbox's header, with how many are waiting. For each pair, **Merge** folds the newer post into the older one (the same as **Merge into another post…**), and **Not the same** sets the pair aside so it isn't suggested again.
+Mocco compares each new post with the board's older ones, within a minute or so of its arrival. When most of the words in its title are in an older post's title, or (where an embedding model is set up) the two posts mean much the same in other words, the pair shows up under **Possible duplicates** in the inbox's header, with how many are waiting. For each pair, **Merge** folds the newer post into the older one (the same as **Merge into another post…**), and **Not the same** sets the pair aside so it isn't suggested again.
 
 ![Possible duplicates: three pairs, each with Merge and Not the same](./images/feedback-console-duplicates.png)
 
