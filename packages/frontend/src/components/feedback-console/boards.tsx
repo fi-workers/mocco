@@ -216,7 +216,7 @@ function Categories({ workspaceId, projectId, boardId }: Props & { boardId: stri
         ))}
       </ul>
       <form
-        aria-label="New category"
+        aria-label="Add a category"
         className="flex items-center gap-2"
         onSubmit={event => {
           event.preventDefault();
