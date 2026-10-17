@@ -231,7 +231,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
 
   /**
    * Publish like the CLI: a signed iOS update, a republish of every rollback target and a
-   * rollBackToEmbedded directive (both dated 1 ms later), then verify it. Returns the
+   * rollBackToEmbedded directive (1 ms and 2 ms later), then verify it. Returns the
    * release and update ids.
    */
   const publishReady = async (label: string) => {
@@ -243,7 +243,11 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
     const updateId = randomUUID();
     const manifest = manifestOf({ createdAt, launch, id: updateId });
     const later = new Date(createdAt.getTime() + 1).toISOString();
-    const directive = JSON.stringify({ type: 'rollBackToEmbedded', parameters: { commitTime: later } });
+    // After the republishes too, as the CLI signs it, so it also reaches rolled-back devices.
+    const directive = JSON.stringify({
+      type: 'rollBackToEmbedded',
+      parameters: { commitTime: new Date(createdAt.getTime() + 2).toISOString() },
+    });
     const response = await finalize(session, declared.releaseId, {
       updates: [{ platform: OtaPlatforms.ios, body: manifest, signature: signBody(manifest) }],
       republishes: declared.rollbackTargets.map(target => {
