@@ -19,8 +19,11 @@ const postOf = (number: number, title: string, voteCount: number) => ({
   mergedIntoPostId: null,
 });
 
-/** A fetch for one board with two posts (one titled with markup, which must stay text). */
-function boardFetch() {
+/**
+ * A fetch for one board with two posts (one titled with markup, which must stay text). Signed in,
+ * the list says the user voted for the posts in `voted` earlier.
+ */
+function boardFetch(opts: { voted?: string[] } = {}) {
   const requests: { method: string; url: string; body: unknown }[] = [];
   let votes = 5;
   const fetchImpl = (async (url: string, init: RequestInit) => {
@@ -32,6 +35,9 @@ function boardFetch() {
       votes += method === 'POST' ? 1 : -1;
       return await Promise.resolve(Response.json({ vote: method === 'POST' ? 'counted' : null, voteCount: votes }));
     }
+    if (pathname.endsWith('/posts/p2/vote')) {
+      return await Promise.resolve(Response.json({ vote: method === 'POST' ? 'counted' : null, voteCount: 1 }));
+    }
     if (pathname.endsWith('/boards/ideas')) {
       return await Promise.resolve(Response.json({ board: { slug: 'ideas', name: 'Ideas', categories: [] } }));
     }
@@ -41,9 +47,12 @@ function boardFetch() {
     if (method === 'POST') {
       return await Promise.resolve(Response.json({ post: postOf(9, 'Offline mode', 1) }, { status: 201 }));
     }
+    const isSignedIn = new Headers(init.headers).get('authorization') === 'Bearer jwt';
+    const listed = (post: ReturnType<typeof postOf>) =>
+      isSignedIn ? { ...post, viewerVote: opts.voted?.includes(post.id) === true ? 'counted' : null } : post;
     return await Promise.resolve(
       Response.json({
-        posts: [postOf(1, 'Dark mode', votes), postOf(2, '<img src=x onerror="alert(1)">', 2)],
+        posts: [listed(postOf(1, 'Dark mode', votes)), listed(postOf(2, '<img src=x onerror="alert(1)">', 2))],
         nextOffset: null,
       }),
     );
@@ -114,6 +123,25 @@ describe('@mocco/js/feedback-sheet', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(panel()).toBeNull();
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('shows "Voted" on opening for an idea the user voted for before', async () => {
+    const target = button();
+    const { requests, fetchImpl } = boardFetch({ voted: ['p2'] });
+    sheetWith(fetchImpl, 'jwt').mount(target);
+
+    target.click();
+
+    await vi.waitFor(() => {
+      expect(panel()?.querySelectorAll('li')).toHaveLength(2);
+    });
+    expect(voteButtons().map(vote => vote.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    expect(voteButtons()[1]?.textContent).toBe('2Voted (2 votes)');
+    voteButtons()[1]?.click();
+    await vi.waitFor(() => {
+      expect(voteButtons()[1]?.getAttribute('aria-pressed')).toBe('false');
+    });
+    expect(requests.at(-1)?.method).toBe('DELETE');
   });
 
   it('suggests similar ideas while a title is typed, and posts one', async () => {

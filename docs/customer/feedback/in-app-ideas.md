@@ -135,4 +135,4 @@ Every write needs a signed-in user: without a token it is refused with a `MoccoE
 
 A signed-in user can post 5 ideas, vote 30 times and comment 20 times an hour; the similar-ideas search runs at most 60 times a minute from one address, which typing in the sheet stays under, since it waits until typing pauses. The list shows the 20 most voted ideas.
 
-The board's list doesn't say which ideas a user voted for before, so after the sheet reopens it shows those as not voted. Pressing **Vote** on one of them changes nothing on Mocco: the count stays, and the button turns to **Voted**.
+For a signed-in user, the sheet shows **Voted** on every idea they voted for before, in this sheet or anywhere else in your app, as soon as it opens. Pressing it takes the vote back. A visitor who isn't signed in sees no votes as theirs.

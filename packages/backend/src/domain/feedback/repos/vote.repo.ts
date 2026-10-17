@@ -1,5 +1,5 @@
 import { FeedbackVoteSources, FeedbackVoteStates } from '@mocco/common/feedback';
-import { and, count, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 
 import * as schema from '@backend/infra/db/schema';
 
@@ -33,6 +33,22 @@ export class FeedbackVoteRepo {
       .from(v)
       .where(of(workspaceId, postId, endUserId));
     return row;
+  }
+
+  /** The end user's vote on each of `postIds` that has one, in one query (a list page's posts). */
+  async statesFor(
+    workspaceId: string,
+    endUserId: string,
+    postIds: readonly string[],
+  ): Promise<Map<string, FeedbackVoteRow['state']>> {
+    if (postIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.db
+      .select({ postId: v.postId, state: v.state })
+      .from(v)
+      .where(and(eq(v.workspaceId, workspaceId), eq(v.endUserId, endUserId), inArray(v.postId, [...postIds])));
+    return new Map(rows.map(row => [row.postId, row.state]));
   }
 
   /** Count a pending vote. Undefined when there is no pending vote (none, or counted already). */

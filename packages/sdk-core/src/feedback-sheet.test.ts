@@ -20,12 +20,31 @@ const postOf = (number: number, title: string, voteCount: number): FeedbackPost 
   mergedIntoPostId: null,
 });
 
-/** A fetch for one board with two posts; votes count, and a new post gets id p9. */
-function boardFetch(opts: { failSimilar?: boolean; failPost?: boolean } = {}) {
+/**
+ * A fetch for one board with two posts; votes count, and a new post gets id p9. Like the server,
+ * it remembers who voted (`voted`, the signed-in user's posts) and says so on each listed post
+ * when the request carries an end-user token.
+ */
+function boardFetch(opts: { failSimilar?: boolean; failPost?: boolean; voted?: string[] } = {}) {
   const requests: string[] = [];
   const counts: Record<string, number> = { p1: 5, p2: 2 };
+  const voted = new Set(opts.voted);
+  /** A vote or unvote that changes something moves the count; a repeat doesn't. */
+  const countVote = (id: string, isVote: boolean) => {
+    if (voted.has(id) !== isVote) {
+      counts[id] = (counts[id] ?? 0) + (isVote ? 1 : -1);
+    }
+    if (isVote) {
+      voted.add(id);
+    } else {
+      voted.delete(id);
+    }
+  };
   const fetchImpl = (async (url: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
+    const isSignedIn = new Headers(init.headers).get('authorization') === 'Bearer jwt';
+    const listed = (post: FeedbackPost): FeedbackPost =>
+      isSignedIn ? { ...post, viewerVote: voted.has(post.id) ? 'counted' : null } : post;
     const path = new URL(url).pathname.replace('/v1/feedback', '');
     const query = new URL(url).searchParams.get('q');
     const suffix = query === null ? '' : `?q=${query}`;
@@ -33,7 +52,7 @@ function boardFetch(opts: { failSimilar?: boolean; failPost?: boolean } = {}) {
     const vote = /^\/posts\/(p\d)\/vote$/.exec(path);
     if (vote !== null) {
       const id = vote[1] ?? '';
-      counts[id] = (counts[id] ?? 0) + (method === 'POST' ? 1 : -1);
+      countVote(id, method === 'POST');
       return await Promise.resolve(
         Response.json({ vote: method === 'POST' ? 'counted' : null, voteCount: counts[id] }),
       );
@@ -44,7 +63,7 @@ function boardFetch(opts: { failSimilar?: boolean; failPost?: boolean } = {}) {
     if (path === '/boards/ideas/similar') {
       return opts.failSimilar === true
         ? await Promise.resolve(Response.json({ title: 'down' }, { status: 503 }))
-        : await Promise.resolve(Response.json({ posts: [postOf(1, `Like ${query ?? ''}`, counts.p1 ?? 0)] }));
+        : await Promise.resolve(Response.json({ posts: [listed(postOf(1, `Like ${query ?? ''}`, counts.p1 ?? 0))] }));
     }
     if (path === '/boards/ideas/posts' && method === 'POST') {
       if (opts.failPost === true) {
@@ -56,19 +75,22 @@ function boardFetch(opts: { failSimilar?: boolean; failPost?: boolean } = {}) {
       return await Promise.resolve(Response.json({ post: postOf(9, input.title, 1) }, { status: 201 }));
     }
     return await Promise.resolve(
-      Response.json({ posts: [postOf(1, 'Dark mode', counts.p1 ?? 0), postOf(2, 'Export', 2)], nextOffset: null }),
+      Response.json({
+        posts: [listed(postOf(1, 'Dark mode', counts.p1 ?? 0)), listed(postOf(2, 'Export', counts.p2 ?? 0))],
+        nextOffset: null,
+      }),
     );
   }) as unknown as typeof fetch;
   return { requests, fetchImpl };
 }
 
-const sheetWith = (fetchImpl: typeof fetch, token: string | null = 'jwt') =>
+const sheetWith = (fetchImpl: typeof fetch, token: string | null | (() => string | null) = 'jwt') =>
   new FeedbackSheetModel({
     publishableKey: 'mk_pub_x',
     baseUrl: BASE,
     fetch: fetchImpl,
     board: 'ideas',
-    endUserToken: () => token,
+    endUserToken: typeof token === 'function' ? token : () => token,
     similarDelayMs: 300,
   });
 
@@ -96,6 +118,54 @@ describe('FeedbackSheetModel', () => {
     expect(requests).toEqual(['GET /boards/ideas', 'GET /boards/ideas/posts']);
   });
 
+  it("shows the user's earlier votes from the list when it opens, so a tap takes one back", async () => {
+    const { requests, fetchImpl } = boardFetch({ voted: ['p1'] });
+    const sheet = sheetWith(fetchImpl);
+
+    await sheet.load();
+
+    expect(sheet.getState().votes).toEqual({ p1: 'counted', p2: null });
+    await sheet.toggleVote('p1');
+    expect(requests.at(-1)).toBe('DELETE /posts/p1/vote');
+    expect(sheet.getState().votes.p1).toBeNull();
+    expect(sheet.getState().posts[0]?.voteCount).toBe(4);
+  });
+
+  it('shows a vote cast in an earlier sheet after it reopens', async () => {
+    const { fetchImpl } = boardFetch();
+    const first = sheetWith(fetchImpl);
+    await first.load();
+    await first.toggleVote('p2');
+
+    const reopened = sheetWith(fetchImpl);
+    await reopened.load();
+
+    expect(reopened.getState().votes.p2).toBe('counted');
+    expect(reopened.getState().posts[1]?.voteCount).toBe(3);
+  });
+
+  it("takes the user's votes from the similar posts too", async () => {
+    vi.useFakeTimers();
+    const { fetchImpl } = boardFetch({ voted: ['p1'] });
+    const sheet = sheetWith(fetchImpl);
+
+    sheet.setDraft({ title: 'Dark mode please' });
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(sheet.getState().votes.p1).toBe('counted');
+  });
+
+  it('reads the list as a visitor when the token source fails', async () => {
+    const { fetchImpl } = boardFetch({ voted: ['p1'] });
+    const sheet = sheetWith(fetchImpl, () => {
+      throw new Error('session expired');
+    });
+
+    await sheet.load();
+
+    expect(sheet.getState()).toMatchObject({ status: 'ready', isSignedIn: false, votes: {} });
+  });
+
   it('is read-only without a signed-in user', async () => {
     const { fetchImpl } = boardFetch();
     const sheet = sheetWith(fetchImpl, null);
@@ -104,6 +174,7 @@ describe('FeedbackSheetModel', () => {
     await sheet.toggleVote('p1');
 
     expect(sheet.getState().isSignedIn).toBe(false);
+    expect(sheet.getState().votes).toEqual({});
     expect(sheet.getState().actionError).toMatchObject({ code: 'missing_end_user_token' });
     expect(sheet.getState().posts[0]?.voteCount).toBe(5);
   });

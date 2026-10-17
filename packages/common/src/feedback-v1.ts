@@ -51,7 +51,17 @@ export const feedbackV1BoardSchema = z.object({
   board: z.object({ slug: z.string(), name: z.string(), categories: z.array(feedbackV1CategorySchema) }),
 });
 
-/** A post as the public sees it. `mergedIntoPostId` is set on a duplicate: show that post instead. */
+const voteState = z.enum([FeedbackVoteStates.pending, FeedbackVoteStates.counted] as [
+  FeedbackVoteState,
+  ...FeedbackVoteState[],
+]);
+
+/**
+ * A post as the public sees it. `mergedIntoPostId` is set on a duplicate: show that post instead.
+ * In a list (a board's posts, the roadmap, the similar posts) read with an end-user token,
+ * `viewerVote` is that end user's own vote on it (null when none); without a token it is absent.
+ * It is never anyone else's.
+ */
 export const feedbackV1PostSchema = z.object({
   id: z.uuid(),
   number: z.int(),
@@ -64,6 +74,7 @@ export const feedbackV1PostSchema = z.object({
   createdAt: timestamp,
   shippedAt: timestamp.nullable(),
   mergedIntoPostId: z.uuid().nullable(),
+  viewerVote: voteState.nullable().optional(),
 });
 export type FeedbackV1Post = z.infer<typeof feedbackV1PostSchema>;
 
@@ -81,11 +92,6 @@ export const feedbackV1RoadmapSchema = z.object({
     >,
   ),
 });
-
-const voteState = z.enum([FeedbackVoteStates.pending, FeedbackVoteStates.counted] as [
-  FeedbackVoteState,
-  ...FeedbackVoteState[],
-]);
 
 /** One post; `viewer` answers for the end user whose token came with the request (null without one). */
 export const feedbackV1PostDetailSchema = z.object({
