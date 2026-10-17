@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
 
+import MoccoSelfWidgets from '@frontend/components/mocco-self-widgets';
 import ProjectSwitcher from '@frontend/components/project-switcher';
 import UserMenu from '@frontend/components/user-menu';
 import WorkspaceSwitcher from '@frontend/components/workspace-switcher';
@@ -16,7 +17,7 @@ import type { ReactNode } from 'react';
 // The authenticated app layout (client-rendered): guards the session, fetches
 // the shell data with React Query, and frames the page in a Vercel-style top bar
 // (logo + workspace switcher + project switcher on the left, the signed-in user on
-// the right).
+// the right, after Mocco's own "What's new" and "Feedback" buttons when configured).
 export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { data: session, isPending } = useSession();
@@ -50,8 +51,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex h-14 items-center justify-between border-b border-border px-4">
-        <div className="flex items-center gap-1.5">
-          <Link href={Routes.workspaces} className="flex items-center" aria-label="Mocco home">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Link href={Routes.workspaces} className="flex shrink-0 items-center" aria-label="Mocco home">
             <Image src="/favicon/favicon.svg" alt="Mocco" width={28} height={28} className="size-7" />
           </Link>
           <span aria-hidden="true" className="text-lg text-border">
@@ -67,7 +68,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </>
           ) : null}
         </div>
-        <UserMenu user={user} />
+        <div className="flex shrink-0 items-center gap-2">
+          <MoccoSelfWidgets />
+          <UserMenu user={user} />
+        </div>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>
     </div>

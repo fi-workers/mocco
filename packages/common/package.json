@@ -26,6 +26,8 @@
     "./messenger": "./src/messenger.ts",
     "./mcp": "./src/mcp.ts",
     "./mocco-config": "./src/mocco-config.ts",
+    "./mocco-self": "./src/mocco-self.ts",
+    "./mocco-self-token": "./src/mocco-self-token.ts",
     "./notification": "./src/notification.ts",
     "./notification-activity": "./src/notification-activity.ts",
     "./notification-presets": "./src/notification-presets.ts",

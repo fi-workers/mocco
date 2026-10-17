@@ -1155,3 +1155,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/sdk.md`,
   `customer/feedback/in-app-ideas.md`, `log.md`
 - Source: branch `feat/feedback-voted-flag` (issue #177)
+
+## 2026-10-17 — Mocco on Mocco: "What's new" and feedback in the console
+
+- The console header shows Mocco's own "What's new" badge and a "Feedback" button that opens the feedback sheet, the
+  `@mocco/js` widgets on a Mocco project, loaded lazily (idle and first use). `GET /api/self/end-user-token` signs
+  the signed-in console user's end-user token. New env: `MOCCO_SELF_PUBLISHABLE_KEY`, `MOCCO_SELF_BOARD`,
+  `MOCCO_SELF_API_URL`, `MOCCO_SELF_IDENTITY_SECRET`; unset, nothing shows.
+- Docs touched: `reference/mocco-on-mocco.md` (new), `reference/env.md`, `index.md`, `log.md`
+- Source: branch `feat/console-mocco-on-mocco` (issue #177)

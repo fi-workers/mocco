@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -208,6 +208,17 @@ Turning it on (operations, no deploy of code):
 
 To turn it off, unset both variables. Pausing the canary source also stops the pings (and so alerts), which is how to
 test the alert path end to end.
+
+## Mocco on Mocco vars
+
+The console's own "What's new" badge and feedback sheet come from a Mocco project ([Mocco on Mocco](./mocco-on-mocco.md)). All four are optional; without the key or the board, the console shows neither widget and loads none of their code.
+
+- `MOCCO_SELF_PUBLISHABLE_KEY`: a publishable key (`mk_pub_…`) of Mocco's own project, with `feedback:read` and `feedback:write`. Public: `next.config.ts` passes it to the browser as `NEXT_PUBLIC_MOCCO_SELF_PUBLISHABLE_KEY` at build time.
+- `MOCCO_SELF_BOARD`: the slug of that project's public feedback board. Public, as `NEXT_PUBLIC_MOCCO_SELF_BOARD`.
+- `MOCCO_SELF_API_URL` (optional): the `/v1` base the widgets call, such as `https://api.example.com/v1`. Unset, they call the console's own origin plus `/api/ext/v1`. Public, as `NEXT_PUBLIC_MOCCO_SELF_API_URL`.
+- `MOCCO_SELF_IDENTITY_SECRET`: that project's identity secret. Server only and sensitive; `GET /api/self/end-user-token` signs the signed-in console user's end-user token with it. Unset, that route answers 404 and the widgets work as for a visitor.
+
+The public three are read at build time, so a change needs a redeploy.
 
 ## Scripts
 

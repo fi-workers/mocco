@@ -127,6 +127,18 @@ const schema = z.object({
   OPS_HEARTBEAT_URL: z.url().optional(),
   /** The id of the GitHub inbound source the canary is sent to. */
   OPS_CANARY_SOURCE_ID: z.uuid().optional(),
+  // Mocco on Mocco: the console shows Mocco's own "What's new" badge and feedback sheet, from a
+  // Mocco project. The publishable key, board and API URL are public (next.config.ts hands them to
+  // the browser as NEXT_PUBLIC_*); without the key or the board, the console shows neither.
+  /** The publishable key (`mk_pub_…`, feedback:read and feedback:write) of Mocco's own project. */
+  MOCCO_SELF_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  /** The slug of that project's public feedback board, such as `mocco`. */
+  MOCCO_SELF_BOARD: z.string().min(1).optional(),
+  /** The /v1 base the widgets call (default: the console's own origin + `/api/ext/v1`). */
+  MOCCO_SELF_API_URL: z.url().optional(),
+  /** That project's identity secret (server only): signs the console user's end-user token.
+   * Unset: the token route answers 404 and the widgets work as for a visitor. */
+  MOCCO_SELF_IDENTITY_SECRET: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

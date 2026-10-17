@@ -1,6 +1,6 @@
 // The JWT leaf of end-user identity (platform foundations F2): verify an HS256 token that the
-// project's server signed with its identity secret.
-import { errors, jwtVerify } from 'jose';
+// project's server signed with its identity secret, and sign one the way a project's server does.
+import { errors, jwtVerify, SignJWT } from 'jose';
 
 /** Clock skew allowed between the customer's server and Mocco. */
 export const END_USER_TOKEN_CLOCK_SKEW_SECONDS = 60;
@@ -28,4 +28,15 @@ export async function verifyHs256(token: string, secret: string, now: Date): Pro
     }
     throw error;
   }
+}
+
+/** An HS256 token for `sub`, valid from `now` for `ttlSeconds`, signed with `secret`: what a
+ * project's server hands its signed-in user (Mocco's own console signs one for Mocco's project). */
+export async function signHs256(sub: string, secret: string, now: Date, ttlSeconds: number): Promise<string> {
+  const issuedAt = Math.floor(now.getTime() / 1000);
+  return await new SignJWT({ sub })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + ttlSeconds)
+    .sign(new TextEncoder().encode(secret));
 }
