@@ -28,9 +28,17 @@ https://showyourtime.help.mocco.club/feedback/<board>
 
 When the help center has its own domain, such as `help.showyourtime.app`, the board is there too: `https://help.showyourtime.app/feedback/<board>`.
 
-Boards are public when they are created. A board marked private has no public page.
+## 2. Create a board
 
-## 2. What visitors see
+Turn on **Feedback board** on the workspace's **Products** page. The project then has a **Feedback** section. A project without boards opens on the form for its first one: give it a name, and its address follows the name (`Feature requests` → `/feedback/feature-requests`) unless you change it.
+
+**Manage boards** lists every board with its public address. There you rename a board, change its address, make it private, delete it, and add or rename its categories. Users pick a category when they post, and the board and roadmap filter by it. Deleting a category keeps its posts, uncategorized.
+
+![Managing boards and their categories](./images/feedback-console-boards.png)
+
+Boards are public when they are created. A board marked private has no public page. Changing a board's address changes its public link, so links shared before stop working.
+
+## 3. What visitors see
 
 The board lists its posts, most voted first. Anyone can read it, and search engines index it. Each post shows its votes, its status and how many comments it has.
 
@@ -54,7 +62,7 @@ The **Changelog** page, at `/feedback/<board>/changelog`, is where you announce 
 
 Search engines find the board, its roadmap, its changelog and every post through the help center's sitemap (`/sitemap.xml`), so you don't submit them yourself.
 
-## 3. Sign your users in from your app
+## 4. Sign your users in from your app
 
 Posting and commenting need to know who the user is. Your app's server signs a short-lived token for its signed-in user, the same token your app sends to the feedback API (see [In-app contact with Mocco Messenger](../messenger/contact-us.md) for the identity secret). It is an HS256 JWT signed with the project's identity secret (the one Messenger setup shows), with the user's id as `sub` and an expiry at most an hour ahead.
 
@@ -83,7 +91,7 @@ A signed-in user can post an idea. While they type a title, the board shows simi
 
 On a post, a signed-in user votes with one click, and clicking again takes the vote back. The count updates at once. They can also comment.
 
-## 4. Visitors without an account
+## 5. Visitors without an account
 
 Someone your app hasn't signed in can still vote, with their email address. Mocco mails them a link, and the vote counts once they open it. They can't post or comment.
 
@@ -93,7 +101,31 @@ Voting by email needs Mocco to send mail. On a self-hosted Mocco without an emai
 
 People who voted by email also hear when the post moves: Mocco mails them when it becomes planned, in progress, shipped or closed. A shipped mail links the changelog entry it went out in. Each mail goes out two minutes after the change, so you can undo a slip. If the post moves again within those two minutes, only the newest status is mailed, and moving a post back to under review mails no one. Every mail has a one-click unsubscribe link. Mocco doesn't mail people your app signed in, because it doesn't keep their addresses. Your app can tell them itself.
 
-## 5. Limits
+## 6. Triage in the inbox
+
+The **Feedback** section opens on the inbox: one board's posts, under review and newest first. Pick another board, a status (or **All**), a category and an order (**Newest**, **Most voted** or **By status**). The choice stays in the address, so you can bookmark a view or send it to a teammate. Each post shows its votes, its number on the board, its status, how many public comments it has and whether your team or a user posted it. The list refreshes every 30 seconds while open.
+
+![The inbox: every status, most voted first](./images/feedback-console-inbox.png)
+
+Open a post to work on it:
+
+- **Status** moves it along. Everyone following it hears about the change, and planned, in progress and shipped posts appear on the roadmap.
+- **Category** files it, or **No category** takes it out of one.
+- **Comment** in one of three ways. A **Reply** is public. The **Official response** is your team's answer, highlighted among the public comments. An **Internal note** stays in Mocco, and visitors never see it.
+- **Votes** lists who voted. A pending vote waits for its email to be confirmed. When a user asks for something by email or on a call, record their vote with the id your app knows them by.
+- **Merge into another post…** handles duplicates. Search the board by title or number and pick the post to keep. The duplicate's votes and followers move there, each person counted once, and the duplicate's public address sends readers to it.
+
+![A post in Mocco: status, category, comments with an internal note and the official response, and votes](./images/feedback-console-post.png)
+
+### Announce what shipped
+
+**Changelog** in the inbox's header lists the board's entries: drafts, scheduled and published. Type a title and choose **New entry** to start one. In the entry, write what changed in Markdown (the preview shows it as readers will see it), tick New, Improved or Fixed, and add the posts it shipped. Then **Publish now**, or pick a time and **Schedule** it: Mocco publishes it within a minute of that time. A published entry can go back to a draft with **Unpublish**.
+
+![Writing a changelog entry: title, tags, Markdown with its preview, and the post it shipped](./images/feedback-console-changelog.png)
+
+People who voted for a post by email hear when it ships, and that mail links the entry that announced it.
+
+## 7. Limits
 
 Each user can vote 30 times, comment 20 times and post 5 times an hour, and one network address can make 120 changes an hour, whoever signs in. An email address gets 3 vote mails an hour.
 

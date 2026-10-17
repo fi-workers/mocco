@@ -1099,6 +1099,22 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-project-setup`
 
+## 2026-10-16 — Feedback console: boards and inbox
+
+- The feedback product is available in the console: a Feedback section with an inbox (board, status, category and
+  sort in the address) and a boards page (create, rename, publish, delete, categories); the staff list gains a
+  "Most voted" sort (`sort: top`).
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #487 (issue #175)
+
+## 2026-10-16 — Feedback console: post page
+
+- Each feedback post has a console page: status and category, editing, replies, the official response and internal
+  notes, votes (record one for a user, remove one), followers, history, and merging into another post on the board.
+  This finishes #175.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-post-page` (issue #175)
+
 ## 2026-10-16 — Feedback roadmap page and sitemap entries
 
 - A public board's roadmap at `/feedback/<board>/roadmap` (planned, in progress, shipped; most voted first; category
@@ -1133,3 +1149,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   two-minute undo window, once per change, by a one-minute job (migration 0083). Signed-in end users aren't mailed.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-status-mail` (issue #180)
+
+## 2026-10-17 — Feedback changelog in the console
+
+- The console's Changelog lists a board's entries by state and edits one: title, address, tags, Markdown with a
+  preview, the posts it shipped, and publishing now, scheduling, unpublishing or deleting it. This finishes #176.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-changelog-console` (issue #176)
