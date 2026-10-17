@@ -16,6 +16,7 @@ import {
 import { FeedbackBoardRepo } from '@backend/domain/feedback/repos/board.repo';
 import { FeedbackCategoryRepo } from '@backend/domain/feedback/repos/category.repo';
 import { ChangelogEntryRepo } from '@backend/domain/feedback/repos/changelog-entry.repo';
+import { ChangelogReadRepo } from '@backend/domain/feedback/repos/changelog-read.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 
@@ -44,6 +45,7 @@ export interface PublicBoardServiceDeps {
   comments: Pick<CommentService, 'createAsEndUser' | 'listForPublic'>;
   posts: Pick<PostService, 'createAsEndUser'>;
   subscriptions: Pick<SubscriptionService, 'subscribe' | 'unsubscribe'>;
+  now?: () => Date;
 }
 
 /** The end-user sources a /v1 caller may name. */
@@ -64,6 +66,9 @@ export const SITEMAP_POST_LIMIT = 10_000;
 
 /** How many changelog entries a project's sitemap lists at most (the newest). */
 export const SITEMAP_CHANGELOG_LIMIT = 1000;
+
+/** The unread badge counts up to this many entries (a widget shows "99+"). */
+export const CHANGELOG_UNREAD_CAP = 100;
 
 /** How many changelog entries a post page lists as having shipped it (the newest). */
 export const POST_CHANGELOG_LIMIT = 10;
@@ -144,6 +149,10 @@ const pageOf = <T>(rows: T[], page: FeedbackPage): PublicPage<T> => ({
 
 export class PublicBoardService {
   constructor(private readonly deps: PublicBoardServiceDeps) {}
+
+  private now(): Date {
+    return this.deps.now?.() ?? new Date();
+  }
 
   /** The public board with the slug; a private or missing one is FeedbackBoardNotFoundError. */
   private async publicBoard(scope: FeedbackScope, slug: string): Promise<FeedbackBoardRow> {
@@ -385,6 +394,38 @@ export class PublicBoardService {
       throw new ChangelogEntryNotFoundError(entrySlug);
     }
     return entry;
+  }
+
+  /**
+   * How many entries were published since the end user last looked: their stored cursor when the
+   * request names them, else `since` (a widget keeps it on the device for visitors), else every
+   * entry. Counts up to CHANGELOG_UNREAD_CAP.
+   */
+  async changelogUnread(
+    scope: FeedbackScope,
+    slug: string,
+    viewer: { endUserId?: string; since?: Date },
+  ): Promise<{ count: number; lastSeenAt: Date | null }> {
+    const board = await this.publicBoard(scope, slug);
+    const stored =
+      viewer.endUserId === undefined
+        ? null
+        : await new ChangelogReadRepo(this.deps.db).lastSeenAt(scope, board.id, viewer.endUserId);
+    const lastSeenAt = stored ?? viewer.since ?? null;
+    const count = await new ChangelogEntryRepo(this.deps.db).countPublishedSince(
+      scope,
+      board.id,
+      lastSeenAt,
+      CHANGELOG_UNREAD_CAP,
+    );
+    return { count, lastSeenAt };
+  }
+
+  /** The end user has read the board's changelog up to now; the cursor never moves back. */
+  async markChangelogSeen(scope: FeedbackScope, slug: string, endUserId: string): Promise<{ lastSeenAt: Date }> {
+    const board = await this.publicBoard(scope, slug);
+    const lastSeenAt = await new ChangelogReadRepo(this.deps.db).markSeen(scope, board.id, endUserId, this.now());
+    return { lastSeenAt };
   }
 
   /** The published entries that announce the post on a public board, newest first. */

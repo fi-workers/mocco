@@ -12,6 +12,10 @@ import { createHash } from 'node:crypto';
 import { ApiScopes } from '@mocco/common/apikey';
 import {
   feedbackV1BoardSchema,
+  feedbackV1ChangelogListSchema,
+  feedbackV1ChangelogSeenSchema,
+  feedbackV1ChangelogUnreadQuerySchema,
+  feedbackV1ChangelogUnreadSchema,
   feedbackV1CommentInputSchema,
   feedbackV1CommentListSchema,
   feedbackV1CommentResultSchema,
@@ -65,6 +69,9 @@ export interface FeedbackServingDeps {
     | 'comment'
     | 'createPost'
     | 'similar'
+    | 'changelog'
+    | 'changelogUnread'
+    | 'markChangelogSeen'
     | 'setSubscribed'
   >;
   endUsers: Pick<EndUserTokenService, 'verify'>;
@@ -84,6 +91,8 @@ export const FeedbackRateLimits = {
   subscriptions: { limit: 30, windowSeconds: 60 * 60 },
   /** Similar-posts searches per client address (typed as a title is written). */
   similar: { limit: 60, windowSeconds: 60 },
+  /** "What's new" read marks per end user (not counted against the address's writes). */
+  changelogSeen: { limit: 120, windowSeconds: 60 * 60 },
   /** Every write from one client address, whoever the end user. */
   writesPerAddress: { limit: 120, windowSeconds: 60 * 60 },
 } as const;
@@ -300,6 +309,72 @@ export function createFeedbackRoutes(
     return await answer(async () => {
       const roadmap = await feedback.boards.roadmap(scopeOf(c), slug.data);
       return send(c, feedbackV1RoadmapSchema, { roadmap: wireRoadmap(roadmap) });
+    });
+  });
+
+  app.get('/boards/:slug/changelog', read, async c => {
+    const slug = slugOf(c);
+    if (!slug.success) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
+    }
+    const page = feedbackV1PageQuerySchema.safeParse(c.req.query());
+    if (!page.success) {
+      return badQuery('limit (1–100) or offset is invalid');
+    }
+    return await answer(async () => {
+      const entries = await feedback.boards.changelog(scopeOf(c), slug.data, page.data);
+      return send(c, feedbackV1ChangelogListSchema, {
+        entries: entries.items.map(entry => wireChangelogEntry(entry)),
+        nextOffset: entries.nextOffset,
+      });
+    });
+  });
+
+  app.get('/boards/:slug/changelog/unread', read, async c => {
+    const slug = slugOf(c);
+    if (!slug.success) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
+    }
+    const query = feedbackV1ChangelogUnreadQuerySchema.safeParse(c.req.query());
+    if (!query.success) {
+      return badQuery('since must be an ISO 8601 date-time');
+    }
+    return await answer(async () => {
+      const endUserId = await viewerOf(c);
+      const unread = await feedback.boards.changelogUnread(scopeOf(c), slug.data, {
+        ...(endUserId !== undefined && { endUserId }),
+        ...(query.data.since !== undefined && { since: new Date(query.data.since) }),
+      });
+      return send(c, feedbackV1ChangelogUnreadSchema, {
+        count: unread.count,
+        lastSeenAt: unread.lastSeenAt === null ? null : iso(unread.lastSeenAt),
+      });
+    });
+  });
+
+  app.post('/boards/:slug/changelog/seen', write, async c => {
+    const slug = slugOf(c);
+    if (!slug.success) {
+      return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
+    }
+    return await answer(async () => {
+      const endUserId = await viewerOf(c);
+      if (endUserId === undefined) {
+        return problemResponse(
+          problemOf(401, ProblemCodes.missingEndUserToken, "An end-user token from the app's server is required"),
+          { 'WWW-Authenticate': 'Bearer' },
+        );
+      }
+      const byUser = await limit(
+        deps,
+        endUserBucket('changelogSeen', c.var.principal.projectId, endUserId),
+        FeedbackRateLimits.changelogSeen,
+      );
+      if (byUser.refused !== undefined) {
+        return byUser.refused;
+      }
+      const seen = await feedback.boards.markChangelogSeen(scopeOf(c), slug.data, endUserId);
+      return send(c, feedbackV1ChangelogSeenSchema, { lastSeenAt: iso(seen.lastSeenAt) });
     });
   });
 

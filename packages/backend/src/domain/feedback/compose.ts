@@ -50,6 +50,7 @@ export function createFeedbackDomain(
     comments: feedbackComments,
     posts: feedbackPosts,
     subscriptions: feedbackSubscriptions,
+    ...now,
   });
   return {
     feedbackBoards,

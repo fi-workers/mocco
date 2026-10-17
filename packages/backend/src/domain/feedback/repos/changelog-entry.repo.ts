@@ -1,5 +1,5 @@
 import { ChangelogEntryStates } from '@mocco/common/feedback';
-import { and, asc, desc, eq, inArray, like, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, like, lte, or, sql } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne } from '@backend/infra/db/rows';
@@ -151,6 +151,23 @@ export class ChangelogEntryRepo {
           .where(and(scoped(scope), inArray(e.boardId, [...boardIds]), eq(e.state, ChangelogEntryStates.published)))
           .orderBy(desc(e.publishedAt), desc(e.createdAt))
           .limit(limit);
+  }
+
+  /** How many of the board's entries were published after `since` (all when null), counting to `cap`. */
+  async countPublishedSince(scope: FeedbackScope, boardId: string, since: Date | null, cap: number): Promise<number> {
+    const rows = await this.db
+      .select({ id: e.id })
+      .from(e)
+      .where(
+        and(
+          scoped(scope),
+          eq(e.boardId, boardId),
+          eq(e.state, ChangelogEntryStates.published),
+          since === null ? undefined : gt(e.publishedAt, since),
+        ),
+      )
+      .limit(cap);
+    return rows.length;
   }
 
   /** The board's published entry with this slug (its public address). */
