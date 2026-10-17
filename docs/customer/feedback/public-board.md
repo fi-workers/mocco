@@ -117,6 +117,12 @@ Open a post to work on it:
 
 ![A post in Mocco: status, category, comments with an internal note and the official response, and votes](./images/feedback-console-post.png)
 
+### Possible duplicates
+
+Mocco compares each new post with the board's older ones, within a minute or so of its arrival. When most of the words in its title are in an older post's title, the pair shows up under **Possible duplicates** in the inbox's header, with how many are waiting. For each pair, **Merge** folds the newer post into the older one (the same as **Merge into another post…**), and **Not the same** sets the pair aside so it isn't suggested again.
+
+![Possible duplicates: three pairs, each with Merge and Not the same](./images/feedback-console-duplicates.png)
+
 ### Announce what shipped
 
 **Changelog** in the inbox's header lists the board's entries: drafts, scheduled and published. Type a title and choose **New entry** to start one. In the entry, write what changed in Markdown (the preview shows it as readers will see it), tick New, Improved or Fixed, and add the posts it shipped. Then **Publish now**, or pick a time and **Schedule** it: Mocco publishes it within a minute of that time. A published entry can go back to a draft with **Unpublish**.

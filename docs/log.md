@@ -1156,3 +1156,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   preview, the posts it shipped, and publishing now, scheduling, unpublishing or deleting it. This finishes #176.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-changelog-console` (issue #176)
+
+## 2026-10-17 — Feedback: suggested duplicates
+
+- A sweep every minute compares each new post with its board's older posts by shared title words and queues close pairs
+  (migration 0084); the console's Possible duplicates page merges a pair or sets it aside for good. Embeddings come
+  later in #181.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-duplicates` (issue #181)

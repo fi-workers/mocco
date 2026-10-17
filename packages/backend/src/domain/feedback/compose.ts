@@ -3,6 +3,7 @@
 import { BoardService } from '@backend/domain/feedback/BoardService';
 import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import { CommentService } from '@backend/domain/feedback/CommentService';
+import { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
 import { MergeService } from '@backend/domain/feedback/MergeService';
 import { PostService } from '@backend/domain/feedback/PostService';
@@ -21,6 +22,8 @@ export interface FeedbackDomain {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  /** Suggested duplicate pairs for staff (#181). */
+  feedbackDuplicates: DuplicateService;
   /** A board's changelog entries (#176). */
   feedbackChangelog: ChangelogService;
   /** What /v1/feedback serves (#174). */
@@ -59,6 +62,7 @@ export function createFeedbackDomain(
     feedbackComments,
     feedbackSubscriptions,
     feedbackMerges: new MergeService({ db, audit: deps.audit, ...now }),
+    feedbackDuplicates: new DuplicateService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
     feedbackChangelog: new ChangelogService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
     feedbackPublic,
     feedbackEmailVotes:

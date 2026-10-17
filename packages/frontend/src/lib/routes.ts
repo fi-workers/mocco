@@ -93,6 +93,16 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/feedback/changelog`;
     return query === '' ? path : `${path}?${query}`;
   },
+  /** A board's suggested duplicate pairs in the console (#181), to merge or set aside. */
+  projectFeedbackDuplicates: (
+    id: string,
+    projectId: string,
+    filters: Readonly<Partial<Record<'board', string>>> = {},
+  ) => {
+    const query = new URLSearchParams(filters).toString();
+    const path = `/workspaces/${id}/p/${projectId}/feedback/duplicates`;
+    return query === '' ? path : `${path}?${query}`;
+  },
   /** One changelog entry's editor. */
   projectFeedbackChangelogEntry: (id: string, projectId: string, entryId: string) =>
     `/workspaces/${id}/p/${projectId}/feedback/changelog/${entryId}`,
