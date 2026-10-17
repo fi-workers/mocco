@@ -1125,3 +1125,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-16 — Help center: rich text article editor
+
+- Articles open in a rich editor (editorcn's block editor on Tiptap 3, vendored) that stays Markdown in and out and
+  offers only what Markdown holds; the Markdown + preview mode stays a toggle. A round trip keeps every translation
+  segment, and opening an article saves nothing.
+- Docs touched: `reference/help-center.md`, `customer/help/help-center.md`, `log.md`
+- Source: branch `feat/help-rich-editor` (issue #486)

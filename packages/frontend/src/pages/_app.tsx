@@ -8,6 +8,7 @@ import EnvironmentRibbon from '@frontend/components/environment-ribbon';
 import { trpc } from '@frontend/lib/trpc';
 
 import '@frontend/styles/globals.css';
+import '@frontend/components/block-editor/style.css';
 
 import type { AppProps } from 'next/app';
 

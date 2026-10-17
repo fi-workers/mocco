@@ -13,6 +13,12 @@ import { createBaseConfig, houseStyle } from '../../eslint.config.base.mjs';
 // - @next/eslint-plugin-next: Next.js rules incl. Core Web Vitals (previously registered but not enabled)
 // - jsx-a11y strict: accessibility
 export default [
+  {
+    // Vendored: editorcn's block editor (shadcn-labs/editorcn, MIT), copied in through its shadcn
+    // registry for the help article editor (#486) and trimmed to what Markdown can hold. It keeps
+    // upstream's style so updates diff cleanly; TypeScript still checks it, lint doesn't.
+    ignores: ['src/components/block-editor/**'],
+  },
   ...createBaseConfig({ tsconfigRootDir: import.meta.dirname }),
   nextPlugin.configs['core-web-vitals'],
   reactHooks.configs.flat['recommended-latest'],
