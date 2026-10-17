@@ -37,6 +37,7 @@ code_refs:
   - packages/frontend/src/lib/feedback-client.ts
   - packages/sdk-core/src/feedback.ts
   - packages/sdk-core/src/whats-new.ts
+  - packages/sdk-core/src/feedback-sheet.ts
 ---
 
 # Feedback board model
@@ -184,6 +185,8 @@ A board's changelog (#176): entries the team writes in Markdown, each announcing
 **`/v1` and the "what's new" badge.** `GET /boards/{slug}/changelog` pages published entries newest first (the same projection). `GET /boards/{slug}/changelog/unread` answers `{ count, lastSeenAt }`: the entries published after the end user's stored cursor when a token comes with the request; without one (or before their first "seen"), after `?since=`, which a widget keeps on the device for visitors; else every entry. It counts up to 100 (`CHANGELOG_UNREAD_CAP`). `POST /boards/{slug}/changelog/seen` needs `feedback:write` and an end-user token and moves the cursor to now, never back (`greatest`), in `mocco_feedback_changelog_reads` (one row per board and end user, board-scoped by the composite FK, deleted with the board). It has its own limit, 120 an hour per end user, so a widget opening often doesn't use up the address's write budget. Private and missing boards are 404, as everywhere on `/v1`.
 
 **SDKs** (#177, first slice). `FeedbackClient` (`@mocco/sdk-core/feedback`) and `WhatsNew` (`@mocco/sdk-core/whats-new`) call these routes; `@mocco/js/whats-new` mounts a badge and popover on a page and `@mocco/react-native/whats-new` has `useWhatsNew` and `<WhatsNewBadge />` ([SDK packages](./sdk.md), [customer guide](../customer/feedback/whats-new.md)). Every client sends `since`: the `publishedAt` of the newest entry the device has marked seen, so for a visitor the count never depends on the device's clock, and a user who signs in later starts from what this device saw. Signed in, marking seen also posts `changelog/seen`, and the server's cursor wins from then on.
+
+**SDKs, second slice** (#177). `FeedbackClient` also calls `similar`, `posts` (create), `roadmap`, comments (list and create) and `subscription` (follow and unfollow). `FeedbackSheetModel` (`@mocco/sdk-core/feedback-sheet`) is the state behind the feedback sheets: `@mocco/js/feedback-sheet` (a side sheet mounted on a page's button) and `<FeedbackSheet />` in `@mocco/react-native/feedback` ([customer guide](../customer/feedback/in-app-ideas.md)). The sheet searches `similar` once typing pauses (300 ms, from 3 characters), so it stays under the address's 60-a-minute limit. Post lists carry no viewer, so a sheet knows only the votes cast in it; voting again on a post the user voted for earlier is idempotent and answers the unchanged count. A per-viewer vote flag on the list would remove that gap.
 
 ## MCP tools
 

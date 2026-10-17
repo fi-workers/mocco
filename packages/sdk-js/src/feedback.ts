@@ -1,6 +1,7 @@
 // `@mocco/js/feedback` (#177): a project's feedback boards from the page. Read a board's posts
-// and changelog with a publishable key (feedback:read); vote as the signed-in user with the
-// token your server signs (feedback:write). The "what's new" badge is `@mocco/js/whats-new`.
+// and changelog with a publishable key (feedback:read); vote, post ideas, comment and follow as
+// the signed-in user with the token your server signs (feedback:write). The "what's new" badge
+// is `@mocco/js/whats-new`, and a ready-made sheet of ideas is `@mocco/js/feedback-sheet`.
 import { FeedbackClient } from '@mocco/sdk-core/feedback';
 
 import type { FeedbackClientOptions } from '@mocco/sdk-core/feedback';
@@ -23,12 +24,17 @@ export type {
   FeedbackChangelogTag,
   FeedbackChangelogUnread,
   FeedbackClientOptions,
+  FeedbackComment,
+  FeedbackCommentPage,
   FeedbackPageOptions,
   FeedbackPost,
+  FeedbackPostCreateRequest,
   FeedbackPostDetail,
   FeedbackPostListOptions,
   FeedbackPostPage,
   FeedbackPostStatus,
+  FeedbackRoadmap,
+  FeedbackSubscription,
   FeedbackVoteResult,
   FeedbackVoteState,
 } from '@mocco/sdk-core/feedback';

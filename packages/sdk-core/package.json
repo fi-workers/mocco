@@ -29,6 +29,12 @@
       "types": "./dist/whats-new.d.ts",
       "import": "./dist/whats-new.js",
       "require": "./dist/whats-new.cjs"
+    },
+    "./feedback-sheet": {
+      "@mocco/source": "./src/feedback-sheet.ts",
+      "types": "./dist/feedback-sheet.d.ts",
+      "import": "./dist/feedback-sheet.js",
+      "require": "./dist/feedback-sheet.cjs"
     }
   },
   "main": "./dist/sdk-core.cjs",

@@ -20,6 +20,11 @@
       "@mocco/source": "./src/whats-new.ts",
       "types": "./dist/whats-new.d.ts",
       "import": "./dist/whats-new.js"
+    },
+    "./feedback-sheet": {
+      "@mocco/source": "./src/feedback-sheet.ts",
+      "types": "./dist/feedback-sheet.d.ts",
+      "import": "./dist/feedback-sheet.js"
     }
   },
   "files": [

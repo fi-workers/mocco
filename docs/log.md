@@ -1135,3 +1135,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/feedback/whats-new.md`, `reference/sdk.md`, `reference/feedback.md`,
   `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/sdk-whats-new` (issue #177)
+
+## 2026-10-17 — Feedback sheet in the web and React Native SDKs
+
+- `FeedbackClient` gains `similar`, `createPost`, `roadmap`, `comments`, `comment`, `follow` and `unfollow`;
+  `FeedbackSheetModel` (`@mocco/sdk-core/feedback-sheet`) holds a sheet's top posts, votes and draft with similar
+  posts. `@mocco/js/feedback-sheet` mounts a side sheet on a page's button (its own 25 KB gzip budget), and
+  `@mocco/react-native/feedback` has `<FeedbackSheet />` and `useFeedbackSheet`. A runnable web example is
+  `examples/web-feedback`.
+- Docs touched: `customer/feedback/in-app-ideas.md` (new), `customer/feedback/whats-new.md`, `reference/sdk.md`,
+  `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/sdk-feedback-sheet` (issue #177)
