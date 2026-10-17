@@ -56,6 +56,7 @@ export default function FeedbackPostPage({ page, blocks, description, card }: Pr
     <FeedbackSiteLayout
       site={site}
       board={board}
+      current="post"
       title={post.title}
       seo={{
         path,

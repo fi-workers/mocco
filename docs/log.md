@@ -1125,3 +1125,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-16 — Feedback roadmap page and sitemap entries
+
+- A public board's roadmap at `/feedback/<board>/roadmap` (planned, in progress, shipped; most voted first; category
+  filter in the address), and the help site's sitemap now lists each public board, its roadmap and its live posts.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #484 (issue #175)
