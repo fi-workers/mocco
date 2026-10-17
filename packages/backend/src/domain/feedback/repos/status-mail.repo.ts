@@ -1,5 +1,5 @@
 import { FeedbackStatusMailStates, FeedbackVoteStates } from '@mocco/common/feedback';
-import { and, asc, eq, gt, inArray, isNull, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lt, lte, ne, notExists, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { EMAIL_END_USER_PREFIX } from '@backend/domain/feedback/EmailVoteService';
@@ -17,6 +17,7 @@ const c = schema.feedbackStatusChanges;
 const m = schema.feedbackStatusMails;
 const s = schema.feedbackSubscriptions;
 const v = schema.feedbackVotes;
+const o = schema.feedbackMailOptOuts;
 const posts = schema.feedbackPosts;
 const boards = schema.feedbackBoards;
 const { projects } = schema;
@@ -56,8 +57,9 @@ export class FeedbackStatusMailRepo {
 
   /**
    * Queue a mail for each follower of the post who can be mailed: an email voter (`email:` id),
-   * still following, whose vote on the post counts (their address is confirmed). Followers who
-   * already have one for this change get nothing new. Returns how many were queued.
+   * still following, whose vote on the post counts (their address is confirmed), who hasn't
+   * stopped all mail from the project. Followers who already have one for this change get nothing
+   * new. Returns how many were queued.
    */
   async queueForChange(change: FeedbackStatusChangeRow): Promise<number> {
     const result = await this.db.execute(sql`
@@ -70,6 +72,11 @@ export class FeedbackStatusMailRepo {
           AND ${s.workspaceId} = ${change.workspaceId}::uuid
           AND ${s.unsubscribedAt} IS NULL
           AND starts_with(${s.endUserId}, ${EMAIL_END_USER_PREFIX})
+          AND NOT EXISTS (
+            SELECT 1 FROM ${o}
+            JOIN ${posts} ON ${posts.id} = ${s.postId}
+            WHERE ${o.projectId} = ${posts.projectId} AND ${o.endUserId} = ${s.endUserId}
+          )
         ON CONFLICT DO NOTHING
         RETURNING 1
       )
@@ -139,12 +146,16 @@ export class FeedbackStatusMailRepo {
     return row;
   }
 
-  /** Whether the end user still follows the post. */
-  async isFollowing(postId: string, endUserId: string): Promise<boolean> {
+  /** Whether the end user still follows the post and hasn't stopped all mail from its project. */
+  async isFollowing(postId: string, projectId: string, endUserId: string): Promise<boolean> {
+    const optedOut = this.db
+      .select({ id: o.id })
+      .from(o)
+      .where(and(eq(o.projectId, projectId), eq(o.endUserId, endUserId)));
     const [row] = await this.db
       .select({ id: s.id })
       .from(s)
-      .where(and(eq(s.postId, postId), eq(s.endUserId, endUserId), isNull(s.unsubscribedAt)));
+      .where(and(eq(s.postId, postId), eq(s.endUserId, endUserId), isNull(s.unsubscribedAt), notExists(optedOut)));
     return row !== undefined;
   }
 }

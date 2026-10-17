@@ -17,6 +17,7 @@ import { EndUserTokenService } from '@backend/domain/enduser/EndUserTokenService
 import { createFeedbackDomain } from '@backend/domain/feedback/compose';
 import { emailEndUserIdOf, PENDING_VOTE_TTL_MS } from '@backend/domain/feedback/EmailVoteService';
 import { FeedbackLinkPurposes, FeedbackLinkTokens } from '@backend/domain/feedback/link-tokens';
+import { FeedbackMailOptOutRepo } from '@backend/domain/feedback/repos/mail-opt-out.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
 import { LogEmailSender } from '@backend/domain/notification/senders/email';
@@ -446,6 +447,92 @@ describe('/v1/feedback posts, subscriptions and email votes (pglite)', () => {
       expect(await statusOf('POST', `/unsubscribe/${encodeURIComponent(token)}`)).toBe(200);
       const followers = await feedback.feedbackSubscriptions.list(scope, target, { limit: 10, offset: 0 });
       expect(followers).toEqual([]);
+    });
+
+    it("stops all of the project's mail from the same link: asks on GET, acts on POST", async () => {
+      const id = await post('Dark mode');
+      await call('POST', '/identify/email', { key, body: { email: EMAIL, postId: id } });
+      const { mail, unsubscribe } = linksOfLastMail();
+      const voter = emailEndUserIdOf(EMAIL);
+      const optOuts = new FeedbackMailOptOutRepo(t.db);
+      expect(mail).toContain(`Stop all mail about Acme's feedback: ${unsubscribe}/all`);
+
+      // The post's page offers both.
+      const ask = await call('GET', unsubscribe);
+      const path = new URL(unsubscribe).pathname;
+      expect(ask.text).toContain(`<form method="post" action="${path}">`);
+      expect(ask.text).toContain(`<form method="post" action="${path}/all">`);
+      expect(ask.text).toContain('Stop all mail about Acme&#39;s feedback');
+
+      const askAll = await call('GET', `${unsubscribe}/all`);
+      expect(askAll.status).toBe(200);
+      expect(askAll.text).toContain('Stop all mail about Acme&#39;s feedback?');
+      expect(askAll.text).toContain(`<form method="post" action="${path}/all">`);
+      expect(askAll.headers.get('cache-control')).toBe('no-store');
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(false);
+
+      const done = await call('POST', `${unsubscribe}/all`);
+      expect(done.status).toBe(200);
+      expect(done.text).toContain('You won&#39;t get mail about Acme&#39;s feedback any more.');
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(true);
+      // The post's own subscription is left as it was, for when mail is turned back on.
+      const followers = await feedback.feedbackSubscriptions.list(scope, id, { limit: 10, offset: 0 });
+      expect(followers.map(row => row.endUserId)).toEqual([voter]);
+      expect(await statusOf('POST', `${unsubscribe}/all`)).toBe(200);
+      expect(await optOuts.isOptedOut({ ...scope, projectId: randomUUID() }, voter)).toBe(false);
+    });
+
+    it('takes any unsubscribe token signed before, and refuses an edited or foreign one, for all mail too', async () => {
+      const id = await post('Old link');
+      const tokens = new FeedbackLinkTokens(LINK_KEY);
+      const optOuts = new FeedbackMailOptOutRepo(t.db);
+      const voter = 'email:old@example.com';
+      const token = tokens.issue(FeedbackLinkPurposes.unsubscribe, { ...scope, endUserId: voter, postId: id }, now);
+      const forged = new FeedbackLinkTokens('another-key').issue(
+        FeedbackLinkPurposes.unsubscribe,
+        { ...scope, endUserId: voter, postId: id },
+        now,
+      );
+      const identify = tokens.issue(FeedbackLinkPurposes.identify, { ...scope, endUserId: voter }, now);
+      const refused = [`${token}x`, forged, identify].map(bad => `/unsubscribe/${encodeURIComponent(bad)}/all`);
+      expect(await statusOf('GET', refused[0] ?? '')).toBe(400);
+      expect(await repeat(refused.length, async index => await statusOf('POST', refused[index] ?? ''))).toEqual([
+        400, 400, 400,
+      ]);
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(false);
+      expect(await statusOf('POST', `/unsubscribe/${encodeURIComponent(token)}/all`)).toBe(200);
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(true);
+    });
+
+    it("still mails a later vote's confirmation, and only its page's form turns the mail back on", async () => {
+      const first = await post('First');
+      const second = await post('Second');
+      const voter = emailEndUserIdOf(EMAIL);
+      const optOuts = new FeedbackMailOptOutRepo(t.db);
+      await call('POST', '/identify/email', { key, body: { email: EMAIL, postId: first } });
+      const notStopped = await call('GET', linksOfLastMail().confirm);
+      expect(notStopped.text).not.toContain('<form');
+      expect(await statusOf('POST', `${linksOfLastMail().unsubscribe}/all`)).toBe(200);
+
+      // A new vote by email: its confirmation goes out, and confirming counts it but asks about the mail.
+      const mails = mailLog.length;
+      expect(await statusOf('POST', '/identify/email', { key, body: { email: EMAIL, postId: second } })).toBe(202);
+      expect(mailLog).toHaveLength(mails + 1);
+      const { confirm } = linksOfLastMail();
+      const page = await call('GET', confirm);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('your vote counts now');
+      expect(page.text).toContain('You stopped all mail about Acme&#39;s feedback');
+      const action = /<form method="post" action="([^"]+)">/u.exec(page.text)?.[1] ?? '';
+      expect(action.startsWith('/api/ext/v1/feedback/identify/email/resume?token=')).toBe(true);
+      expect(await voteCountOf(second)).toBe(1);
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(true);
+
+      expect(await statusOf('POST', '/identify/email/resume?token=x')).toBe(400);
+      const resumed = await call('POST', `${ORIGIN}${action.replaceAll('&amp;', '&')}`);
+      expect(resumed.status).toBe(200);
+      expect(resumed.text).toContain('You&#39;ll hear about Acme&#39;s feedback again');
+      expect(await optOuts.isOptedOut(scope, voter)).toBe(false);
     });
 
     it('limits link openings per client address', async () => {

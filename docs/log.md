@@ -1209,3 +1209,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feedback.md`, `reference/events.md`, `reference/releases.md`, `reference/github-app.md`,
   `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: stop all mail, and a 10,000-follower load test
+
+- An email voter can stop all feedback mail from a project, not only one post's: the same signed unsubscribe link at
+  `/unsubscribe/{token}/all` asks on GET and acts on POST (migration 0089, `mocco_feedback_mail_opt_outs`). Status mail skips the address at queueing and at sending.
+  A later vote by email still mails its confirmation; confirming doesn't turn mail back on, the page's button does.
+- A load test sends a change's mail to 10,000 followers through a fake transport, in runs of 200, each address once.
+  A run now reads each change's post and links once instead of once per mail.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-mail-optout` (issue #180)

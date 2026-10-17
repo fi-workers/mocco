@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { createFeedbackDomain } from '@backend/domain/feedback/compose';
+import { FeedbackMailOptOutRepo } from '@backend/domain/feedback/repos/mail-opt-out.repo';
 import { FeedbackStatusMailRepo } from '@backend/domain/feedback/repos/status-mail.repo';
 import { StatusMailPolicy, StatusMailService } from '@backend/domain/feedback/StatusMailService';
 import { EmailResultKinds } from '@backend/domain/notification/senders/email';
@@ -128,6 +129,9 @@ describe('status mail (pglite)', () => {
     });
     expect(message?.text).toContain(`See the post: https://acme.help.test/feedback/ideas/${String(dark.number)}`);
     expect(message?.text).toContain("You get this because you voted for it on Acme's feedback board.");
+    expect(message?.text).toContain(
+      `Stop all mail about Acme's feedback: https://mocco.test/unsubscribe/${dark.id}/email:ada@example.com/all`,
+    );
 
     // Running again sends nothing new.
     expect(await runAfterWindow()).toEqual({ queued: 0, sent: 0 });
@@ -191,6 +195,61 @@ describe('status mail (pglite)', () => {
       'email:ada@example.com': FeedbackStatusMailStates.sent,
       'email:bob@example.com': FeedbackStatusMailStates.skipped,
     });
+  });
+
+  it("skips an address that stopped all of the project's mail, at queueing and at sending, and only in that project", async () => {
+    const optOuts = new FeedbackMailOptOutRepo(t.db);
+    const first = await post('First');
+    const second = await post('Second');
+    await vote(first.id, 'email:ada@example.com');
+    await vote(first.id, 'email:bob@example.com');
+    await vote(second.id, 'email:ada@example.com');
+    await vote(second.id, 'email:carol@example.com');
+    // Carol stops this one post only; Ada stops all of Acme's mail.
+    await feedback.feedbackSubscriptions.unsubscribe(scope, second.id, 'email:carol@example.com');
+    await optOuts.optOut(scope, 'email:ada@example.com');
+    await optOuts.optOut(scope, 'email:ada@example.com');
+
+    // Another project of the workspace, where Ada still follows.
+    const beta = await createProjectDomain(t.db).projects.create(scope.workspaceId, { name: 'Beta', handle: 'beta' });
+    const betaScope = { workspaceId: scope.workspaceId, projectId: beta.id };
+    const betaBoard = await feedback.feedbackBoards.createBoard(betaScope, actor, { slug: 'ideas', name: 'Ideas' });
+    const elsewhere = await feedback.feedbackPosts.create(betaScope, actor, {
+      boardId: betaBoard.id,
+      title: 'Elsewhere',
+    });
+    await feedback.feedbackVotes.vote(betaScope, elsewhere.id, 'email:ada@example.com', { source: 'web' });
+
+    await move(first.id, FeedbackPostStatuses.planned);
+    await move(second.id, FeedbackPostStatuses.planned);
+    await feedback.feedbackPosts.setStatus(betaScope, actor, elsewhere.id, FeedbackPostStatuses.planned);
+    expect(await runAfterWindow()).toEqual({ queued: 2, sent: 2 });
+    expect(
+      email.sent.map(message => [message.to, message.subject]).toSorted(([a = ''], [b = '']) => a.localeCompare(b)),
+    ).toEqual([
+      ['ada@example.com', '"Elsewhere" is planned'],
+      ['bob@example.com', '"First" is planned'],
+    ]);
+
+    // Opting out after the mail was queued still stops it.
+    await move(first.id, FeedbackPostStatuses.inProgress);
+    clock = await later(AFTER_WINDOW);
+    expect(await mail.fanOutDue()).toBe(1);
+    await optOuts.optOut(scope, 'email:bob@example.com');
+    expect(await mail.sendQueued()).toBe(0);
+    const [skipped] = await t.db
+      .select()
+      .from(feedbackStatusMails)
+      .where(eq(feedbackStatusMails.endUserId, 'email:bob@example.com'))
+      .orderBy(desc(feedbackStatusMails.createdAt));
+    expect(skipped?.state).toBe(FeedbackStatusMailStates.skipped);
+
+    // Turning it back on mails the next change, and the per-post choices stand as they were.
+    await optOuts.optIn(scope, 'email:ada@example.com');
+    await move(second.id, FeedbackPostStatuses.shipped);
+    const before = email.sent.length;
+    expect(await runAfterWindow()).toEqual({ queued: 1, sent: 1 });
+    expect(email.sent.slice(before).map(message => message.to)).toEqual(['ada@example.com']);
   });
 
   it('retries a transient failure up to the limit, gives up on a permanent one, and never resends a stale claim', async () => {

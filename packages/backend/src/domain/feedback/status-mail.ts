@@ -1,6 +1,7 @@
 // The mail a post's followers get when it moves (#180): planned, in progress, shipped or closed.
 // Pure: StatusMailService fills in the links. Every customer string (the post's title, the
-// project's name) is escaped in HTML, and every mail carries the one-click unsubscribe link.
+// project's name) is escaped in HTML, and every mail carries the one-click unsubscribe link and
+// the link that stops all of the project's feedback mail.
 import { FeedbackPostStatuses } from '@mocco/common/feedback';
 
 import { escapeHtml } from '@backend/domain/status/snapshot/render';
@@ -39,12 +40,15 @@ export interface StatusMailInput {
   /** The changelog entry that announced it, when it shipped in one. */
   changelogUrl: string | null;
   unsubscribeUrl: string;
+  /** The same signed link's page that stops all mail about the project's feedback. */
+  unsubscribeAllUrl: string;
 }
 
 export function renderStatusMail(input: StatusMailInput): EmailMessage {
   const { subject, line } = headlines[input.status](input.postTitle);
   const footer = `You get this because you voted for it on ${input.projectName}'s feedback board.`;
   const unsubscribe = 'Stop hearing about this post';
+  const unsubscribeAll = `Stop all mail about ${input.projectName}'s feedback`;
   const links: { label: string; url: string }[] = [
     ...(input.changelogUrl === null ? [] : [{ label: 'Read what shipped', url: input.changelogUrl }]),
     ...(input.postUrl === null ? [] : [{ label: 'See the post', url: input.postUrl }]),
@@ -59,12 +63,13 @@ export function renderStatusMail(input: StatusMailInput): EmailMessage {
       ...(links.length === 0 ? [] : ['']),
       footer,
       `${unsubscribe}: ${input.unsubscribeUrl}`,
+      `${unsubscribeAll}: ${input.unsubscribeAllUrl}`,
     ].join('\n'),
     html: [
       `<p>${escapeHtml(line)}</p>`,
       ...links.map(link => `<p><a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a></p>`),
       `<p>${escapeHtml(footer)}</p>`,
-      `<p><a href="${escapeHtml(input.unsubscribeUrl)}">${escapeHtml(unsubscribe)}</a></p>`,
+      `<p><a href="${escapeHtml(input.unsubscribeUrl)}">${escapeHtml(unsubscribe)}</a> · <a href="${escapeHtml(input.unsubscribeAllUrl)}">${escapeHtml(unsubscribeAll)}</a></p>`,
     ].join(''),
     headers: {
       'List-Unsubscribe': `<${input.unsubscribeUrl}>`,

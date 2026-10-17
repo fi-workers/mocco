@@ -624,6 +624,13 @@
       "when": 1792219334699,
       "tag": "0088_feedback_ship_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792225245730,
+      "tag": "0089_feedback_mail_opt_outs",
+      "breakpoints": true
     }
   ]
 }

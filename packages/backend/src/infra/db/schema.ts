@@ -4765,6 +4765,31 @@ export const feedbackStatusMails = pgTable(
   ],
 );
 
+/** An end user who stopped all feedback mail from a project (#180), every post at once. A row is
+ * the opt-out; deleting it turns the mail back on. Per-post opt-outs stay on the subscriptions. */
+export const feedbackMailOptOuts = pgTable(
+  'mocco_feedback_mail_opt_outs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    endUserId: text('end_user_id').notNull(),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_mail_opt_outs_project_end_user_uq').on(t.projectId, t.endUserId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_feedback_mail_opt_outs_project_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_mail_opt_outs_end_user_check',
+      sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
+    ),
+  ],
+);
+
 /** A pair of posts that may be the same request (#181): `post_id` is the newer one, suggested to
  * be merged into `candidate_post_id`. One row per pair, so a dismissed pair is never suggested
  * again. */
