@@ -86,6 +86,7 @@ A post's number comes from its board's `next_post_number`, taken by an `UPDATE â
 
 - `sort: status` (the default): workflow order (`FEEDBACK_POST_STATUS_ORDER`: under review, planned, in progress, shipped, closed), newest first within a status.
 - `sort: newest`: newest first.
+- `sort: top`: most counted votes first, newest first among equals (the console inbox's "Most voted").
 
 Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 
@@ -150,6 +151,15 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 | `subscribers` | A post's current subscribers, oldest first |
 | `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
+
+## The console
+
+The project's **Feedback** section (`pages/workspaces/[id]/p/[projectId]/feedback/`, #175) appears once the workspace turns the feedback product on (Products page). It reads and writes only through the `feedback.*` procedures above.
+
+- **Inbox** (`/feedback`, `components/feedback-console/inbox.tsx`): one board's posts, with the board, status tab, category and sort in the query string (`?board=ideas&status=all&category=mobile&sort=top`); defaults (the first board, under review, every category, newest) are left out of the address. Each row shows the counted votes, the post's number, title, status, category, public comment count and whether the team or an end user posted it; a merged duplicate carries a "Merged" badge. 50 posts a page with previous and next; the list refreshes every 30 seconds (no realtime in v1). A public board links to its page on the help site when the project has one.
+- **Boards** (`/feedback/boards`, `components/feedback-console/boards.tsx`): create a board (the address is derived from the name until edited, and must match `FEEDBACK_SLUG_PATTERN`), rename it, change its address or visibility, delete it after a confirmation, and add, rename or delete its categories (a new category's slug comes from its name). A project without boards opens on the create form.
+
+- **A post** (`/feedback/posts/<id>`, `components/feedback-console/post.tsx`, opened from an inbox row): its description (editable with the title), the status and category selects, comments with the composer's three kinds (reply, official response, internal note; internal notes are tinted and never public), the votes (pending ones marked) with recording a vote for a user id and removing one, the follower count, and the status history with who changed what. **Merge into another postâ€¦** searches the board's 100 most voted posts by title or number (client-side) and calls `mergePost`; a merged post says which post it went into, its status is fixed, and its votes are read-only (`lockLivePost` refuses them). Team members' names come from `workspace.members`; an email voter shows as the address (`FEEDBACK_EMAIL_END_USER_PREFIX`, now in `@mocco/common/feedback`).
 
 ## Changelog
 
@@ -283,5 +293,3 @@ A test (`transport/ext/sites/feedback.test.ts`) builds both pages' data and call
 **Roadmap.** `/feedback/<board>/roadmap` shows the planned, in progress and shipped columns side by side, the 50 most voted posts of each (`PublicBoardService.roadmap`, the same columns `GET /boards/{slug}/roadmap` answers), merged duplicates left out. The category filter (`?category=<slug>`) is in the address and narrows the columns already on the page in the browser, so a filtered roadmap can be shared as a link; without JavaScript, and for crawlers, every category shows, and the canonical URL has no filter.
 
 **Sitemap.** The help site's `/sitemap.xml` also lists each public board, its roadmap and its live posts (merged duplicates left out), with their last change as `lastmod`, at most 10,000 posts per project, the most recently changed first (`PublicBoardService.sitemap`). Board pages are served in one language, so they carry no `hreflang` alternates.
-
-Not built yet: the console's inbox.
