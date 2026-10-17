@@ -1156,3 +1156,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   preview, the posts it shipped, and publishing now, scheduling, unpublishing or deleting it. This finishes #176.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-changelog-console` (issue #176)
+
+## 2026-10-17 — Feedback end-to-end test
+
+- A Playwright spec runs the feedback product against the real server: board setup, signed-in end users posting and
+  voting on the public board, console triage (official response, internal note kept off the public comments,
+  status), and a changelog entry published to the public page and RSS feed.
+- Docs touched: `reference/env.md`, `log.md`
+- Source: branch `feat/e2e-feedback-flow` (issues #175, #176)
