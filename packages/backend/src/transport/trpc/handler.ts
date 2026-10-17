@@ -26,6 +26,7 @@ import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
 import type { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
+import type { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
@@ -116,6 +117,7 @@ export interface TrpcDeps extends Services {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  feedbackDuplicates: DuplicateService;
   feedbackChangelog: ChangelogService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
@@ -187,6 +189,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         feedbackComments: deps.feedbackComments,
         feedbackSubscriptions: deps.feedbackSubscriptions,
         feedbackMerges: deps.feedbackMerges,
+        feedbackDuplicates: deps.feedbackDuplicates,
         feedbackChangelog: deps.feedbackChangelog,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,

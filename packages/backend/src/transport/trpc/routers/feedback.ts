@@ -7,6 +7,7 @@
 // FeedbackOfficialInternalError and FeedbackMergeInvalidError → BAD_REQUEST). Entities are looked up within the
 // caller's workspace and project, so another tenant's id is NOT_FOUND.
 import {
+  FeedbackLimits,
   FeedbackVoteSources,
   feedbackBoardInputSchema,
   feedbackCategoryInputSchema,
@@ -187,6 +188,33 @@ export const feedbackRouter = router({
       async ({ ctx, input }) =>
         await ctx.feedbackMerges.merge(scopeOf(input), ctx.session.user.id, input.postId, input.intoPostId),
     ),
+
+  /** The board's suggested duplicate pairs still to decide, the newest first, with both posts,
+   * and how many there are. Merge one with `mergePost` (post into original). */
+  duplicates: feedbackProcedure
+    .input(boardInput.extend({ limit: z.int().min(1).max(FeedbackLimits.listMax).default(FeedbackLimits.listDefault) }))
+    .query(async ({ ctx, input }) => {
+      const pairs = await ctx.feedbackDuplicates.list(scopeOf(input), input.boardId, input.limit);
+      return {
+        pairs: pairs.map(pair => ({
+          id: pair.candidate.id,
+          score: pair.candidate.score,
+          method: pair.candidate.method,
+          createdAt: pair.candidate.createdAt,
+          post: pair.post,
+          original: pair.original,
+        })),
+        openCount: await ctx.feedbackDuplicates.countOpen(scopeOf(input), input.boardId),
+      };
+    }),
+
+  /** Set a suggested pair aside: the posts aren't the same request, and it isn't suggested again. */
+  dismissDuplicate: feedbackProcedure
+    .input(projectInput.extend({ duplicateId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.feedbackDuplicates.dismiss(scopeOf(input), ctx.session.user.id, input.duplicateId);
+      return { ok: true } as const;
+    }),
 
   /** The post's comments, oldest first, internal notes included. */
   comments: feedbackProcedure.input(postInput.extend(feedbackPageInputSchema.shape)).query(async ({ ctx, input }) => ({

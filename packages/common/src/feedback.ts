@@ -237,3 +237,14 @@ export const FEEDBACK_NOTIFIED_STATUSES = [
   FeedbackPostStatuses.shipped,
   FeedbackPostStatuses.closed,
 ] as const satisfies readonly FeedbackPostStatus[];
+
+// ─── Duplicates (#181) ───────────────────────────────────────────────────────
+
+/** A suggested duplicate pair, for staff: still to decide, or set aside as not a duplicate (it
+ * never comes back). Merging the pair takes it out of the queue: a merged post is in no pair. */
+export const FeedbackDuplicateStates = { open: 'open', dismissed: 'dismissed' } as const;
+export type FeedbackDuplicateState = (typeof FeedbackDuplicateStates)[keyof typeof FeedbackDuplicateStates];
+
+/** How a pair was found: shared title words (embeddings come later, #181). */
+export const FeedbackDuplicateMethods = { fulltext: 'fulltext' } as const;
+export type FeedbackDuplicateMethod = (typeof FeedbackDuplicateMethods)[keyof typeof FeedbackDuplicateMethods];

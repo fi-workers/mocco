@@ -131,9 +131,19 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 
 **Concurrency.** One transaction takes the `feedbackPost` advisory lock (`AdvisoryLockNamespaces.feedbackPost`) for both posts, then both rows `FOR UPDATE`, each in id order, so two merges sharing a post apply one after another and never deadlock. Votes and subscriptions lock their post row first (`lockLivePost`), so none can land on a post while its votes are being moved. Tests run four merges into one target at once (each voter counted once) and two crossing merges with votes arriving together (one merge wins, the other is refused, and the live post's count equals its counted votes).
 
+## Suggested duplicates
+
+Staff get pairs of posts that may be the same request (#181, the full-text half; embeddings come later). Migration 0084 adds `mocco_feedback_duplicate_candidates` and `duplicates_checked_at` on posts.
+
+- **The sweep.** The `feedback.duplicates.detect` job runs every minute (`DuplicateService.detectDue`). It takes up to 50 posts with no `duplicates_checked_at`, oldest first, across every workspace, and compares each with the older posts of its board (a lower number); posts that existed before the migration are compared as the sweep reaches them. A merged post is marked checked with nothing to compare.
+- **Matching.** A title's key words are the similar-posts search's words (letters and digits, two characters or more, at most eight) without common English filler (`a`, `add`, `please`, `support`, `the`…). The search (`FeedbackPostRepo.similar`) finds up to 20 older posts, and each is scored by the share of the new title's key words found as whole words in its title. A pair needs two shared key words and a score of 0.5 or more; a post keeps its three closest pairs (then the most voted). A title with fewer than two key words gets none.
+- **One row per pair**, `post_id` the newer post and `candidate_post_id` the older one it may repeat, unique on the two, with `score` (0 to 1), `method` (`fulltext`) and `state` (`open` or `dismissed`). A pair already there, open or dismissed, is never inserted again, so a dismissed pair doesn't come back.
+- **The queue** (`list`, `countOpen`) is a board's open pairs whose posts are both unmerged, the newest first: merging either post takes every pair it is in out of the queue, with no state change.
+- **Dismissing** (`dismiss`) sets an open pair to `dismissed` with who and when, and records `feedback.duplicate.dismissed`. Another project's pair, or one already dismissed, is `FeedbackDuplicateNotFoundError` (NOT_FOUND).
+
 ## Audit
 
-`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits. Category and post edits aren't audited. The changelog's audit actions are under [Changelog](#changelog).
+`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits, and `feedback.duplicate.dismissed` (on the newer post, with the board and `candidatePostId`) when staff set a [suggested pair](#suggested-duplicates) aside. Category and post edits aren't audited. The changelog's audit actions are under [Changelog](#changelog).
 
 ## The feedback router
 
@@ -151,6 +161,7 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 | `subscribers` | A post's current subscribers, oldest first |
 | `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
+| `duplicates`, `dismissDuplicate` | A board's [suggested pairs](#suggested-duplicates) still to decide, with both posts and the open count; set one aside |
 
 ## The console
 
@@ -160,6 +171,7 @@ The project's **Feedback** section (`pages/workspaces/[id]/p/[projectId]/feedbac
 - **Boards** (`/feedback/boards`, `components/feedback-console/boards.tsx`): create a board (the address is derived from the name until edited, and must match `FEEDBACK_SLUG_PATTERN`), rename it, change its address or visibility, delete it after a confirmation, and add, rename or delete its categories (a new category's slug comes from its name). A project without boards opens on the create form.
 
 - **A post** (`/feedback/posts/<id>`, `components/feedback-console/post.tsx`, opened from an inbox row): its description (editable with the title), the status and category selects, comments with the composer's three kinds (reply, official response, internal note; internal notes are tinted and never public), the votes (pending ones marked) with recording a vote for a user id and removing one, the follower count, and the status history with who changed what. **Merge into another post…** searches the board's 100 most voted posts by title or number (client-side) and calls `mergePost`; a merged post says which post it went into, its status is fixed, and its votes are read-only (`lockLivePost` refuses them). Team members' names come from `workspace.members`; an email voter shows as the address (`FEEDBACK_EMAIL_END_USER_PREFIX`, now in `@mocco/common/feedback`).
+- **Possible duplicates** (`/feedback/duplicates?board=`, `components/feedback-console/duplicates.tsx`, linked from the inbox with the open count): the board's [suggested pairs](#suggested-duplicates), newest first, each with both posts' numbers, titles, statuses and votes and the share of title words they have in common. **Merge #new into #old** calls `mergePost`; **Not the same** calls `dismissDuplicate`.
 - **Changelog** (`/feedback/changelog?board=&state=`, `components/feedback-console/changelog.tsx`, linked from the inbox): a board's entries by state (Draft, Scheduled, Published, All), newest first, and **New entry**, which creates a draft from a title and opens it. The editor (`/feedback/changelog/<id>`, `changelog-entry.tsx`) edits the title, the address, the tags, the Markdown text beside the public page's rendering (`helpArticleBlocks`) and the posts it announces (searched among the board's 100 most voted, merged duplicates left out). **Publish now** and **Schedule** (a `datetime-local` in the viewer's time zone, sent as an absolute time) save unsaved edits first. **Unpublish** or **Cancel the schedule** takes it back to a draft, and **Delete entry** asks first. A published entry links its public page.
 
 ## Changelog

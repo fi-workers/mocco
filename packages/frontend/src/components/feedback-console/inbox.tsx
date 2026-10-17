@@ -142,6 +142,8 @@ function Filters({
   publicUrl,
   manageHref,
   changelogHref,
+  duplicatesHref,
+  duplicateCount,
   onChange,
 }: {
   boards: readonly Board[];
@@ -152,6 +154,8 @@ function Filters({
   publicUrl: string | null;
   manageHref: string;
   changelogHref: string;
+  duplicatesHref: string;
+  duplicateCount: number;
   onChange: (href: string | null) => Promise<void>;
 }) {
   return (
@@ -176,8 +180,13 @@ function Filters({
           </a>
         )}
         <Link
-          href={changelogHref}
+          href={duplicatesHref}
           className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+          Possible duplicates{duplicateCount === 0 ? '' : ` (${String(duplicateCount)})`}
+        </Link>
+        <Link
+          href={changelogHref}
+          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
           Changelog
         </Link>
         <Link
@@ -301,6 +310,11 @@ function BoardInbox({
     { refetchInterval: FEEDBACK_INBOX_REFRESH_MS, placeholderData: previous => previous },
   );
   const posts = postsQuery.data?.posts ?? [];
+  // Only the count, for the link to the queue.
+  const duplicatesQuery = trpc.feedback.duplicates.useQuery(
+    { workspaceId, projectId, boardId: board.id, limit: 1 },
+    { refetchInterval: FEEDBACK_INBOX_REFRESH_MS },
+  );
 
   /** The inbox's address with one filter changed; another board starts from its defaults. */
   const hrefWith = (change: Partial<InboxFilters>) =>
@@ -323,6 +337,8 @@ function BoardInbox({
         publicUrl={siteSlug === null || !board.isPublic ? null : publicBoardUrl(siteSlug, board.slug)}
         manageHref={Routes.projectFeedbackBoards(workspaceId, projectId)}
         changelogHref={Routes.projectFeedbackChangelog(workspaceId, projectId, { board: board.slug })}
+        duplicatesHref={Routes.projectFeedbackDuplicates(workspaceId, projectId, { board: board.slug })}
+        duplicateCount={duplicatesQuery.data?.openCount ?? 0}
         onChange={async href => {
           setOffset(0);
           if (href !== null) {

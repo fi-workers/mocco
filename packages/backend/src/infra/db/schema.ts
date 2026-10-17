@@ -4,6 +4,8 @@ import {
   ChangelogEntryStates,
   ChangelogTags,
   FeedbackCommentAuthorKinds,
+  FeedbackDuplicateMethods,
+  FeedbackDuplicateStates,
   FeedbackStatusMailStates,
   FeedbackLimits,
   FeedbackPostStatuses,
@@ -92,6 +94,8 @@ import type {
   ChangelogEntryState,
   ChangelogTag,
   FeedbackCommentAuthorKind,
+  FeedbackDuplicateMethod,
+  FeedbackDuplicateState,
   FeedbackStatusMailState,
   FeedbackPostStatus,
   FeedbackStatusChangeReason,
@@ -4379,11 +4383,17 @@ export const feedbackPosts = pgTable(
     // merged: merging a target re-parents the posts merged into it, so there are no chains.
     mergedIntoPostId: uuid('merged_into_post_id'),
     mergedAt: timestamp('merged_at'),
+    // When the duplicate sweep compared it with the board's older posts (#181); null = not yet.
+    duplicatesCheckedAt: timestamp('duplicates_checked_at'),
     createdAt,
     updatedAt,
   },
   t => [
     uniqueIndex('mocco_feedback_posts_board_number_uq').on(t.boardId, t.number),
+    // The duplicate sweep's scan: posts not compared yet, oldest first.
+    index('mocco_feedback_posts_duplicates_unchecked_idx')
+      .on(t.createdAt)
+      .where(sql`${t.duplicatesCheckedAt} IS NULL`),
     index('mocco_feedback_posts_board_status_created_idx').on(t.boardId, t.status, t.createdAt.desc()),
     index('mocco_feedback_posts_board_created_idx').on(t.boardId, t.createdAt.desc()),
     // Lets status changes reference (post_id, workspace_id).
@@ -4715,6 +4725,65 @@ export const feedbackStatusMails = pgTable(
     check(
       'mocco_feedback_status_mails_state_check',
       sql`${t.state} IN (${sqlInList(Object.values(FeedbackStatusMailStates))})`,
+    ),
+  ],
+);
+
+/** A pair of posts that may be the same request (#181): `post_id` is the newer one, suggested to
+ * be merged into `candidate_post_id`. One row per pair, so a dismissed pair is never suggested
+ * again. */
+export const feedbackDuplicateCandidates = pgTable(
+  'mocco_feedback_duplicate_candidates',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    candidatePostId: uuid('candidate_post_id').notNull(),
+    // How alike they are, 0 to 1 (for fulltext: the share of the newer title's words in the other).
+    score: real().notNull(),
+    method: text().$type<FeedbackDuplicateMethod>().notNull(),
+    state: text().$type<FeedbackDuplicateState>().notNull().default(FeedbackDuplicateStates.open),
+    dismissedAt: timestamp('dismissed_at'),
+    dismissedByUserId: uuid('dismissed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_duplicate_candidates_pair_uq').on(t.postId, t.candidatePostId),
+    // The staff queue: a board's open pairs, newest first.
+    index('mocco_feedback_duplicate_candidates_board_open_idx')
+      .on(t.boardId, t.createdAt.desc())
+      .where(sql`${t.state} = '${sql.raw(FeedbackDuplicateStates.open)}'`),
+    index('mocco_feedback_duplicate_candidates_candidate_idx').on(t.candidatePostId),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_feedback_duplicate_candidates_board_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_duplicate_candidates_post_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.candidatePostId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_duplicate_candidates_candidate_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_duplicate_candidates_distinct_check', sql`${t.postId} <> ${t.candidatePostId}`),
+    check('mocco_feedback_duplicate_candidates_score_check', sql`${t.score} >= 0 AND ${t.score} <= 1`),
+    check(
+      'mocco_feedback_duplicate_candidates_method_check',
+      sql`${t.method} IN (${sqlInList(Object.values(FeedbackDuplicateMethods))})`,
+    ),
+    check(
+      'mocco_feedback_duplicate_candidates_state_check',
+      sql`${t.state} IN (${sqlInList(Object.values(FeedbackDuplicateStates))})`,
+    ),
+    check(
+      'mocco_feedback_duplicate_candidates_dismissed_check',
+      sql`(${t.state} = '${sql.raw(FeedbackDuplicateStates.dismissed)}') = (${t.dismissedAt} IS NOT NULL)`,
     ),
   ],
 );

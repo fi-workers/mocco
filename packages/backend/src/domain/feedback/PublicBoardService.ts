@@ -53,7 +53,7 @@ export type PublicVoteSource = typeof FeedbackVoteSources.web | typeof FeedbackV
 
 /** The words `similar` matches on: letters and digits, two characters or more, at most eight. */
 export const SIMILAR_MAX_WORDS = 8;
-const wordsOf = (query: string): string[] => [
+export const wordsOf = (query: string): string[] => [
   // eslint-disable-next-line sonarjs/null-dereference -- query is a parsed string, never null
   ...new Set((query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []).slice(0, SIMILAR_MAX_WORDS)),
 ];

@@ -141,3 +141,11 @@ export class ChangelogPostsInvalidError extends BadRequestError {
     this.name = 'ChangelogPostsInvalidError';
   }
 }
+
+/** The scope has no open duplicate pair with this id (it may have been dismissed) — NOT_FOUND. */
+export class FeedbackDuplicateNotFoundError extends NotFoundError {
+  constructor(id: string, options?: ErrorOptions) {
+    super(`Open duplicate pair ${id} was not found`, options);
+    this.name = 'FeedbackDuplicateNotFoundError';
+  }
+}

@@ -101,6 +101,8 @@ export const AuditActions = {
   feedbackPostStatusChanged: 'feedback.post.status_changed',
   /** Staff merged a duplicate feedback post into another; its votes and subscribers moved. */
   feedbackPostMerged: 'feedback.post.merged',
+  /** Staff set a suggested duplicate pair aside: the posts aren't the same request. */
+  feedbackDuplicateDismissed: 'feedback.duplicate.dismissed',
   /** A changelog entry went public, by a team member or at its scheduled time (no actor). */
   changelogEntryPublished: 'feedback.changelog.published',
   /** A published changelog entry was taken back to a draft. */
@@ -237,6 +239,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.feedbackBoardDeleted]: 'Feedback board deleted',
   [AuditActions.feedbackPostStatusChanged]: 'Feedback post status changed',
   [AuditActions.feedbackPostMerged]: 'Feedback post merged into another',
+  [AuditActions.feedbackDuplicateDismissed]: 'Feedback duplicate suggestion dismissed',
   [AuditActions.changelogEntryPublished]: 'Changelog entry published',
   [AuditActions.changelogEntryUnpublished]: 'Changelog entry unpublished',
   [AuditActions.changelogEntryDeleted]: 'Changelog entry deleted',

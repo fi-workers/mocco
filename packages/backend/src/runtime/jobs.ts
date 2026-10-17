@@ -17,6 +17,7 @@ import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { BoardService } from '@backend/domain/feedback/BoardService';
 import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
+import { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import { feedbackUnsubscribeUrl } from '@backend/domain/feedback/EmailVoteService';
 import { createFeedbackHandlers, feedbackSchedules } from '@backend/domain/feedback/jobs';
 import { feedbackLinkDepsFromEnv } from '@backend/domain/feedback/link-config';
@@ -236,6 +237,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         },
         now: deps.now,
       }),
+      duplicates: new DuplicateService({ db, audit, boards: new BoardService({ db, audit }), now: deps.now }),
     }),
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),

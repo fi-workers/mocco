@@ -10,6 +10,7 @@ import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
 import type { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
+import type { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
@@ -129,6 +130,7 @@ export interface Context {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  feedbackDuplicates: DuplicateService;
   /** A board's changelog (#176). */
   feedbackChangelog: ChangelogService;
   /** The status page: pages and components, incidents, maintenance (#148). */

@@ -88,6 +88,8 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
   subscribers: async (api, scope, ids) => await api.feedback.subscribers({ ...scope, postId: ids.postId }),
   mergePost: async (api, scope, ids) =>
     await api.feedback.mergePost({ ...scope, postId: ids.postId, intoPostId: randomUUID() }),
+  duplicates: async (api, scope, ids) => await api.feedback.duplicates({ ...scope, boardId: ids.boardId }),
+  dismissDuplicate: async (api, scope) => await api.feedback.dismissDuplicate({ ...scope, duplicateId: randomUUID() }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
