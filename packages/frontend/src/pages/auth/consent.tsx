@@ -19,7 +19,7 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   [McpScopes.statusWrite]: "Run your status monitors' checks now, as you",
   [McpScopes.messengerWrite]: 'Reply to and assign your messenger conversations, as you',
   [McpScopes.feedbackWrite]:
-    'Move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you',
+    'Set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you',
   [McpScopes.otaWrite]:
     'Set up OTA hosting as you: host an app, add channels, register signing certificates and trust CI',
   [McpScopes.projectsWrite]: 'Create projects, add apps to them and turn products on, as you',

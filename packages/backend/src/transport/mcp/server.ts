@@ -16,15 +16,25 @@
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
 // under `feedback:write`, the four OTA setup changes (in `tools/ota-setup.ts`) under
 // `ota:write`, and the three project setup changes (in `tools/projects.ts`) under
-// `projects:write`.
+// `projects:write`. The rest of the feedback changes (in `tools/feedback-authoring.ts`,
+// `tools/feedback-intake.ts` and `tools/feedback-followers.ts`) are under `feedback:write` too.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
 import { registerFeedbackTools, type FeedbackToolDeps } from '@backend/transport/mcp/tools/feedback';
 import {
+  registerFeedbackAuthoringTools,
+  type FeedbackAuthoringToolDeps,
+} from '@backend/transport/mcp/tools/feedback-authoring';
+import {
   registerFeedbackEngagementTools,
   type FeedbackEngagementToolDeps,
 } from '@backend/transport/mcp/tools/feedback-engagement';
+import {
+  registerFeedbackFollowerTools,
+  type FeedbackFollowerToolDeps,
+} from '@backend/transport/mcp/tools/feedback-followers';
+import { registerFeedbackIntakeTools, type FeedbackIntakeToolDeps } from '@backend/transport/mcp/tools/feedback-intake';
 import {
   registerFeedbackShippingTools,
   type FeedbackShippingToolDeps,
@@ -63,6 +73,9 @@ export type McpToolDeps = RunToolDeps &
   FeedbackToolDeps &
   FeedbackShippingToolDeps &
   FeedbackEngagementToolDeps &
+  FeedbackAuthoringToolDeps &
+  FeedbackIntakeToolDeps &
+  FeedbackFollowerToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -94,6 +107,9 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerFeedbackTools(server, deps);
   registerFeedbackShippingTools(server, deps);
   registerFeedbackEngagementTools(server, deps);
+  registerFeedbackAuthoringTools(server, deps);
+  registerFeedbackIntakeTools(server, deps);
+  registerFeedbackFollowerTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);
