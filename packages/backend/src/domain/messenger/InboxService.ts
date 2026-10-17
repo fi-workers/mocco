@@ -1,9 +1,9 @@
 // The team's side of the messenger (#95): a project's inbox, a conversation with every
 // message (internal notes included), replies and notes (with attachments, #430),
-// open/closed, read positions, assigning by hand, and blocking a contact. Callers are workspace members, checked by the tRPC procedure;
+// open/closed (audited), read positions, assigning by hand, and blocking a contact. Callers are workspace members, checked by the tRPC procedure;
 // every query here is also scoped by workspace and project.
 import { AuditActions } from '@mocco/common/audit';
-import { AuthorKinds, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
+import { AuthorKinds, ConversationStatuses, MessageVisibilities, MessengerLimits } from '@mocco/common/messenger';
 
 import {
   attachmentsByMessage,
@@ -240,9 +240,37 @@ export class InboxService {
     return { conversationId: conversation.id, assignee: summary, changed: true };
   }
 
-  async setStatus(workspaceId: string, projectId: string, conversationId: string, status: ConversationStatus) {
-    await this.require(workspaceId, projectId, conversationId);
-    return await new MessengerConversationRepo(this.deps.db).setStatus(workspaceId, conversationId, status, this.now());
+  /**
+   * Close a conversation, or open a closed one again. Audited as `actorUserId`; setting the
+   * status it has already changes and records nothing.
+   */
+  async setStatus(
+    workspaceId: string,
+    projectId: string,
+    actorUserId: string,
+    input: { conversationId: string; status: ConversationStatus },
+  ) {
+    const conversation = await this.require(workspaceId, projectId, input.conversationId);
+    if (conversation.status === input.status) {
+      return conversation;
+    }
+    const updated = await new MessengerConversationRepo(this.deps.db).setStatus(
+      workspaceId,
+      conversation.id,
+      input.status,
+      this.now(),
+    );
+    await this.deps.audit.record(workspaceId, {
+      actorUserId,
+      action:
+        input.status === ConversationStatuses.closed
+          ? AuditActions.messengerConversationClosed
+          : AuditActions.messengerConversationReopened,
+      subjectType: 'messenger_conversation',
+      subjectId: conversation.id,
+      payload: { projectId },
+    });
+    return updated;
   }
 
   async markRead(workspaceId: string, projectId: string, userId: string, conversationId: string) {
@@ -305,6 +333,15 @@ export class InboxService {
       throw new InboxMemberNotFoundError(input.userId);
     }
     return { available: updated.available };
+  }
+
+  /** One of the project's contacts, as the conversation view shows them. */
+  async contact(workspaceId: string, projectId: string, contactId: string) {
+    const contact = await new MessengerContactRepo(this.deps.db).find(workspaceId, projectId, contactId);
+    if (contact === undefined) {
+      throw new ContactNotFoundError(contactId);
+    }
+    return contact;
   }
 
   /** Stop a contact writing (they can still read what they have), or let them again. Audited. */

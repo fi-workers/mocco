@@ -17,7 +17,8 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   offline_access: 'Stay signed in without asking you again',
   [McpScopes.approvalsWrite]: 'Approve or reject changes as you, in workspaces that allow agents to decide',
   [McpScopes.statusWrite]: "Run your status monitors' checks now, as you",
-  [McpScopes.messengerWrite]: 'Reply to and assign your messenger conversations, as you',
+  [McpScopes.messengerWrite]:
+    'Reply to, note, assign, close and block in your messenger conversations, and change its rotation and settings, as you',
   [McpScopes.feedbackWrite]: 'Move, comment on, vote on and merge your feedback posts, as you',
   [McpScopes.otaWrite]:
     'Set up OTA hosting as you: host an app, add channels, register signing certificates and trust CI',

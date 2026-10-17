@@ -4,7 +4,7 @@ description: How Mocco's messenger stores conversations between a project's sign
 type: reference
 status: active
 created: 2026-10-02
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, messenger, support]
@@ -31,6 +31,9 @@ code_refs:
   - packages/frontend/src/components/messenger/rotation.tsx
   - packages/frontend/src/components/messenger/desktop-alerts.tsx
   - packages/backend/src/domain/messenger/messages.ts
+  - packages/backend/src/transport/mcp/tools/messenger.ts
+  - packages/backend/src/transport/mcp/tools/messenger-conversations.ts
+  - packages/backend/src/transport/mcp/tools/messenger-setup.ts
 ---
 
 # Messenger
@@ -68,7 +71,7 @@ Guest sessions need no signature, so they are also limited to 20 an hour per cli
 - **Idempotency.** A retried send with the same `clientMessageId` returns the stored message; a retried start returns the conversation it already started.
 - **Unread.** The contact has unread when `last_operator_seq > contact_last_read_seq`; a team member has unread when `last_message_seq > last_read_seq`. Writing moves the writer's own read position.
 - **Internal notes** are operator-only (a CHECK) and never leave the inbox: `/v1` reads filter to public messages.
-- **Reopening.** A contact writing in a closed conversation reopens it.
+- **Closing and reopening.** `InboxService.setStatus` closes a conversation or opens it again, audited as `messenger.conversation.closed` / `.reopened` (subject `messenger_conversation`, payload `{ projectId }`) naming the person; setting the status it has already changes and records nothing. A contact writing in a closed conversation reopens it, unrecorded.
 - **Blocking** (`messenger.setContactBlocked`, audited) stops a contact writing and opening sessions; they can still read what they have.
 - **Erasing** (privacy requests) is a hard delete of the contact with every session, conversation, message, attachment, read position and push token (the foreign keys cascade), and the attachments' bytes first (`StorageService.delete`), so an erase that stops halfway can run again. The team erases from the inbox (`messenger.eraseContact`); a user erases themselves with `DELETE /v1/messenger/me`. Both are audited as `messenger.contact.erased` with only `{ projectId, by: 'operator' | 'contact' }`.
 
@@ -138,7 +141,7 @@ A team **reply** (never an internal note) enqueues `messenger.push.reply` `{ con
 
 ## Inbox (tRPC)
 
-The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus`, `markRead`, `assign({ conversationId, assigneeUserId | null })` (by hand, audited; see [round robin](#round-robin)), `setContactBlocked`, `eraseContact`, and the rotation: `inboxMembers` (each member's name, email, availability and last assignment), `addInboxMember` (workspace members only, else `BAD_REQUEST`), `removeInboxMember`, `setAvailability({ userId, available })` (an id not in the rotation is `NOT_FOUND`). `inbox` rows and `conversation` carry `assignee: { userId, name } | null`.
+The `messenger` router uses `productProcedure(Products.messenger)`: `settings`, `enable`, `rotateSecret`, `setCategories`, `inbox` (by status, keyset-paged by `before`, with each conversation's contact and the caller's unread state), `conversation` (every message, notes included, and the contact), `createAttachment` (reserve an image or PDF upload in a conversation), `write` (reply, or `internal: true` for a note, with up to 3 `attachmentIds`), `setStatus` (audited), `markRead`, `assign({ conversationId, assigneeUserId | null })` (by hand, audited; see [round robin](#round-robin)), `setContactBlocked`, `eraseContact`, and the rotation: `inboxMembers` (each member's name, email, availability and last assignment), `addInboxMember` (workspace members only, else `BAD_REQUEST`), `removeInboxMember`, `setAvailability({ userId, available })` (an id not in the rotation is `NOT_FOUND`). `inbox` rows and `conversation` carry `assignee: { userId, name } | null`.
 
 ## Console
 
@@ -146,16 +149,27 @@ The project's **Inbox** tab (`/workspaces/:id/p/:projectId/inbox`, `?status=clos
 
 ## MCP tools
 
-Agents reach the inbox through four tools in `transport/mcp/tools/messenger.ts` (#462, ADR 0025), thin adapters over `InboxService` behind `ProjectScope` with `Products.messenger`, so a conversation of another project or workspace reads exactly like one that does not exist. Customer setup is in [Connect Mocco to your agent](../customer/mcp/connect.md).
+Agents reach the inbox through the tools in `transport/mcp/tools/messenger.ts` (#462), `messenger-conversations.ts` and `messenger-setup.ts` (ADR 0025): thin adapters over `InboxService` and `MessengerSettingsService` behind `ProjectScope` with `Products.messenger`, so a conversation, contact or project of another workspace reads exactly like one that does not exist. Customer setup is in [Connect Mocco to your agent](../customer/mcp/connect.md).
 
 | Tool | Service call | Notes |
 |---|---|---|
-| `mocco_messenger_conversations_search` | `list` | `status` `open` (default), `closed` or `all`; `assignee` `me`, a user id or `unassigned`; `contact` matches a contact's id, email (any case) or `external_user_id` exactly; `limit` up to 50, keyset-paged by `before` (`nextBefore`, a `last_message_at`); concise or detailed |
-| `mocco_messenger_conversation_get` | `get` | The latest `limit` messages (default 50) oldest first, notes marked, with `earlierMessages`; each attachment as id, file name, type and size. The signed download link `get` makes for the console is dropped. Detailed adds the contact's email, user id, traits and last context, and each message's context |
-| `mocco_messenger_reply` | `write` (`internal: false`) | Text only. The confirmation shows the contact and the exact text; the signed state records the conversation's `last_message_seq` when asked, so once the reply is sent (or the contact writes again) the same confirmation no longer matches. The message's `client_message_id` is `mcp:` plus a hash of the person, conversation, that seq and the text, so two concurrent answers to one confirmation still write one message |
-| `mocco_messenger_assign` | `assign` | `assignee` `me`, a user id or `unassigned`. The confirmation shows who has it and who takes it, and the state records both, so a reassignment in between asks again. Someone outside the workspace is refused before asking, and an assignment that changes nothing answers without asking |
+| `mocco_messenger_conversations_search` | `InboxService.list` | `status` `open` (default), `closed` or `all`; `assignee` `me`, a user id or `unassigned`; `contact` matches a contact's id, email (any case) or `external_user_id` exactly; `limit` up to 50, keyset-paged by `before` (`nextBefore`, a `last_message_at`); concise or detailed |
+| `mocco_messenger_conversation_get` | `InboxService.get` | The latest `limit` messages (default 50) oldest first, notes marked, with `earlierMessages`; each attachment as id, file name, type and size. The signed download link `get` makes for the console is dropped. Detailed adds the contact's email, user id, traits and last context, and each message's context |
+| `mocco_messenger_settings_get` | `MessengerSettingsService.get` | `isSetUp`, and the categories and `allowGuests` when it is; the projection without the identity secret |
+| `mocco_messenger_inbox_members_list` | `InboxService.members` | The rotation in joining order: user id, name, email, `available`, `lastAssignedAt` |
+| `mocco_messenger_reply` | `InboxService.write` (`internal: false`) | Text only. The confirmation shows the contact and the exact text; the signed state records the conversation's `last_message_seq` when asked, so once the reply is sent (or the contact writes again) the same confirmation no longer matches. The message's `client_message_id` is `mcp:` plus a hash of the person, the tool, the conversation, that seq and the text, so two concurrent answers to one confirmation still write one message |
+| `mocco_messenger_note_create` | `InboxService.write` (`internal: true`) | As the reply, bound the same way; the confirmation says the contact never sees it |
+| `mocco_messenger_assign` | `InboxService.assign` | `assignee` `me`, a user id or `unassigned`. The confirmation shows who has it and who takes it, and the state records both, so a reassignment in between asks again. Someone outside the workspace is refused before asking, and an assignment that changes nothing answers without asking |
+| `mocco_messenger_conversation_set_status` | `InboxService.setStatus` | `open` or `closed`; the state records the status asked from |
+| `mocco_messenger_contact_set_blocked` | `InboxService.contact`, `setContactBlocked` | `contactId` and `blocked`; the state records whether they were blocked when asked |
+| `mocco_messenger_categories_set` | `MessengerSettingsService.setCategories` | The whole list (`messengerCategoriesSchema`); the confirmation shows both lists and names any removed key an app may still send (its starts are refused); the state records the list asked from |
+| `mocco_messenger_guest_access_set` | `MessengerSettingsService.setAllowGuests` | The state records the setting asked from |
+| `mocco_messenger_inbox_members_add` / `_remove` | `InboxService.assignable`, `addMember` / `removeMember` | `userId` `me` or a user id; someone outside the workspace is refused before asking; already in (or not in) answers without asking |
+| `mocco_messenger_inbox_members_set_availability` | `InboxService.setAvailable` | `userId` (default `me`) and `available`; someone not in the rotation is refused; the state records their availability when asked. Not audited, as in the console |
 
-Reply and assign are behind the same locks as every changing tool: the `messenger:write` OAuth scope (stepped up for per tool), the workspace's `agents_may_decide` opt-in and a server able to sign the confirmation (`openDecision`, `confirmThenApply`). Both act as the caller, and any workspace member may use them, as in the inbox. Notes, attachments, closing, blocking, erasing and the rotation stay in the console.
+Every change is behind the same locks as every changing tool: the `messenger:write` OAuth scope (stepped up for per tool), the workspace's `agents_may_decide` opt-in and a server able to sign the confirmation (`openDecision`, `confirmThenApply`). Each answers without asking when nothing would change, and its confirmation is bound to the state it showed, so a change by anyone in between makes the old answer a different change, refused. They act as the caller, and any workspace member may use them, as in the inbox.
+
+Not tools, on purpose: `enable` and `rotateSecret` (each returns the identity secret, which must never enter a model's context), `eraseContact` (a privacy request that can't be undone stays with a person), `createAttachment` (an upload needs the bytes PUT outside the protocol; attaching from an agent is a follow-up) and `markRead` (a read position is the person's own record of what they have seen; an agent reading a thread is not the person reading it).
 
 ## Events
 

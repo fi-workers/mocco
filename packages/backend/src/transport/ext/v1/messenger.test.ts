@@ -357,7 +357,7 @@ describe('/v1/messenger (pglite)', () => {
     const token = await sessionFor('u1');
     const { body } = await start(token);
     const conversationId = (body as unknown as { conversation: { id: string } }).conversation.id;
-    await messenger.inbox.setStatus(workspaceId, projectId, conversationId, 'closed');
+    await messenger.inbox.setStatus(workspaceId, projectId, operatorId, { conversationId, status: 'closed' });
 
     const reply = await call('POST', `/conversations/${conversationId}/messages`, {
       token,

@@ -1125,3 +1125,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-17 — Messenger: the rest of the inbox as MCP tools, and a coverage audit
+
+- Closes the messenger's MCP gap (ADR 0025): `mocco_messenger_note_create`, `_conversation_set_status`,
+  `_contact_set_blocked` (`tools/messenger-conversations.ts`), and `_settings_get`, `_inbox_members_list`,
+  `_categories_set`, `_guest_access_set`, `_inbox_members_add` / `_remove` / `_set_availability`
+  (`tools/messenger-setup.ts`). Every change is behind `messenger:write`, the workspace's opt-in and a confirmation
+  bound to the state it showed; the consent line says what the scope now covers.
+- `InboxService.setStatus` now takes the person and audits `messenger.conversation.closed` / `.reopened` (the one inbox
+  change the console made unrecorded); setting the status it has already records nothing. No migration.
+- Not tools, on purpose: setting up and rotating the identity secret (they return it), erasing a contact, marking read.
+  Attaching files from an agent is a follow-up.
+- The MCP spec gains a Coverage section: every other console procedure mapped to its tool, a gap, or an exclusion.
+- Docs touched: `reference/messenger.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-messenger-coverage`

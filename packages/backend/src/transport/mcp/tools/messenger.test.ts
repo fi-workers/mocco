@@ -277,7 +277,10 @@ describe('mocco_messenger_* (pglite, over HTTP)', () => {
       body: 'How do I export?',
       clientMessageId: randomUUID(),
     }));
-    await messenger.inbox.setStatus(mine.workspaceId, mine.projectId, closed, 'closed');
+    await messenger.inbox.setStatus(mine.workspaceId, mine.projectId, ada, {
+      conversationId: closed,
+      status: 'closed',
+    });
 
     // Ada answers Minji with a PDF attached, and leaves a note.
     const pdf = new TextEncoder().encode('%PDF-1.7\n%%EOF\n');
@@ -347,6 +350,7 @@ describe('mocco_messenger_* (pglite, over HTTP)', () => {
       helpTranslations: { grid: refuse, reviewByShortId: refuse },
       helpGlossary: { list: refuse },
       messengerInbox: messenger.inbox,
+      messengerSettings: messenger.messengerSettings,
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
       feedbackVotes: { list: refuse, find: refuse, vote: refuse },

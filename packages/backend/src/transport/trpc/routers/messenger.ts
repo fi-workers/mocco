@@ -127,7 +127,7 @@ export const messengerRouter = router({
   setStatus: messengerProcedure
     .input(conversationInput.extend({ status: conversationStatusSchema }))
     .mutation(async ({ ctx, input }) => ({
-      conversation: await ctx.inbox.setStatus(input.workspaceId, input.projectId, input.conversationId, input.status),
+      conversation: await ctx.inbox.setStatus(input.workspaceId, input.projectId, ctx.session.user.id, input),
     })),
 
   /** Give the conversation to a workspace member, or to no one (`assigneeUserId: null`). */
