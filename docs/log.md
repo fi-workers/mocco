@@ -4,7 +4,7 @@ description: Append-only chronological record of what changed in docs/ and why, 
 type: journal
 status: active
 created: 2026-09-24
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [meta, log, wiki]
@@ -1098,3 +1098,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - No migration.
 - Docs touched: `customer/mcp/connect.md`, `specs/2026-10-02-mcp-and-cli-design.md`, `log.md`
 - Source: branch `feat/mcp-project-setup`
+
+## 2026-10-17 — OTA: rollback to embedded after a rollback, and the stop route that ran the wrong action
+
+- Found running showyourtime's OTA test cases on a simulator. `POST …/rollback-to-embedded` ran a plain **rollback** in
+  production: the route was `:action{pause|rollback|rollback-to-embedded}`, and Hono's TrieRouter (what SmartRouter falls
+  back to for the whole ext app) matches that alternation unanchored. Tests ran on RegExpRouter and passed. One route per
+  action now, and a backend lint rule bans alternation in a route param pattern.
+- Rolling back to embedded after a rollback had no directive: it was looked up by the served update's id, and a republish
+  has none. It is now looked up by release and platform, dated after the served update; the CLI signs the directive 1 ms
+  after the republishes, so it is newer than both.
+- Docs touched: `reference/ota-hosting.md`, `log.md`
+- Source: branch `fix/ota-rollback-to-embedded-after-rollback`
