@@ -1220,3 +1220,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
   `specs/2026-09-24-feedback-design.md`, `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/mcp-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: MCP tools for the rest of the console
+
+- Closes ADR 0025's gap for feedback boards and posts: `mocco_feedback_board_get`, `_subscribers_list`,
+  `_duplicates_list`, `_intake_preview`, `_source_posts_list` and `_post_sources_list` read; `_board_create`,
+  `_board_update`, `_board_release_policy_set`, `_category_create`, `_category_update`, `_category_delete`,
+  `_post_create`, `_post_update`, `_post_unvote`, `_duplicate_dismiss` and `_intake_convert` change, behind
+  `feedback:write`, the opt-in and confirmations bound to what they showed. Deleting a board stays in the console on
+  purpose. `DuplicateService.requireOpen` is new. The consent line now names setting up boards and writing posts.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-feedback-coverage`

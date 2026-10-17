@@ -279,6 +279,16 @@ export class DuplicateService {
     return await new FeedbackDuplicateCandidateRepo(this.deps.db).countOpen(scope, boardId);
   }
 
+  /** One pair still in the queue (open, both posts unmerged) with both posts, or
+   * FeedbackDuplicateNotFoundError (also for another project's). */
+  async requireOpen(scope: FeedbackScope, id: string): Promise<FeedbackDuplicatePair> {
+    const pair = await new FeedbackDuplicateCandidateRepo(this.deps.db).findOpen(scope, id);
+    if (pair === undefined) {
+      throw new FeedbackDuplicateNotFoundError(id);
+    }
+    return pair;
+  }
+
   /** The posts aren't the same request: the pair leaves the queue for good. */
   async dismiss(scope: FeedbackScope, actorUserId: string, id: string): Promise<void> {
     const row = await new FeedbackDuplicateCandidateRepo(this.deps.db).dismiss(scope, id, {

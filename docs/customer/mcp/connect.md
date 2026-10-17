@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts and marking them shipped from a release. The plan is in the
+> assigning messenger conversations, and setting up feedback boards, writing, moving, commenting on, voting on, merging and converting feedback posts and marking them shipped from a release. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -77,6 +77,12 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_feedback_ship_suggestions_list` | The releases waiting for you to mark feedback posts shipped: the commit, who approved it, the posts and the draft changelog entry |
 | `mocco_feedback_votes_list` | Who voted for a feedback post (your app's id for each end user), and whether each vote counts yet or waits for an email confirmation |
 | `mocco_feedback_comments_list` | A feedback post's comments as your team sees them: end users' comments, your official response, and internal notes, marked |
+| `mocco_feedback_board_get` | One feedback board: whether it is public, its categories, and which releases ship its posts |
+| `mocco_feedback_subscribers_list` | Who follows a feedback post, a page at a time |
+| `mocco_feedback_duplicates_list` | A board's possible duplicates still to decide, with both posts |
+| `mocco_feedback_intake_preview` | What turning a messenger conversation into a feedback post starts from: a title, the customer's words, and the board's posts it may repeat |
+| `mocco_feedback_source_posts_list` | The feedback posts a messenger conversation became |
+| `mocco_feedback_post_sources_list` | The messenger conversations a feedback post came from, with the customer's words |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -157,6 +163,13 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
 | `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
 | `mocco_feedback_post_merge` | Merges a duplicate feedback post into the post it repeats, as you; votes and followers move over |
+| `mocco_feedback_board_create` / `_update` | Creates a feedback board, or renames it, moves its address or makes it public or private, as you |
+| `mocco_feedback_board_release_policy_set` | Sets which releases ship a board's posts, and whether you are asked first, as you |
+| `mocco_feedback_category_create` / `_update` / `_delete` | Adds, changes or deletes a board's category, as you; a deleted category's posts stay, uncategorized |
+| `mocco_feedback_post_create` / `_update` | Writes a feedback post as your team, or edits its title, details or category, as you |
+| `mocco_feedback_post_unvote` | Removes an end user's vote on a feedback post on their behalf, as you |
+| `mocco_feedback_duplicate_dismiss` | Marks a suggested duplicate pair as different requests, as you |
+| `mocco_feedback_intake_convert` | Turns a messenger conversation into a new feedback post, or adds it to one, as you |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -213,7 +226,7 @@ status the post had when you were asked: if anyone moves the post before you ans
 answer is refused and you are asked afresh, and answering the same confirmation twice moves
 it once. Asking for the status a post has already answers without asking you. It follows the
 same rules as the other changes, needs the workspace to allow agents to make changes, and
-needs its own permission, asked for the first time it is used: **Move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you**. Any member
+needs its own permission, asked for the first time it is used: **Set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you**. Any member
 of the workspace may move posts, as on the board.
 
 **Commenting, voting and merging on feedback.** The same permission and the same workspace
@@ -242,6 +255,30 @@ it is, the post's email voters are mailed, and the draft stays a draft for you t
 `mocco_feedback_ship_suggestions_dismiss` leaves the posts as they are. If anyone moves or
 merges one of the posts before you answer, the answer is refused and you are asked afresh;
 if someone decides the release first, the answer is refused.
+
+**Setting up boards and writing posts.** The same permission and switch cover setting a board
+up and writing posts as your team, each confirmed in your client first with exactly what would
+change. `mocco_feedback_board_create` and `_update` create a board, or rename it, move its
+address (its public pages move with it) or make it public or private; only what you name
+changes. `mocco_feedback_board_release_policy_set` sets which repo's releases ship the board's
+posts and whether you are asked first; the confirmation says plainly when posts would be
+marked shipped without asking. `mocco_feedback_category_create`, `_update` and `_delete` look
+after categories; a deleted category's posts stay on the board with none, and the confirmation
+says how many. `mocco_feedback_post_create` writes a post as your team and
+`mocco_feedback_post_update` edits its title, details or category. An address another board
+or category has already is refused before you are asked. If anyone changes the board,
+category or post before you answer, the answer is refused and you are asked afresh.
+Deleting a board is left to the console on purpose: it deletes every post, vote, comment and
+changelog entry on it, with no undo.
+
+**Duplicates, conversations and votes.** `mocco_feedback_duplicate_dismiss` sets a suggested
+pair aside for good; both posts stay as they are (merge one with `mocco_feedback_post_merge`).
+`mocco_feedback_intake_convert` turns a messenger conversation into a new post or adds it to
+an existing one, as **Convert to feedback** does: the confirmation quotes the customer's words
+(never your internal notes) and says whether they vote for it, which they do when they were
+signed in to your app. A conversation that became a post already is not made a second one.
+`mocco_feedback_post_unvote` removes one end user's vote, for when they ask or it was
+recorded by mistake; they keep following the post.
 
 **Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
 a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product

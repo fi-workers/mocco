@@ -77,6 +77,18 @@ export class FeedbackDuplicateCandidateRepo {
     return rows;
   }
 
+  /** One open pair whose posts are both unmerged, with both posts; undefined otherwise. */
+  async findOpen(scope: FeedbackScope, id: string): Promise<FeedbackDuplicatePair | undefined> {
+    const [row] = await this.db
+      .select({ candidate: d, post: newer, original: older })
+      .from(d)
+      .innerJoin(newer, eq(newer.id, d.postId))
+      .innerJoin(older, eq(older.id, d.candidatePostId))
+      .where(and(scoped(scope), eq(d.id, id), live))
+      .limit(1);
+    return row;
+  }
+
   async countOpen(scope: FeedbackScope, boardId: string): Promise<number> {
     const [row] = await this.db
       .select({ value: count() })

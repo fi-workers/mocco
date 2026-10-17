@@ -325,6 +325,28 @@ Three more (`transport/mcp/tools/feedback-shipping.ts`, #179) sit over `ShipSugg
 
 The two changes decide a run on a board at a time, as the inbox banner does, and have the same locks: `feedback:write`, the opt-in and a confirmation round trip. The confirmation names the run, its commit and approver, and each post with its status now and what happens to it (`in_progress → shipped`, or left as it is when merged or shipped since); accepting also says email voters are mailed and the draft stays a draft. It is bound to the board, the run, the waiting suggestions' ids and each post's status and `mergedIntoPostId`, so a suggestion decided or added, or a post moved or merged, before the answer is refused as a different change and the next call asks with what is there then. A run with nothing waiting on the board (decided already, unknown, or another project's) is refused before asking with `FeedbackShipSuggestionNotFoundError`'s message, and so is accepting a run whose every post was merged or shipped since: nothing would ship, so the refusal says to dismiss it. `accept` locks the suggestions and posts again, so a post merged in the gap is decided without a change. The changes are the console's: reason `ship_suggestion` and `feedback.shipped` naming the caller, and [status mail](#status-mail) follows.
 
+Seventeen more close the gap between the console and agents (ADR 0025), behind the same `ProjectScope` check. Every `feedback` procedure now has a tool, except `deleteBoard`, which stays in the console on purpose: it deletes every post, vote, comment, follower, source and changelog entry on the board with no undo. The [GitHub link](#github-links) tools come in their own change.
+
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_feedback_board_get` | `BoardService.getBoard` | One board (id, slug, name, public) with its release policy and categories in order; detailed adds category slugs and positions and the board's timestamps |
+| `mocco_feedback_board_create` | `BoardService.createBoard` | Creates a board (slug, name, public by default) as the caller; audited |
+| `mocco_feedback_board_update` | `BoardService.updateBoard` | Changes a board's name, slug or visibility; only the fields given |
+| `mocco_feedback_board_release_policy_set` | `BoardService.setReleasePolicy` | Sets the [release policy](#shipping-on-release); only the fields given; audited |
+| `mocco_feedback_category_create`, `_update`, `_delete` | `BoardService.createCategory`, `updateCategory`, `deleteCategory` | Adds, changes (only the fields given) or deletes a board's category; the tools take the board too, to show the category |
+| `mocco_feedback_post_create` | `PostService.create` | Writes a post as the caller (title, body, category, first status) |
+| `mocco_feedback_post_update` | `PostService.update` | Edits a post's title, body or category (`null` uncategorizes); only the fields given |
+| `mocco_feedback_subscribers_list` | `SubscriptionService.list` | A post's current followers, oldest first, `limit` up to 99, `offset`, `nextOffset` |
+| `mocco_feedback_post_unvote` | `VoteService.unvote` | Removes an end user's vote on their behalf; they keep following |
+| `mocco_feedback_duplicates_list` | `DuplicateService.list`, `countOpen` | A board's [suggested pairs](#suggested-duplicates) with both posts (id, number, title, status, votes) and the open count; detailed adds the start of both bodies |
+| `mocco_feedback_duplicate_dismiss` | `DuplicateService.requireOpen`, `dismiss` | Sets an open pair aside as the caller; audited |
+| `mocco_feedback_intake_preview` | `IntakeService.preview` | A request on a board: suggested title, words, requester, the posts it became and up to five similar posts |
+| `mocco_feedback_intake_convert` | `IntakeService.preview`, `convert` | Makes a request a new post or adds it to one, as the caller; audited |
+| `mocco_feedback_source_posts_list` | `IntakeService.postsOf` | The posts a request became |
+| `mocco_feedback_post_sources_list` | `PostService.requirePost`, `IntakeService.sourcesOf` | A post's requests with their words (cut at 500 characters unless detailed, which adds who converted each) |
+
+The changes have the locks of every other feedback change: `feedback:write`, the opt-in and a confirmation round trip naming exactly what would change. Edits take only the fields given and answer without asking when nothing would change; each confirmation records the current values (a post's body as a hash), so an edit by anyone before the answer is refused as a different change. A taken board or category slug, a category of another board, and an incomplete or merged conversion target are refused before asking. Deleting a category says how many posts lose it (`or more` past a page). A dismissal reads the pair with `DuplicateService.requireOpen` (new: one open pair whose posts are both unmerged, else `FeedbackDuplicateNotFoundError`) and a conversion reads the preview; a request that became a post already answers that post without asking. Removing a vote is bound to the vote's state, and a merged post is refused.
+
 ## The public /v1 surface
 
 `/api/ext/v1/feedback` (#174, `transport/ext/v1/feedback.ts`) serves a project's public boards to its app, its widget and public board pages, over `PublicBoardService`. Routes and status codes are in the [public API reference](./public-api.md#routes).

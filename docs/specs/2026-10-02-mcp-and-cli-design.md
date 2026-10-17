@@ -191,6 +191,12 @@ has several servers loaded.
 | `mocco_feedback_ship_suggestions_list` | Release runs waiting to mark posts shipped: commit, approver, posts, draft changelog entry |
 | `mocco_feedback_votes_list` | A post's votes (end user, counted or pending), offset-paged |
 | `mocco_feedback_comments_list` | A post's comments as the team sees them, internal notes marked, offset-paged |
+| `mocco_feedback_board_get` | One feedback board: visibility, release policy, categories in order |
+| `mocco_feedback_subscribers_list` | A post's current followers, offset-paged |
+| `mocco_feedback_duplicates_list` | A board's open suggested duplicate pairs with both posts and the open count |
+| `mocco_feedback_intake_preview` | A request (messenger conversation) as a post on a board: title, words, requester, posts it became, similar posts |
+| `mocco_feedback_source_posts_list` | The posts a request became |
+| `mocco_feedback_post_sources_list` | The requests a post came from, with their words (the team's view) |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -216,6 +222,13 @@ has several servers loaded.
 | `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
 | `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
 | `mocco_feedback_post_merge` | Merge a duplicate post into another as the caller (`feedback:write`) |
+| `mocco_feedback_board_create` / `_update` | Create a board, or change its name, address or visibility (`feedback:write`) |
+| `mocco_feedback_board_release_policy_set` | Set whose releases ship a board's posts and whether the team is asked (`feedback:write`) |
+| `mocco_feedback_category_create` / `_update` / `_delete` | Add, change or delete a board's category (`feedback:write`) |
+| `mocco_feedback_post_create` / `_update` | Write a post as the team, or edit its title, body or category (`feedback:write`) |
+| `mocco_feedback_post_unvote` | Remove an end user's vote on their behalf (`feedback:write`) |
+| `mocco_feedback_duplicate_dismiss` | Set a suggested duplicate pair aside (`feedback:write`) |
+| `mocco_feedback_intake_convert` | Turn a request into a new post, or add it to one (`feedback:write`) |
 
 ### Search, not list
 
@@ -265,7 +278,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
-| `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts, and decide ship suggestions (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`, `_ship_suggestions_accept`, `_ship_suggestions_dismiss`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, set up boards and categories, write, move, comment on, vote on, merge and convert feedback posts, and decide ship suggestions and suggested duplicates (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_unvote`, `_post_merge`, `_ship_suggestions_accept`, `_ship_suggestions_dismiss`, `_board_create`, `_board_update`, `_board_release_policy_set`, `_category_create`, `_category_update`, `_category_delete`, `_post_create`, `_post_update`, `_duplicate_dismiss`, `_intake_convert`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -621,6 +634,30 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 - **Nothing the console can't do.** `acceptShipSuggestions` and `dismissShipSuggestions` in
   the `feedback` router call the same methods; accepting is audited as `feedback.shipped`
   naming the caller, and status mail follows.
+
+### How the rest of the feedback console is covered (ADR 0025 gap)
+
+- **Every `feedback` procedure has a tool or a reason.** Boards, categories, staff posts,
+  the release policy, followers, unvoting, suggested duplicates and intake had procedures and
+  console screens but no tools. They are in `tools/feedback-authoring.ts`,
+  `tools/feedback-intake.ts` and `tools/feedback-followers.ts`, each a thin adapter over the
+  method the router calls (`BoardService`, `PostService.create` / `update`,
+  `SubscriptionService.list`, `VoteService.unvote`, `DuplicateService`, `IntakeService`).
+  `deleteBoard` is the one deliberate exclusion: it cascades to every post, vote, comment,
+  follower, source and changelog entry on the board with no undo, so it stays in the console,
+  where the person deleting it is looking at it.
+- **The same scope, wider wording.** All of them use `feedback:write`; the consent line now
+  reads **Set up your feedback boards, write, move, comment on, vote on and merge your feedback
+  posts, and decide which ones a release shipped, as you**. Existing tokens keep working.
+- **Edits name only what changes, and are bound to what was shown.** Board, category and post
+  edits take only the fields given, keep the rest, and answer without asking when nothing would
+  change. The confirmation records the current values (a post's body as a hash), so an edit by
+  anyone before the answer is a different change. A taken address is refused before asking.
+- **Duplicates and intake.** Dismissing reads the pair through a new
+  `DuplicateService.requireOpen` (open, both posts unmerged) and is bound to it. Converting
+  reads `IntakeService.preview` and is bound to the request's words, its requester, the posts
+  it became and the target; a request that became a post already answers that post without
+  asking, as the service would.
 
 ## Evaluating it
 
