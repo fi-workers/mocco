@@ -4,7 +4,7 @@ description: The neutral object-store port and its drivers, the mocco_objects le
 type: reference
 status: active
 created: 2026-10-01
-updated: 2026-10-05
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, platform, storage, s3, r2]
@@ -36,6 +36,20 @@ code_refs:
 | `filesystem` | Local dev, tests, single-box self-host | Signed URLs on `/api/ext/internal/storage/*` |
 
 Unset, local dev uses `filesystem` (under `.mocco-storage/` in the working directory, gitignored) and a Vercel deploy has no store: its filesystem doesn't persist, so storage features report "not configured" until S3 or R2 is set. A Vercel Blob driver isn't included yet.
+
+## Production (www.mocco.club)
+
+Since 2026-10-17 production uses the `s3` driver on AWS (account `463470949718`, `ap-northeast-2`):
+
+| | |
+|---|---|
+| Bucket | `fi-workers-mocco-storage` — object ownership enforced, ACLs blocked |
+| Public | Only `pub/*`, by a bucket policy (`s3:GetObject` for everyone). `prv/*` answers 403 without a signed URL |
+| `STORAGE_PUBLIC_BASE_URL` | `https://fi-workers-mocco-storage.s3.ap-northeast-2.amazonaws.com` (no CDN yet) |
+| CORS | `PUT`, `GET`, `HEAD` from `https://www.mocco.club` (browser uploads to presigned URLs) |
+| Credentials | IAM user `mocco-storage-prod`, inline policy `mocco-storage-bucket-only`: `PutObject`, `GetObject`, `DeleteObject` on the bucket's objects and `ListBucket` on the bucket — nothing else. Its key is only in Vercel's production env (`STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, sensitive) |
+
+Rotate the key by creating a second one for the same user, updating the two env vars, redeploying, then deleting the old key. Egress from S3 is paid per GB; a CDN (or moving to R2, which this driver also speaks) is the lever when OTA traffic grows.
 
 ## Keys and visibility
 
