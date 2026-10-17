@@ -14,7 +14,8 @@
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
 // under `feedback:write`, `mocco_help_translation_accept`, `mocco_help_translation_retranslate`
-// and `mocco_help_glossary_set` (in `tools/help-write.ts`) under `help:write`, the four OTA setup
+// and `mocco_help_glossary_set` (in `tools/help-write.ts`) and the help center's writing tools (in
+// `tools/help-authoring-write.ts`) under `help:write`, the four OTA setup
 // changes (in `tools/ota-setup.ts`) under `ota:write`, and the three project setup changes (in
 // `tools/projects.ts`) under `projects:write`.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
@@ -28,6 +29,11 @@ import {
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
+import { registerHelpAuthoringTools, type HelpAuthoringToolDeps } from '@backend/transport/mcp/tools/help-authoring';
+import {
+  registerHelpAuthoringWriteTools,
+  type HelpAuthoringWriteToolDeps,
+} from '@backend/transport/mcp/tools/help-authoring-write';
 import { registerHelpWriteTools, type HelpWriteToolDeps } from '@backend/transport/mcp/tools/help-write';
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
@@ -57,6 +63,8 @@ export type McpToolDeps = RunToolDeps &
   StatusMonitorToolDeps &
   HelpToolDeps &
   HelpWriteToolDeps &
+  HelpAuthoringToolDeps &
+  HelpAuthoringWriteToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
   FeedbackEngagementToolDeps &
@@ -88,6 +96,8 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerStatusMonitorTools(server, deps);
   registerHelpTools(server, deps);
   registerHelpWriteTools(server, deps);
+  registerHelpAuthoringTools(server, deps);
+  registerHelpAuthoringWriteTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);
   registerFeedbackEngagementTools(server, deps);

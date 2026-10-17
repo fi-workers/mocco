@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -126,6 +126,7 @@ The first slice of the [help center design](../specs/2026-09-24-help-center-desi
 | Console editor | Live | The project's **Help center** tab: setup, the tree, and a Markdown editor with live preview, autosave, pasted, dropped or picked images (public objects in storage, PNG/JPEG/WebP/GIF up to 10 MB), publish and history ([customer guide](../customer/help/help-center.md)) |
 | App API and SDK | Live | `GET /v1/help/site`, `/collections/{slug}`, `/articles/{id}` and `/search` with a `help:read` key (publishable allowed), language-negotiated with ETags; `HelpClient` in `@mocco/js` and `@mocco/react-native/messenger` ([public API](./public-api.md)) |
 | Was this helpful? | Live | Yes/no and an optional comment under each published article, from the public site's widget and `POST /v1/help/articles/{id}/feedback` (`sendFeedback`); one answer per visitor, article and day under a keyed hash; the article editor shows the last 30 days |
+| MCP tools | Live | Agents search and read the published site, read the editor's view (setup, every article with its draft, history), and set up a site, add collections and sections, create, save, restore, publish, unpublish and delete articles as the caller, behind `help:write`, the workspace's opt-in and a confirmation bound to the article as shown; images, imports, AI training crawlers and a person's translation stay in the console ([reference](./help-center.md#mcp-tools)) |
 
 ### Feedback board (#98)
 

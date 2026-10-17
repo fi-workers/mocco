@@ -58,13 +58,26 @@ type Row = Record<string, unknown>;
 const HELP_TOOLS = new Set([
   'mocco_help_articles_get',
   'mocco_help_articles_search',
+  'mocco_help_draft_get',
+  'mocco_help_drafts_list',
   'mocco_help_glossary_list',
+  'mocco_help_revisions_list',
+  'mocco_help_site_get',
   'mocco_help_translation_get',
   'mocco_help_translations_list',
 ]);
 
 const HELP_CHANGE_TOOLS = new Set([
+  'mocco_help_article_create',
+  'mocco_help_article_delete',
+  'mocco_help_article_publish',
+  'mocco_help_article_unpublish',
+  'mocco_help_collection_create',
+  'mocco_help_draft_restore',
+  'mocco_help_draft_save',
   'mocco_help_glossary_set',
+  'mocco_help_section_create',
+  'mocco_help_site_enable',
   'mocco_help_translation_accept',
   'mocco_help_translation_retranslate',
 ]);
@@ -229,6 +242,8 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
       helpFeedback: help.helpFeedback,
       helpTranslations: help.helpTranslations,
       helpGlossary: help.helpGlossary,
+      helpSites: help.helpSites,
+      helpAuthoring: help.helpAuthoring,
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
@@ -254,7 +269,7 @@ describe('mocco_help_articles_* (pglite, over HTTP)', () => {
     expect([reads.length, changes.length]).toEqual([HELP_TOOLS.size, HELP_CHANGE_TOOLS.size]);
     expect(reads.length + changes.length).toBe(tools.length);
     expect(reads.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
-    expect(changes.map(tool => tool.annotations?.readOnlyHint)).toEqual([false, false, false]);
+    expect(changes.every(tool => tool.annotations?.readOnlyHint === false)).toBe(true);
   });
 
   describe('mocco_help_articles_search', () => {

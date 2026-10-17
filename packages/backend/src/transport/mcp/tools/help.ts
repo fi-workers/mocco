@@ -1,8 +1,8 @@
 // `mocco_help_articles_*` — what a project's help center publishes: find articles by
 // text (or list them all) and read one, in a language where it is translated. Read-only
 // and published content only, the same content the public site and `/v1/help` serve:
-// drafts and unpublished articles are not there. Writing, publishing and translating are
-// the console's, and a tool that does them needs its own design pass.
+// drafts and unpublished articles are not there. The editor's view (drafts, history) and
+// writing and publishing are `help-authoring.ts` and `help-authoring-write.ts`.
 //
 // Thin adapters (ADR 0025) over `HelpPublicReadService`, the service the public site and
 // `/v1/help` read through. The help center is project-scoped, so every call first goes

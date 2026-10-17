@@ -316,6 +316,8 @@ describe('mocco_help translation and glossary changes (pglite, over HTTP)', () =
       helpFeedback: help.helpFeedback,
       helpTranslations: help.helpTranslations,
       helpGlossary: help.helpGlossary,
+      helpSites: help.helpSites,
+      helpAuthoring: help.helpAuthoring,
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },

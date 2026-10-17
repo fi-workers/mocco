@@ -15,7 +15,8 @@
 // `status:write`, `mocco_messenger_reply` and `mocco_messenger_assign` for `messenger:write`,
 // and `mocco_feedback_post_set_status`, `mocco_feedback_comment_create`, `mocco_feedback_post_vote`
 // and `mocco_feedback_post_merge` for `feedback:write`, `mocco_help_translation_accept`,
-// `mocco_help_translation_retranslate` and `mocco_help_glossary_set` for `help:write`, the OTA
+// `mocco_help_translation_retranslate`, `mocco_help_glossary_set` and the help center's writing
+// tools (`tools/help-authoring-write.ts`) for `help:write`, the OTA
 // setup changes (`tools/ota-setup.ts`) for `ota:write`, and the project setup changes
 // (`tools/projects.ts`) for `projects:write`.
 import { requireMcpAuth } from '@better-auth/mcp';
