@@ -70,7 +70,7 @@ Guest sessions need no signature, so they are also limited to 20 an hour per cli
 - **Internal notes** are operator-only (a CHECK) and never leave the inbox: `/v1` reads filter to public messages.
 - **Reopening.** A contact writing in a closed conversation reopens it.
 - **Blocking** (`messenger.setContactBlocked`, audited) stops a contact writing and opening sessions; they can still read what they have.
-- **Erasing** (privacy requests) is a hard delete of the contact with every session, conversation, message, attachment, read position and push token (the foreign keys cascade), and the attachments' bytes first (`StorageService.delete`), so an erase that stops halfway can run again. The team erases from the inbox (`messenger.eraseContact`); a user erases themselves with `DELETE /v1/messenger/me`. Both are audited as `messenger.contact.erased` with only `{ projectId, by: 'operator' | 'contact' }`.
+- **Erasing** (privacy requests) is a hard delete of the contact with every session, conversation, message, attachment, read position and push token (the foreign keys cascade), and the attachments' bytes first (`StorageService.delete`), so an erase that stops halfway can run again. The team erases from the inbox (`messenger.eraseContact`); a user erases themselves with `DELETE /v1/messenger/me`. Both are audited as `messenger.contact.erased` with only `{ projectId, by: 'operator' | 'contact' }`. Feedback posts made from their conversations stay, but the sources quoting them are deleted ([feedback intake](./feedback.md#intake)).
 
 ## Round robin
 

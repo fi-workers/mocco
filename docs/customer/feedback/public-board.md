@@ -117,6 +117,12 @@ Open a post to work on it:
 
 ![A post in Mocco: status, category, comments with an internal note and the official response, and votes](./images/feedback-console-post.png)
 
+### Turn a conversation into feedback
+
+When a user asks for something in the Messenger inbox, open the conversation and choose **Convert to feedback** in the panel beside it. Mocco fills in a title and details from what they wrote and shows posts on the board that may already cover it. **Add to #N** adds the request to one of those; **Create post** makes a new one. A signed-in user's vote is added for them, so they hear when it moves. The post's page shows the conversations it came from, with a link back to each.
+
+![Converting a conversation: similar posts on the board, and a new post filled in from the request](./images/feedback-convert-conversation.png)
+
 ### Possible duplicates
 
 Mocco compares each new post with the board's older ones, within a minute or so of its arrival. When most of the words in its title are in an older post's title, the pair shows up under **Possible duplicates** in the inbox's header, with how many are waiting. For each pair, **Merge** folds the newer post into the older one (the same as **Merge into another post…**), and **Not the same** sets the pair aside so it isn't suggested again.

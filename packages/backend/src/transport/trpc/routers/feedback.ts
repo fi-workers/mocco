@@ -12,12 +12,14 @@ import {
   feedbackBoardInputSchema,
   feedbackCategoryInputSchema,
   feedbackCommentInputSchema,
+  feedbackConvertInputSchema,
   feedbackEndUserIdSchema,
   feedbackPageInputSchema,
   feedbackPostCreateInputSchema,
   feedbackPostListInputSchema,
   feedbackPostStatusSchema,
   feedbackPostUpdateInputSchema,
+  feedbackSourceTypeSchema,
 } from '@mocco/common/feedback';
 import { Products } from '@mocco/common/project';
 import { z } from 'zod';
@@ -215,6 +217,42 @@ export const feedbackRouter = router({
       await ctx.feedbackDuplicates.dismiss(scopeOf(input), ctx.session.user.id, input.duplicateId);
       return { ok: true } as const;
     }),
+
+  /** What converting a source (a messenger conversation) on the board would start from: a title
+   * and details from the request, the board's posts it may repeat, and the posts it already became. */
+  intakePreview: feedbackProcedure
+    .input(boardInput.extend({ sourceType: feedbackSourceTypeSchema, sourceId: z.string().min(1).max(200) }))
+    .query(
+      async ({ ctx, input }) =>
+        await ctx.feedbackIntake.preview(scopeOf(input), input.sourceType, input.sourceId, input.boardId),
+    ),
+
+  /** Make the source a new post on a board, or add it to `intoPostId`; its requester votes when known.
+   * A source that already became a post answers that post. */
+  convertSource: feedbackProcedure.input(projectInput.and(feedbackConvertInputSchema)).mutation(
+    async ({ ctx, input }) =>
+      await ctx.feedbackIntake.convert(scopeOf(input), ctx.session.user.id, {
+        ...('intoPostId' in input
+          ? { intoPostId: input.intoPostId }
+          : { boardId: input.boardId, title: input.title, ...(input.body !== undefined && { body: input.body }) }),
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+      }),
+  ),
+
+  /** The posts a source became, for its own page. */
+  sourcePosts: feedbackProcedure
+    .input(projectInput.extend({ sourceType: feedbackSourceTypeSchema, sourceId: z.string().min(1).max(200) }))
+    .query(async ({ ctx, input }) => {
+      const links = await ctx.feedbackIntake.postsOf(scopeOf(input), input.sourceType, input.sourceId);
+      return { posts: links.map(link => link.post) };
+    }),
+
+  /** Where a post came from, with the request's words (staff only). */
+  postSources: feedbackProcedure.input(postInput).query(async ({ ctx, input }) => {
+    await ctx.feedbackPosts.requirePost(scopeOf(input), input.postId);
+    return { sources: await ctx.feedbackIntake.sourcesOf(scopeOf(input), input.postId) };
+  }),
 
   /** The post's comments, oldest first, internal notes included. */
   comments: feedbackProcedure.input(postInput.extend(feedbackPageInputSchema.shape)).query(async ({ ctx, input }) => ({

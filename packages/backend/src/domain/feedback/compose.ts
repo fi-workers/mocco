@@ -5,6 +5,7 @@ import { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import { CommentService } from '@backend/domain/feedback/CommentService';
 import { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import { EmailVoteService } from '@backend/domain/feedback/EmailVoteService';
+import { IntakeService } from '@backend/domain/feedback/IntakeService';
 import { MergeService } from '@backend/domain/feedback/MergeService';
 import { PostService } from '@backend/domain/feedback/PostService';
 import { PublicBoardService } from '@backend/domain/feedback/PublicBoardService';
@@ -12,6 +13,7 @@ import { SubscriptionService } from '@backend/domain/feedback/SubscriptionServic
 import { VoteService } from '@backend/domain/feedback/VoteService';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { FeedbackSourceReaders } from '@backend/domain/feedback/IntakeService';
 import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { Db } from '@backend/infra/db/types';
 
@@ -24,6 +26,8 @@ export interface FeedbackDomain {
   feedbackMerges: MergeService;
   /** Suggested duplicate pairs for staff (#181). */
   feedbackDuplicates: DuplicateService;
+  /** Requests from other products turned into posts (#182). */
+  feedbackIntake: IntakeService;
   /** A board's changelog entries (#176). */
   feedbackChangelog: ChangelogService;
   /** What /v1/feedback serves (#174). */
@@ -37,6 +41,8 @@ export function createFeedbackDomain(
   deps: {
     audit: Pick<AuditService, 'record'>;
     now?: () => Date;
+    /** Other products' sources a post can come from (#182); none, and nothing converts. */
+    sources?: FeedbackSourceReaders;
     /** The mail links' key and sender, and the origin their URLs start with. */
     links?: FeedbackLinkEnvDeps & { appOrigin: string };
   },
@@ -63,6 +69,14 @@ export function createFeedbackDomain(
     feedbackSubscriptions,
     feedbackMerges: new MergeService({ db, audit: deps.audit, ...now }),
     feedbackDuplicates: new DuplicateService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
+    feedbackIntake: new IntakeService({
+      db,
+      audit: deps.audit,
+      boards: feedbackBoards,
+      posts: feedbackPosts,
+      votes: feedbackVotes,
+      sources: deps.sources ?? {},
+    }),
     feedbackChangelog: new ChangelogService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
     feedbackPublic,
     feedbackEmailVotes:

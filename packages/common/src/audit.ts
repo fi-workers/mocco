@@ -103,6 +103,8 @@ export const AuditActions = {
   feedbackPostMerged: 'feedback.post.merged',
   /** Staff set a suggested duplicate pair aside: the posts aren't the same request. */
   feedbackDuplicateDismissed: 'feedback.duplicate.dismissed',
+  /** Staff turned a request from elsewhere in Mocco (a messenger conversation) into a post, or added it to one. */
+  feedbackPostConverted: 'feedback.post.converted',
   /** A changelog entry went public, by a team member or at its scheduled time (no actor). */
   changelogEntryPublished: 'feedback.changelog.published',
   /** A published changelog entry was taken back to a draft. */
@@ -240,6 +242,7 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.feedbackPostStatusChanged]: 'Feedback post status changed',
   [AuditActions.feedbackPostMerged]: 'Feedback post merged into another',
   [AuditActions.feedbackDuplicateDismissed]: 'Feedback duplicate suggestion dismissed',
+  [AuditActions.feedbackPostConverted]: 'Request converted to feedback',
   [AuditActions.changelogEntryPublished]: 'Changelog entry published',
   [AuditActions.changelogEntryUnpublished]: 'Changelog entry unpublished',
   [AuditActions.changelogEntryDeleted]: 'Changelog entry deleted',

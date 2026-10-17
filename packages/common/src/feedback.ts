@@ -248,3 +248,31 @@ export type FeedbackDuplicateState = (typeof FeedbackDuplicateStates)[keyof type
 /** How a pair was found: shared title words (embeddings come later, #181). */
 export const FeedbackDuplicateMethods = { fulltext: 'fulltext' } as const;
 export type FeedbackDuplicateMethod = (typeof FeedbackDuplicateMethods)[keyof typeof FeedbackDuplicateMethods];
+
+// ─── Intake (#182) ───────────────────────────────────────────────────────────
+
+/** Where else in Mocco a request can be turned into a post: a messenger conversation for now;
+ * app reviews (#94) and forum threads (#97) join as they land. */
+export const FeedbackSourceTypes = { messengerConversation: 'messenger_conversation' } as const;
+export type FeedbackSourceType = (typeof FeedbackSourceTypes)[keyof typeof FeedbackSourceTypes];
+export const feedbackSourceTypeSchema = z.enum(Object.values(FeedbackSourceTypes));
+
+/** How much of the request a post's source keeps, for the team to see why it exists. */
+export const FEEDBACK_SOURCE_EXCERPT_MAX = 1000;
+
+/** Turn a source into a post: a new one on `boardId`, or (with `intoPostId`) an existing one. */
+export const feedbackConvertInputSchema = z.union([
+  z.object({
+    sourceType: feedbackSourceTypeSchema,
+    sourceId: z.string().min(1).max(200),
+    boardId: z.uuid(),
+    title,
+    body: body.optional(),
+  }),
+  z.object({
+    sourceType: feedbackSourceTypeSchema,
+    sourceId: z.string().min(1).max(200),
+    intoPostId: z.uuid(),
+  }),
+]);
+export type FeedbackConvertInput = z.infer<typeof feedbackConvertInputSchema>;
