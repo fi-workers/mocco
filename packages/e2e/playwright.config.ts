@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 3100;
-const baseURL = `http://localhost:${PORT}`;
+import { E2E_ORIGIN, E2E_PORT } from './port';
+
+const PORT = E2E_PORT;
+const baseURL = E2E_ORIGIN;
 
 // e2e runs against the real Next server + a real Postgres (the app uses
 // node-postgres, not the pglite that vitest uses). The suite exercises the
@@ -18,7 +20,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     // Build (env-free, lazy env) then start the production server on PORT.
-    command: 'yarn workspace @mocco/frontend build && yarn workspace @mocco/frontend exec next start -p 3100',
+    command: `yarn workspace @mocco/frontend build && yarn workspace @mocco/frontend exec next start -p ${String(PORT)}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

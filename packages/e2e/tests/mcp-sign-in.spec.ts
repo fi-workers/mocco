@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import pg from 'pg';
 
+import { E2E_ORIGIN } from '../port';
+
 // An MCP client connecting for the first time, against the real server: it is refused
 // with a pointer to the resource metadata, discovers the authorization server from it,
 // sends the person through sign-in and consent, swaps the code for a token, and lists
@@ -11,8 +13,7 @@ import pg from 'pg';
 // consent page did not exist — so the whole path is pinned here, not piecewise. It ends
 // where deciding begins: a token that only signed in is challenged for `approvals:write`.
 
-const PORT = 3100;
-const ORIGIN = `http://localhost:${PORT}`;
+const ORIGIN = E2E_ORIGIN;
 const RESOURCE = `${ORIGIN}/api/mcp`;
 const REDIRECT_URI = 'http://127.0.0.1:9999/callback';
 const PROTOCOL_VERSION = '2026-07-28';
