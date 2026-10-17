@@ -121,8 +121,12 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
     });
     return { platform: exported.platform, body, createdAt };
   });
-  const later = (platform: OtaPlatform) =>
-    new Date((signed.find(update => update.platform === platform)?.createdAt ?? now()).getTime() + 1);
+  // Devices only take an update or directive newer than what they run. A rollback
+  // republish is 1 ms after this release's update; the rollBackToEmbedded directive is 1 ms
+  // after that, so it also reaches devices that were rolled back to a republish.
+  const after = (platform: OtaPlatform, ms: number) =>
+    new Date((signed.find(update => update.platform === platform)?.createdAt ?? now()).getTime() + ms);
+  const later = (platform: OtaPlatform) => after(platform, 1);
   const request: FinalizeRequest = {
     updates: signed.map(update => ({ platform: update.platform, body: update.body, signature: sign(update.body) })),
     republishes: declared.rollbackTargets.map(target => {
@@ -130,7 +134,7 @@ export async function publish(options: PublishOptions): Promise<PublishResult> {
       return { platform: target.platform, targetUpdateId: target.updateId, body, signature: sign(body) };
     }),
     directives: signed.map(update => {
-      const body = rollBackToEmbeddedOf(later(update.platform));
+      const body = rollBackToEmbeddedOf(after(update.platform, 2));
       return { platform: update.platform, body, signature: sign(body) };
     }),
   };
