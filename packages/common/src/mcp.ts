@@ -27,7 +27,10 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * deciding tool, so the person grants it at the moment a decision is actually wanted.
  * `status:write` lets an agent run a monitor's ad-hoc check as its person, stepped up for
  * the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
- * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
+ * conversation, leave a note, assign, close or reopen it, block its contact, and change the
+ * inbox's rotation, categories and guest access as its person, stepped up for the same way.
+ * Setting the messenger up and rotating its identity secret (both hand out the secret) and
+ * erasing a contact are not in it. `feedback:write` lets
  * an agent move a feedback post to another status as its person, stepped up for the same way.
  * `ota:write` lets an agent set up OTA hosting as its person — host an app, add an open
  * channel, register a signing certificate and trust a repository to publish — stepped up for

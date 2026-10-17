@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -26,8 +26,8 @@ https://www.mocco.club/api/mcp
 ```
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
-> resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts. The plan is in the
+> resuming or rejecting a paused run, changing where notifications go, working the messenger
+> inbox and its settings, and moving, commenting on, voting on and merging feedback posts. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -71,6 +71,8 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_help_glossary_list` | The help center's glossary every translation follows: names kept as written in every language, and words translated one fixed way per language, found by text, rule or language |
 | `mocco_messenger_conversations_search` | Which messenger conversations are open (or closed), newest activity first, by assignee (yours, someone's, or no one's) or by contact (id, email or your app's user id), with a preview of the latest message and whether you have read it |
 | `mocco_messenger_conversation_get` | One conversation's thread: every message from the user and your team, internal notes marked, and each attachment's name, type and size |
+| `mocco_messenger_settings_get` | Whether a project's messenger is set up, the categories users pick from and whether people who aren't signed in may write; never the identity secret |
+| `mocco_messenger_inbox_members_list` | Who takes new conversations (round robin), in order, and whether each is available or away |
 | `mocco_feedback_boards_list` | Which feedback boards a project has, whether each is public, and their categories in order |
 | `mocco_feedback_posts_search` | A board's posts by status (under review, planned, in progress, shipped, closed) or newest first, by status or category, a page at a time |
 | `mocco_feedback_post_get` | One feedback post, and every status it took and when |
@@ -150,6 +152,13 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_monitors_check` | Runs an HTTP or TCP monitor's next round now, for example right after a deploy, instead of at its interval |
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
+| `mocco_messenger_note_create` | Leaves an internal note in a conversation as you; only your team sees it |
+| `mocco_messenger_conversation_set_status` | Closes a conversation, or opens a closed one again, as you |
+| `mocco_messenger_contact_set_blocked` | Stops a user writing to your team (they can still read), or lets them write again |
+| `mocco_messenger_categories_set` | Replaces the categories users pick from when they start a conversation |
+| `mocco_messenger_guest_access_set` | Lets people who aren't signed in write (leaving an email), or takes only signed-in users |
+| `mocco_messenger_inbox_members_add` / `_remove` | Puts a workspace member in the round-robin rotation, or takes them out |
+| `mocco_messenger_inbox_members_set_availability` | Marks you (or someone in the rotation) available or away |
 | `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
 | `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
 | `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
@@ -192,14 +201,34 @@ monitor are refused before you are asked anything.
 on. Your client first shows who it goes to and the exact text, and nothing is sent until you
 answer yes. A confirmation is for a reply after the conversation's latest message, so answering
 it twice sends once, and if the user writes again before you answer, you are asked afresh. It
-sends text only; attach files, leave internal notes, close a conversation and block a user in
-the console. `mocco_messenger_assign` is the hand-off: your client shows who has the
-conversation now and who would take it, and someone outside the workspace is refused before
-you are asked. Round robin still assigns new conversations when they start. Both follow the
-same rules as the other changes, need the workspace to allow agents to make changes, and
-need their own permission, asked for the first time either is used: **Reply to and assign
-your messenger conversations, as you**. Any member of the workspace may reply and assign, as
-in the inbox, and an assignment is recorded in the audit trail naming you.
+sends text only; attach files in the console. `mocco_messenger_assign` is the hand-off: your
+client shows who has the conversation now and who would take it, and someone outside the
+workspace is refused before you are asked. Round robin still assigns new conversations when
+they start.
+
+**Notes, closing and blocking.** `mocco_messenger_note_create` leaves a note only your team
+sees: your client shows the exact text first, and the user is never notified.
+`mocco_messenger_conversation_set_status` closes a conversation or opens it again (a user
+writing in a closed one opens it again by itself). `mocco_messenger_contact_set_blocked` stops
+a user writing; they can still read what they have. Each confirmation is for the state it
+showed: if a teammate closes the conversation, writes in it or blocks the user before you
+answer, you are asked afresh. Asking for what is so already answers without asking.
+
+**Messenger settings and the rotation.** `mocco_messenger_categories_set` shows the categories
+now and after, and warns when it removes a key an app may still send.
+`mocco_messenger_guest_access_set` turns guest access on or off. The rotation tools add or
+remove someone, or mark them available or away, as the **Round robin** settings do; someone
+outside the workspace is refused before you are asked. Setting the messenger up and rotating
+its identity secret stay in the console, because both show the secret, and so does erasing a
+user, which can't be undone.
+
+All of these follow the same rules as the other changes, need the workspace to allow agents
+to make changes, and need their own permission, asked for the first time one is used:
+**Reply to, note, assign, close and block in your messenger conversations, and change its
+rotation and settings, as you**. Any member of the workspace may use them, as in the inbox.
+Assigning, closing, reopening, blocking, the categories, guest access and joining or leaving
+the rotation are recorded in the audit trail naming you; availability is not, as in the
+console.
 
 **Moving a feedback post.** `mocco_feedback_post_set_status` does what changing a post's
 status on the board does: the post gets the new status (moving it to shipped records when it
@@ -387,6 +416,8 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not reply in the messenger in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… isn't a member of this workspace" | A conversation can only go to a member of the workspace. `mocco_messenger_conversations_search` names the people who have conversations now |
 | "Conversation … was not found" | It is in another project or workspace, or the id is wrong. Search the inbox first |
+| "The messenger isn't set up for this project" | Set it up from the project's **Inbox** in the console; it shows the identity secret once |
+| "… is not in this inbox's rotation" | Add them with `mocco_messenger_inbox_members_add` first |
 | "This connection may not change feedback statuses" (or comment, record votes, merge feedback posts) | The app was never allowed to change feedback. Reconnect it and allow the feedback permission when asked |
 | "Agents may not change feedback statuses in this workspace" (or comment, record votes, merge) | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "That confirmation was for a different change" after moving a post | Someone moved the post before you answered. Call again to be asked about the move from its status now |

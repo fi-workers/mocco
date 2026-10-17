@@ -91,6 +91,9 @@ export const AuditActions = {
   messengerInboxMemberRemoved: 'messenger.inbox_member.removed',
   /** Someone gave a conversation to a team member, or to no one, by hand. */
   messengerConversationAssigned: 'messenger.conversation.assigned',
+  /** Someone closed a conversation, or opened a closed one again (a contact writing again reopens it unrecorded). */
+  messengerConversationClosed: 'messenger.conversation.closed',
+  messengerConversationReopened: 'messenger.conversation.reopened',
   apiKeyCreated: 'apikey.created',
   apiKeyRevoked: 'apikey.revoked',
   /** A workspace turned the MCP deciding tools on or off. */
@@ -225,6 +228,8 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.messengerInboxMemberAdded]: 'Added to a messenger inbox',
   [AuditActions.messengerInboxMemberRemoved]: 'Removed from a messenger inbox',
   [AuditActions.messengerConversationAssigned]: 'Messenger conversation assigned',
+  [AuditActions.messengerConversationClosed]: 'Messenger conversation closed',
+  [AuditActions.messengerConversationReopened]: 'Messenger conversation reopened',
   [AuditActions.apiKeyCreated]: 'API key created',
   [AuditActions.apiKeyRevoked]: 'API key revoked',
   [AuditActions.mcpAgentsMayDecideChanged]: 'Agent decisions turned on or off',

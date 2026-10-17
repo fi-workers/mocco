@@ -17,8 +17,9 @@
 // are behind the locks of every changing tool (`openDecision`, `confirmThenApply` in
 // `deciding.ts`): their own `messenger:write` scope, stepped up for per tool, the workspace's
 // opt-in, and a confirmation that shows the exact reply, or who the conversation goes from and
-// to, before anything is written. Text only: attaching a file from an agent, internal notes,
-// closing and blocking stay in the console for now.
+// to, before anything is written. Text only: attaching a file from an agent stays in the
+// console. Notes, closing and blocking are in `messenger-conversations.ts`; the settings and
+// the rotation in `messenger-setup.ts`.
 import { createHash } from 'node:crypto';
 
 import { McpScopes } from '@mocco/common/mcp';
@@ -56,9 +57,9 @@ type StatusFilter = (typeof StatusFilters)[keyof typeof StatusFilters];
 const statusFilters = Object.values(StatusFilters) as [StatusFilter, ...StatusFilter[]];
 
 /** Who a conversation is with, in words: the caller, or no one. */
-const AssigneeWords = { me: 'me', unassigned: 'unassigned' } as const;
+export const AssigneeWords = { me: 'me', unassigned: 'unassigned' } as const;
 
-const projectArg = z
+export const projectArg = z
   .uuid()
   .optional()
   .describe('The project whose inbox to use. Omit it when the workspace has exactly one.');
@@ -66,7 +67,9 @@ const projectArg = z
 const responseFormatArg = (concise: string, detailed: string) =>
   z.enum(['concise', 'detailed']).default('concise').describe(`\`concise\` is ${concise}; \`detailed\` ${detailed}.`);
 
-const conversationArg = z.uuid().describe('The conversation id, as `mocco_messenger_conversations_search` returns it.');
+export const conversationArg = z
+  .uuid()
+  .describe('The conversation id, as `mocco_messenger_conversations_search` returns it.');
 
 const searchInput = z.object({
   workspaceId: workspaceArg,
@@ -139,11 +142,14 @@ export type GetConversationArgs = z.infer<typeof readInput>;
 export type ReplyArgs = z.infer<typeof replyInput>;
 export type AssignArgs = z.infer<typeof assignInput>;
 
-const resolveMessengerProject = async (deps: MessengerToolDeps, userId: string, asked: Partial<ProjectInScope>) =>
-  await deps.projects.resolve(userId, asked, Products.messenger);
+export const resolveMessengerProject = async (
+  deps: Pick<MessengerToolDeps, 'projects'>,
+  userId: string,
+  asked: Partial<ProjectInScope>,
+) => await deps.projects.resolve(userId, asked, Products.messenger);
 
 /** `me` is the caller, `unassigned` no one (null), anything else a user id. */
-function assigneeOf(word: string, userId: string): string | null {
+export function assigneeOf(word: string, userId: string): string | null {
   if (word === AssigneeWords.unassigned) {
     return null;
   }
@@ -251,11 +257,15 @@ export async function getConversation(deps: MessengerToolDeps, args: GetConversa
   };
 }
 
-/** How the two changing tools name themselves in their refusals. */
-const MESSENGER_WRITE = {
+/** How every changing messenger tool names its scope in its refusals. */
+export const MESSENGER_WRITE = {
   name: McpScopes.messengerWrite,
-  allows: 'reply to and assign your messenger conversations',
+  allows: 'reply to and manage your messenger conversations, rotation and settings',
 } as const;
+
+/** The step-up a changing messenger tool declares: `<doing> needs your permission …`. */
+export const requireMessengerWrite = (doing: string) =>
+  requireScope(McpScopes.messengerWrite, `${doing} needs your permission for this app to ${MESSENGER_WRITE.allows}`);
 
 const replyWords: DecisionWords = {
   verb: 'reply in the messenger',
@@ -273,7 +283,7 @@ const assignWords: DecisionWords = {
 
 /** The refusals the model reads (not found, which another tenant's conversation reads as too,
  * a workspace or project to pick, someone outside the workspace); anything else is rethrown. */
-function messengerRefusal(error: unknown): CallToolResult {
+export function messengerRefusal(error: unknown): CallToolResult {
   if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ForbiddenError) {
     return refused(error.message);
   }
@@ -281,13 +291,17 @@ function messengerRefusal(error: unknown): CallToolResult {
 }
 
 /**
- * The reply's key in the conversation: the same person sending the same text after the same
- * message. A confirmation answered twice (it is valid for five minutes) then sends once —
- * the second finds the first through the conversation's unique client message id.
+ * A message's key in the conversation: the same person sending the same text, as a reply or
+ * as a note (the tool), after the same message. A confirmation answered twice (it is valid
+ * for five minutes) then writes once — the second finds the first through the conversation's
+ * unique client message id.
  */
-const replyKeyOf = (userId: string, change: { conversationId: string; afterSeq: number; body: string }) =>
+export const messageKeyOf = (
+  userId: string,
+  change: { tool: string; conversationId: string; afterSeq: number; body: string },
+) =>
   `mcp:${createHash('sha256')
-    .update([userId, change.conversationId, String(change.afterSeq), change.body].join('\0'))
+    .update([userId, change.tool, change.conversationId, String(change.afterSeq), change.body].join('\0'))
     .digest('hex')
     .slice(0, 32)}`;
 
@@ -334,7 +348,7 @@ export async function reply(
           conversationId: conversation.id,
           body: args.body,
           internal: false,
-          clientMessageId: replyKeyOf(userId, change),
+          clientMessageId: messageKeyOf(userId, change),
         });
         return asJson({
           changed: true,
@@ -437,14 +451,11 @@ export function registerMessengerTools(server: McpServer, deps: MessengerToolDep
     {
       title: 'Reply in a messenger conversation',
       description:
-        'Send a text reply to the contact, as the signed-in person, exactly as the console sends one: they read it in the app and may get a push notification. The person is asked to confirm the exact text in their client first, and it only works where the workspace allows agents to make changes. No attachments or internal notes.',
+        'Send a text reply to the contact, as the signed-in person, exactly as the console sends one: they read it in the app and may get a push notification. The person is asked to confirm the exact text in their client first, and it only works where the workspace allows agents to make changes. No attachments; for a note only the team sees, use `mocco_messenger_note_create`.',
       inputSchema: replyInput,
       // It writes to a customer; a confirmation answered twice still sends once.
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      scopeChallenge: requireScope(
-        McpScopes.messengerWrite,
-        'Replying needs your permission for this app to reply to and assign your messenger conversations',
-      ),
+      scopeChallenge: requireMessengerWrite('Replying'),
     },
     async (args, ctx) => await reply(deps, args, ctx),
   );
@@ -457,10 +468,7 @@ export function registerMessengerTools(server: McpServer, deps: MessengerToolDep
         'Give a conversation to a workspace member (`me` or their user id) or to no one (`unassigned`), as the signed-in person. Round robin only assigns when a conversation starts; this is the hand-off. The person is asked to confirm in their client first, and it only works where the workspace allows agents to make changes.',
       inputSchema: assignInput,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      scopeChallenge: requireScope(
-        McpScopes.messengerWrite,
-        'Assigning needs your permission for this app to reply to and assign your messenger conversations',
-      ),
+      scopeChallenge: requireMessengerWrite('Assigning'),
     },
     async (args, ctx) => await assign(deps, args, ctx),
   );

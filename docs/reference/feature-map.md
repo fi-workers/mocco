@@ -4,7 +4,7 @@ description: Sorts deploy-governance features into MVP versus Post-MVP against t
 type: reference
 status: active
 created: 2026-07-04
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [reference, mvp, scope, feature-map, prototype]
@@ -111,7 +111,7 @@ The first slice of the [messenger design](../specs/2026-09-24-messenger-design.m
 | Attachments | Live | Up to 3 screenshots or PDFs (10 MB each) per message through object storage, verified on send (size, declared type and the bytes' signature), served with short-lived links, PDFs only as downloads; thumbnails and file chips in the inbox. The team attaches them to replies and notes from the inbox under the same checks |
 | Guests | Live | Optional: people who aren't signed in write with an email, kept on the device by a guest token, merged into their account when they sign in there |
 | Push replies | Live | Devices register Expo push tokens; a team reply is pushed unless already read; gone devices are disabled |
-| MCP tools | Live | Agents search the inbox (status, assignee, contact), read a thread with attachment metadata only, and reply (text) or assign by hand as the caller, behind `messenger:write`, the workspace's opt-in and a confirmation ([MCP tools](./messenger.md#mcp-tools)); the console's conversation header assigns by hand too |
+| MCP tools | Live | Agents search the inbox (status, assignee, contact), read a thread with attachment metadata only, the settings (never the identity secret) and the rotation; and, as the caller, reply (text), leave a note, assign, close or reopen, block a contact, change the categories and guest access, and change the rotation and availability, behind `messenger:write`, the workspace's opt-in and a confirmation bound to what it showed ([MCP tools](./messenger.md#mcp-tools)). Setting up, rotating the identity secret, erasing a contact and attaching files stay in the console |
 
 ### Help center (#96)
 

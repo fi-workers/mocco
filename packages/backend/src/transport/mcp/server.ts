@@ -9,8 +9,9 @@
 // (`tools/inbound-write.ts`); each is gated by scope, by the
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
 // here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) has the
-// same locks under its own `status:write` scope, and `mocco_messenger_reply` and
-// `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
+// same locks under its own `status:write` scope, and the messenger changes (in
+// `tools/messenger.ts`, `tools/messenger-conversations.ts` and `tools/messenger-setup.ts`)
+// under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
 // under `feedback:write`, the four OTA setup changes (in `tools/ota-setup.ts`) under
@@ -30,6 +31,11 @@ import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/too
 import { registerInboundTools, type InboundToolDeps } from '@backend/transport/mcp/tools/inbound';
 import { registerInboundWriteTools, type InboundWriteToolDeps } from '@backend/transport/mcp/tools/inbound-write';
 import { registerMessengerTools, type MessengerToolDeps } from '@backend/transport/mcp/tools/messenger';
+import {
+  registerMessengerConversationTools,
+  type MessengerConversationToolDeps,
+} from '@backend/transport/mcp/tools/messenger-conversations';
+import { registerMessengerSetupTools, type MessengerSetupToolDeps } from '@backend/transport/mcp/tools/messenger-setup';
 import { registerNotificationTools, type NotificationToolDeps } from '@backend/transport/mcp/tools/notifications';
 import {
   registerNotificationWriteTools,
@@ -55,6 +61,8 @@ export type McpToolDeps = RunToolDeps &
   StatusMonitorToolDeps &
   HelpToolDeps &
   MessengerToolDeps &
+  MessengerConversationToolDeps &
+  MessengerSetupToolDeps &
   FeedbackToolDeps &
   FeedbackEngagementToolDeps &
   NotificationToolDeps &
@@ -85,6 +93,8 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerStatusMonitorTools(server, deps);
   registerHelpTools(server, deps);
   registerMessengerTools(server, deps);
+  registerMessengerConversationTools(server, deps);
+  registerMessengerSetupTools(server, deps);
   registerFeedbackTools(server, deps);
   registerFeedbackEngagementTools(server, deps);
   registerNotificationTools(server, deps);

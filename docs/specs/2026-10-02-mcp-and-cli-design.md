@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -185,6 +185,8 @@ has several servers loaded.
 | `mocco_help_glossary_list` | A help center's glossary: kept and fixed terms with their translations, by text, rule and language; offset-paged (detailed: id, note, changed) |
 | `mocco_messenger_conversations_search` | A project's inbox, newest activity first (status, assignee or unassigned, contact) |
 | `mocco_messenger_conversation_get` | One conversation's thread, notes marked, attachments as metadata only (never a signed link) |
+| `mocco_messenger_settings_get` | Whether a project's messenger is set up, its categories and guest access; never the identity secret |
+| `mocco_messenger_inbox_members_list` | The round-robin rotation in order, each member available or away |
 | `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
 | `mocco_feedback_posts_search` | A board's posts (status, category; by status or newest), offset-paged |
 | `mocco_feedback_post_get` | One feedback post with its status history; the body cut short unless detailed |
@@ -210,6 +212,13 @@ has several servers loaded.
 | `mocco_monitors_check` | Run a monitor's next round now (`status:write`) |
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
+| `mocco_messenger_note_create` | Leave an internal note only the team sees, as the caller (`messenger:write`) |
+| `mocco_messenger_conversation_set_status` | Close a conversation or open it again (`messenger:write`) |
+| `mocco_messenger_contact_set_blocked` | Block a contact from writing, or let them write again (`messenger:write`) |
+| `mocco_messenger_categories_set` | Replace the categories a contact picks from (`messenger:write`) |
+| `mocco_messenger_guest_access_set` | Let people who aren't signed in write, or not (`messenger:write`) |
+| `mocco_messenger_inbox_members_add` / `_remove` | Put a workspace member in the rotation, or take them out (`messenger:write`) |
+| `mocco_messenger_inbox_members_set_availability` | Mark someone in the rotation available or away (`messenger:write`) |
 | `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
 | `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
 | `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
@@ -262,7 +271,7 @@ still refuses what the role refuses.
 | `approvals:read` | List and read approval requests and their votes |
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
-| `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
+| `messenger:write` | On MCP, reply to, note, assign, close or reopen messenger conversations, block their contacts, and change the rotation, categories and guest access (every changing `mocco_messenger_*` tool); stepped up for like `approvals:write` |
 | `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
@@ -418,7 +427,10 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    built* below): `mocco_messenger_conversations_search` and `mocco_messenger_conversation_get`
    over `InboxService.list` / `get` behind `ProjectScope` with `Products.messenger`, and
    `mocco_messenger_reply` and `mocco_messenger_assign` over `InboxService.write` / `assign`.
-   Still to come: attaching a file, internal notes, closing and blocking from an agent.
+   The rest of the messenger router followed (*shipped*; see *How the rest of the messenger is
+   built* below): notes, closing and reopening, blocking, the settings and the rotation. Attaching
+   a file from an agent is still to come; setting up, rotating the identity secret, erasing a
+   contact and marking read are not tools, on purpose.
 
    The feedback board's tools follow (*shipped*, issue #468; see *How the feedback change is
    built* below): `mocco_feedback_boards_list`, `mocco_feedback_posts_search` and
@@ -557,6 +569,29 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 - **No links out.** `InboxService.get` signs a short-lived download link per attachment for
   the console; the read tool keeps only the id, file name, type and size.
 
+### How the rest of the messenger is built
+
+- **One scope.** The new changes (`tools/messenger-conversations.ts`: note, close or reopen,
+  block; `tools/messenger-setup.ts`: categories, guest access, the rotation and availability)
+  stay behind `messenger:write`, and the consent line now says all of it (**Reply to, note,
+  assign, close and block in your messenger conversations, and change its rotation and
+  settings, as you**). One kind of trust — working this inbox as me — is one prompt.
+- **Bound to what was shown.** Each change records the state its confirmation showed: the
+  status asked from, the conversation's latest message (a note, like a reply, with a
+  `client_message_id` derived from the person, the tool, that seq and the text), whether the
+  contact was blocked, the category list, the guest setting, a member's availability. A change
+  by anyone in between makes the retry a different change, refused; what is so already answers
+  without asking, so a confirmation answered twice changes once.
+- **Audited through the service.** `InboxService.setStatus` was the one inbox change the
+  console made without an audit entry or an actor. It now takes the person and records
+  `messenger.conversation.closed` / `.reopened`, from the console and an agent alike, and
+  setting the status a conversation has already records nothing. Availability stays unaudited
+  in both, as the round-robin design decided.
+- **Nothing the console can't do; no secret in context.** Every tool calls the method the
+  `messenger` router calls (plus `InboxService.contact`, a read of one contact for the block
+  confirmation). The settings read is the service's projection without the identity secret;
+  `enable` and `rotateSecret`, which return it, have no tool, nor does `eraseContact`.
+
 ### How the feedback change is built (issue #468)
 
 - **Its own scope.** `mocco_feedback_post_set_status` goes through `openDecision` with
@@ -597,6 +632,107 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   team member. Both reads page with `limit` and `nextOffset`.
 - **Nothing the console can't do.** `vote`, `createComment` and `mergePost` in the `feedback`
   router call the same methods; a merge is audited as `feedback.post.merged` naming the caller.
+
+## Coverage
+
+ADR 0025 asks every product surface for its tools. This is the audit of every console
+(tRPC) procedure against the tools, as of 2026-10-17. **Covered** names the tool; **gap**
+is a tool still to build (a read, or a write behind the named scope with the opt-in and the
+confirmation); **excluded** stays with a person in the console, for the reason given. The
+feedback, help center and status routers are audited with their own slices. The messenger
+is covered in full except for its exclusions (see *How the rest of the messenger is built*).
+
+**Messenger.** Covered: `inbox`, `conversation`, `write` (reply and note), `assign`,
+`setStatus`, `setContactBlocked`, `settings`, `setCategories`, `setAllowGuests`,
+`inboxMembers`, `addInboxMember`, `removeInboxMember`, `setAvailability`. Excluded: `enable`
+and `rotateSecret` (return the identity secret), `eraseContact` (an irreversible privacy
+action), `markRead` (the person's own read position). Gap: `createAttachment` (a byte upload
+outside the protocol; write).
+
+**Flags** (`flags`; no `flags:write` scope exists yet).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `list`, `environments`, `history` | `mocco_flags_search`, `mocco_flags_get`, `mocco_flags_changesets_search` | covered |
+| `changeset` | — | gap: read (one changeset; its votes are on `mocco_approvals_get`) |
+| `voteChangeset` | `mocco_approvals_vote` on the changeset's request | covered through approvals; the console also pins `contentHash` — check the request's own pin is equivalent |
+| `segments`, `preview`, `ruleset`, `usage`, `stale`, `deployCheck`, `timeline`, `fileSyncs` | — | gap: read |
+| `createEnvironment`, `createBoolean`, `create`, `setClientVisible`, `applyChangeset`, `withdrawChangeset`, `rebaseChangeset`, `setLinkedPipeline`, `dismissStale` | — | gap: write (`flags:write`); a protected environment still routes `applyChangeset` to approval |
+| `kill` | — | gap, needs a decision: the incident path bypasses the gate, so it may need a person's token and its own scope, or stay in the console |
+| `setKillRoles`, `setChangeGate` | — | excluded: who may kill or approve is a role and governance choice |
+
+**OTA** (`ota`, `ota.hosting`).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `hosting.apps.list`, `certificates.list`, `trustPolicies.list` | `mocco_ota_setup_get` | covered |
+| `hosting.apps.create`, `channels.create`, `certificates.add`, `trustPolicies.create` | `mocco_ota_apps_host`, `mocco_ota_channels_create`, `mocco_ota_certificates_add`, `mocco_ota_trust_policies_create` | covered (`ota:write`) |
+| `hosting.channels.list`, `channels.heads` | `mocco_ota_channels_search` | covered |
+| `hosting.releases.list` | `mocco_ota_releases_search` | covered |
+| `hosting.metrics.channelReach` | `mocco_ota_adoption_get` | covered |
+| `versionPolicy.get`, `versionPolicy.history` | `mocco_ota_version_policies_search` | covered |
+| `hosting.metrics.adoption`, `releases.get`, `certificates.usage`, `channels.previewPromotion`, `channels.timeline`, `externalCredential.list` | — | gap: read (credentials as metadata only) |
+| `hosting.channels.promote`, `channels.changeRollout`, `channels.stop`, `versionPolicy.change` | — | gap: write, a release decision — a person's token, and protected channels still open an approval; its own design pass |
+| `hosting.trustPolicies.delete` | — | gap, needs a decision: write (`ota:write`, admin) or excluded as a trust revocation |
+| `hosting.certificates.retire` | — | excluded: devices stop accepting updates signed with it |
+| `hosting.channels.changePolicy` | — | excluded: names who must approve (governance) |
+| `externalCredential.create`, `.rotate`, `.delete` | — | excluded: vendor secrets |
+
+**Projects and products** (`project`, `product`).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `project.list`, `project.get`, `project.listApps`, `product.list` | `mocco_projects_search` | covered |
+| `project.create`, `project.addApp`, `product.enable` | `mocco_projects_create`, `mocco_projects_apps_add`, `mocco_products_enable` | covered (`projects:write`) |
+| `project.listRepos` | — | gap: read |
+| `project.update`, `project.setAppWebOrigins`, `project.linkRepo` | — | gap: write (`projects:write`); web origins are a CORS setting, so the confirmation must show them |
+| `project.unlinkRepo` | — | gap, needs a decision: write or excluded as destructive |
+| `project.setArchived`, `project.removeApp`, `product.disable` | — | excluded: destructive |
+
+**Deploys: runs, gates, approvals, pipeline, integrations** (`run`, `approval`, `pipeline`, `integration`, `credentialGrant`).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `run.list`, `run.get` | `mocco_runs_search`, `mocco_runs_get` | covered (`run.get`'s resumes are not in the answer) |
+| `run.resumeGate` | `mocco_gates_resume` | covered (`approvals:write`) |
+| `approval.list`, `approval.get`, `approval.vote` | `mocco_approvals_search`, `mocco_approvals_get`, `mocco_approvals_vote` | covered |
+| `run.events` | — | gap: read (a run's event log, for an agent watching it) |
+| `run.trigger` | — | gap: write, starts a pipeline — a person's token and a scope of its own |
+| `pipeline.preview` | — | gap: read (validate a `.mocco.yml` an agent is editing) |
+| `integration.connections`, `availableRepos`, `repos`, `commits`, `commitDetail` | — | gap: read |
+| `integration.addRepo`, `integration.setWatchedBranch` | — | gap: write (`projects:write`) |
+| `integration.startInstall` | — | excluded: a browser install flow |
+| `credentialGrant.list` | — | gap: read (no secrets) |
+| `credentialGrant.create`, `credentialGrant.delete` | — | excluded: decides which gate receives cloud credentials |
+
+**Notifications and inbound** (`notification`, `inbound`).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `notification.channels`, `rules`, `activity`, `deliveries` | `mocco_notifications_channels_search`, `_rules_search`, `_activity_search` | covered (deliveries through the activity trace) |
+| `notification.guilds`, `guildChannels` | `mocco_notifications_discord_channels_search` | covered |
+| `notification.createChannel`, `reenableChannel`, `addRule`, `removeRule`, `applyDefaultRules` | `mocco_notifications_channels_connect`, `_channels_reenable`, `_rules_add`, `_rules_remove`, `_presets_apply` | covered (`approvals:write`, admin) |
+| `notification.deleteChannel` | — | gap, needs a decision: write (admin) or excluded as destructive |
+| `notification.discordSetup` | — | excluded: a console hint; `connect` already refuses with the reason |
+| `inbound.sources.list`, `inbound.receipts.list` | `mocco_inbound_sources_search`, `mocco_notifications_activity_search` | covered |
+| `inbound.sources.create`, `pause`, `resume`, `delete` | `mocco_inbound_sources_create`, `_pause`, `_resume`, `_delete` | covered (GitHub sources only for create) |
+| `inbound.sources.rename` | — | gap: write (admin) |
+| `inbound.sources.rotateSecret` | — | excluded: returns a secret |
+
+**Workspace, members, access, API keys, audit** (`workspace`, `role`, `apiKey`, `mcp`, `audit`).
+
+| Procedure | Tool | Disposition |
+|---|---|---|
+| `workspace.list`, `workspace.members` | — | gap: read (an agent in several workspaces has to guess ids today) |
+| `role.list`, `role.listMembers` | — | gap: read (who could approve this) |
+| `apiKey.list` | — | gap: read (metadata, never the token) |
+| `mcp.settings` | — | gap: read (lets an agent explain an opt-in refusal) |
+| `audit.list`, `audit.recent`, `audit.verify` | — | gap: read (one search tool) |
+| `workspace.create`, `update`, `delete` | — | excluded: ownership and destructive admin |
+| `workspace.active`, `workspace.setActive` | — | excluded: console session state; tools take `workspaceId` |
+| `role.create`, `delete`, `addMember`, `removeMember` | — | excluded: who may decide |
+| `apiKey.create`, `apiKey.revoke` | — | excluded: returns a secret; revoking can cut off CI |
+| `mcp.setAgentsMayDecide` | — | excluded: an agent must not grant itself the opt-in |
 
 ## Evaluating it
 
