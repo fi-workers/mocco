@@ -10,6 +10,16 @@
       "@mocco/source": "./src/mocco-js.ts",
       "types": "./dist/mocco-js.d.ts",
       "import": "./dist/mocco-js.js"
+    },
+    "./feedback": {
+      "@mocco/source": "./src/feedback.ts",
+      "types": "./dist/feedback.d.ts",
+      "import": "./dist/feedback.js"
+    },
+    "./whats-new": {
+      "@mocco/source": "./src/whats-new.ts",
+      "types": "./dist/whats-new.d.ts",
+      "import": "./dist/whats-new.js"
     }
   },
   "files": [
@@ -31,6 +41,7 @@
   },
   "devDependencies": {
     "eslint": "10.6.0",
+    "happy-dom": "20.14.5",
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "vitest": "4.1.9"

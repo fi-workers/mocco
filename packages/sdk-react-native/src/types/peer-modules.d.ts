@@ -25,6 +25,15 @@ declare module 'expo-updates' {
 }
 
 declare module 'react-native' {
+  import type { ComponentType, ReactNode } from 'react';
+
+  interface PrimitiveProps {
+    style?: unknown;
+    accessibilityLabel?: string;
+    children?: ReactNode;
+  }
+  export const View: ComponentType<PrimitiveProps>;
+  export const Text: ComponentType<PrimitiveProps>;
   export const AppState: {
     currentState: string;
     addEventListener(type: 'change', listener: (state: string) => void): { remove(): void };

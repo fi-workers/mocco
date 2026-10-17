@@ -2,6 +2,16 @@
 // against the route schemas (platform foundations §11).
 import { type whoamiResponseSchema } from '@mocco/common/apikey';
 import {
+  type feedbackV1BoardSchema,
+  type feedbackV1ChangelogListSchema,
+  type feedbackV1ChangelogSeenSchema,
+  type feedbackV1ChangelogUnreadSchema,
+  type feedbackV1PostDetailSchema,
+  type feedbackV1PostListQuerySchema,
+  type feedbackV1PostListSchema,
+  type feedbackV1VoteResultSchema,
+} from '@mocco/common/feedback-v1';
+import {
   type helpV1ArticleSchema,
   type helpV1CollectionResultSchema,
   type helpV1FeedbackInputSchema,
@@ -70,6 +80,16 @@ import type {
   WhoAmI,
 } from '@mocco/sdk-core';
 import type {
+  FeedbackBoard,
+  FeedbackChangelogPage,
+  FeedbackChangelogSeen,
+  FeedbackChangelogUnread,
+  FeedbackPostDetail,
+  FeedbackPostListOptions,
+  FeedbackPostPage,
+  FeedbackVoteResult,
+} from '@mocco/sdk-core/feedback';
+import type {
   StatusAffectedComponent,
   StatusComponent,
   StatusComponentStatus,
@@ -125,6 +145,17 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof contactMessageSchema>>().toExtend<MessengerMessage>();
     expectTypeOf<MessengerAttachmentRequest>().toExtend<z.input<typeof attachmentCreateInputSchema>>();
     expectTypeOf<MessengerPushTokenRequest>().toExtend<z.input<typeof pushTokenInputSchema>>();
+  });
+
+  it('feedback: what the SDK asks for is accepted, and what the routes answer is what it types', () => {
+    expectTypeOf<FeedbackPostListOptions>().toExtend<z.input<typeof feedbackV1PostListQuerySchema>>();
+    expectTypeOf<z.output<typeof feedbackV1BoardSchema>>().toExtend<{ board: FeedbackBoard }>();
+    expectTypeOf<z.output<typeof feedbackV1PostListSchema>>().toExtend<FeedbackPostPage>();
+    expectTypeOf<z.output<typeof feedbackV1PostDetailSchema>>().toExtend<FeedbackPostDetail>();
+    expectTypeOf<z.output<typeof feedbackV1VoteResultSchema>>().toExtend<FeedbackVoteResult>();
+    expectTypeOf<z.output<typeof feedbackV1ChangelogListSchema>>().toExtend<FeedbackChangelogPage>();
+    expectTypeOf<z.output<typeof feedbackV1ChangelogUnreadSchema>>().toExtend<FeedbackChangelogUnread>();
+    expectTypeOf<z.output<typeof feedbackV1ChangelogSeenSchema>>().toExtend<FeedbackChangelogSeen>();
   });
 
   it('status: what the SDK sends is accepted, and what the routes answer is what it types', () => {

@@ -1,7 +1,7 @@
 {
   "name": "@mocco/react-native",
   "version": "0.3.0",
-  "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate), in-app contact (messenger hooks) and the Expo config plugin.",
+  "description": "Mocco for React Native: hosted OTA updates (MoccoOta, useMoccoUpdate), in-app contact (messenger hooks), a \"what's new\" badge (useWhatsNew) and the Expo config plugin.",
   "license": "MIT",
   "type": "commonjs",
   "sideEffects": false,
@@ -23,6 +23,12 @@
       "types": "./dist/messenger.d.ts",
       "import": "./dist/messenger.mjs",
       "require": "./dist/messenger.js"
+    },
+    "./whats-new": {
+      "@mocco/source": "./src/whats-new.tsx",
+      "types": "./dist/whats-new.d.ts",
+      "import": "./dist/whats-new.mjs",
+      "require": "./dist/whats-new.js"
     },
     "./app.plugin.js": "./app.plugin.js"
   },

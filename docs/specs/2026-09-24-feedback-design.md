@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, feedback]
@@ -289,6 +289,8 @@ mocco.whatsNew.on('open', () => { /* analytics */ });
 ```
 
 The React Native module exposes `<WhatsNewBadge />` and `useWhatsNew()` hooks and a `FeedbackSheet` from the messenger shell.
+
+As built so far (#177, [SDK packages](../reference/sdk.md)): the browser SDK is `@mocco/js` (not `@mocco/web`), with `createWhatsNew` on `@mocco/js/whats-new` (`unreadCount`, `markSeen`, `mount`, and `onOpenChange` in the mount options instead of `on('open')`) and `createFeedback` on `@mocco/js/feedback` (`board(slug)` reads, `vote`, `unvote`). There is no `identify` call: the client takes an `endUserToken()` function and asks it again when a token expires. `@mocco/react-native/whats-new` has `useWhatsNew` and `<WhatsNewBadge />`; `similar`, `createPost`, comments, the roadmap, email identification and `FeedbackSheet` come next. Types are written out in sdk-core and checked against `@mocco/common/feedback-v1` by the SDK contract test, since `@mocco/common` isn't published.
 
 ### 6.1 MCP tools (ADR 0025)
 
