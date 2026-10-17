@@ -4,7 +4,7 @@ description: How Mocco stores a project's status pages — pages, component grou
 type: reference
 status: active
 created: 2026-10-05
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, status, components, incidents, maintenance]
@@ -224,7 +224,10 @@ An incident belongs to a page and is opened with its first update, in `investiga
 
 Moving forward may skip steps. An update that keeps the status is allowed while the incident is open. Anything
 else throws `IncidentTransitionError` (a `ConflictError`, so `CONFLICT` over tRPC) and changes nothing. The update
-locks the incident row, so two concurrent updates can't both pass the check.
+locks the incident row, so two concurrent updates can't both pass the check. A caller may also pass what it was shown
+(`expected`: the status and the latest update's id, the latest by time and then id); if the incident has a newer update
+or another status by the time the row is locked, `IncidentMovedError` (also a `ConflictError`) and nothing is posted.
+The [MCP](#mcp) update tool passes it, so a person's confirmation can't be applied over an update they never saw.
 
 `resolved_at` is set if and only if the status is `resolved`; a DB check enforces it as well. `identified_at` is
 set the first time the incident reaches `identified` and is kept after that.
@@ -1100,8 +1103,8 @@ calls every procedure as a non-member and with another tenant's ids, and fails i
 | `monitors`, `monitor`, `createMonitor`, `updateMonitor`, `pauseMonitor`, `resumeMonitor`, `deleteMonitor`, `rotateHeartbeatToken` | Monitors (never a heartbeat token's hash); `createMonitor` answers `{ monitor, heartbeatToken }` (null for a probe kind) and `rotateHeartbeatToken` `{ monitor, token }`, the only times a ping token is shown; `monitor` returns its location ids, components, latest state changes (50, newest first), latest ten closed rounds (newest first), the incident it opened that is still open (`openIncident`, or null), and `history`: its rolled-up `hours` (the last 48) and `days` (the last 90), oldest first, each with `rounds`, `downSeconds`, and `p50Ms` / `p95Ms` read from the latency histogram (days add `uptimeRatio`); rows the rollup hasn't written are absent |
 | `locations`, `createLocation`, `rotateLocationToken`, `disableLocation` | Probe locations of the workspace (no `projectId`); the writes need an owner or admin (`FORBIDDEN` for a plain member), and `.output()` strips `token_hash`, so a token appears only in `createLocation` and `rotateLocationToken` |
 
-Agents read the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md)); see
-[MCP](#mcp) below. A mutating tool for posting an incident update, behind the workspace's switch, comes later.
+Agents read and change the same data over MCP ([ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md));
+see [MCP](#mcp) below for which procedures have a tool and which stay in the console.
 
 ## Not built yet
 
@@ -1156,6 +1159,40 @@ confirmation round trip whose question names the monitor, its target, its state 
 signed state records the tool, the workspace, the project and the monitor, so a confirmation for one monitor is
 refused for another. A heartbeat or a paused monitor is refused before anything is asked, and the service checks both
 again when a confirmed check is applied (`MonitorKindError`, `MonitorPausedError`). A round already due is not
-moved. Nothing on MCP declares or
-updates an incident, or changes a monitor's settings or a location. See
+moved.
+
+### Changing a status page over MCP
+
+The console's incident, maintenance and component status changes have tools too, each a thin adapter over the service
+the matching `status.*` procedure calls, with the caller's own id (so the audit log names the person, as in the
+console): `transport/mcp/tools/status-incidents.ts`, `status-maintenance.ts` and `status-pages.ts`, sharing
+`status-write.ts`. Every one needs `status:write` (stepped up for, as above), the workspace's `agents_may_decide`
+opt-in and a confirmation round trip; any member of a project with the status product may use them, as in the console
+(`productProcedure`), and another tenant's ids read like missing ones. Each confirmation says whether the change is
+public, and each is bound to the state it showed, so an answer given after that state changed is refused as a
+different change:
+
+| Tool | Calls | The confirmation shows, and is bound to |
+|---|---|---|
+| `mocco_status_incident_create` | `IncidentService.create` | The page, `PUBLIC` (the page and its subscribers), the title, severity, status, affected components by name and the first update verbatim; bound to the page's newest incident, so answering twice opens one |
+| `mocco_status_incident_update_post` | `IncidentService.postUpdate` with `expected` | Whether it is public (a draft stays in the console), the status now and an excerpt of the latest update, the move (or that it stays), that resolving closes it, and the update verbatim; bound to the status and the latest update, which the service checks again under the row lock |
+| `mocco_status_incident_components_set` | `IncidentService.setComponents` | The components now and after, by name; bound to the components now |
+| `mocco_status_incident_postmortem_set` | `IncidentService.setPostmortem` | The start of the postmortem now and the whole new one (or that it is cleared); bound to a hash of the one now |
+| `mocco_status_incident_run_link` · `…_run_unlink` | `CorrelationService.link` · `unlink` | The run (repository, commit and state when it is linked already), the relation and who linked it now; bound to the link now |
+| `mocco_status_incident_runs_correlate` | `CorrelationService.correlate` | How many suggestions are replaced and how many people's links stay; bound to the suggested runs |
+| `mocco_status_maintenance_schedule` | `MaintenanceService.schedule` | The page, `PUBLIC`, the title, start and end in UTC, the components by name and the description verbatim; bound to the page's newest window |
+| `mocco_status_maintenance_cancel` | `MaintenanceService.cancel` | The window, its status and times, and that one in progress ends now; bound to its status and times |
+| `mocco_status_component_status_set` | `StatusPageService.setComponentStatus` | The status set by hand now and after, and what the page shows now; bound to the status set by hand |
+
+What is refused before anything is asked: a component of another page, a status move the lifecycle doesn't allow
+(naming the moves it does), an update to a resolved incident, a window that ends before it starts or is already over,
+and a run that isn't linked. A change that is already true (the same components, postmortem, link or status) answers
+`changed: false` without asking. `mocco_status_run_incidents_list` is the read the run page has
+(`CorrelationService.incidentsForRun`, behind membership and the status product): the incidents a run is linked to.
+
+What stays in the console, and why: deleting a page (it deletes every incident, window and component on it with no
+undo); creating and rotating a location's token and a heartbeat's ping token (a credential shown once, which must not
+pass through an agent's transcript; MCP never reads a token out), and disabling a location (it stops every monitor
+there across the workspace's projects, and needs an owner or admin); and, for now, the page, group and component
+structure, monitors' settings, pause, resume and delete, and the gates that announce maintenance. See
 [Connect Mocco to your agent](../customer/mcp/connect.md).

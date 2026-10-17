@@ -4,7 +4,7 @@
 import { AuditActions } from '@mocco/common/audit';
 import { INCIDENT_TRANSITIONS, IncidentStatuses, SubscriberMailKinds } from '@mocco/common/status';
 
-import { IncidentTransitionError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
+import { IncidentMovedError, IncidentTransitionError, StatusEntityNotFoundError } from '@backend/domain/status/errors';
 import { ComponentRepo } from '@backend/domain/status/repos/component.repo';
 import { IncidentComponentRepo } from '@backend/domain/status/repos/incident-component.repo';
 import { IncidentUpdateRepo } from '@backend/domain/status/repos/incident-update.repo';
@@ -143,8 +143,19 @@ export class IncidentService {
     return incident;
   }
 
-  /** Post an update to the timeline, moving the incident to `input.status` if that's a legal step. */
-  async postUpdate(scope: StatusScope, actor: StatusActor, incidentId: string, input: IncidentUpdateInput) {
+  /**
+   * Post an update to the timeline, moving the incident to `input.status` if that's a legal step.
+   * `expected` is what the caller was shown (an agent's confirmation): the incident's status and
+   * its latest update. If another update was posted since, `IncidentMovedError` and nothing is
+   * posted; checked under the incident's row lock, so a concurrent update can't slip between.
+   */
+  async postUpdate(
+    scope: StatusScope,
+    actor: StatusActor,
+    incidentId: string,
+    input: IncidentUpdateInput,
+    expected?: { status: IncidentStatus; latestUpdateId: string | null },
+  ) {
     const { userId, via } = actorOf(actor);
     const now = this.now();
     const { incident, from, update } = await this.deps.snapshots.change(async (tx, touch) => {
@@ -152,6 +163,12 @@ export class IncidentService {
       const current = await incidents.findForUpdate(scope, incidentId);
       if (current === undefined) {
         throw new StatusEntityNotFoundError('incident', incidentId);
+      }
+      if (expected !== undefined) {
+        const latest = await new IncidentUpdateRepo(tx).findLatest(scope.workspaceId, incidentId);
+        if (current.status !== expected.status || (latest?.id ?? null) !== expected.latestUpdateId) {
+          throw new IncidentMovedError(incidentId);
+        }
       }
       touch({ workspaceId: scope.workspaceId, pageId: current.pageId });
       const updated = await incidents.update(scope, incidentId, transitionIncident(current, input.status, now));

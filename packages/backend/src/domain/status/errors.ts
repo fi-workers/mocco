@@ -48,6 +48,17 @@ export class IncidentTransitionError extends ConflictError {
   }
 }
 
+/**
+ * An update was asked for after a given status and latest update, and the incident has moved on
+ * since (another update was posted) — CONFLICT. What a confirmation showed is no longer true.
+ */
+export class IncidentMovedError extends ConflictError {
+  constructor(incidentId: string, options?: ErrorOptions) {
+    super(`Incident ${incidentId} has a newer update than the one you were shown`, options);
+    this.name = 'IncidentMovedError';
+  }
+}
+
 /** Canceling a window that already completed or was canceled — CONFLICT. */
 export class MaintenanceTransitionError extends ConflictError {
   constructor(status: MaintenanceStatus, options?: ErrorOptions) {

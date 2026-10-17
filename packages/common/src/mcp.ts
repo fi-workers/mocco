@@ -25,8 +25,9 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * `approvals:write` lets an agent vote as its person. It is not asked for when a client
  * first connects: the client is challenged for it (step-up) the first time it calls a
  * deciding tool, so the person grants it at the moment a decision is actually wanted.
- * `status:write` lets an agent run a monitor's ad-hoc check as its person, stepped up for
- * the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
+ * `status:write` lets an agent change a project's status pages as its person — open and update
+ * incidents, link deploys to them, schedule and cancel maintenance, set a component's status —
+ * and run a monitor's ad-hoc check, stepped up for the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
  * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
  * an agent move a feedback post to another status as its person, stepped up for the same way.
  * `ota:write` lets an agent set up OTA hosting as its person — host an app, add an open

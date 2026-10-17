@@ -11,8 +11,8 @@
 // up front. The deciding tools declare `approvals:write` themselves (`scopeChallenge` in
 // `tools/approvals.ts`), and the SDK answers a call to one with a 403
 // `insufficient_scope` before the tool runs — judged on the parsed request it is about to
-// execute, not on a header that merely names it. `mocco_monitors_check` does the same for
-// `status:write`, `mocco_messenger_reply` and `mocco_messenger_assign` for `messenger:write`,
+// execute, not on a header that merely names it. `mocco_monitors_check` and the status page
+// changes do the same for `status:write`, `mocco_messenger_reply` and `mocco_messenger_assign` for `messenger:write`,
 // and `mocco_feedback_post_set_status`, `mocco_feedback_comment_create`, `mocco_feedback_post_vote`
 // and `mocco_feedback_post_merge` for `feedback:write`, the OTA setup changes
 // (`tools/ota-setup.ts`) for `ota:write`, and the project setup changes (`tools/projects.ts`)

@@ -8,8 +8,9 @@
 // notification settings (`tools/notifications-write.ts`) and four change webhook sources
 // (`tools/inbound-write.ts`); each is gated by scope, by the
 // workspace's opt-in and by a confirmation round trip whose signed state is verified
-// here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) has the
-// same locks under its own `status:write` scope, and `mocco_messenger_reply` and
+// here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) and the
+// status page changes (`tools/status-incidents.ts`, `tools/status-maintenance.ts`,
+// `tools/status-pages.ts`) have the same locks under their own `status:write` scope, and `mocco_messenger_reply` and
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
@@ -40,8 +41,12 @@ import { registerOtaSetupTools, type OtaSetupToolDeps } from '@backend/transport
 import { registerProjectTools, type ProjectToolDeps } from '@backend/transport/mcp/tools/projects';
 import { registerRunTools, type RunToolDeps } from '@backend/transport/mcp/tools/runs';
 import { registerStatusTools, type StatusToolDeps } from '@backend/transport/mcp/tools/status';
+import { registerStatusIncidentTools } from '@backend/transport/mcp/tools/status-incidents';
+import { registerStatusMaintenanceTools } from '@backend/transport/mcp/tools/status-maintenance';
 import { registerStatusMonitorTools, type StatusMonitorToolDeps } from '@backend/transport/mcp/tools/status-monitors';
+import { registerStatusPageTools } from '@backend/transport/mcp/tools/status-pages';
 
+import type { StatusWriteToolDeps } from '@backend/transport/mcp/tools/status-write';
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 
 export type McpToolDeps = RunToolDeps &
@@ -53,6 +58,7 @@ export type McpToolDeps = RunToolDeps &
   ProjectToolDeps &
   StatusToolDeps &
   StatusMonitorToolDeps &
+  StatusWriteToolDeps &
   HelpToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
@@ -83,6 +89,9 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerProjectTools(server, deps);
   registerStatusTools(server, deps);
   registerStatusMonitorTools(server, deps);
+  registerStatusIncidentTools(server, deps);
+  registerStatusMaintenanceTools(server, deps);
+  registerStatusPageTools(server, deps);
   registerHelpTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);

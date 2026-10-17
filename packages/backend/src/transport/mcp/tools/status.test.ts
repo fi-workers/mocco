@@ -86,6 +86,7 @@ const ALL_STATUS_TOOLS = [
   'mocco_status_locations_search',
   'mocco_status_monitors_get',
   'mocco_status_monitors_search',
+  'mocco_status_run_incidents_list',
 ];
 
 describe('mocco_status_* (pglite, over HTTP)', () => {
@@ -296,12 +297,17 @@ describe('mocco_status_* (pglite, over HTTP)', () => {
     await t.close();
   });
 
-  it('declares every status tool read-only', async () => {
+  it('declares every status read tool read-only, and every other status tool a change', async () => {
     const listed = await rpc(ada, 'tools/list', {});
 
     const statusTools = listed.result?.tools?.filter(tool => tool.name.startsWith('mocco_status_')) ?? [];
-    expect(new Set(statusTools.map(tool => tool.name))).toEqual(new Set(ALL_STATUS_TOOLS));
-    expect(statusTools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    const reads = statusTools.filter(tool => ALL_STATUS_TOOLS.includes(tool.name));
+    // The changes (`status-write.ts` and the tools on it) are behind status:write and a confirmation.
+    const changes = statusTools.filter(tool => !ALL_STATUS_TOOLS.includes(tool.name));
+    expect(new Set(reads.map(tool => tool.name))).toEqual(new Set(ALL_STATUS_TOOLS));
+    expect(reads.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    expect(changes.length).toBeGreaterThan(0);
+    expect(changes.filter(tool => tool.annotations?.readOnlyHint !== false).map(tool => tool.name)).toEqual([]);
   });
 
   describe('mocco_status_pages_get', () => {

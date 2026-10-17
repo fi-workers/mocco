@@ -1125,3 +1125,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-17 — MCP: running an incident from an agent
+
+- ADR 0025 says what a person can do in the console has an MCP tool unless deliberately left out; status had reads and
+  `mocco_monitors_check` only. Agents now open incidents, post their updates up to resolved, set their components and
+  postmortem, link, unlink and re-suggest deploys, schedule and cancel maintenance, and set a component's status, behind
+  the existing `status:write` scope (its consent text and description widened), the workspace's opt-in and a
+  confirmation that says when a change is public, quotes what will be published, and is bound to the state it showed.
+  `mocco_status_run_incidents_list` reads a run's incidents. `IncidentService.postUpdate` takes the status and latest
+  update a caller was shown and refuses a stale one under the row lock (`IncidentMovedError`).
+- Left in the console on purpose: deleting a page, location and heartbeat tokens, disabling a location. The page
+  structure, monitor settings and gate maintenances follow in the next PR.
+- No migration.
+- Docs touched: `reference/status.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-status-coverage`

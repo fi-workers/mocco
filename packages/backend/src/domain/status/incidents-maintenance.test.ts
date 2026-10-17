@@ -11,6 +11,7 @@ import { createProjectDomain } from '@backend/domain/project/instance';
 import { deriveComponentStatus } from '@backend/domain/status/component-status';
 import { createStatusDomain } from '@backend/domain/status/compose';
 import {
+  IncidentMovedError,
   IncidentTransitionError,
   MaintenanceTransitionError,
   StatusEntityNotFoundError,
@@ -165,6 +166,51 @@ describe('incidents and maintenance (pglite)', () => {
     const detail = await status.statusIncidents.get(scope, incident.id);
     expect(sameStatus.incident.identifiedAt).toEqual(T0);
     expect(detail.updates).toHaveLength(2);
+  });
+
+  it('posts an update asked for after a given status and latest update only while both still hold', async () => {
+    const { page } = await setUp();
+    const incident = await status.statusIncidents.create(scope, actor, {
+      pageId: page.id,
+      title: 'Slow',
+      severity: IncidentSeverities.minor,
+      status: IncidentStatuses.investigating,
+      body: 'Looking',
+      components: [],
+    });
+    const opened = await status.statusIncidents.get(scope, incident.id);
+    const [first] = opened.updates;
+    const shown = { status: IncidentStatuses.investigating, latestUpdateId: first?.id ?? null };
+    clock = minutes(1);
+    // Someone else posts after the caller was shown the first update, keeping the status.
+    await status.statusIncidents.postUpdate(scope, actor, incident.id, {
+      status: IncidentStatuses.investigating,
+      body: 'Still looking',
+    });
+
+    await expect(
+      status.statusIncidents.postUpdate(
+        scope,
+        actor,
+        incident.id,
+        { status: IncidentStatuses.resolved, body: 'x' },
+        shown,
+      ),
+    ).rejects.toBeInstanceOf(IncidentMovedError);
+    const detail = await status.statusIncidents.get(scope, incident.id);
+    expect(detail.incident.status).toBe(IncidentStatuses.investigating);
+    expect(detail.updates).toHaveLength(2);
+
+    clock = minutes(2);
+    const latest = { status: IncidentStatuses.investigating, latestUpdateId: detail.updates.at(-1)?.id ?? null };
+    const posted = await status.statusIncidents.postUpdate(
+      scope,
+      actor,
+      incident.id,
+      { status: IncidentStatuses.resolved, body: 'Fixed' },
+      latest,
+    );
+    expect(posted.incident.status).toBe(IncidentStatuses.resolved);
   });
 
   it('enforces the resolved_at invariant in the database too', async () => {

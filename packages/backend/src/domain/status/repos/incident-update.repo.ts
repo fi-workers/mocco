@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
 import { expectOne } from '@backend/infra/db/rows';
 import * as schema from '@backend/infra/db/schema';
@@ -32,6 +32,17 @@ export class IncidentUpdateRepo {
       .from(u)
       .where(and(eq(u.workspaceId, workspaceId), inArray(u.incidentId, [...incidentIds])))
       .orderBy(asc(u.createdAt));
+  }
+
+  /** The incident's latest update; ties on time go to the larger id, as `listForIncident` can't order them. */
+  async findLatest(workspaceId: string, incidentId: string): Promise<IncidentUpdateRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(u)
+      .where(and(eq(u.workspaceId, workspaceId), eq(u.incidentId, incidentId)))
+      .orderBy(desc(u.createdAt), desc(u.id))
+      .limit(1);
+    return row;
   }
 
   async find(workspaceId: string, id: string): Promise<IncidentUpdateRow | undefined> {
