@@ -26,6 +26,10 @@ export default defineConfig({
       DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://mocco:mocco@localhost:5432/mocco',
       AUTH_SECRET: process.env.AUTH_SECRET ?? 'e2e-ephemeral-secret-not-for-prod',
       SERVICE_DOMAIN: `localhost:${PORT}`,
+      // Public help sites (and their feedback boards) at <site>.help.localhost; Chromium resolves *.localhost.
+      HELP_SITES_DOMAIN: `help.localhost:${PORT}`,
+      // Seals the messenger identity secret; a throwaway key for this suite only.
+      SECRETS_ENCRYPTION_KEYS: 'e2e:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=',
     },
   },
 });

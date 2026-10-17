@@ -64,6 +64,10 @@ stores secrets; that feature then fails with an error naming the variable. Gener
 `echo "k1:$(openssl rand -base64 32)"` and put it in the gitignored `env/.env` (and in the Vercel
 project env for deploys).
 
+The e2e server (`packages/e2e/playwright.config.ts`) sets a throwaway key here and
+`HELP_SITES_DOMAIN=help.localhost:3100`, so the feedback flow can set up a messenger (its identity
+secret is sealed) and open public boards at `<site>.help.localhost`.
+
 ## Tailnet access (method A: phone on the tailnet)
 
 Tailscale is a developer-machine concern, confined to **one generator script** — `infra/local/scripts/gen-tailscale-env.ts`. Nothing else (the loader, `env.ts`, `resolveAuthOrigins`) knows Tailscale exists; they only ever see `SERVICE_DOMAIN`, an ordinary env var. Swapping in a real domain, ngrok, or plain localhost later is just a different `SERVICE_DOMAIN` value — no code changes anywhere.
