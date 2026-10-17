@@ -23,7 +23,9 @@ import { resolveStatusProject } from '@backend/transport/mcp/tools/status';
 import type { ProjectInScope, ProjectScope } from '@backend/domain/mcp/ProjectScope';
 import type { CorrelationService } from '@backend/domain/status/CorrelationService';
 import type { IncidentService } from '@backend/domain/status/IncidentService';
+import type { LocationService } from '@backend/domain/status/LocationService';
 import type { MaintenanceService } from '@backend/domain/status/MaintenanceService';
+import type { MonitorService } from '@backend/domain/status/MonitorService';
 import type { IncidentRow } from '@backend/domain/status/repos/incident.repo';
 import type { StatusPageRow } from '@backend/domain/status/repos/page.repo';
 import type { StatusPageService } from '@backend/domain/status/StatusPageService';
@@ -33,10 +35,29 @@ import type { CallToolResult, ScopeChallengeHandler, ServerContext } from '@mode
 
 /** The services status changes write through: the ones the console's `status` router calls. */
 export interface StatusChanges {
-  pages: Pick<StatusPageService, 'listPages' | 'getPage' | 'setComponentStatus'>;
+  pages: Pick<
+    StatusPageService,
+    | 'listPages'
+    | 'getPage'
+    | 'setComponentStatus'
+    | 'createPage'
+    | 'updatePage'
+    | 'createGroup'
+    | 'updateGroup'
+    | 'deleteGroup'
+    | 'createComponent'
+    | 'updateComponent'
+    | 'deleteComponent'
+  >;
   incidents: Pick<IncidentService, 'list' | 'get' | 'create' | 'postUpdate' | 'setComponents' | 'setPostmortem'>;
   correlation: Pick<CorrelationService, 'list' | 'correlate' | 'link' | 'unlink' | 'incidentsForRun'>;
-  maintenances: Pick<MaintenanceService, 'list' | 'schedule' | 'cancel'>;
+  maintenances: Pick<
+    MaintenanceService,
+    'list' | 'schedule' | 'cancel' | 'listGateMaintenances' | 'setGateMaintenance' | 'deleteGateMaintenance'
+  >;
+  monitors: Pick<MonitorService, 'list' | 'find' | 'create' | 'update' | 'pause' | 'resume' | 'delete'>;
+  /** For the names of the locations a monitor runs at. */
+  locations: Pick<LocationService, 'list'>;
 }
 
 export interface StatusWriteToolDeps extends DecidingToolDeps {
@@ -48,7 +69,7 @@ export interface StatusWriteToolDeps extends DecidingToolDeps {
 /** One permission for every status change, worded as the consent screen words it. */
 const STATUS_WRITE = {
   name: McpScopes.statusWrite,
-  allows: 'change your status pages, incidents and maintenance',
+  allows: 'change your status pages, incidents, maintenance and monitors',
 } as const;
 
 /** How a status change names itself in its refusals. */
@@ -115,6 +136,9 @@ export function statusRefusal(error: unknown): CallToolResult {
   }
   throw error;
 }
+
+/** Ascending by code unit, like a database's C collation: ids in a fixed order for a binding. */
+export const byText = (a: string, b: string) => Number(a > b) - Number(a < b);
 
 /** A page as a confirmation names it. */
 export const pageLabel = (page: Pick<StatusPageRow, 'title' | 'slug'>) => `"${page.title}" (address ${page.slug})`;

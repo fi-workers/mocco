@@ -179,6 +179,7 @@ has several servers loaded.
 | `mocco_status_monitors_get` | One monitor: latest state changes, open monitor incident, latest rounds |
 | `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
 | `mocco_status_run_incidents_list` | The status incidents a run is linked to, across the workspace's projects |
+| `mocco_status_gate_maintenances_search` | A status page's gates that announce maintenance |
 | `mocco_help_articles_search` | A project's published help articles matching text (all or any word), or all in order; in a language where translated |
 | `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages and 30-day helpfulness |
 | `mocco_help_translations_list` | A help center's translation counts per language and the published articles a filter lists (attention, stale, failed, all), with each language's status; offset-paged |
@@ -215,6 +216,11 @@ has several servers loaded.
 | `mocco_status_incident_run_link` / `_run_unlink` / `_runs_correlate` | Link or unlink a deploy, or recompute Mocco's suggestions (`status:write`) |
 | `mocco_status_maintenance_schedule` / `_cancel` | Schedule or cancel a maintenance window (`status:write`) |
 | `mocco_status_component_status_set` | Set the status a component reports by hand (`status:write`) |
+| `mocco_status_page_create` / `_page_update` | Create a status page, or change its title or address (`status:write`) |
+| `mocco_status_group_create` / `_update` / `_delete` | Add, rename or move, and delete a component group (`status:write`) |
+| `mocco_status_component_create` / `_update` / `_delete` | Add, change and delete a component (`status:write`) |
+| `mocco_status_monitor_create` / `_update` / `_pause` / `_resume` / `_delete` | Create an HTTP or TCP monitor, change its settings without reading its check, pause, resume and delete it (`status:write`) |
+| `mocco_status_gate_maintenance_set` / `_delete` | Make a gate announce maintenance on a page, or stop it (`status:write`) |
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
 | `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
@@ -268,7 +274,7 @@ still refuses what the role refuses.
 | `runs:read` | List and read runs, steps and gates |
 | `approvals:read` | List and read approval requests and their votes |
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
-| `status:write` | On MCP, change a project's status pages — incidents, deploy links, maintenance and component statuses (`mocco_status_incident_*`, `mocco_status_maintenance_*`, `mocco_status_component_status_set`) — and run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
+| `status:write` | On MCP, change a project's status pages — incidents, deploy links, maintenance, page structure, monitors and gate maintenances (`mocco_status_incident_*`, `mocco_status_maintenance_*`, `mocco_status_page_*`, `mocco_status_group_*`, `mocco_status_component_*`, `mocco_status_monitor_*`, `mocco_status_gate_maintenance_*`) — and run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
 | `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
 

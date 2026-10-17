@@ -87,6 +87,7 @@ const ALL_STATUS_TOOLS = [
   'mocco_status_monitors_get',
   'mocco_status_monitors_search',
   'mocco_status_run_incidents_list',
+  'mocco_status_gate_maintenances_search',
 ];
 
 describe('mocco_status_* (pglite, over HTTP)', () => {

@@ -1,9 +1,9 @@
 // `mocco_status_*` — what a project's status pages say now, which incidents are open (or
 // were), each incident's timeline and the deploys linked to it, and the maintenance windows
-// ahead (monitors and probe locations are in `status-monitors.ts`). Read-only: opening
-// an incident, posting an update, setting a component's status and scheduling
-// maintenance are things a person says to their customers, and a tool that does them
-// needs its own design pass.
+// ahead (monitors and probe locations are in `status-monitors.ts`). Read-only: the
+// changes are in `status-incidents.ts`, `status-maintenance.ts`, `status-pages.ts`,
+// `status-page-structure.ts`, `status-monitor-changes.ts` and `status-gate-maintenance.ts`,
+// with the locks they share in `status-write.ts`.
 //
 // Thin adapters (ADR 0025) over the services the console's `status` router reads through.
 // Status is project-scoped, so every call first goes through `ProjectScope` — membership,

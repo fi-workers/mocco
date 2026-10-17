@@ -60,6 +60,8 @@ export function getMcpHandler(): McpHttpHandler {
         incidents: status.statusIncidents,
         correlation: status.statusCorrelation,
         maintenances: status.statusMaintenances,
+        monitors: status.statusMonitors,
+        locations: status.statusLocations,
       },
       helpPublic: getHelpDomain().helpPublic,
       helpFeedback: getHelpDomain().helpFeedback,

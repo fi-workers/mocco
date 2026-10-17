@@ -289,6 +289,8 @@ describe('status page changes over MCP (pglite, over HTTP)', () => {
         incidents: status.statusIncidents,
         correlation: status.statusCorrelation,
         maintenances: status.statusMaintenances,
+        monitors: status.statusMonitors,
+        locations: status.statusLocations,
       },
       helpPublic: { searchInProject: refuse, siteInProject: refuse, articleInProject: refuse },
       helpFeedback: { helpfulness: refuse },

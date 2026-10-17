@@ -26,7 +26,8 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * first connects: the client is challenged for it (step-up) the first time it calls a
  * deciding tool, so the person grants it at the moment a decision is actually wanted.
  * `status:write` lets an agent change a project's status pages as its person — open and update
- * incidents, link deploys to them, schedule and cancel maintenance, set a component's status —
+ * incidents, link deploys to them, schedule and cancel maintenance, set up pages, components,
+ * monitors and the gates that announce maintenance —
  * and run a monitor's ad-hoc check, stepped up for the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
  * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
  * an agent move a feedback post to another status as its person, stepped up for the same way.
