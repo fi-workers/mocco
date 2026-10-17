@@ -4,7 +4,7 @@ description: The domain event catalog, how to publish and subscribe, delivery se
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, events, jobs, backend, notifications]
@@ -115,7 +115,9 @@ Every governance payload names its run so a notification can render without anot
 `deploy.released` carries the governance run payload plus `repoId`, `projectIds` (every project a
 release row was recorded for), `previousReleaseSha` (the repo's previous release commit, or null),
 `gates` (`{ gateId, name, resumedBy }[]`, the resumed gates in pipeline order), `resumedBy`
-(`{ userId, role | null }[]`, once per person and role) and `releasedAt` (ISO 8601). Its dedupe key
+(`{ userId, role | null }[]`, once per person and role), `releasedAt` (ISO 8601) and
+`succeededSteps` (the names of the run's succeeded steps, in pipeline order; `[]` on an event
+stored before #179). Its dedupe key
 is `deploy.released:<runId>` and its `occurredAt` is the run's finish time. It is published once per
 run, even when `run.succeeded` is redelivered, and the hourly `releases.reconcile` job publishes it
 for a release the event path missed. See [release registry](./releases.md).
@@ -207,6 +209,11 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
 - The status deploy watch (`registerStatusSubscribers`, `domain/status/subscribers.ts`) as
   `status.deploy_watch` on `deploy.released`: it watches the released projects' monitors for 15
   minutes ([status: the deploy watch](./status.md#the-deploy-watch)).
+- The feedback ship detector (`registerFeedbackSubscribers`, `domain/feedback/subscribers.ts`) as
+  `feedback.ship_detect` on `deploy.released`: it suggests shipping the board posts whose linked pull
+  requests the release contains ([feedback: shipping on release](./feedback.md#shipping-on-release)).
+  `createEventBus` takes the `CommitAncestry` port for it (the GitHub App; without one, only a merge
+  commit that is the released commit counts).
 - Gate-linked maintenance (same factory) as `status.maintenance.gate_resumed` on `gate.resumed`, which starts the
   windows the gate announces, and `status.maintenance.run_succeeded`, `status.maintenance.run_failed` and
   `status.maintenance.gate_rejected`, which complete the run's windows

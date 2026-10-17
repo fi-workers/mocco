@@ -617,6 +617,13 @@
       "when": 1792215462013,
       "tag": "0087_feedback_links",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1792219334699,
+      "tag": "0088_feedback_ship_suggestions",
+      "breakpoints": true
     }
   ]
 }

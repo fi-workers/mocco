@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { useState } from 'react';
 
 import { BoardForm } from '@frontend/components/feedback-console/boards';
+import { ShipSuggestions } from '@frontend/components/feedback-console/ship-suggestions';
 import {
   Ago,
   errorMessage,
@@ -346,6 +347,7 @@ function BoardInbox({
           }
         }}
       />
+      <ShipSuggestions workspaceId={workspaceId} projectId={projectId} boardId={board.id} />
       {postsQuery.isPending ? <Spinner /> : null}
       {postsQuery.error ? <p className="text-sm text-destructive">{errorMessage(postsQuery.error)}</p> : null}
       {postsQuery.isSuccess && posts.length === 0 ? (

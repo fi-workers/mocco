@@ -52,6 +52,7 @@ function fakeProvider(isOwner = true): GitHubProvider {
     search: async () => [],
     get: async () => null,
     closingPullRequests: async () => [],
+    containsCommit: async () => false,
   };
 }
 

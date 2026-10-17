@@ -10,13 +10,15 @@ import { LinkService } from '@backend/domain/feedback/LinkService';
 import { MergeService } from '@backend/domain/feedback/MergeService';
 import { PostService } from '@backend/domain/feedback/PostService';
 import { PublicBoardService } from '@backend/domain/feedback/PublicBoardService';
+import { ShipDetector } from '@backend/domain/feedback/ShipDetector';
+import { ShipSuggestionService } from '@backend/domain/feedback/ShipSuggestionService';
 import { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import { VoteService } from '@backend/domain/feedback/VoteService';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { FeedbackSourceReaders } from '@backend/domain/feedback/IntakeService';
 import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
-import type { IssueTracker } from '@backend/domain/integration/ports';
+import type { CommitAncestry, IssueTracker } from '@backend/domain/integration/ports';
 import type { Db } from '@backend/infra/db/types';
 
 export interface FeedbackDomain {
@@ -34,6 +36,8 @@ export interface FeedbackDomain {
   feedbackChangelog: ChangelogService;
   /** GitHub issues and pull requests linked to posts (#178). */
   feedbackLinks: LinkService;
+  /** Posts a release shipped, for the team to mark shipped (#179). */
+  feedbackShipSuggestions: ShipSuggestionService;
   /** What /v1/feedback serves (#174). */
   feedbackPublic: PublicBoardService;
   /** Voting by email and the signed mail links (#174); undefined without a link signing key. */
@@ -91,10 +95,29 @@ export function createFeedbackDomain(
       ...(deps.tracker !== undefined && { tracker: deps.tracker }),
       ...now,
     }),
+    feedbackShipSuggestions: new ShipSuggestionService({ db, audit: deps.audit, boards: feedbackBoards, ...now }),
     feedbackPublic,
     feedbackEmailVotes:
       deps.links === undefined
         ? undefined
         : new EmailVoteService({ db, boards: feedbackPublic, votes: feedbackVotes, ...deps.links, ...now }),
   };
+}
+
+/** The ship detector over a db (#179), for the `deploy.released` subscriber. */
+export function createShipDetector(
+  db: Db,
+  deps: { audit: Pick<AuditService, 'record'>; ancestry?: CommitAncestry; ancestryCallCap?: number; now?: () => Date },
+): ShipDetector {
+  const now = deps.now === undefined ? {} : { now: deps.now };
+  const boards = new BoardService({ db, audit: deps.audit });
+  return new ShipDetector({
+    db,
+    audit: deps.audit,
+    changelog: new ChangelogService({ db, audit: deps.audit, boards, ...now }),
+    suggestions: new ShipSuggestionService({ db, audit: deps.audit, boards, ...now }),
+    ...(deps.ancestry !== undefined && { ancestry: deps.ancestry }),
+    ...(deps.ancestryCallCap !== undefined && { ancestryCallCap: deps.ancestryCallCap }),
+    ...now,
+  });
 }

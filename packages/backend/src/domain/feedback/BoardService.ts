@@ -4,11 +4,13 @@ import { AuditActions } from '@mocco/common/audit';
 import {
   FeedbackBoardNotFoundError,
   FeedbackCategoryNotFoundError,
+  FeedbackLinkRepoNotFoundError,
   FeedbackSlugTakenError,
 } from '@backend/domain/feedback/errors';
 import { FeedbackBoardRepo } from '@backend/domain/feedback/repos/board.repo';
 import { FeedbackCategoryRepo } from '@backend/domain/feedback/repos/category.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
+import { FeedbackTrackerRepoRepo } from '@backend/domain/feedback/repos/tracker-repo.repo';
 import { UniqueConstraintError } from '@backend/infra/db/errors';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
@@ -16,7 +18,7 @@ import type { FeedbackBoardRow } from '@backend/domain/feedback/repos/board.repo
 import type { FeedbackCategoryRow } from '@backend/domain/feedback/repos/category.repo';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type { Db } from '@backend/infra/db/types';
-import type { FeedbackBoardInput, FeedbackCategoryInput } from '@mocco/common/feedback';
+import type { FeedbackBoardInput, FeedbackCategoryInput, FeedbackReleasePolicyInput } from '@mocco/common/feedback';
 
 export interface BoardServiceDeps {
   db: Db;
@@ -108,6 +110,38 @@ export class BoardService {
     if (board === undefined) {
       throw new FeedbackBoardNotFoundError(boardId);
     }
+    return board;
+  }
+
+  /**
+   * Set whose releases ship the board's posts, and how (#179). The release repo must be one linked
+   * to the board's project (FeedbackLinkRepoNotFoundError otherwise): only that repo's releases name
+   * the project. Audited, since `auto_apply` lets Mocco change posts' statuses on its own.
+   */
+  async setReleasePolicy(
+    scope: FeedbackScope,
+    actorUserId: string,
+    boardId: string,
+    input: FeedbackReleasePolicyInput,
+  ): Promise<FeedbackBoardRow> {
+    await this.requireBoard(scope, boardId);
+    if (
+      input.releaseRepoId !== null &&
+      (await new FeedbackTrackerRepoRepo(this.deps.db).findInProject(scope, input.releaseRepoId)) === undefined
+    ) {
+      throw new FeedbackLinkRepoNotFoundError(input.releaseRepoId);
+    }
+    const board = await new FeedbackBoardRepo(this.deps.db).setReleasePolicy(scope, boardId, input);
+    if (board === undefined) {
+      throw new FeedbackBoardNotFoundError(boardId);
+    }
+    await this.deps.audit.record(scope.workspaceId, {
+      actorUserId,
+      action: AuditActions.feedbackBoardReleasePolicyChanged,
+      subjectType: 'feedback_board',
+      subjectId: boardId,
+      payload: { projectId: scope.projectId, slug: board.slug, ...input },
+    });
     return board;
   }
 

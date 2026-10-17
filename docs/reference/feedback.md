@@ -1,6 +1,6 @@
 ---
 title: Feedback board model
-description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates, and the GitHub issues and pull requests linked to posts — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, the feedback MCP tools, and the public /v1 surface with end-user tokens, and the public board pages.
+description: How Mocco stores a project's feedback boards — boards, categories, posts with a per-board number, each post's append-only status history, end users' votes, comments and subscriptions, and merged duplicates, and the GitHub issues and pull requests linked to posts, and shipping posts on release — the statuses and how staff move a post between them, how votes are counted, who sees which comments, how merging moves votes and subscribers, how the staff list sorts, what is audited, the feedback tRPC router, the feedback MCP tools, and the public /v1 surface with end-user tokens, and the public board pages.
 type: reference
 status: active
 created: 2026-10-06
@@ -12,6 +12,8 @@ related:
   - ../specs/2026-09-24-feedback-design.md
   - ./project.md
   - ./github-app.md
+  - ./releases.md
+  - ../adr/0031-feedback-ships-on-the-release-registry-not-environments.md
 code_refs:
   - packages/common/src/feedback.ts
   - packages/backend/src/domain/feedback/BoardService.ts
@@ -22,6 +24,11 @@ code_refs:
   - packages/backend/src/domain/feedback/MergeService.ts
   - packages/backend/src/domain/feedback/errors.ts
   - packages/backend/src/domain/feedback/LinkService.ts
+  - packages/backend/src/domain/feedback/ShipDetector.ts
+  - packages/backend/src/domain/feedback/ShipSuggestionService.ts
+  - packages/backend/src/domain/feedback/ancestry-checks.ts
+  - packages/backend/src/domain/feedback/subscribers.ts
+  - packages/frontend/src/components/feedback-console/ship-suggestions.tsx
   - packages/frontend/src/components/feedback-console/github-links.tsx
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
@@ -42,7 +49,7 @@ code_refs:
 
 # Feedback board model
 
-The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` surface (#174, [below](#the-public-v1-surface)): reads, the similar-posts search, and posts, votes, comments and follows from the app's signed-in end users, voting by email, and signed unsubscribe links; the public board and post pages (#175, [below](#public-board-pages)). GitHub links (#178, [below](#github-links)) let staff tie a post to the issues and pull requests that deliver it; shipping on deploy comes in a later slice.
+The first slices of the [feedback design](../specs/2026-09-24-feedback-design.md) (#98): staff create a project's boards and categories, write posts, and move posts through statuses over tRPC (#172), and agents read boards and posts and move posts over MCP (#468); end users' votes, comments and subscriptions, the team's official responses and internal notes, and merging duplicates (#173); the public `/v1` surface (#174, [below](#the-public-v1-surface)): reads, the similar-posts search, and posts, votes, comments and follows from the app's signed-in end users, voting by email, and signed unsubscribe links; the public board and post pages (#175, [below](#public-board-pages)). GitHub links (#178, [below](#github-links)) let staff tie a post to the issues and pull requests that deliver it, and a release that contains them suggests marking the post shipped (#179, [below](#shipping-on-release)).
 
 ## Tables
 
@@ -158,7 +165,7 @@ Requests captured elsewhere in Mocco become posts (#182); for now the source is 
 
 ## GitHub links
 
-Staff link a post to issues and pull requests in the repos linked to its project (#178). The link stores what GitHub last said about it, and webhooks keep that current; shipping a post when a linked pull request's merge commit is deployed is the next slice and reads these rows. Migration 0087 adds two tables:
+Staff link a post to issues and pull requests in the repos linked to its project (#178). The link stores what GitHub last said about it, and webhooks keep that current; [shipping on release](#shipping-on-release) reads these rows. Migration 0087 adds two tables:
 
 | Table | What it holds |
 |---|---|
@@ -171,15 +178,44 @@ Staff link a post to issues and pull requests in the repos linked to its project
 - **Webhooks.** The deferred webhook pass hands `issues` and `pull_request` deliveries (every action) to `LinkService.applyProviderEvent` through `CommitSyncService.withTrackerEvents`, after resolving the repo through the installation's connection like every other event. Every link to that issue or pull request in the repo's workspace takes its title, state and merge commit, and for a pull request every closer row for it does too; an issue whose state changed has its closers resolved again. A delivery that matches no link is parked (logged with `console.warn`, never thrown), like an unknown repo or installation. A new pull request that says `Fixes #12` becomes a closer when the issue next changes state or is refreshed, not from its own event.
 - **Refresh** (`feedback.links.refresh`, every 10 minutes): the 20 links not heard about for 6 hours, the longest ago first, are read again (and an issue's closers), for deliveries GitHub never sent. A link whose repo or target is gone keeps what it knew; a failure is logged; either way it waits its next turn. Without a GitHub App the job does nothing.
 
-Not yet: MCP tools for links, showing links on the public board (number and state only, per the design), and shipping posts from a deploy.
+Not yet: MCP tools for links, and showing links on the public board (number and state only, per the design).
+
+## Shipping on release
+
+A release that contains a post's linked work suggests marking the post shipped (#179, [ADR 0031](../adr/0031-feedback-ships-on-the-release-registry-not-environments.md)). Migration 0088 adds the board's release policy, marks on links, `mocco_feedback_ship_suggestions`, and `source_run_id` on changelog entries.
+
+**What counts as a release.** Mocco has no environments, so a board says which releases ship its posts. A release is the [release registry](./releases.md)'s `deploy.released`: a run that succeeded and passed at least one resumed gate. A run with no gate never ships a post. The board's release policy (all on `mocco_feedback_boards`, set with `BoardService.setReleasePolicy`, audited as `feedback.board.release_policy_changed`):
+
+| Column | Default | Meaning |
+|---|---|---|
+| `release_repo_id` | null (off) | The repo whose releases count. It must be linked to the board's project (`FeedbackLinkRepoNotFoundError`, NOT_FOUND, otherwise), and the release must name that project. FK to `mocco_repos`, SET NULL |
+| `release_step_name` | null (any) | Only a release whose run succeeded a step of this name counts (`deploy.released` carries `succeededSteps`) |
+| `ship_policy` | `all_links_shipped` | `all_links_shipped`: every link that counts has shipped. `any_link_shipped`: one has |
+| `ship_mode` | `suggest` | `suggest` asks the team; `auto_apply` marks the posts shipped itself |
+
+**The detector** (`ShipDetector`, the `feedback.ship_detect` subscriber on `deploy.released`, `domain/feedback/subscribers.ts`) runs for each board whose release repo is the release's repo, in a project the release names, whose step (if any) succeeded:
+
+1. **Candidates.** The board's links to the release repo that no release shipped yet: a merged pull request's merge commit, or the merge commits of an issue's merged closing pull requests.
+2. **Containment.** A merge commit that is the released commit is contained without asking. Any other is asked through the `CommitAncestry` port (`containsCommit(repo, ancestor, head)`; the GitHub adapter calls the compare API, `ahead` or `identical` is contained, `behind`, `diverged` or a 404 is not). Commit order in `mocco_commits` isn't used: a force-push makes it lie. `AncestryChecks` caches each answer for the release and asks at most 50 times (`SHIP_ANCESTRY_CALL_CAP`); past the cap, without a GitHub App, or when GitHub fails (logged), a link isn't decided and waits for the next release.
+3. **Marks.** Each contained link gets `shipped_run_id` and `shipped_at`: the first release that contained it, never moved by a later one.
+4. **Posts.** Every post of the board with a link this run shipped is checked against the policy. Shipped links always count; an abandoned link doesn't (a pull request closed unmerged, an issue closed with no merged pull request); every other link (open, or merged and not released yet, in any repo) counts. A merged duplicate, a post already shipped, and a post waiting on a suggestion from an earlier run are skipped.
+5. **Suggestions.** One `mocco_feedback_ship_suggestions` row per (post, run), unique, with the released `commit_sha` and the resumed gates' names (`gate_names`, the banner's "approved by"), `state` `pending`. Each new one records `feedback.shipped_suggested` (no actor; the run, commit, gates and draft).
+6. **Draft.** One draft changelog entry per board and run (`source_run_id`, unique per board) groups every post the run suggested there, by number: the title is the first post's (and "and N more"), the body a line per post with its pull requests linked. `ChangelogService.draftForRun` adds posts to it on a later pass and never touches its words. Each suggestion points at it (`changelog_entry_id`, SET NULL when the entry is deleted).
+7. **Auto-apply.** On a board in `auto_apply` mode the run's suggestions are applied at once (below), as no one.
+
+Every step is idempotent: a release delivered again marks nothing new (marks stay), inserts no suggestion (the unique pair), and drafts no second entry, so the at-least-once bus delivers it effectively once. A failure throws and the delivery job retries. The release registry's reconcile publishes releases the event path missed, so a missed release still reaches the detector.
+
+**Deciding** (`ShipSuggestionService`): `listPending` groups a board's waiting suggestions by run, the newest first. `accept` takes every waiting suggestion of a run on the board in one transaction (the suggestions locked, then the posts in id order) and moves each post to `shipped` with a status change of reason `ship_suggestion` by the team member; a post merged or shipped meanwhile has its suggestion decided with no change. The suggestions become `accepted` with who and when, and each shipped post records `feedback.shipped`. The status change is like any other, so [status mail](#status-mail) follows. `autoApply` does the same as no one, with reason `auto_apply` and state `auto_applied`. `dismiss` sets them `dismissed` and leaves the posts (not audited). A run with nothing waiting on the board is `FeedbackShipSuggestionNotFoundError` (NOT_FOUND). The draft stays a draft either way: publishing it is the team's call.
+
+Not yet: MCP tools to list and decide suggestions, the staff Slack notice, and noticing a later release that no longer contains a shipped link (a revert or rollback).
 
 ## Audit
 
-`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits, and `feedback.duplicate.dismissed` (on the newer post, with the board and `candidatePostId`) when staff set a [suggested pair](#suggested-duplicates) aside, and `feedback.post.converted` (with the board, the post number, the source and whether the post was new) when a request becomes a post or joins one ([intake](#intake)), and `feedback.post.linked` (with the board, the post number, the repo, kind and number) and `feedback.post.unlinked` (with the kind, number and URL) for [GitHub links](#github-links). Category and post edits aren't audited. The changelog's audit actions are under [Changelog](#changelog).
+`feedback.board.created`, `feedback.board.deleted`, `feedback.post.status_changed` (with `from`, `to`, the board and the post number) and `feedback.post.merged` (on the source, with the board, both post numbers, `intoPostId` and `votesAdded`) are appended after their transaction commits, and `feedback.duplicate.dismissed` (on the newer post, with the board and `candidatePostId`) when staff set a [suggested pair](#suggested-duplicates) aside, and `feedback.post.converted` (with the board, the post number, the source and whether the post was new) when a request becomes a post or joins one ([intake](#intake)), and `feedback.post.linked` (with the board, the post number, the repo, kind and number) and `feedback.post.unlinked` (with the kind, number and URL) for [GitHub links](#github-links), and `feedback.board.release_policy_changed`, `feedback.shipped_suggested` and `feedback.shipped` for [shipping on release](#shipping-on-release). Category and post edits aren't audited. The changelog's audit actions are under [Changelog](#changelog).
 
 ## The feedback router
 
-`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError`, `FeedbackVoteNotFoundError`, `FeedbackLinkRepoNotFoundError`, `FeedbackLinkTargetNotFoundError` and `FeedbackLinkNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError`, `FeedbackStatusUnchangedError`, `FeedbackStatusMovedError`, `FeedbackPostMergedError` and `FeedbackLinkExistsError` are CONFLICT; `FeedbackOfficialInternalError`, `FeedbackMergeInvalidError` and `FeedbackIssueTrackerUnavailableError` are BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
+`feedback.*` procedures all use `productProcedure(Products.feedback)`: the caller must be a member of the workspace (NOT_FOUND otherwise), the project must belong to it (NOT_FOUND), and the feedback product must be enabled (FORBIDDEN). The same chain maps the domain's errors: `FeedbackBoardNotFoundError`, `FeedbackCategoryNotFoundError`, `FeedbackPostNotFoundError`, `FeedbackVoteNotFoundError`, `FeedbackLinkRepoNotFoundError`, `FeedbackLinkTargetNotFoundError`, `FeedbackLinkNotFoundError` and `FeedbackShipSuggestionNotFoundError` are NOT_FOUND; `FeedbackSlugTakenError`, `FeedbackStatusUnchangedError`, `FeedbackStatusMovedError`, `FeedbackPostMergedError` and `FeedbackLinkExistsError` are CONFLICT; `FeedbackOfficialInternalError`, `FeedbackMergeInvalidError` and `FeedbackIssueTrackerUnavailableError` are BAD_REQUEST. Entities are looked up within the caller's workspace and project, so another tenant's id is NOT_FOUND. A test calls every procedure as a non-member and with another tenant's ids.
 
 | Procedure | Does |
 |---|---|
@@ -195,6 +231,7 @@ Not yet: MCP tools for links, showing links on the public board (number and stat
 | `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
 | `intakePreview`, `convertSource`, `sourcePosts`, `postSources` | [Intake](#intake): preview a source on a board, convert it, the posts a source became, and a post's sources |
 | `linkRepos`, `linkSearch`, `links`, `link`, `unlink` | [GitHub links](#github-links): the project's repos, a search of one (at most `FEEDBACK_LINK_SEARCH_LIMIT`, 10), a post's links with their closers, linking by number, and removing a link |
+| `setReleasePolicy`, `shipSuggestions`, `acceptShipSuggestions`, `dismissShipSuggestions` | [Shipping on release](#shipping-on-release): set a board's release policy; its waiting suggestions by run; mark a run's posts shipped as the caller, or set them aside |
 | `duplicates`, `dismissDuplicate` | A board's [suggested pairs](#suggested-duplicates) still to decide, with both posts and the open count; set one aside |
 
 ## The console
@@ -202,7 +239,8 @@ Not yet: MCP tools for links, showing links on the public board (number and stat
 The project's **Feedback** section (`pages/workspaces/[id]/p/[projectId]/feedback/`, #175) appears once the workspace turns the feedback product on (Products page). It reads and writes only through the `feedback.*` procedures above.
 
 - **Inbox** (`/feedback`, `components/feedback-console/inbox.tsx`): one board's posts, with the board, status tab, category and sort in the query string (`?board=ideas&status=all&category=mobile&sort=top`); defaults (the first board, under review, every category, newest) are left out of the address. Each row shows the counted votes, the post's number, title, status, category, public comment count and whether the team or an end user posted it; a merged duplicate carries a "Merged" badge. 50 posts a page with previous and next; the list refreshes every 30 seconds (no realtime in v1). A public board links to its page on the help site when the project has one.
-- **Boards** (`/feedback/boards`, `components/feedback-console/boards.tsx`): create a board (the address is derived from the name until edited, and must match `FEEDBACK_SLUG_PATTERN`), rename it, change its address or visibility, delete it after a confirmation, and add, rename or delete its categories (a new category's slug comes from its name). A project without boards opens on the create form.
+- **Boards** (`/feedback/boards`, `components/feedback-console/boards.tsx`): create a board (the address is derived from the name until edited, and must match `FEEDBACK_SLUG_PATTERN`), rename it, change its address or visibility, delete it after a confirmation, and add, rename or delete its categories (a new category's slug comes from its name). **Shipping on release** sets the [release policy](#shipping-on-release): the release repository (one of the project's, or Off), an optional release step, when a post counts as shipped, and **Mark posts shipped without asking** (`auto_apply`, off by default). A project without boards opens on the create form.
+- **Ship banner** (`components/feedback-console/ship-suggestions.tsx`, on the inbox above the posts): one banner per release run with waiting suggestions, "N posts shipped in run abc1234 (approved by sre)", linking the run and listing the posts with their votes; **Mark shipped** calls `acceptShipSuggestions`, **Dismiss** `dismissShipSuggestions`, and **Draft changelog entry** opens the run's draft. Refreshes every 30 seconds.
 
 - **A post** (`/feedback/posts/<id>`, `components/feedback-console/post.tsx`, opened from an inbox row): its description (editable with the title), the status and category selects, comments with the composer's three kinds (reply, official response, internal note; internal notes are tinted and never public), the votes (pending ones marked) with recording a vote for a user id and removing one, the follower count, and the status history with who changed what. **Merge into another post…** searches the board's 100 most voted posts by title or number (client-side) and calls `mergePost`; a merged post says which post it went into, its status is fixed, and its votes are read-only (`lockLivePost` refuses them). Team members' names come from `workspace.members`; an email voter shows as the address (`FEEDBACK_EMAIL_END_USER_PREFIX`, now in `@mocco/common/feedback`).
 - **GitHub** (`components/feedback-console/github-links.tsx`, beside the triage controls): the post's links, each with its kind, repo, number, title (linking to GitHub), a state badge (open, merged, closed), the merge commit's short SHA, and an issue's closing pull requests with their states; **Unlink** removes one. **Link an issue or pull request…** picks one of the project's repos, issue or pull request, and searches by words or `#number` (an empty search lists the recently updated ones); clicking a result links it. A project without repos is pointed at its project page, and a server without a GitHub App shows the error from `linkSearch`.
@@ -214,7 +252,7 @@ The project's **Feedback** section (`pages/workspaces/[id]/p/[projectId]/feedbac
 
 A board's changelog (#176): entries the team writes in Markdown, each announcing posts that shipped. The model, the service, the `changelog` router and the publish job, the public changelog, `/v1` and the console's changelog (below).
 
-**Tables.** `mocco_changelog_entries` (board-scoped through the boards' composite FK, so an entry can't point at another tenant's board; deleting the board deletes its entries): `slug` (unique per board, `CHANGELOG_SLUG_PATTERN`, 1–80 characters), `title`, `body_md`, `tags` (a `text[]` of `new`, `improved`, `fixed`, DB-checked; the design's separate tags table wasn't needed), `state` (`draft`, `scheduled`, `published`), `publish_at` (set exactly while scheduled) and `published_at` (set exactly while published), both held by one CHECK, and `created_by_user_id` (SET NULL). `mocco_changelog_entry_posts` links an entry to the posts it announces, in order (`position`); deleting either side removes the link. The widget's read cursors and the run that drafted an entry (#179) come with their slices.
+**Tables.** `mocco_changelog_entries` (board-scoped through the boards' composite FK, so an entry can't point at another tenant's board; deleting the board deletes its entries): `slug` (unique per board, `CHANGELOG_SLUG_PATTERN`, 1–80 characters), `title`, `body_md`, `tags` (a `text[]` of `new`, `improved`, `fixed`, DB-checked; the design's separate tags table wasn't needed), `state` (`draft`, `scheduled`, `published`), `publish_at` (set exactly while scheduled) and `published_at` (set exactly while published), both held by one CHECK, and `created_by_user_id` (SET NULL). `mocco_changelog_entry_posts` links an entry to the posts it announces, in order (`position`); deleting either side removes the link. `source_run_id` (migration 0088, SET NULL) is the release run whose shipped posts the ship detector drafted the entry from, unique per board ([shipping on release](#shipping-on-release)); null for an entry the team started.
 
 **ChangelogService** (`domain/feedback/ChangelogService.ts`, `ctx.feedbackChangelog`):
 

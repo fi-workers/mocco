@@ -203,3 +203,12 @@ export class FeedbackIssueTrackerUnavailableError extends BadRequestError {
     this.name = 'FeedbackIssueTrackerUnavailableError';
   }
 }
+
+/** The board has no ship suggestions from that run still waiting for a decision (another
+ * project's board or run, or a run already decided) — NOT_FOUND. */
+export class FeedbackShipSuggestionNotFoundError extends NotFoundError {
+  constructor(runId: string, options?: ErrorOptions) {
+    super(`No ship suggestions from run ${runId} are waiting on this board`, options);
+    this.name = 'FeedbackShipSuggestionNotFoundError';
+  }
+}

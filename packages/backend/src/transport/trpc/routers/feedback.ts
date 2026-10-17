@@ -22,6 +22,7 @@ import {
   feedbackPostListInputSchema,
   feedbackPostStatusSchema,
   feedbackPostUpdateInputSchema,
+  feedbackReleasePolicyInputSchema,
   feedbackSourceTypeSchema,
 } from '@mocco/common/feedback';
 import { Products } from '@mocco/common/project';
@@ -70,6 +71,39 @@ export const feedbackRouter = router({
         ...(input.isPublic !== undefined && { isPublic: input.isPublic }),
       }),
     })),
+
+  /** Set whose releases ship the board's posts, and whether the team is asked first (#179). */
+  setReleasePolicy: feedbackProcedure
+    .input(boardInput.extend(feedbackReleasePolicyInputSchema.shape))
+    .mutation(async ({ ctx, input }) => ({
+      board: await ctx.feedbackBoards.setReleasePolicy(scopeOf(input), ctx.session.user.id, input.boardId, {
+        releaseRepoId: input.releaseRepoId,
+        releaseStepName: input.releaseStepName,
+        shipPolicy: input.shipPolicy,
+        shipMode: input.shipMode,
+      }),
+    })),
+
+  /** The board's ship suggestions waiting for the team, by release run, the newest first. */
+  shipSuggestions: feedbackProcedure.input(boardInput).query(async ({ ctx, input }) => ({
+    runs: await ctx.feedbackShipSuggestions.listPending(scopeOf(input), input.boardId),
+  })),
+
+  /** Mark the posts a release run shipped on the board shipped, as the caller; their followers hear. */
+  acceptShipSuggestions: feedbackProcedure
+    .input(boardInput.extend({ runId: z.uuid() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.feedbackShipSuggestions.accept(scopeOf(input), ctx.session.user.id, input.boardId, input.runId),
+    ),
+
+  /** Set a release run's ship suggestions on the board aside; the posts stay as they are. */
+  dismissShipSuggestions: feedbackProcedure
+    .input(boardInput.extend({ runId: z.uuid() }))
+    .mutation(
+      async ({ ctx, input }) =>
+        await ctx.feedbackShipSuggestions.dismiss(scopeOf(input), ctx.session.user.id, input.boardId, input.runId),
+    ),
 
   /** Delete the board with its categories, posts and their history. */
   deleteBoard: feedbackProcedure.input(boardInput).mutation(async ({ ctx, input }) => {

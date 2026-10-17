@@ -1,5 +1,5 @@
 import { DomainEventTypes } from '@mocco/common/events';
-import { RunStates } from '@mocco/common/execution';
+import { RunStates, RunStepStatuses } from '@mocco/common/execution';
 import { GateStates, ResumeDecisions } from '@mocco/common/governance';
 
 import {
@@ -10,6 +10,7 @@ import {
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { EventPublisher } from '@backend/domain/events/ports';
+import type { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import type { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import type { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import type { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
@@ -29,6 +30,7 @@ export interface ReleaseServiceDeps {
   projectRepos: ProjectRepoRepo;
   /** The execution and governance repos the release is read from (cross-domain injection). */
   runs: RunRepo;
+  steps: RunStepRepo;
   runGates: RunGateRepo;
   resumes: ResumeRepo;
   /** Publishes `deploy.released`. */
@@ -114,6 +116,8 @@ export class ReleaseService {
         .filter(vote => vote.runGateId === gate.id && vote.decision === ResumeDecisions.resume)
         .map(vote => ({ userId: vote.userId, role: vote.roleName })),
     }));
+    const steps = await this.deps.steps.listByRun(workspaceId, runId);
+    const succeededSteps = steps.filter(step => step.status === RunStepStatuses.succeeded).map(step => step.name);
     const previous = await this.deps.releases.findPreviousForRepo(workspaceId, repo.id, releasedAt);
     const inserted = await this.deps.releases.insertMissing(
       projectIds.map(projectId => ({
@@ -141,6 +145,7 @@ export class ReleaseService {
         gates: releaseGates,
         resumedBy: uniqueResumers(releaseGates),
         releasedAt: releasedAt.toISOString(),
+        succeededSteps,
       },
     });
     return { projectIds, inserted: inserted.length };

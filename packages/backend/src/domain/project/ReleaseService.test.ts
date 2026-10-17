@@ -270,6 +270,8 @@ describe('ReleaseService (pglite)', () => {
       repoFullName: 'fi-workers/api',
       previousReleaseSha: null,
       resumedBy: [{ userId: deployer, role: 'deployer' }],
+      // The run's succeeded steps, so a feedback board can require its release step (#179).
+      succeededSteps: ['ship'],
     });
     expect(new Set(deployReleasedPayloadSchema.parse(event?.payload).projectIds)).toEqual(new Set([api, web]));
 

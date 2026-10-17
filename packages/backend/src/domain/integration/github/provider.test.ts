@@ -10,6 +10,7 @@ import {
   fitCheckOutput,
   toCheckRunBody,
   toClosingPullRequests,
+  isBaseInHead,
   toListedCommit,
   toRepo,
   toSearchQuery,
@@ -305,5 +306,17 @@ describe('issue tracker mappers', () => {
       [3, FeedbackLinkStates.closed, null],
     ]);
     expect(toClosingPullRequests({ repository: null }, repo)).toEqual([]);
+  });
+});
+
+describe('isBaseInHead', () => {
+  it('reads a merge commit as in the head when the head is ahead of it or the same commit', () => {
+    expect(isBaseInHead({ status: 'ahead', ahead_by: 3, behind_by: 0 })).toBe(true);
+    expect(isBaseInHead({ status: 'identical' })).toBe(true);
+    // Behind: the head is older than the merge. Diverged: the merge isn't on the head's branch,
+    // as after a force-push dropped it.
+    expect(isBaseInHead({ status: 'behind' })).toBe(false);
+    expect(isBaseInHead({ status: 'diverged' })).toBe(false);
+    expect(() => isBaseInHead({})).toThrow();
   });
 });

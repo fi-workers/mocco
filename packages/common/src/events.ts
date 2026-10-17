@@ -134,6 +134,9 @@ export const deployReleasedPayloadSchema = runEventPayloadSchema.extend({
   resumedBy: z.array(releaseResumerSchema),
   /** When the run finished. */
   releasedAt: z.iso.datetime(),
+  // Added after the first release (#179), so it defaults like the run subject's late fields.
+  /** The names of the run's steps that succeeded, in pipeline order (a board's release step). */
+  succeededSteps: z.array(z.string()).default([]),
 });
 
 export const releaseEventPayloadSchemas = {

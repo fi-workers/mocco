@@ -4,6 +4,7 @@
 // job runner (runtime/jobs.ts), so a publishing lambda and a delivering tick agree on it.
 import { createEventBus } from '@backend/domain/events/subscriptions';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
+import { getIntegration } from '@backend/domain/integration/instance';
 import { getJobQueue } from '@backend/domain/jobs/instance';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
@@ -21,6 +22,7 @@ export function getEventBus(): EventBus {
       queue: getJobQueue(),
       now: () => new Date(),
       appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
+      commitAncestry: getIntegration()?.provider,
     });
   }
   return state.bus;
