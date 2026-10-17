@@ -1111,6 +1111,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/ota-hosting.md`, `log.md`
 - Source: branch `fix/ota-rollback-to-embedded-after-rollback`
 
+## 2026-10-17 — OTA: rolling back one runtime when the channel has several
+
+- A rollback without a runtime covers every runtime on the channel, and an old runtime with a single release made the
+  whole rollback fail with a message that named only the platform. The refusal now names the runtime and says to name
+  the bad release's; `mocco ota pause|rollback --runtime-version` passes it (the API already took `runtimeVersion`).
+- Docs touched: `reference/ota-hosting.md`, `log.md`
+- Source: branch `fix/ota-rollback-runtime-scope`
+
 ## 2026-10-16 — Feedback console: boards and inbox
 
 - The feedback product is available in the console: a Feedback section with an inbox (board, status, category and
