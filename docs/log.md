@@ -1125,3 +1125,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-17 — Mocco on Mocco
+
+- A design for running Mocco's own feedback board, changelog, help, status page and support on Mocco: Mocco's board
+  and changelog on subpaths of `www.mocco.club` (`/feedback/…`, beside `/docs`) for search and one brand, a proposal to
+  move the console to `app.mocco.club` with what that touches, the status page and customer help hosts left for later
+  with their reasons, and the order and owners of each step.
+- Docs touched: `specs/2026-10-17-mocco-on-mocco-design.md`, `index.md`, `log.md`
+- Source: branch `docs/mocco-on-mocco`
