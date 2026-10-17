@@ -100,6 +100,9 @@ export interface PublicPost {
   mergedIntoPostId: string | null;
 }
 
+/** A listed post; with a viewer, `viewerVote` is their own vote on it (null when none). */
+export type PublicListedPost = PublicPost & { viewerVote?: FeedbackVoteState | null };
+
 /** A comment as the public sees it: `isMine` instead of anyone's id. */
 export interface PublicComment {
   id: string;
@@ -173,6 +176,23 @@ export class PublicBoardService {
     return post;
   }
 
+  /** `posts` with the viewer's own vote on each, from one query; unchanged without a viewer. */
+  private async withViewerVotes(
+    scope: FeedbackScope,
+    posts: PublicPost[],
+    viewer: string | undefined,
+  ): Promise<PublicListedPost[]> {
+    if (viewer === undefined) {
+      return posts;
+    }
+    const states = await new FeedbackVoteRepo(this.deps.db).statesFor(
+      scope.workspaceId,
+      viewer,
+      posts.map(post => post.id),
+    );
+    return posts.map(post => ({ ...post, viewerVote: states.get(post.id) ?? null }));
+  }
+
   /** Published entries with the posts they announce. */
   private async publicEntries(rows: readonly ChangelogEntryRow[]): Promise<PublicChangelogEntry[]> {
     const posts = await new ChangelogEntryRepo(this.deps.db).postsOf(rows.map(row => row.id));
@@ -198,12 +218,14 @@ export class PublicBoardService {
     };
   }
 
-  /** The board's posts, merged duplicates left out, filtered by status and category slug. */
+  /** The board's posts, merged duplicates left out, filtered by status and category slug; with a
+   * viewer, each with their own vote. */
   async posts(
     scope: FeedbackScope,
     slug: string,
     query: { status?: FeedbackPostStatus; category?: string; sort: FeedbackPublicSort } & FeedbackPage,
-  ): Promise<PublicPage<PublicPost>> {
+    viewer?: string,
+  ): Promise<PublicPage<PublicListedPost>> {
     const board = await this.publicBoard(scope, slug);
     let categoryId: string | undefined;
     if (query.category !== undefined) {
@@ -221,14 +243,20 @@ export class PublicBoardService {
       limit: query.limit + 1,
       offset: query.offset,
     });
-    return pageOf(
+    const page = pageOf(
       rows.map(row => toPublicPost(row)),
       query,
     );
+    return { ...page, items: await this.withViewerVotes(scope, page.items, viewer) };
   }
 
-  /** The board's roadmap: the most voted posts of each column. */
-  async roadmap(scope: FeedbackScope, slug: string): Promise<Record<RoadmapColumn, PublicPost[]>> {
+  /** The board's roadmap: the most voted posts of each column; with a viewer, each with their own
+   * vote (one query for every column). */
+  async roadmap(
+    scope: FeedbackScope,
+    slug: string,
+    viewer?: string,
+  ): Promise<Record<RoadmapColumn, PublicListedPost[]>> {
     const board = await this.publicBoard(scope, slug);
     const posts = new FeedbackPostRepo(this.deps.db);
     const columns = await Promise.all(
@@ -243,7 +271,15 @@ export class PublicBoardService {
         return [column, rows.map(row => toPublicPost(row))] as const;
       }),
     );
-    return Object.fromEntries(columns) as Record<RoadmapColumn, PublicPost[]>;
+    const listed = await this.withViewerVotes(
+      scope,
+      columns.flatMap(([, rows]) => rows),
+      viewer,
+    );
+    const byId = new Map(listed.map(post => [post.id, post]));
+    return Object.fromEntries(
+      columns.map(([column, rows]) => [column, rows.map(post => byId.get(post.id) ?? post)]),
+    ) as Record<RoadmapColumn, PublicListedPost[]>;
   }
 
   /** One post; with a viewer, also their vote on it. A merged duplicate is served with
@@ -342,15 +378,26 @@ export class PublicBoardService {
     return toPublicPost(post);
   }
 
-  /** The board's posts most like `query`, so an end user about to post can vote instead. */
-  async similar(scope: FeedbackScope, slug: string, query: string, limit: number): Promise<PublicPost[]> {
+  /** The board's posts most like `query`, so an end user about to post can vote instead; with a
+   * viewer, each with their own vote. */
+  async similar(
+    scope: FeedbackScope,
+    slug: string,
+    query: string,
+    limit: number,
+    viewer?: string,
+  ): Promise<PublicListedPost[]> {
     const board = await this.publicBoard(scope, slug);
     const words = wordsOf(query);
     if (words.length === 0) {
       return [];
     }
     const rows = await new FeedbackPostRepo(this.deps.db).similar(scope, board.id, words, limit);
-    return rows.map(row => toPublicPost(row));
+    return await this.withViewerVotes(
+      scope,
+      rows.map(row => toPublicPost(row)),
+      viewer,
+    );
   }
 
   /** Follow or stop following a post. Idempotent; an opt-out outlives later votes. */

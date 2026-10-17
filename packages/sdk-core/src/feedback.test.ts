@@ -62,11 +62,14 @@ describe('FeedbackClient', () => {
       `${BASE}/feedback/boards/ideas/posts?status=planned&sort=new&limit=5`,
       `${BASE}/feedback/boards/ideas/changelog?limit=3&offset=3`,
     ]);
-    // Reads that don't depend on the viewer never send the end user's token.
-    expect(calls.map(call => call.headers.get('authorization'))).toEqual(
-      Array.from({ length: 3 }, () => 'Bearer mk_pub_x'),
-    );
-    expect(calls.map(call => call.headers.get('x-mocco-key'))).toEqual([null, null, null]);
+    // Reads that don't depend on the viewer never send the end user's token; the post list
+    // does, so each post says whether they voted for it.
+    expect(calls.map(call => call.headers.get('authorization'))).toEqual([
+      'Bearer mk_pub_x',
+      'Bearer jwt-1',
+      'Bearer mk_pub_x',
+    ]);
+    expect(calls.map(call => call.headers.get('x-mocco-key'))).toEqual([null, 'mk_pub_x', null]);
   });
 
   it('votes with the end-user token and the key in X-Mocco-Key, asking for the token once', async () => {
@@ -152,7 +155,7 @@ describe('FeedbackClient', () => {
     expect(calls.map(call => call.headers.get('authorization'))).toEqual(['Bearer mk_pub_x', 'Bearer jwt']);
   });
 
-  it('searches similar posts and reads the roadmap with the key alone', async () => {
+  it('searches similar posts and reads the roadmap with the viewer when signed in', async () => {
     const { calls, fetchImpl } = fakeFetch(call =>
       call.url.includes('/similar')
         ? Response.json({ posts: [{ id: 'p1' }] })
@@ -172,7 +175,24 @@ describe('FeedbackClient', () => {
       `${BASE}/feedback/boards/ideas/similar?q=dark+mode+%26+more&limit=3`,
       `${BASE}/feedback/boards/ideas/roadmap`,
     ]);
-    expect(calls.map(call => call.headers.get('authorization'))).toEqual(['Bearer mk_pub_x', 'Bearer mk_pub_x']);
+    expect(calls.map(call => call.headers.get('authorization'))).toEqual(['Bearer jwt', 'Bearer jwt']);
+  });
+
+  it('reads a list as a visitor when the token source fails, but a write rejects', async () => {
+    const { calls, fetchImpl } = fakeFetch(() => Response.json({ posts: [], nextOffset: null }));
+    const feedback = new FeedbackClient({
+      publishableKey: 'mk_pub_x',
+      baseUrl: BASE,
+      fetch: fetchImpl,
+      endUserToken: () => {
+        throw new Error('session expired');
+      },
+    });
+
+    expect(await feedback.board('ideas').posts()).toEqual({ posts: [], nextOffset: null });
+    expect(calls.map(call => call.headers.get('authorization'))).toEqual(['Bearer mk_pub_x']);
+    await expect(feedback.vote('p1')).rejects.toThrow('session expired');
+    expect(calls).toHaveLength(1);
   });
 
   it('posts an idea, comments and follows as the signed-in end user', async () => {

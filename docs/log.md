@@ -1146,3 +1146,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `customer/feedback/in-app-ideas.md` (new), `customer/feedback/whats-new.md`, `reference/sdk.md`,
   `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
 - Source: branch `feat/sdk-feedback-sheet` (issue #177)
+
+## 2026-10-17 — Feedback lists say which posts the viewer voted for
+
+- With an end-user token, `/v1/feedback/boards/{slug}/posts`, `…/roadmap` and `…/similar` add `viewerVote` to each
+  post (the requester's own vote, one query per answer); without one it is absent. The feedback sheets show
+  **Voted** for earlier votes when they open, and `FeedbackClient` sends the token on those reads.
+- Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/sdk.md`,
+  `customer/feedback/in-app-ideas.md`, `log.md`
+- Source: branch `feat/feedback-voted-flag` (issue #177)

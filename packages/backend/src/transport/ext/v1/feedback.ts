@@ -2,7 +2,8 @@
 // Reads take a key with feedback:read. Votes and comments take a key with feedback:write
 // plus the end user's token: an HS256 JWT the app's server signs with the project's identity
 // secret, sent as `Authorization: Bearer …` (the key then rides in `X-Mocco-Key`). A token
-// on a read adds the viewer's own vote and marks their comments. Posting, following a post
+// on a read adds the viewer's own vote (on one post, and on each post of a list, the roadmap
+// and the similar posts) and marks their comments. Posting, following a post
 // and the similar-posts search work the same way; voting by email and the mail links are in
 // feedback-links.ts. Every answer is parsed
 // through its @mocco/common/feedback-v1 schema, so nothing outside the public projection
@@ -50,7 +51,7 @@ import type {
   PublicBoardService,
   PublicChangelogEntry,
   PublicComment,
-  PublicPost,
+  PublicListedPost,
 } from '@backend/domain/feedback/PublicBoardService';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { RoadmapColumn } from '@mocco/common/feedback';
@@ -140,13 +141,13 @@ const answer = async (work: () => Promise<Response>): Promise<Response> => {
 
 const iso = (at: Date) => at.toISOString();
 
-export const wirePost = (post: PublicPost) => ({
+export const wirePost = (post: PublicListedPost) => ({
   ...post,
   createdAt: iso(post.createdAt),
   shippedAt: post.shippedAt === null ? null : iso(post.shippedAt),
 });
 
-const wireRoadmap = (roadmap: Record<RoadmapColumn, PublicPost[]>) =>
+const wireRoadmap = (roadmap: Record<RoadmapColumn, PublicListedPost[]>) =>
   Object.fromEntries(
     Object.entries(roadmap).map(([column, posts]) => [column, posts.map(post => wirePost(post))]),
   ) as Record<RoadmapColumn, ReturnType<typeof wirePost>[]>;
@@ -293,7 +294,7 @@ export function createFeedbackRoutes(
       return badQuery('status, category, sort (top or new), limit (1–100) or offset is invalid');
     }
     return await answer(async () => {
-      const page = await feedback.boards.posts(scopeOf(c), slug.data, query.data);
+      const page = await feedback.boards.posts(scopeOf(c), slug.data, query.data, await viewerOf(c));
       return send(c, feedbackV1PostListSchema, {
         posts: page.items.map(post => wirePost(post)),
         nextOffset: page.nextOffset,
@@ -307,7 +308,7 @@ export function createFeedbackRoutes(
       return problemResponse(problemOf(404, ProblemCodes.notFound, 'Not found'));
     }
     return await answer(async () => {
-      const roadmap = await feedback.boards.roadmap(scopeOf(c), slug.data);
+      const roadmap = await feedback.boards.roadmap(scopeOf(c), slug.data, await viewerOf(c));
       return send(c, feedbackV1RoadmapSchema, { roadmap: wireRoadmap(roadmap) });
     });
   });
@@ -469,7 +470,13 @@ export function createFeedbackRoutes(
       return limited.refused;
     }
     return await answer(async () => {
-      const posts = await feedback.boards.similar(scopeOf(c), slug.data, query.data.q, query.data.limit);
+      const posts = await feedback.boards.similar(
+        scopeOf(c),
+        slug.data,
+        query.data.q,
+        query.data.limit,
+        await viewerOf(c),
+      );
       return send(c, feedbackV1SimilarSchema, { posts: posts.map(post => wirePost(post)) });
     });
   });

@@ -14,6 +14,7 @@ import {
   type feedbackV1PostListQuerySchema,
   type feedbackV1PostListSchema,
   type feedbackV1PostResultSchema,
+  type feedbackV1PostSchema,
   type feedbackV1RoadmapSchema,
   type feedbackV1SimilarQuerySchema,
   type feedbackV1SimilarSchema,
@@ -183,6 +184,11 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof feedbackV1CommentResultSchema>>().toExtend<{ comment: FeedbackComment }>();
     expectTypeOf<z.output<typeof feedbackV1SubscriptionResultSchema>>().toExtend<FeedbackSubscription>();
     expectTypeOf<z.output<typeof feedbackV1RoadmapSchema>>().toExtend<{ roadmap: FeedbackRoadmap }>();
+  });
+
+  it("feedback lists: a signed-in end user's own vote on each post", () => {
+    // Optional on both sides, so `toExtend` above would pass without it: pin the field itself.
+    expectTypeOf<z.output<typeof feedbackV1PostSchema>['viewerVote']>().toEqualTypeOf<FeedbackPost['viewerVote']>();
   });
 
   it('status: what the SDK sends is accepted, and what the routes answer is what it types', () => {

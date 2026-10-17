@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ApiKeyKinds, ApiScopes } from '@mocco/common/apikey';
-import { FeedbackPostStatuses, FeedbackVoteSources } from '@mocco/common/feedback';
+import { FeedbackPostStatuses, FeedbackVoteSources, FeedbackVoteStates } from '@mocco/common/feedback';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -15,6 +15,7 @@ import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { EndUserTokenService } from '@backend/domain/enduser/EndUserTokenService';
 import { createFeedbackDomain } from '@backend/domain/feedback/compose';
+import { EMAIL_END_USER_PREFIX } from '@backend/domain/feedback/EmailVoteService';
 import { createMessengerDomain } from '@backend/domain/messenger/compose';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { MemoryRateLimiter } from '@backend/domain/ratelimit/MemoryRateLimiter';
@@ -432,6 +433,62 @@ describe('/v1/feedback (pglite)', () => {
       expect(other.body.viewer).toEqual({ vote: null });
       expect(await bodyOf('DELETE', `/posts/${id}/vote`, { key, token })).toEqual({ vote: null, voteCount: 0 });
       expect(await statusOf('POST', `/posts/${id}/vote`, { key, token, body: { source: 'staff' } })).toBe(400);
+    });
+
+    it("marks the signed-in viewer's own votes on listed posts, and nobody else's", async () => {
+      const dark = await post('Dark mode');
+      const exporting = await post('Dark export', { status: FeedbackPostStatuses.planned });
+      const other = await post('Offline');
+      const u1 = await tokenFor(secret, 'u1');
+      const u2 = await tokenFor(secret, 'u2');
+      await call('POST', `/posts/${dark.id}/vote`, { key, token: u1 });
+      await call('POST', `/posts/${exporting.id}/vote`, { key, token: u1 });
+      await call('POST', `/posts/${other.id}/vote`, { key, token: u2 });
+      // An email voter's pending vote: Mocco's own id, which no token can claim.
+      await feedback.feedbackVotes.vote(scope, other.id, `${EMAIL_END_USER_PREFIX}${EMAIL}`, {
+        source: FeedbackVoteSources.web,
+        state: FeedbackVoteStates.pending,
+      });
+
+      const votesOf = (posts: unknown) =>
+        Object.fromEntries((posts as Json[]).map(row => [row.title as string, row.viewerVote]));
+      const listed = async (token?: string) => {
+        const answer = await bodyOf('GET', '/boards/ideas/posts', { key, ...(token !== undefined && { token }) });
+        return answer.posts;
+      };
+      expect(votesOf(await listed(u1))).toEqual({
+        'Dark mode': 'counted',
+        'Dark export': 'counted',
+        Offline: null,
+      });
+      expect(votesOf(await listed(u2))).toEqual({ 'Dark mode': null, 'Dark export': null, Offline: 'counted' });
+      expect(votesOf(await listed(await tokenFor(secret, 'u3')))).toEqual({
+        'Dark mode': null,
+        'Dark export': null,
+        Offline: null,
+      });
+      // Without a token the field is absent, not false.
+      const anonymous = (await listed()) as Json[];
+      expect(anonymous.every(row => !('viewerVote' in row))).toBe(true);
+
+      const similar = await bodyOf('GET', '/boards/ideas/similar?q=dark', { key, token: u2 });
+      expect(votesOf(similar.posts)).toEqual({ 'Dark mode': null, 'Dark export': null });
+      const similarMine = await bodyOf('GET', '/boards/ideas/similar?q=dark', { key, token: u1 });
+      expect(votesOf(similarMine.posts)).toEqual({ 'Dark mode': 'counted', 'Dark export': 'counted' });
+      const similarAnonymous = await bodyOf('GET', '/boards/ideas/similar?q=dark', { key });
+      expect((similarAnonymous.posts as Json[]).every(row => !('viewerVote' in row))).toBe(true);
+
+      const roadmap = await bodyOf('GET', '/boards/ideas/roadmap', { key, token: u1 });
+      expect((roadmap.roadmap as Record<string, Json[]>).planned).toMatchObject([
+        { id: exporting.id, viewerVote: 'counted' },
+      ]);
+      const roadmapAnonymous = await bodyOf('GET', '/boards/ideas/roadmap', { key });
+      expect((roadmapAnonymous.roadmap as Record<string, Json[]>).planned?.[0]).not.toHaveProperty('viewerVote');
+
+      // Taking the vote back shows on the next read; a bad token is refused, not read as nobody.
+      await call('DELETE', `/posts/${dark.id}/vote`, { key, token: u1 });
+      expect(votesOf(await listed(u1))['Dark mode']).toBeNull();
+      expect(await statusOf('GET', '/boards/ideas/posts', { key, token: 'garbage.token.here' })).toBe(401);
     });
 
     it('refuses an empty comment', async () => {

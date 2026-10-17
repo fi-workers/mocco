@@ -47,8 +47,9 @@ export interface FeedbackSheetState {
    */
   isSignedIn: boolean | null;
   /**
-   * The end user's votes this sheet knows of: from their votes and posts here. The board's list
-   * doesn't say which posts a user voted for elsewhere; voting again changes nothing.
+   * The end user's votes by post id: from the board's list and the similar posts (Mocco says
+   * which of them the signed-in user voted for, here or anywhere else), then their votes and
+   * posts here.
    */
   votes: Record<string, FeedbackVoteState | null>;
   /** Posts whose vote is on its way. */
@@ -84,6 +85,10 @@ const initialState: FeedbackSheetState = {
 };
 
 const errorOf = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
+
+/** The viewer's votes the answer's posts carry (absent for a visitor). */
+const viewerVotesOf = (posts: FeedbackPost[]): Record<string, FeedbackVoteState | null> =>
+  Object.fromEntries(posts.flatMap(post => (post.viewerVote === undefined ? [] : [[post.id, post.viewerVote]])));
 
 /** `posts` with `postId`'s count set from a vote's answer. */
 const withCount = (posts: FeedbackPost[], postId: string, voteCount: number): FeedbackPost[] =>
@@ -168,11 +173,21 @@ export class FeedbackSheetModel {
     }, this.options.similarDelayMs ?? DEFAULT_SIMILAR_DELAY_MS);
   }
 
+  /** Take the viewer's votes from an answer, except on posts whose vote is on its way. */
+  private votesWith(posts: FeedbackPost[]): Record<string, FeedbackVoteState | null> {
+    const { voting } = this.state;
+    const known = Object.entries(viewerVotesOf(posts)).filter(([postId]) => !voting.includes(postId));
+    return { ...this.state.votes, ...Object.fromEntries(known) };
+  }
+
   private async search(query: string, seq: number): Promise<void> {
     try {
       const similar = await this.board.similar(query);
       if (seq === this.searchSeq) {
-        this.setDraftState({ similar, isSearching: false });
+        this.setState({
+          draft: { ...this.state.draft, similar, isSearching: false },
+          votes: this.votesWith(similar),
+        });
       }
     } catch {
       // Offline or limited: keep the last suggestions.
@@ -191,7 +206,7 @@ export class FeedbackSheetModel {
         this.board.posts({ sort: 'top', limit: this.options.pageSize ?? DEFAULT_PAGE_SIZE }),
         this.hasEndUser(),
       ]);
-      this.setState({ status: 'ready', board, posts: page.posts, isSignedIn });
+      this.setState({ status: 'ready', board, posts: page.posts, isSignedIn, votes: this.votesWith(page.posts) });
     } catch (error) {
       this.setState({ status: 'error', error: errorOf(error) });
     }

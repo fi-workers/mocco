@@ -30,7 +30,11 @@ export interface FeedbackBoard {
   categories: FeedbackCategory[];
 }
 
-/** A post as the public sees it. `mergedIntoPostId` is set on a duplicate: show that post instead. */
+/**
+ * A post as the public sees it. `mergedIntoPostId` is set on a duplicate: show that post instead.
+ * In a list (`posts`, `roadmap`, `similar`) read for a signed-in end user, `viewerVote` is their
+ * own vote on it (null when none); for an anonymous visitor it is absent.
+ */
 export interface FeedbackPost {
   id: string;
   number: number;
@@ -43,6 +47,7 @@ export interface FeedbackPost {
   createdAt: string;
   shippedAt: string | null;
   mergedIntoPostId: string | null;
+  viewerVote?: FeedbackVoteState | null;
 }
 
 export interface FeedbackPostPage {
@@ -163,7 +168,8 @@ export interface FeedbackClientOptions {
    * The signed-in end user's token: an HS256 JWT your server signs with the project's identity
    * secret (`sub` = the user's id, expiring within an hour). Called when the client first needs
    * one, and again when Mocco refuses the one it has (expired); `resetEndUser()` forgets it.
-   * Without it (or while it returns null) the client reads as an anonymous visitor.
+   * Without it (or while it returns null) the client reads as an anonymous visitor; a read
+   * also does when it throws (a write rejects with its error).
    */
   endUserToken?: EndUserTokenSource;
 }
@@ -194,13 +200,17 @@ export interface FeedbackBoardClient {
   readonly slug: string;
   /** The board's name and categories. A private or missing board is a 404 `MoccoError`. */
   get(): Promise<FeedbackBoard>;
-  /** The board's posts (merged duplicates left out), most voted first unless `sort: 'new'`. */
+  /**
+   * The board's posts (merged duplicates left out), most voted first unless `sort: 'new'`.
+   * Signed in, each has the end user's own `viewerVote`.
+   */
   posts(opts?: FeedbackPostListOptions): Promise<FeedbackPostPage>;
-  /** The board's public posts by roadmap column: planned, in progress and shipped. */
+  /** The board's public posts by roadmap column: planned, in progress and shipped (signed in,
+   * with `viewerVote`). */
   roadmap(): Promise<FeedbackRoadmap>;
   /**
    * Posts like `title`, e.g. while the end user types an idea, so they can vote for one
-   * instead of posting a duplicate. Up to `limit` (1–10, default 5).
+   * instead of posting a duplicate. Up to `limit` (1–10, default 5); signed in, with `viewerVote`.
    */
   similar(title: string, opts?: { limit?: number }): Promise<FeedbackPost[]>;
   /** Post an idea as the signed-in end user (needs feedback:write); it counts their vote. */
@@ -237,6 +247,18 @@ export class FeedbackClient {
     });
   }
 
+  /** The token for a request: a read whose token source fails goes as an anonymous visitor. */
+  private async tokenFor(use: Exclude<EndUserUse, 'none'>): Promise<string | null> {
+    if (use === 'required') {
+      return await this.endUserToken();
+    }
+    try {
+      return await this.endUserToken();
+    } catch {
+      return null;
+    }
+  }
+
   /** Forget the end user's token, e.g. after they sign out or another user signs in. */
   resetEndUser(): void {
     this.token = undefined;
@@ -259,7 +281,7 @@ export class FeedbackClient {
 
   /** A /v1/feedback request, with the end user's token as `use` asks for it. */
   async request<T>(method: string, path: string, use: EndUserUse, body?: unknown, isRetry = false): Promise<T> {
-    const token = use === 'none' ? null : await this.endUserToken();
+    const token = use === 'none' ? null : await this.tokenFor(use);
     if (token === null && use === 'required') {
       throw new MoccoError(401, {
         type: ProblemCodes.missing,
@@ -298,18 +320,18 @@ export class FeedbackClient {
         return await this.request<FeedbackPostPage>(
           'GET',
           `${path}/posts${queryOf({ status, category, sort, limit, offset })}`,
-          'none',
+          'optional',
         );
       },
       roadmap: async () => {
-        const answer = await this.request<{ roadmap: FeedbackRoadmap }>('GET', `${path}/roadmap`, 'none');
+        const answer = await this.request<{ roadmap: FeedbackRoadmap }>('GET', `${path}/roadmap`, 'optional');
         return answer.roadmap;
       },
       similar: async (title, opts = {}) => {
         const answer = await this.request<{ posts: FeedbackPost[] }>(
           'GET',
           `${path}/similar${queryOf({ q: title, limit: opts.limit })}`,
-          'none',
+          'optional',
         );
         return answer.posts;
       },
