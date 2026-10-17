@@ -84,4 +84,17 @@ describe('getEnv', () => {
     const { getEnv } = await import('./env');
     expect(getEnv()).toMatchObject({ CRON_SECRET: 'cron', JOBS_TICK_SECRET: 'tick', JOBS_TICK_BUDGET_MS: 20_000 });
   });
+
+  it('turns escaped newlines in POSTGRES_CA_CERT back into line breaks', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://x');
+    vi.stubEnv('POSTGRES_CA_CERT', String.raw`-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----`);
+    const { getEnv } = await import('./env');
+    expect(getEnv().POSTGRES_CA_CERT).toBe('-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----');
+  });
+
+  it('leaves POSTGRES_CA_CERT unset by default', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://x');
+    const { getEnv } = await import('./env');
+    expect(getEnv().POSTGRES_CA_CERT).toBeUndefined();
+  });
 });

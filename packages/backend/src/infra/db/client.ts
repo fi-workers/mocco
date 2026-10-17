@@ -3,12 +3,17 @@ import { Pool } from 'pg';
 
 import { getEnv } from '@backend/infra/config/env';
 import * as schema from '@backend/infra/db/schema';
+import { pgConnectionConfig } from '@backend/infra/db/ssl';
 
 // max:1 — one connection per warm serverless instance. Supabase's pooler caps
 // concurrent clients (session mode: ~15), and an unbounded Pool (pg default max 10)
 // across many concurrent lambdas exhausts it (EMAXCONNSESSION). Point DATABASE_URL
 // at the transaction pooler (:6543) in serverless. Local/tests: 1 is plenty.
-const createDb = () => drizzle(new Pool({ connectionString: getEnv().DATABASE_URL, max: 1 }), { schema });
+// A Supabase host gets TLS with its certificate verified against the Supabase CA (infra/db/ssl.ts).
+const createDb = () => {
+  const env = getEnv();
+  return drizzle(new Pool({ ...pgConnectionConfig(env.DATABASE_URL, env.POSTGRES_CA_CERT), max: 1 }), { schema });
+};
 
 /** Drizzle DB type (reused in the tRPC context etc.). Shared schema across node-postgres and pglite. */
 export type Db = ReturnType<typeof createDb>;

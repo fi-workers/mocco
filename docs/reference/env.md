@@ -4,7 +4,7 @@ description: How env files are laid out and loaded — the committed/personal fi
 type: reference
 status: active
 created: 2026-07-25
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [reference, env, config, auth, tailscale]
@@ -55,6 +55,12 @@ Values per environment:
 - **e2e**: `SERVICE_DOMAIN=localhost:3100` (set in `packages/e2e/playwright.config.ts`)
 - **preview**: derived from `VERCEL_URL` — a separate branch in `resolveAuthOrigins`, `SERVICE_DOMAIN` isn't consulted there
 - **tailnet**: `SERVICE_DOMAIN=<node>.<tailnet>.ts.net` — written into the gitignored `env/.env` by the generator below
+
+## `POSTGRES_CA_CERT` — database TLS
+
+When `DATABASE_URL` points at Supabase (`*.supabase.com`, `*.supabase.co`), the backend connects over TLS and verifies the server certificate against the Supabase CA, hostname included (verify-full; `packages/backend/src/infra/db/ssl.ts`). `POSTGRES_CA_CERT` holds that CA as PEM; a one-line value with escaped `\n` is accepted. Unset, the committed copy of the Supabase Root 2021 CA (`infra/db/supabase-ca.ts`, expires 2031-04-26) is used, so the variable is optional. `scripts/migrate-production.mjs` follows the same rule and falls back to `infra/db/supabase-ca.crt`.
+
+Leave `sslmode` out of `DATABASE_URL`. node-postgres treats `sslmode=require` as verify-full against the system roots, which don't include the Supabase CA, and any ssl URL param replaces the backend's `ssl` option, so the backend strips them. Other hosts (local Postgres, CI) are left as they are.
 
 ## `SECRETS_ENCRYPTION_KEYS` — SecretBox keys
 

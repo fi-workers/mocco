@@ -4,6 +4,14 @@ import { z } from 'zod';
 // into the auth provider explicitly — no library reads env on its own.
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
+  /** PEM of the CA that signs the database server's certificate (Supabase Root 2021 CA). A one-line value
+   * with escaped `\n` is accepted. Unset, a Supabase host is verified against the committed copy
+   * (infra/db/supabase-ca.ts). */
+  POSTGRES_CA_CERT: z
+    .string()
+    .min(1)
+    .optional()
+    .transform(v => v?.replaceAll(String.raw`\n`, '\n')),
   /** Session signing secret. Generate with: openssl rand -base64 32 */
   AUTH_SECRET: z.string().min(1).optional(),
   /** Canonical app host — a bare authority, no scheme (prod `www.mocco.club`,
