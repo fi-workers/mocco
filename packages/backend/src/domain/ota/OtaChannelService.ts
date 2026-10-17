@@ -383,7 +383,8 @@ export class OtaChannelService {
     const writes = await Promise.all(
       heads.map(async (detail): Promise<HeadWrite> => {
         const served = detail.candidate ?? detail.active;
-        const directive = served == null ? undefined : await this.deps.releases.findRollBackToEmbedded(served.id);
+        const directive =
+          served == null ? undefined : await this.deps.releases.findRollBackToEmbedded(served, detail.head.platform);
         if (directive === undefined) {
           throw new OtaRollbackUnavailableError(channel.name, detail.head.platform, { isToEmbedded: true });
         }
@@ -552,7 +553,8 @@ export class OtaChannelService {
       }
     }
     const served = detail.candidate ?? detail.active;
-    const directive = served == null ? undefined : await this.deps.releases.findRollBackToEmbedded(served.id);
+    const directive =
+      served == null ? undefined : await this.deps.releases.findRollBackToEmbedded(served, head.platform);
     // A republish belongs to the release it was signed with; what it serves is its content's release.
     const isRolledBack = detail.active !== null && detail.active.contentOfUpdateId !== detail.active.id;
     const content =

@@ -10,7 +10,7 @@ import {
   oidcExchangeRequestSchema,
   promotionRequestSchema,
   rolloutBpOf,
-  stopActionSchema,
+  StopActions,
   stopRequestSchema,
   uploadRequestSchema,
 } from '@mocco/common/ota-hosting';
@@ -32,7 +32,7 @@ import type { OtaChannelService } from '@backend/domain/ota/OtaChannelService';
 import type { UploadSessionRow } from '@backend/domain/ota/repos/upload-session.repo';
 import type { TrustPolicyService } from '@backend/domain/ota/TrustPolicyService';
 import type { UploadService } from '@backend/domain/ota/UploadService';
-import type { PromotionResult } from '@mocco/common/ota-hosting';
+import type { PromotionResult, StopAction } from '@mocco/common/ota-hosting';
 
 export interface OtaUploadDeps {
   uploads: Pick<UploadService, 'createSession' | 'authenticate' | 'beginRelease' | 'finalize'>;
@@ -170,22 +170,28 @@ export function createOtaUploadRoutes(deps: V1Deps, ota: OtaUploadDeps): Hono<V1
   });
 
   // Stop actions from CI — never gated: pause a rollout, roll back, or roll back to embedded.
-  const stopPaths = { pause: 'pause', rollback: 'rollback', 'rollback-to-embedded': 'rollback_embedded' } as const;
-  app.post('/apps/:appId/channels/:channel/:action{pause|rollback|rollback-to-embedded}', ciKey, async c => {
-    const action = stopActionSchema.parse(stopPaths[c.req.param('action') as keyof typeof stopPaths]);
-    const { data, refused } = await parseJson(c, stopRequestSchema);
-    if (refused !== undefined) {
-      return refused;
-    }
-    try {
-      return c.json(
-        await ota.channels.stopAsKey(c.var.principal, c.req.param('appId'), c.req.param('channel'), action, data),
-        201,
-      );
-    } catch (error) {
-      return problemOfError(error);
-    }
-  });
+  // One route per action, never `:action{a|b}`: Hono's TrieRouter (SmartRouter's fallback for
+  // the whole ext app) matches a param pattern's alternation unanchored, which routed
+  // rollback-to-embedded to rollback.
+  const stopRoute = (path: string, action: StopAction) => {
+    app.post(`/apps/:appId/channels/:channel/${path}`, ciKey, async c => {
+      const { data, refused } = await parseJson(c, stopRequestSchema);
+      if (refused !== undefined) {
+        return refused;
+      }
+      try {
+        return c.json(
+          await ota.channels.stopAsKey(c.var.principal, c.req.param('appId'), c.req.param('channel'), action, data),
+          201,
+        );
+      } catch (error) {
+        return problemOfError(error);
+      }
+    });
+  };
+  stopRoute('pause', StopActions.pause);
+  stopRoute('rollback', StopActions.rollback);
+  stopRoute('rollback-to-embedded', StopActions.rollbackEmbedded);
 
   // A promotion request's state, so CI can wait for its approval (`promote --wait`).
   app.get('/apps/:appId/promotions/:requestId', ciKey, async c => {
