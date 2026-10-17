@@ -1,5 +1,9 @@
 import DocContent from '@frontend/components/doc-content';
-import FeedbackSiteLayout, { boardPath, postPath } from '@frontend/components/feedback/feedback-site-layout';
+import FeedbackSiteLayout, {
+  boardPath,
+  changelogEntryPath,
+  postPath,
+} from '@frontend/components/feedback/feedback-site-layout';
 import PostComments from '@frontend/components/feedback/post-comments';
 import { StatusBadge } from '@frontend/components/feedback/post-list';
 import VoteBox from '@frontend/components/feedback/vote-box';
@@ -56,6 +60,7 @@ export default function FeedbackPostPage({ page, blocks, description, card }: Pr
     <FeedbackSiteLayout
       site={site}
       board={board}
+      current="post"
       title={post.title}
       seo={{
         path,
@@ -90,6 +95,21 @@ export default function FeedbackPostPage({ page, blocks, description, card }: Pr
         </div>
         <VoteBox site={site.slug} postId={post.id} initialCount={post.voteCount} />
         {blocks.length === 0 ? null : <DocContent blocks={blocks} />}
+        {page.changelog.length === 0 ? null : (
+          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Shipped in</span>
+            {page.changelog.map((entry, index) => (
+              <span key={entry.slug}>
+                <a
+                  href={changelogEntryPath(board.slug, entry.slug)}
+                  className="font-medium underline-offset-2 hover:underline">
+                  {entry.title}
+                </a>
+                {index < page.changelog.length - 1 ? ',' : null}
+              </span>
+            ))}
+          </p>
+        )}
       </article>
       <PostComments site={site.slug} postId={post.id} initial={page.comments} hasMore={page.hasMoreComments} />
     </FeedbackSiteLayout>

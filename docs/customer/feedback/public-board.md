@@ -4,7 +4,7 @@ description: Put a project's feedback board on the web for your users, where the
 type: guide
 status: active
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, feedback, guide]
@@ -43,6 +43,16 @@ A post's page has its description, the team's official response, and the public 
 ![A post with its votes, the official response and comments](./images/feedback-post.png)
 
 A merged duplicate's address sends the reader to the post it was merged into.
+
+The board's **Roadmap** page, at `/feedback/<board>/roadmap`, shows what your team has planned, is building and has shipped, side by side. Each column lists its most voted posts first, up to 50. Moving a post to planned, in progress or shipped in Mocco puts it on the roadmap; under review and closed posts stay off it. The category buttons narrow the columns, and the choice is kept in the address (`?category=mobile`).
+
+![The roadmap: planned, in progress and shipped, most voted first](./images/feedback-roadmap.png)
+
+The **Changelog** page, at `/feedback/<board>/changelog`, is where you announce what shipped. Each entry has a date, tags (New, Improved, Fixed), its text and the ideas it shipped, and each of those ideas then shows **Shipped in** with a link back. Only published entries appear. Readers can follow it in a feed reader at `/feedback/<board>/changelog.rss`.
+
+![The changelog: two entries with their tags and the ideas they shipped](./images/feedback-changelog.png)
+
+Search engines find the board, its roadmap, its changelog and every post through the help center's sitemap (`/sitemap.xml`), so you don't submit them yourself.
 
 ## 3. Sign your users in from your app
 

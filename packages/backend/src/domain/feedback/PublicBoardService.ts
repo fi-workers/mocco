@@ -8,24 +8,28 @@ import { FeedbackCommentAuthorKinds, FeedbackVoteStates, RoadmapColumns } from '
 import { FeedbackPublicSorts } from '@mocco/common/feedback-v1';
 
 import {
+  ChangelogEntryNotFoundError,
   FeedbackBoardNotFoundError,
   FeedbackCategoryNotFoundError,
   FeedbackPostNotFoundError,
 } from '@backend/domain/feedback/errors';
 import { FeedbackBoardRepo } from '@backend/domain/feedback/repos/board.repo';
 import { FeedbackCategoryRepo } from '@backend/domain/feedback/repos/category.repo';
+import { ChangelogEntryRepo } from '@backend/domain/feedback/repos/changelog-entry.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 
 import type { CommentService, FeedbackPublicComment } from '@backend/domain/feedback/CommentService';
 import type { PostService } from '@backend/domain/feedback/PostService';
 import type { FeedbackBoardRow } from '@backend/domain/feedback/repos/board.repo';
+import type { ChangelogEntryRow } from '@backend/domain/feedback/repos/changelog-entry.repo';
 import type { FeedbackPostRow } from '@backend/domain/feedback/repos/post.repo';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { Db } from '@backend/infra/db/types';
 import type {
+  ChangelogTag,
   FeedbackPage,
   FeedbackPostStatus,
   FeedbackVoteSources,
@@ -54,6 +58,26 @@ const wordsOf = (query: string): string[] => [
 
 /** How many posts each roadmap column shows (the most voted). */
 export const ROADMAP_COLUMN_LIMIT = 50;
+
+/** How many posts a project's sitemap lists at most (the most recently changed). */
+export const SITEMAP_POST_LIMIT = 10_000;
+
+/** How many changelog entries a project's sitemap lists at most (the newest). */
+export const SITEMAP_CHANGELOG_LIMIT = 1000;
+
+/** How many changelog entries a post page lists as having shipped it (the newest). */
+export const POST_CHANGELOG_LIMIT = 10;
+
+/** A published changelog entry as the public sees it: no author, no draft state. */
+export interface PublicChangelogEntry {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  tags: ChangelogTag[];
+  publishedAt: Date;
+  posts: { id: string; number: number; title: string; status: FeedbackPostStatus }[];
+}
 
 /** A post as the public sees it. */
 export interface PublicPost {
@@ -138,6 +162,20 @@ export class PublicBoardService {
       throw new FeedbackPostNotFoundError(postId);
     }
     return post;
+  }
+
+  /** Published entries with the posts they announce. */
+  private async publicEntries(rows: readonly ChangelogEntryRow[]): Promise<PublicChangelogEntry[]> {
+    const posts = await new ChangelogEntryRepo(this.deps.db).postsOf(rows.map(row => row.id));
+    return rows.map(row => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      body: row.bodyMd,
+      tags: row.tags,
+      publishedAt: row.publishedAt ?? row.updatedAt,
+      posts: posts.get(row.id) ?? [],
+    }));
   }
 
   /** The board and its categories in order. */
@@ -318,6 +356,77 @@ export class PublicBoardService {
       ? await this.deps.subscriptions.subscribe(scope, postId, endUserId)
       : await this.deps.subscriptions.unsubscribe(scope, postId, endUserId);
     return { subscribed: row.unsubscribedAt === null };
+  }
+
+  /**
+   * What a sitemap lists for the project: each public board, when it last changed, and its live
+   * posts by number (merged duplicates left out), the most recently changed first, at most
+   * SITEMAP_POST_LIMIT across the boards.
+   */
+  /** A public board's published changelog, newest first (#176). */
+  async changelog(scope: FeedbackScope, slug: string, page: FeedbackPage): Promise<PublicPage<PublicChangelogEntry>> {
+    const board = await this.publicBoard(scope, slug);
+    const rows = await new ChangelogEntryRepo(this.deps.db).listPublished(scope, board.id, {
+      limit: page.limit + 1,
+      offset: page.offset,
+    });
+    return pageOf(await this.publicEntries(rows), page);
+  }
+
+  /** One published entry of a public board by its slug; a draft, scheduled or missing one is ChangelogEntryNotFoundError. */
+  async changelogEntry(scope: FeedbackScope, boardSlug: string, entrySlug: string): Promise<PublicChangelogEntry> {
+    const board = await this.publicBoard(scope, boardSlug);
+    const row = await new ChangelogEntryRepo(this.deps.db).findPublishedBySlug(scope, board.id, entrySlug);
+    if (row === undefined) {
+      throw new ChangelogEntryNotFoundError(entrySlug);
+    }
+    const [entry] = await this.publicEntries([row]);
+    if (entry === undefined) {
+      throw new ChangelogEntryNotFoundError(entrySlug);
+    }
+    return entry;
+  }
+
+  /** The published entries that announce the post on a public board, newest first. */
+  async changelogForPost(scope: FeedbackScope, postId: string) {
+    const post = await this.publicPost(scope, postId);
+    const rows = await new ChangelogEntryRepo(this.deps.db).listPublishedForPost(scope, post.id, POST_CHANGELOG_LIMIT);
+    return rows.map(row => ({ slug: row.slug, title: row.title, publishedAt: row.publishedAt ?? new Date(0) }));
+  }
+
+  async sitemap(scope: FeedbackScope): Promise<
+    {
+      slug: string;
+      updatedAt: Date;
+      posts: { number: number; updatedAt: Date }[];
+      changelog: { slug: string; updatedAt: Date }[];
+    }[]
+  > {
+    const all = await new FeedbackBoardRepo(this.deps.db).list(scope);
+    const boards = all.filter(board => board.isPublic);
+    const posts = await new FeedbackPostRepo(this.deps.db).listForSitemap(
+      scope,
+      boards.map(board => board.id),
+      SITEMAP_POST_LIMIT,
+    );
+    const entries = await new ChangelogEntryRepo(this.deps.db).listPublishedForSitemap(
+      scope,
+      boards.map(board => board.id),
+      SITEMAP_CHANGELOG_LIMIT,
+    );
+    return boards.map(board => {
+      const own = posts.filter(post => post.boardId === board.id);
+      const changelog = entries
+        .filter(entry => entry.boardId === board.id)
+        .map(entry => ({ slug: entry.slug, updatedAt: entry.updatedAt }));
+      const latest = new Date(Math.max(board.updatedAt.getTime(), ...own.map(post => post.updatedAt.getTime())));
+      return {
+        slug: board.slug,
+        updatedAt: latest,
+        posts: own.map(post => ({ number: post.number, updatedAt: post.updatedAt })),
+        changelog,
+      };
+    });
   }
 
   /** The title of a post on a public board, for the pages its links open. */

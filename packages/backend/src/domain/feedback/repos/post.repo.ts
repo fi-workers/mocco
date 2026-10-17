@@ -58,6 +58,19 @@ export class FeedbackPostRepo {
     return new Set(rows.map(row => row.id));
   }
 
+  /** The boards' live posts (merged duplicates left out), newest change first, for a sitemap. */
+  async listForSitemap(scope: FeedbackScope, boardIds: readonly string[], limit: number) {
+    if (boardIds.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select({ boardId: p.boardId, number: p.number, updatedAt: p.updatedAt })
+      .from(p)
+      .where(and(scoped(scope), inArray(p.boardId, [...boardIds]), isNull(p.mergedIntoPostId)))
+      .orderBy(desc(p.updatedAt), desc(p.number))
+      .limit(limit);
+  }
+
   /** The board's post with this number (its public address). */
   async findByNumber(scope: FeedbackScope, boardId: string, number: number): Promise<FeedbackPostRow | undefined> {
     const [row] = await this.db
