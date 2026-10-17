@@ -1,5 +1,5 @@
 import { OtaDirectiveTypes, OtaReleaseStatuses, OtaUpdateKinds } from '@mocco/common/ota-hosting';
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lt, sql } from 'drizzle-orm';
 
 import { rethrowUniqueViolation } from '@backend/infra/db/errors';
 import { expectOne, getOrThrow } from '@backend/infra/db/rows';
@@ -127,17 +127,27 @@ export class OtaReleaseRepo {
     return row;
   }
 
-  /** The pre-signed rollBackToEmbedded directive valid for devices on `supersedesUpdateId`. */
-  async findRollBackToEmbedded(supersedesUpdateId: string) {
+  /**
+   * The pre-signed rollBackToEmbedded directive for devices running `served`: one signed with
+   * the same release, for its platform, and dated after `served`. A device ignores a directive
+   * no newer than what it runs, so a release's own update and its pre-signed republishes (a
+   * rolled-back head serves one) each need a directive later than themselves; the newest
+   * such directive is the one to serve.
+   */
+  async findRollBackToEmbedded(served: { releaseId: string; commitTime: Date }, platform: OtaPlatform) {
     const [row] = await this.db
       .select()
       .from(schema.otaSignedDirectives)
       .where(
         and(
           eq(schema.otaSignedDirectives.type, OtaDirectiveTypes.rollBackToEmbedded),
-          eq(schema.otaSignedDirectives.supersedesUpdateId, supersedesUpdateId),
+          eq(schema.otaSignedDirectives.releaseId, served.releaseId),
+          eq(schema.otaSignedDirectives.platform, platform),
+          gt(schema.otaSignedDirectives.commitTime, served.commitTime),
         ),
-      );
+      )
+      .orderBy(desc(schema.otaSignedDirectives.commitTime))
+      .limit(1);
     return row;
   }
 
