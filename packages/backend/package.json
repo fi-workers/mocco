@@ -17,6 +17,7 @@
     "./ota/instance": "./src/domain/ota/instance.ts",
     "./project/instance": "./src/domain/project/instance.ts",
     "./seo/handler": "./src/transport/seo/handler.ts",
+    "./self/end-user-token": "./src/transport/self/end-user-token.ts",
     "./sites/feedback": "./src/transport/sites/feedback.ts",
     "./trpc/handler": "./src/transport/trpc/handler.ts",
     "./trpc/root": "./src/transport/trpc/root.ts",

@@ -1,6 +1,9 @@
+import { selfWidgetsConfigOf } from '@mocco/common/mocco-self';
+
 import { Environments } from '@frontend/lib/environment';
 
 import type { Environment } from '@frontend/lib/environment';
+import type { SelfWidgetsConfig } from '@mocco/common/mocco-self';
 
 // Central client-side config reader — the one place that reads NEXT_PUBLIC_* env
 // (the checkable app's Configure pattern). Grows to hold other public config
@@ -45,4 +48,11 @@ export class Configure {
   // Sentry DSN (empty → Sentry is a no-op). The DSN is public, so client and
   // server both use this one value (see instrumentation.ts).
   static readonly SentryDsn: string = process.env.NEXT_PUBLIC_SENTRY_DSN ?? '';
+
+  // Mocco on Mocco: the console's own "What's new" and feedback widgets (null → not shown).
+  static readonly SelfWidgets: SelfWidgetsConfig | null = selfWidgetsConfigOf({
+    publishableKey: process.env.NEXT_PUBLIC_MOCCO_SELF_PUBLISHABLE_KEY,
+    board: process.env.NEXT_PUBLIC_MOCCO_SELF_BOARD,
+    apiUrl: process.env.NEXT_PUBLIC_MOCCO_SELF_API_URL,
+  });
 }

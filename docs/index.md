@@ -103,6 +103,7 @@ related:
 - [OG images](./reference/og-images.md) — signed, content-addressed share images rendered once with satori and stored in object storage
 - [Backend conventions](./reference/backend-conventions.md) — domain / infra / transport layering, vendor isolation, per-router error mapping
 - [Frontend conventions](./reference/frontend-conventions.md) — Pages Router, client-rendered, lint stack
+- [Mocco on Mocco](./reference/mocco-on-mocco.md) — the console's own "What's new" badge and feedback sheet from a Mocco project: env, the end-user token route, lazy loading, production setup
 - [Env management](./reference/env.md) — env file layout, `with-env`, `SERVICE_DOMAIN`, tailnet access
 - [CI conventions](./reference/ci-conventions.md) — supply-chain hardening rules
 - [DB conventions (Drizzle)](./reference/db-conventions.md) — mocco_ prefix, id, timestamp, indexes

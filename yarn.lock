@@ -2635,6 +2635,7 @@ __metadata:
     "@mocco/backend": "workspace:*"
     "@mocco/common": "workspace:*"
     "@mocco/flags-core": "workspace:*"
+    "@mocco/js": "workspace:*"
     "@next/eslint-plugin-next": "npm:16.2.9"
     "@sentry/nextjs": "npm:10.65.0"
     "@tailwindcss/postcss": "npm:4.1.17"
@@ -2668,7 +2669,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@mocco/js@workspace:packages/sdk-js":
+"@mocco/js@workspace:*, @mocco/js@workspace:packages/sdk-js":
   version: 0.0.0-use.local
   resolution: "@mocco/js@workspace:packages/sdk-js"
   dependencies:

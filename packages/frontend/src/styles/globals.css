@@ -124,6 +124,20 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Mocco on Mocco: the console's own "What's new" popover and feedback sheet (@mocco/js) take the
+   console's tokens, so they follow its theme instead of the system's. */
+:root {
+  --mocco-wn-bg: var(--popover);
+  --mocco-wn-fg: var(--popover-foreground);
+  --mocco-wn-border: var(--border);
+  --mocco-wn-tag: var(--muted);
+  --mocco-fs-accent: var(--primary);
+  --mocco-fs-accent-fg: var(--primary-foreground);
+  --mocco-fs-bg: var(--popover);
+  --mocco-fs-fg: var(--popover-foreground);
+  --mocco-fs-border: var(--border);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

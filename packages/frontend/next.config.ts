@@ -46,6 +46,11 @@ const config: NextConfig = {
     NEXT_PUBLIC_SITE_HOST: process.env.SERVICE_DOMAIN ?? process.env.VERCEL_URL ?? '',
     NEXT_PUBLIC_HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN ?? '',
     NEXT_PUBLIC_HELP_CUSTOM_DOMAINS: process.env.HELP_CUSTOM_DOMAINS ?? '',
+    // Mocco on Mocco (docs/reference/mocco-on-mocco.md): the public half of the console's own
+    // "What's new" and feedback widgets. MOCCO_SELF_IDENTITY_SECRET stays on the server.
+    NEXT_PUBLIC_MOCCO_SELF_PUBLISHABLE_KEY: process.env.MOCCO_SELF_PUBLISHABLE_KEY ?? '',
+    NEXT_PUBLIC_MOCCO_SELF_BOARD: process.env.MOCCO_SELF_BOARD ?? '',
+    NEXT_PUBLIC_MOCCO_SELF_API_URL: process.env.MOCCO_SELF_API_URL ?? '',
   },
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
