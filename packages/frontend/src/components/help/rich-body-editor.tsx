@@ -21,6 +21,7 @@ import { helpImageProblem, helpImageTypeOf, useHelpImageUpload } from '@frontend
 import { fireAndForget } from '@frontend/lib/fire-and-forget';
 import { helpMediaExtensions, helpStarterKitOptions, withLeanTextEncoding } from '@frontend/lib/help-rich-markdown';
 
+import type { SlashCommandSuggestionItem } from '@frontend/components/block-editor';
 import type { EditorView } from '@tiptap/pm/view';
 import type { Ref } from 'react';
 
@@ -61,7 +62,7 @@ function insertImage(view: EditorView, src: string, alt: string) {
 }
 
 /** editorcn's slash menu items, then an uploaded image and a table. */
-const slashItems = getSlashCommandSuggestion([
+const slashCommandItems: SlashCommandSuggestionItem[] = [
   ...defaultSlashCommandItems,
   {
     id: 'image',
@@ -84,7 +85,23 @@ const slashItems = getSlashCommandSuggestion([
       editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
     },
   },
-]);
+];
+
+/** Whether an item answers what was typed after "/": its title (so "/heading 2" finds Heading 2)
+ * or the start of a keyword. */
+const matches = (item: SlashCommandSuggestionItem, query: string) => {
+  /* eslint-disable sonarjs/null-dereference -- the query, titles and keywords are strings, never null */
+  const typed = query.trim().toLowerCase();
+  return item.title.toLowerCase().includes(typed) || item.keywords.some(keyword => keyword.startsWith(typed));
+  /* eslint-enable sonarjs/null-dereference */
+};
+
+/** editorcn's menu, also matching titles and with spaces allowed, so "/heading 2" works. */
+const slashItems = {
+  ...getSlashCommandSuggestion(slashCommandItems),
+  allowSpaces: true,
+  items: ({ query }: { query: string }) => slashCommandItems.filter(item => matches(item, query)),
+};
 
 export default function RichBodyEditor({
   workspaceId,
