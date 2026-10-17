@@ -208,10 +208,13 @@ export async function getPost(deps: FeedbackToolDeps, args: GetPostArgs, userId:
   };
 }
 
+/** What `feedback:write` allows, as the consent screen words it: one permission for every feedback change. */
+export const FEEDBACK_WRITE_ALLOWS = 'move, comment on, vote on, merge and link your feedback posts to GitHub';
+
 const moveWords: DecisionWords = {
   verb: 'change feedback statuses',
   doing: "Changing a feedback post's status",
-  scope: { name: McpScopes.feedbackWrite, allows: 'move, comment on, vote on and merge your feedback posts' },
+  scope: { name: McpScopes.feedbackWrite, allows: FEEDBACK_WRITE_ALLOWS },
   instead: 'change it from the board in the Mocco console',
 };
 

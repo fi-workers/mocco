@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -190,6 +190,8 @@ has several servers loaded.
 | `mocco_feedback_post_get` | One feedback post with its status history; the body cut short unless detailed |
 | `mocco_feedback_votes_list` | A post's votes (end user, counted or pending), offset-paged |
 | `mocco_feedback_comments_list` | A post's comments as the team sees them, internal notes marked, offset-paged |
+| `mocco_feedback_links_list` | A post's GitHub links: state, merge commit, an issue's closing pull requests |
+| `mocco_feedback_github_search` | Issues or pull requests of the project's repos (words or number), one repo or each |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -214,6 +216,7 @@ has several servers loaded.
 | `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
 | `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
 | `mocco_feedback_post_merge` | Merge a duplicate post into another as the caller (`feedback:write`) |
+| `mocco_feedback_post_link` / `_unlink` | Link a GitHub issue or pull request to a post, or remove a link, as the caller (`feedback:write`) |
 
 ### Search, not list
 
@@ -263,7 +266,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
-| `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, move, comment on, vote on, merge and link feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`, `_post_link`, `_post_unlink`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -429,8 +432,12 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    `mocco_feedback_votes_list` and `mocco_feedback_comments_list` over `VoteService.list` and
    `CommentService.listForStaff`, and the changes `mocco_feedback_comment_create`,
    `mocco_feedback_post_vote` and `mocco_feedback_post_merge` over `CommentService.createAsStaff`,
-   `VoteService.vote` and `MergeService.merge`. Accepting a ship suggestion gets its tool in
-   the slice that builds it.
+   `VoteService.vote` and `MergeService.merge`. GitHub links follow (*shipped*, issue #178; see
+   *How the feedback link tools are built*): `mocco_feedback_links_list` and
+   `mocco_feedback_github_search` over `LinkService.list` and `repos` / `search`, and the changes
+   `mocco_feedback_post_link` and `mocco_feedback_post_unlink` over `LinkService.preview` / `link`
+   and `requireLink` / `unlink`. Accepting a ship suggestion gets its tool in the slice that
+   builds it.
 
 ### How the vote is built (slice 6b)
 
@@ -597,6 +604,28 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   team member. Both reads page with `limit` and `nextOffset`.
 - **Nothing the console can't do.** `vote`, `createComment` and `mergePost` in the `feedback`
   router call the same methods; a merge is audited as `feedback.post.merged` naming the caller.
+
+### How the feedback link tools are built (issue #178)
+
+- **The same scope.** Linking and unlinking (`tools/feedback-links.ts`) use `feedback:write`,
+  and the consent line says so (**Move, comment on, vote on, merge and link your feedback posts
+  to GitHub, as you**). Tokens granted before keep working: the scope is the same, only its
+  description grew.
+- **Refusals before asking.** `LinkService.preview` reads what `link` would link with every
+  refusal `link` has, plus a target the post links already, and writes nothing. So a merged
+  post, a repo the project doesn't link, a number the repo doesn't have and a duplicate link
+  are refused before the person is asked.
+- **Bound to GitHub's state.** The link confirmation names the post, the repo and the issue or
+  pull request with its title and state, and records the post, repo, kind, number and state.
+  The answer re-reads the target, so one given after GitHub reports a new state (a pull request
+  merged meanwhile) is refused as a different change and the next call asks with the new
+  state. The unlink confirmation is bound to the link and its stored state the same way.
+- **Search across the project's repos.** The console searches one repo at a time; the tool
+  searches each repo the project links in turn unless `repoId` names one, so an agent needs no
+  extra call to find the repo ids. A project without repos and a server without a GitHub App
+  are refused with what to do. A repo id outside the project reads like one that does not exist.
+- **Nothing the console can't do.** `link` and `unlink` are the methods the `feedback` router
+  calls, audited as `feedback.post.linked` and `feedback.post.unlinked` naming the caller.
 
 ## Evaluating it
 

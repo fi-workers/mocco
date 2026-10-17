@@ -31,6 +31,15 @@ export class FeedbackLinkRepo {
     return inserted;
   }
 
+  /** One of the project's links; undefined when it has no such link. */
+  async find(scope: FeedbackScope, linkId: string): Promise<FeedbackLinkRow | undefined> {
+    const [found] = await this.db
+      .select()
+      .from(l)
+      .where(and(scoped(scope), eq(l.id, linkId)));
+    return found;
+  }
+
   /** A post's links, oldest first. */
   async ofPost(scope: FeedbackScope, postId: string): Promise<FeedbackLinkRow[]> {
     return await this.db

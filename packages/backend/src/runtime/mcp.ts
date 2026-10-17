@@ -65,6 +65,7 @@ export function getMcpHandler(): McpHttpHandler {
       feedbackVotes: getFeedbackDomain().feedbackVotes,
       feedbackComments: getFeedbackDomain().feedbackComments,
       feedbackMerges: getFeedbackDomain().feedbackMerges,
+      feedbackLinks: getFeedbackDomain().feedbackLinks,
       notifications: getNotification().channels,
       notificationActivity: getNotification().activity,
       inbound: getInbound(),

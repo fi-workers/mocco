@@ -25,6 +25,7 @@ import { z } from 'zod';
 
 import { confirmThenApply, openDecision, refused, requireScope } from '@backend/transport/mcp/tools/deciding';
 import {
+  FEEDBACK_WRITE_ALLOWS,
   excerptOf,
   feedbackRefusal,
   postArg,
@@ -176,7 +177,7 @@ export async function listComments(deps: FeedbackEngagementToolDeps, args: ListC
 /** One permission for every feedback change, worded as the consent screen words it. */
 const writeScope = () => ({
   name: McpScopes.feedbackWrite,
-  allows: 'move, comment on, vote on and merge your feedback posts',
+  allows: FEEDBACK_WRITE_ALLOWS,
 });
 
 const commentWords: DecisionWords = {

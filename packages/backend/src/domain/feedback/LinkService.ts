@@ -27,6 +27,7 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { PostService } from '@backend/domain/feedback/PostService';
 import type { FeedbackLinkCloserFields, FeedbackLinkCloserRow } from '@backend/domain/feedback/repos/link-closer.repo';
 import type { FeedbackLinkLiveFields, FeedbackLinkRow } from '@backend/domain/feedback/repos/link.repo';
+import type { FeedbackPostRow } from '@backend/domain/feedback/repos/post.repo';
 import type { FeedbackTrackerRepoRow } from '@backend/domain/feedback/repos/tracker-repo.repo';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type {
@@ -122,6 +123,21 @@ export class LinkService implements TrackerEventSink {
     }
   }
 
+  /** The post (not a merged one), the project's repo and the issue or pull request as the provider
+   * has it now: what `link` would link, read with the same refusals and nothing written. */
+  private async resolveTarget(scope: FeedbackScope, postId: string, input: FeedbackLinkCreateInput) {
+    const post = await this.deps.posts.requirePost(scope, postId);
+    if (post.mergedIntoPostId !== null) {
+      throw new FeedbackPostMergedError(post.id, post.mergedIntoPostId);
+    }
+    const repo = await this.requireRepo(scope, input.repoId);
+    const item = await this.requireTracker().get(refOf(repo), input.kind, input.number);
+    if (item === null) {
+      throw new FeedbackLinkTargetNotFoundError(input.kind, input.number);
+    }
+    return { post, repo, item };
+  }
+
   /** The repos the project links, which a post's links come from. */
   async repos(scope: FeedbackScope): Promise<{ id: string; owner: string; name: string }[]> {
     const rows = await new FeedbackTrackerRepoRepo(this.deps.db).ofProject(scope);
@@ -159,6 +175,42 @@ export class LinkService implements TrackerEventSink {
   }
 
   /**
+   * What linking would link, before anyone is asked to confirm it (the MCP tool): the post, the
+   * repo by name, and the issue or pull request as the provider has it now. Refuses exactly as
+   * `link` does, and also when the post links it already (FeedbackLinkExistsError). Writes nothing.
+   */
+  async preview(
+    scope: FeedbackScope,
+    postId: string,
+    input: FeedbackLinkCreateInput,
+  ): Promise<{ post: FeedbackPostRow; repo: { id: string; owner: string; name: string }; item: TrackerItem }> {
+    const { post, repo, item } = await this.resolveTarget(scope, postId, input);
+    const existing = await new FeedbackLinkRepo(this.deps.db).findByTarget(
+      scope.workspaceId,
+      repo.id,
+      item.kind,
+      item.number,
+    );
+    if (existing.some(link => link.postId === post.id)) {
+      throw new FeedbackLinkExistsError();
+    }
+    return { post, repo: { id: repo.id, owner: repo.owner, name: repo.name }, item };
+  }
+
+  /** One of the project's links with its repo by name, or FeedbackLinkNotFoundError (also another project's). */
+  async requireLink(
+    scope: FeedbackScope,
+    linkId: string,
+  ): Promise<FeedbackLinkRow & { repo: { owner: string; name: string } | null }> {
+    const link = await new FeedbackLinkRepo(this.deps.db).find(scope, linkId);
+    if (link === undefined) {
+      throw new FeedbackLinkNotFoundError(linkId);
+    }
+    const repo = await new FeedbackTrackerRepoRepo(this.deps.db).findInWorkspace(scope.workspaceId, link.repoId);
+    return { ...link, repo: repo === undefined ? null : { owner: repo.owner, name: repo.name } };
+  }
+
+  /**
    * Link an issue or pull request of one of the project's repos to the post, as the provider has it
    * now; an issue's closing pull requests come with it. A repo the project doesn't link is
    * FeedbackLinkRepoNotFoundError, a number the repo doesn't have FeedbackLinkTargetNotFoundError,
@@ -170,16 +222,8 @@ export class LinkService implements TrackerEventSink {
     postId: string,
     input: FeedbackLinkCreateInput,
   ): Promise<FeedbackLinkRow> {
-    const post = await this.deps.posts.requirePost(scope, postId);
-    if (post.mergedIntoPostId !== null) {
-      throw new FeedbackPostMergedError(post.id, post.mergedIntoPostId);
-    }
-    const repo = await this.requireRepo(scope, input.repoId);
+    const { post, repo, item } = await this.resolveTarget(scope, postId, input);
     const ref = refOf(repo);
-    const item = await this.requireTracker().get(ref, input.kind, input.number);
-    if (item === null) {
-      throw new FeedbackLinkTargetNotFoundError(input.kind, input.number);
-    }
     const link = await new FeedbackLinkRepo(this.deps.db).insert({
       ...scope,
       postId,
