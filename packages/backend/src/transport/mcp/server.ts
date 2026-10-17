@@ -13,6 +13,7 @@
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
 // `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
+// and `mocco_feedback_post_link` and `mocco_feedback_post_unlink` (in `tools/feedback-links.ts`)
 // under `feedback:write`, the four OTA setup changes (in `tools/ota-setup.ts`) under
 // `ota:write`, and the three project setup changes (in `tools/projects.ts`) under
 // `projects:write`.
@@ -24,6 +25,7 @@ import {
   registerFeedbackEngagementTools,
   type FeedbackEngagementToolDeps,
 } from '@backend/transport/mcp/tools/feedback-engagement';
+import { registerFeedbackLinkTools, type FeedbackLinkToolDeps } from '@backend/transport/mcp/tools/feedback-links';
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
@@ -57,6 +59,7 @@ export type McpToolDeps = RunToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
   FeedbackEngagementToolDeps &
+  FeedbackLinkToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -87,6 +90,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);
   registerFeedbackEngagementTools(server, deps);
+  registerFeedbackLinkTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);

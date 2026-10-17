@@ -26,6 +26,7 @@ code_refs:
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback-engagement.ts
+  - packages/backend/src/transport/mcp/tools/feedback-links.ts
   - packages/backend/src/domain/feedback/PublicBoardService.ts
   - packages/backend/src/domain/enduser/EndUserTokenService.ts
   - packages/backend/src/transport/ext/v1/feedback.ts
@@ -171,7 +172,9 @@ Staff link a post to issues and pull requests in the repos linked to its project
 - **Webhooks.** The deferred webhook pass hands `issues` and `pull_request` deliveries (every action) to `LinkService.applyProviderEvent` through `CommitSyncService.withTrackerEvents`, after resolving the repo through the installation's connection like every other event. Every link to that issue or pull request in the repo's workspace takes its title, state and merge commit, and for a pull request every closer row for it does too; an issue whose state changed has its closers resolved again. A delivery that matches no link is parked (logged with `console.warn`, never thrown), like an unknown repo or installation. A new pull request that says `Fixes #12` becomes a closer when the issue next changes state or is refreshed, not from its own event.
 - **Refresh** (`feedback.links.refresh`, every 10 minutes): the 20 links not heard about for 6 hours, the longest ago first, are read again (and an issue's closers), for deliveries GitHub never sent. A link whose repo or target is gone keeps what it knew; a failure is logged; either way it waits its next turn. Without a GitHub App the job does nothing.
 
-Not yet: MCP tools for links, showing links on the public board (number and state only, per the design), and shipping posts from a deploy.
+Agents read, search, link and unlink through four MCP tools ([MCP tools](#mcp-tools)). For them, `LinkService.preview` reads what `link` would link (the post, the repo and the issue or pull request as GitHub has it now) with the same refusals plus `FeedbackLinkExistsError` for a target the post links already, writing nothing, and `requireLink` reads one of the project's links with its repo (`FeedbackLinkNotFoundError` otherwise, also for another project's).
+
+Not yet: showing links on the public board (number and state only, per the design), and shipping posts from a deploy.
 
 ## Audit
 
@@ -273,6 +276,17 @@ Five more (`transport/mcp/tools/feedback-engagement.ts`, #473) sit over `VoteSer
 | `mocco_feedback_post_merge` | `MergeService.merge` | Merges a duplicate into another post on its board as the caller |
 
 The three changes have the locks of `mocco_feedback_post_set_status`: `feedback:write`, the opt-in and a confirmation round trip. Each confirmation is bound to what it showed. A comment is bound to its text and kind. A vote is bound to whether the end user had a pending vote or none; one that counts already answers without asking. A merge is bound to both posts, their board and each post's vote count, so a vote on either before the answer asks again. A post merged in between, a post into itself, or a post on another board is refused before asking. The services check the same rules again under their locks ([Merging duplicates](#merging-duplicates)).
+
+Four more (`transport/mcp/tools/feedback-links.ts`, #178) sit over `LinkService` behind the same `ProjectScope` check:
+
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_feedback_links_list` | `LinkService.list` | A post's [GitHub links](#github-links), oldest first: id, repo (`owner/name`), kind, number, title, state and merge commit, and an issue's closing pull requests (number, title, state, merge commit); detailed adds the URLs, the repo id, `mergedAt`, `refreshedAt`, `createdAt` and who linked it |
+| `mocco_feedback_github_search` | `LinkService.repos`, `search` | Issues or pull requests (`kind`) of the project's repos by words or number, every repo in turn unless `repoId` names one, up to 10 per repo; the answer lists the project's repos too. A project without repos and a server without a GitHub App are refused with what to do; a repo outside the project reads like one that does not exist |
+| `mocco_feedback_post_link` | `LinkService.preview`, `link` | Links an issue or pull request of one of the project's repos to a post as the caller |
+| `mocco_feedback_post_unlink` | `LinkService.requireLink`, `unlink` | Removes a link as the caller; nothing changes on GitHub |
+
+The two changes have the same locks: `feedback:write`, the opt-in and a confirmation round trip. Linking first reads the target through `preview`, so a merged post, a repo the project doesn't link, a number the repo doesn't have and a target the post links already are refused before asking. The confirmation names the post, the repo and the issue or pull request with its title and state, and is bound to the post, repo, kind, number and state: if GitHub reports another state before the answer, the answer is refused as a different change and the next call asks with the new state. Unlinking is bound to the link and its state the same way; a link removed in between is refused. Both are audited as the console's are (`feedback.post.linked`, `feedback.post.unlinked`), naming the caller.
 
 ## The public /v1 surface
 

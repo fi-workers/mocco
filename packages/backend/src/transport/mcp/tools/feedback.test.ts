@@ -263,6 +263,7 @@ describe('mocco_feedback_* (pglite, over HTTP)', () => {
       feedbackVotes: feedback.feedbackVotes,
       feedbackComments: feedback.feedbackComments,
       feedbackMerges: feedback.feedbackMerges,
+      feedbackLinks: feedback.feedbackLinks,
       scope,
       projects: new ProjectScope({ workspaces: scope, projects: project.projects, products: project.products }),
       settings,

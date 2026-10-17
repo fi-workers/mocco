@@ -128,6 +128,15 @@ describe('mocco_approvals_search (pglite, over HTTP)', () => {
       feedbackVotes: { list: refuse, find: refuse, vote: refuse },
       feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
       feedbackMerges: { merge: refuse },
+      feedbackLinks: {
+        repos: refuse,
+        search: refuse,
+        list: refuse,
+        preview: refuse,
+        requireLink: refuse,
+        link: refuse,
+        unlink: refuse,
+      },
       settings: { agentsMayDecide: refuse },
       confirmations: undefined,
     });

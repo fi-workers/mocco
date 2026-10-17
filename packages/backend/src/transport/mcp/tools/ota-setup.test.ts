@@ -206,6 +206,15 @@ describe('mocco_ota_setup_get and the OTA setup changes (pglite, over HTTP)', ()
       feedbackVotes: { list: refuse, find: refuse, vote: refuse },
       feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
       feedbackMerges: { merge: refuse },
+      feedbackLinks: {
+        repos: refuse,
+        search: refuse,
+        list: refuse,
+        preview: refuse,
+        requireLink: refuse,
+        link: refuse,
+        unlink: refuse,
+      },
       settings,
       confirmations: createConfirmations('a-test-secret-that-is-only-used-here'),
     });

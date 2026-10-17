@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts. The plan is in the
+> assigning messenger conversations, and moving, commenting on, voting on, merging and linking feedback posts to GitHub. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -76,6 +76,8 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_feedback_post_get` | One feedback post, and every status it took and when |
 | `mocco_feedback_votes_list` | Who voted for a feedback post (your app's id for each end user), and whether each vote counts yet or waits for an email confirmation |
 | `mocco_feedback_comments_list` | A feedback post's comments as your team sees them: end users' comments, your official response, and internal notes, marked |
+| `mocco_feedback_links_list` | The GitHub issues and pull requests a feedback post links: open, closed or merged, the merge commit, and the pull requests that close a linked issue |
+| `mocco_feedback_github_search` | Issues or pull requests in the GitHub repos linked to the project, by words or number, to link one to a post |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -154,6 +156,8 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
 | `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
 | `mocco_feedback_post_merge` | Merges a duplicate feedback post into the post it repeats, as you; votes and followers move over |
+| `mocco_feedback_post_link` | Links a GitHub issue or pull request to a feedback post, as you |
+| `mocco_feedback_post_unlink` | Removes a feedback post's GitHub link, as you; nothing changes on GitHub |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -210,7 +214,7 @@ status the post had when you were asked: if anyone moves the post before you ans
 answer is refused and you are asked afresh, and answering the same confirmation twice moves
 it once. Asking for the status a post has already answers without asking you. It follows the
 same rules as the other changes, needs the workspace to allow agents to make changes, and
-needs its own permission, asked for the first time it is used: **Move, comment on, vote on and merge your feedback posts, as you**. Any member
+needs its own permission, asked for the first time it is used: **Move, comment on, vote on, merge and link your feedback posts to GitHub, as you**. Any member
 of the workspace may move posts, as on the board.
 
 **Commenting, voting and merging on feedback.** The same permission and the same workspace
@@ -228,6 +232,17 @@ switch cover three more changes, each confirmed in your client first:
   is closed, keeping its comments and history. A merge can't be undone. If either post gets a
   vote before you answer, you are asked again with the new counts; if either is merged
   elsewhere, the merge is refused.
+
+**Linking feedback to GitHub.** The same permission and switch cover linking a post to an
+issue or pull request, as the post page's **GitHub** section does. `mocco_feedback_github_search`
+finds one in the repos linked to the project (every one, or the one you name); it needs your
+Mocco server's GitHub App, and says so when the project links no repo.
+`mocco_feedback_post_link` shows the post, the repo and the issue or pull request with its
+title and state (open, closed or merged). If its state changes on GitHub before you answer, you
+are asked again with the new one. A merged post, a repo the project doesn't link, a number the
+repo doesn't have and an issue the post links already are refused before you are asked.
+`mocco_feedback_post_unlink` shows the link and its state, and removes it from the post only:
+nothing changes on GitHub.
 
 **Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
 a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product

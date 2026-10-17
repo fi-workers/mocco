@@ -1193,3 +1193,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/github-app.md` (new), `reference/feature-map.md`,
   `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-github-links` (issue #178)
+
+## 2026-10-17 — Feedback: MCP tools for GitHub links
+
+- `mocco_feedback_links_list` and `mocco_feedback_github_search` read a post's links (state, merge commit, closing
+  pull requests) and search the project's repos; `mocco_feedback_post_link` and `mocco_feedback_post_unlink` change
+  them behind `feedback:write`, the opt-in and a confirmation bound to the target's state on GitHub.
+  `LinkService.preview` and `requireLink` read before asking. The consent line now names linking.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `specs/2026-09-24-feedback-design.md`, `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-feedback-links` (issue #178)

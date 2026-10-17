@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, feedback]
@@ -299,7 +299,7 @@ The core slice (#172) ships the services and the `feedback` tRPC router; the nex
 - `mocco_feedback_post_get`: one post with its status history.
 - `mocco_feedback_post_set_status`: acts as the caller, behind a `feedback:write` scope, the workspace's opt-in and the confirmation round trip.
 
-Voting, merging and accepting a ship suggestion get their tools in the slices that build them. Votes, comments, subscriptions and merging (#173) are built, and their tools shipped in #473: `mocco_feedback_votes_list`, `mocco_feedback_comments_list`, and the changing `mocco_feedback_comment_create`, `mocco_feedback_post_vote` and `mocco_feedback_post_merge`, behind `feedback:write`, the opt-in and the confirmation round trip.
+Voting, merging and accepting a ship suggestion get their tools in the slices that build them. Votes, comments, subscriptions and merging (#173) are built, and their tools shipped in #473: `mocco_feedback_votes_list`, `mocco_feedback_comments_list`, and the changing `mocco_feedback_comment_create`, `mocco_feedback_post_vote` and `mocco_feedback_post_merge`, behind `feedback:write`, the opt-in and the confirmation round trip. GitHub links (#178) got theirs next: `mocco_feedback_links_list`, `mocco_feedback_github_search`, and the changing `mocco_feedback_post_link` and `mocco_feedback_post_unlink`, behind the same locks.
 
 ## 7. External vendors and self-host story
 
