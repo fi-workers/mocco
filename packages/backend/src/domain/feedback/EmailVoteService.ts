@@ -47,6 +47,18 @@ export interface EmailVoteServiceDeps {
 
 const LINK_BASE = '/api/ext/v1/feedback';
 
+/** The signed one-click link that stops an end user's mail about a post; it doesn't expire. */
+export function feedbackUnsubscribeUrl(
+  links: { tokens: FeedbackLinkTokens; appOrigin: string },
+  scope: FeedbackScope,
+  postId: string,
+  endUserId: string,
+  now: Date,
+): string {
+  const token = links.tokens.issue(FeedbackLinkPurposes.unsubscribe, { ...scope, endUserId, postId }, now);
+  return `${links.appOrigin}${LINK_BASE}/unsubscribe/${encodeURIComponent(token)}`;
+}
+
 export class EmailVoteService {
   constructor(private readonly deps: EmailVoteServiceDeps) {}
 
@@ -83,8 +95,7 @@ export class EmailVoteService {
 
   /** The signed one-click link that stops the end user's mail about the post. */
   unsubscribeUrlOf(scope: FeedbackScope, postId: string, endUserId: string): string {
-    const token = this.deps.tokens.issue(FeedbackLinkPurposes.unsubscribe, { ...scope, endUserId, postId }, this.now());
-    return `${this.deps.appOrigin}${LINK_BASE}/unsubscribe/${encodeURIComponent(token)}`;
+    return feedbackUnsubscribeUrl(this.deps, scope, postId, endUserId, this.now());
   }
 
   /** Vote for the post as `email`, pending, and mail the address its confirmation link. */

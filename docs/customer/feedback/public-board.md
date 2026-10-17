@@ -91,6 +91,8 @@ Someone your app hasn't signed in can still vote, with their email address. Mocc
 
 Voting by email needs Mocco to send mail. On a self-hosted Mocco without an email sender, the form says it isn't available.
 
+People who voted by email also hear when the post moves: Mocco mails them when it becomes planned, in progress, shipped or closed. A shipped mail links the changelog entry it went out in. Each mail goes out two minutes after the change, so you can undo a slip. If the post moves again within those two minutes, only the newest status is mailed, and moving a post back to under review mails no one. Every mail has a one-click unsubscribe link. Mocco doesn't mail people your app signed in, because it doesn't keep their addresses. Your app can tell them itself.
+
 ## 5. Limits
 
 Each user can vote 30 times, comment 20 times and post 5 times an hour, and one network address can make 120 changes an hour, whoever signs in. An email address gets 3 vote mails an hour.

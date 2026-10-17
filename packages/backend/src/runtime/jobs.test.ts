@@ -92,6 +92,7 @@ describe('job runtime composition (pglite)', () => {
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,
         FeedbackJobKinds.publishDueChangelog,
+        FeedbackJobKinds.statusMail,
         FlagJobKinds.expireChangesets,
         FlagJobKinds.detectStale,
         FlagJobKinds.staleDigest,

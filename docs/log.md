@@ -1126,3 +1126,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   cursor (migration 0082), for an app's "what's new" badge.
 - Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/feedback-changelog-v1` (issue #176)
+
+## 2026-10-17 — Feedback status mail
+
+- Email voters who follow a post are mailed when it becomes planned, in progress, shipped or closed, after a
+  two-minute undo window, once per change, by a one-minute job (migration 0083). Signed-in end users aren't mailed.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-status-mail` (issue #180)
