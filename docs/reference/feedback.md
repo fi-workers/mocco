@@ -4,7 +4,7 @@ description: How Mocco stores a project's feedback boards â€” boards, categories
 type: reference
 status: active
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-16
 confidence: high
 owner: andrea
 tags: [reference, feedback, boards, posts]
@@ -86,6 +86,7 @@ A post's number comes from its board's `next_post_number`, taken by an `UPDATE â
 
 - `sort: status` (the default): workflow order (`FEEDBACK_POST_STATUS_ORDER`: under review, planned, in progress, shipped, closed), newest first within a status.
 - `sort: newest`: newest first.
+- `sort: top`: most counted votes first, newest first among equals (the console inbox's "Most voted").
 
 Another project's board is `FeedbackBoardNotFoundError`, never an empty list.
 
@@ -150,6 +151,15 @@ Reads come in two projections. `listForStaff` returns every comment, oldest firs
 | `comments`, `createComment` | A post's comments for the team, internal notes included; comment as the caller, plainly, as the official response or as an internal note |
 | `subscribers` | A post's current subscribers, oldest first |
 | `mergePost` | Merge the post into `intoPostId` as the caller (above); returns the closed source and the recounted target |
+
+## The console
+
+The project's **Feedback** section (`pages/workspaces/[id]/p/[projectId]/feedback/`, #175) appears once the workspace turns the feedback product on (Products page). It reads and writes only through the `feedback.*` procedures above.
+
+- **Inbox** (`/feedback`, `components/feedback-console/inbox.tsx`): one board's posts, with the board, status tab, category and sort in the query string (`?board=ideas&status=all&category=mobile&sort=top`); defaults (the first board, under review, every category, newest) are left out of the address. Each row shows the counted votes, the post's number, title, status, category, public comment count and whether the team or an end user posted it; a merged duplicate carries a "Merged" badge. 50 posts a page with previous and next; the list refreshes every 30 seconds (no realtime in v1). A public board links to its page on the help site when the project has one.
+- **Boards** (`/feedback/boards`, `components/feedback-console/boards.tsx`): create a board (the address is derived from the name until edited, and must match `FEEDBACK_SLUG_PATTERN`), rename it, change its address or visibility, delete it after a confirmation, and add, rename or delete its categories (a new category's slug comes from its name). A project without boards opens on the create form.
+
+Not built yet: a post's page in the console (status, category, official response, internal notes, merging).
 
 ## MCP tools
 
@@ -241,4 +251,4 @@ A project's public boards have pages on its help center's site (#175, [ADR 0015]
 
 A test (`transport/ext/sites/feedback.test.ts`) builds both pages' data and calls the routes after an internal note, an official response, another end user's comment and a post written by an email-like end-user id, and checks that none of the note, the team member's id, the end users' ids, the email or the workspace, project and board ids is in any page or answer.
 
-Not built yet: the roadmap page, the sitemap entries, and the console's inbox.
+Not built yet: the roadmap page and the sitemap entries.

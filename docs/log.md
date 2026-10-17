@@ -1125,3 +1125,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-16 — Feedback console: boards and inbox
+
+- The feedback product is available in the console: a Feedback section with an inbox (board, status, category and
+  sort in the address) and a boards page (create, rename, publish, delete, categories); the staff list gains a
+  "Most voted" sort (`sort: top`).
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: PR #487 (issue #175)

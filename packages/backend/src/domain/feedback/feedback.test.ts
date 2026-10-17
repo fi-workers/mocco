@@ -132,7 +132,7 @@ describe('feedback boards and posts (pglite)', () => {
     ).rejects.toBeInstanceOf(FeedbackBoardNotFoundError);
   });
 
-  it('lists a board sorted by status in workflow order, newest first within a status, or by date', async () => {
+  it('lists a board sorted by status in workflow order, newest first within a status, by date, or by votes', async () => {
     const board = await feedback.feedbackBoards.createBoard(scope, actor, { slug: 'ideas', name: 'Ideas' });
     const statuses: [string, FeedbackPostStatus][] = [
       ['a', FeedbackPostStatuses.closed],
@@ -153,6 +153,14 @@ describe('feedback boards and posts (pglite)', () => {
     expect(byStatus.map(post => post.title)).toEqual(['g', 'c', 'e', 'b', 'f', 'd', 'a']);
     const newest = await feedback.feedbackPosts.list(scope, { ...listQuery(board.id), sort: FeedbackPostSorts.newest });
     expect(newest.map(post => post.title)).toEqual(['g', 'f', 'e', 'd', 'c', 'b', 'a']);
+    const idOf = (title: string) => newest.find(post => post.title === title)?.id ?? '';
+    const staffVote = async (title: string, endUserId: string) =>
+      await feedback.feedbackVotes.vote(scope, idOf(title), endUserId, { source: 'staff', recordedByUserId: actor });
+    await staffVote('b', 'u1');
+    await staffVote('b', 'u2');
+    await staffVote('c', 'u1');
+    const top = await feedback.feedbackPosts.list(scope, { ...listQuery(board.id), sort: FeedbackPostSorts.top });
+    expect(top.map(post => post.title)).toEqual(['b', 'c', 'g', 'f', 'e', 'd', 'a']);
     const planned = await feedback.feedbackPosts.list(scope, {
       ...listQuery(board.id),
       status: FeedbackPostStatuses.planned,

@@ -67,10 +67,12 @@ export class FeedbackPostRepo {
 
   /** A board's posts, filtered, sorted and paged as the query says. */
   async list(scope: FeedbackScope, query: FeedbackPostListQuery): Promise<FeedbackPostRow[]> {
-    const order =
-      query.sort === FeedbackPostSorts.status
-        ? [asc(statusRank), desc(p.createdAt), desc(p.number)]
-        : [desc(p.createdAt), desc(p.number)];
+    const orders = {
+      [FeedbackPostSorts.status]: [asc(statusRank), desc(p.createdAt), desc(p.number)],
+      [FeedbackPostSorts.newest]: [desc(p.createdAt), desc(p.number)],
+      [FeedbackPostSorts.top]: [desc(p.voteCount), desc(p.createdAt), desc(p.number)],
+    };
+    const order = orders[query.sort];
     return await this.db
       .select()
       .from(p)

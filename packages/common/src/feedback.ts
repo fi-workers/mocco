@@ -50,6 +50,8 @@ export const FeedbackPostSorts = {
   status: 'status',
   /** Newest first. */
   newest: 'newest',
+  /** Most counted votes first, newest first among equals. */
+  top: 'top',
 } as const;
 export type FeedbackPostSort = (typeof FeedbackPostSorts)[keyof typeof FeedbackPostSorts];
 export const feedbackPostSortSchema = z.enum(
