@@ -65,6 +65,7 @@ export const bundle = assetOf('console.log("v1")', 'application/javascript', 'bu
 export const image = assetOf('png-bytes', 'image/png', 'png');
 
 export interface ManifestOptions {
+  runtimeVersion?: string;
   createdAt?: Date;
   assetUrlBase?: string;
   id?: string;
@@ -157,9 +158,14 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
     return sessionToken;
   };
 
-  const declare = async (session: string, assets: readonly FakeAsset[], platforms: OtaPlatform[] = ['ios']) => {
+  const declare = async (
+    session: string,
+    assets: readonly FakeAsset[],
+    platforms: OtaPlatform[] = ['ios'],
+    runtimeVersion = RUNTIME,
+  ) => {
     const response = await call('POST', `${API}/ota/uploads`, session, {
-      runtimeVersion: RUNTIME,
+      runtimeVersion,
       platforms,
       assets: assets.map(asset => ({
         hash: asset.hash,
@@ -192,7 +198,7 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
     return JSON.stringify({
       id: opts.id ?? randomUUID(),
       createdAt: (opts.createdAt ?? new Date()).toISOString(),
-      runtimeVersion: RUNTIME,
+      runtimeVersion: opts.runtimeVersion ?? RUNTIME,
       launchAsset: {
         hash: launch.hash,
         key: 'bundle',
@@ -234,14 +240,14 @@ export async function createOtaFixture(options: { oidcKeys?: JWTVerifyGetKey; ev
    * rollBackToEmbedded directive (1 ms and 2 ms later), then verify it. Returns the
    * release and update ids.
    */
-  const publishReady = async (label: string) => {
+  const publishReady = async (label: string, runtimeVersion = RUNTIME) => {
     const launch = assetOf(`console.log("${label}")`, 'application/javascript', 'bundle');
     const session = await newSession();
-    const declared = await declare(session, [launch, image]);
+    const declared = await declare(session, [launch, image], ['ios'], runtimeVersion);
     await putMissing(declared, [launch, image]);
     const createdAt = new Date();
     const updateId = randomUUID();
-    const manifest = manifestOf({ createdAt, launch, id: updateId });
+    const manifest = manifestOf({ createdAt, launch, id: updateId, runtimeVersion });
     const later = new Date(createdAt.getTime() + 1).toISOString();
     // After the republishes too, as the CLI signs it, so it also reaches rolled-back devices.
     const directive = JSON.stringify({

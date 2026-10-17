@@ -190,6 +190,24 @@ describe('staged rollout, pause and instant rollback', () => {
     expect(directive?.commitTime?.getTime()).toBeGreaterThan(new Date(republish.createdAt ?? 0).getTime());
   });
 
+  it('names the runtime that blocks a rollback across runtimes, and rolls back the one named', async () => {
+    // An old runtime with a single release, and the current one with two.
+    const old = await f.publishReady('old', '0.9.0');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, old.releaseId, f.ownerId, null);
+    const v1 = await f.publishReady('v1');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v1.releaseId, f.ownerId, null);
+    const v2 = await f.publishReady('v2');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v2.releaseId, f.ownerId, null);
+
+    await expect(stop(StopActions.rollback)).rejects.toThrow(/ios runtime 0\.9\.0; name the runtime to roll back/u);
+    const result = await f.ota.otaChannels.stopFromConsole(f.appRow, staging.id, StopActions.rollback, f.ownerId, {
+      runtimeVersion: RUNTIME,
+      reason: null,
+    });
+
+    expect(result).toMatchObject({ kind: OtaDeploymentKinds.rollback, releaseId: v2.releaseId, changed: true });
+  });
+
   it('runs the stop action each CI path names', async () => {
     const v1 = await f.publishReady('v1');
     await f.ota.otaChannels.promote(f.appRow, staging.id, v1.releaseId, f.ownerId, null);
