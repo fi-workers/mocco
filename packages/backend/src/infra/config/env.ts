@@ -92,6 +92,9 @@ const schema = z.object({
   // search builds article URLs from them.
   HELP_SITES_DOMAIN: z.string().min(1).optional(),
   HELP_CUSTOM_DOMAINS: z.string().min(1).optional(),
+  // The slug of one help site whose /feedback pages are served on SERVICE_DOMAIN (also read by
+  // next.config.ts): its board, roadmap, posts and changelog, linked and indexed there.
+  HELP_APP_HOST_SITE: z.string().min(1).optional(),
   // Vercel AI Gateway key for help center translation and feedback duplicate embeddings; unset, help
   // centers serve the source language and duplicates are matched by title words only.
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),

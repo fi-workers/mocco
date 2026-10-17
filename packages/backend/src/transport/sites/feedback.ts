@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { NotFoundError } from '@backend/domain/errors';
 import { getFeedbackDomain } from '@backend/domain/feedback/instance';
 import { getHelpDomain } from '@backend/domain/helpcenter/instance';
-import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
+import { feedbackSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { getEnv } from '@backend/infra/config/env';
 import { wireChangelogEntry, wireComment, wirePost } from '@backend/transport/ext/v1/feedback';
 
@@ -287,7 +287,7 @@ export function feedbackPages(): ReturnType<typeof createFeedbackPages> {
   state.pages ??= createFeedbackPages({
     sites: getHelpDomain().helpPublic,
     boards: getFeedbackDomain().feedbackPublic,
-    originOf: site => helpSiteOrigin(site, getEnv()),
+    originOf: site => feedbackSiteOrigin(site, getEnv()),
   });
   return state.pages;
 }

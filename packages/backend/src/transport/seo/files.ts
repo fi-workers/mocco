@@ -3,7 +3,8 @@
 // out of the signed-in console; a help center's host lists that site's published pages in
 // every language they are served in, and its public feedback boards (#175), under the site's
 // canonical origin (its custom domain when it has one), and keeps AI training crawlers out when
-// the site says so. Pure over
+// the site says so. A site mounted on the app's host (HELP_APP_HOST_SITE) has its board pages
+// listed in the app's sitemap instead of its own. Pure over
 // its inputs, so the Next route stays a thin adapter.
 
 import { HelpSiteNotFoundError } from '@backend/domain/helpcenter/errors';
@@ -48,6 +49,25 @@ export interface SeoFileDeps {
   indexNowKeyOf: (slug: string) => string | null;
   /** The project's public feedback board pages on a help site (#175): boards, roadmaps, posts. */
   feedbackPages?: (slug: string) => Promise<readonly { path: string; lastModified: Date }[]>;
+  /** The site whose board pages the app's own host serves (HELP_APP_HOST_SITE), if any. */
+  appHostSite?: string;
+}
+
+/** The app host's robots.txt and sitemap: its public pages, and the board pages of a site mounted on it. */
+async function appSeoFile(file: SeoFile, deps: SeoFileDeps): Promise<SeoFileResponse> {
+  if (file === SeoFiles.robots) {
+    return {
+      status: 200,
+      contentType: TEXT,
+      body: robotsTxt({ disallow: APP_PRIVATE_PATHS, sitemap: `${deps.appOrigin}/sitemap.xml` }),
+    };
+  }
+  const boards = deps.appHostSite === undefined ? [] : ((await deps.feedbackPages?.(deps.appHostSite)) ?? []);
+  const pages = [...deps.appPages(), ...boards].map(page => ({
+    loc: `${deps.appOrigin}${page.path}`,
+    lastModified: page.lastModified,
+  }));
+  return { status: 200, contentType: XML, body: sitemapXml(pages) };
 }
 
 export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): Promise<SeoFileResponse> {
@@ -60,17 +80,7 @@ export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): P
       : { status: 200, contentType: TEXT, body: key };
   }
   if (slug === null) {
-    if (file === SeoFiles.robots) {
-      return {
-        status: 200,
-        contentType: TEXT,
-        body: robotsTxt({ disallow: APP_PRIVATE_PATHS, sitemap: `${deps.appOrigin}/sitemap.xml` }),
-      };
-    }
-    const pages = deps
-      .appPages()
-      .map(page => ({ loc: `${deps.appOrigin}${page.path}`, lastModified: page.lastModified }));
-    return { status: 200, contentType: XML, body: sitemapXml(pages) };
+    return await appSeoFile(file, deps);
   }
   const origin = deps.helpSiteOrigin(slug);
   if (origin === null) {
@@ -91,8 +101,9 @@ export async function seoFile(file: SeoFile, host: string, deps: SeoFileDeps): P
     }
     const map = await deps.help.sitemap(slug);
     const pages = withLanguageVersions(origin, [map.homes, ...map.articles], map.sourceLocale);
-    // Feedback boards are served in one language, so they have no alternates.
-    const boards = (await deps.feedbackPages?.(slug)) ?? [];
+    // Feedback boards are served in one language, so they have no alternates. A site mounted on the
+    // app's host redirects its boards there, so they are listed in the app's sitemap instead.
+    const boards = slug === deps.appHostSite ? [] : ((await deps.feedbackPages?.(slug)) ?? []);
     const boardPages = boards.map(page => ({ loc: `${origin}${page.path}`, lastModified: page.lastModified }));
     return { status: 200, contentType: XML, body: sitemapXml([...pages, ...boardPages]) };
   } catch (error) {

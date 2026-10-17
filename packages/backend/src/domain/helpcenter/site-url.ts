@@ -2,6 +2,10 @@
 // customer domain HELP_CUSTOM_DOMAINS maps to the site, else <slug>.<HELP_SITES_DOMAIN>.
 // The same variables drive next.config.ts's host rewrites.
 
+import { appHostOriginFor, appHostSiteOf, hostnameOf } from '@mocco/common/help-hosts';
+
+import type { HelpHostEnv } from '@mocco/common/help-hosts';
+
 /* eslint-disable sonarjs/null-dereference -- every value here is a string from a split, never null */
 
 export function helpSiteOrigin(
@@ -46,4 +50,24 @@ export function helpSiteForHost(
   }
   const slug = hostname.slice(0, -(sitesDomain.length + 1));
   return /^[a-z0-9-]+$/u.test(slug) ? slug : null;
+}
+
+/**
+ * Where a site's /feedback pages are served, for canonical URLs, the sitemap, the changelog feed
+ * and links in mail: the app's own origin for HELP_APP_HOST_SITE, else the site's own origin.
+ */
+export function feedbackSiteOrigin(slug: string, env: HelpHostEnv): string | null {
+  return appHostOriginFor(slug, env) ?? helpSiteOrigin(slug, env);
+}
+
+/**
+ * The site whose /feedback pages a request's host serves: the site of a help host, or
+ * HELP_APP_HOST_SITE on the app's own host (SERVICE_DOMAIN); null for any other host.
+ */
+export function feedbackSiteForHost(host: string, env: HelpHostEnv): string | null {
+  const appHostSite = appHostSiteOf(env);
+  if (appHostSite !== null && hostnameOf(host).toLowerCase() === hostnameOf(env.SERVICE_DOMAIN).toLowerCase()) {
+    return appHostSite;
+  }
+  return helpSiteForHost(host, env);
 }
