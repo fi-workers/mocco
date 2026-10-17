@@ -80,6 +80,9 @@ export const Routes = {
     const path = `/workspaces/${id}/p/${projectId}/feedback`;
     return query === '' ? path : `${path}?${query}`;
   },
+  /** A feedback post in the console: triage, comments, votes, history and merging. */
+  projectFeedbackPost: (id: string, projectId: string, postId: string) =>
+    `/workspaces/${id}/p/${projectId}/feedback/posts/${postId}`,
   /** The project's feedback boards: create, rename, publish or delete them, and their categories. */
   projectFeedbackBoards: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/feedback/boards`,
   /** The project's help center (#96): setup, then its collections, sections and articles. */

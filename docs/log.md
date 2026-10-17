@@ -1106,3 +1106,11 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   "Most voted" sort (`sort: top`).
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: PR #487 (issue #175)
+
+## 2026-10-16 — Feedback console: post page
+
+- Each feedback post has a console page: status and category, editing, replies, the official response and internal
+  notes, votes (record one for a user, remove one), followers, history, and merging into another post on the board.
+  This finishes #175.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-post-page` (issue #175)
