@@ -53,6 +53,8 @@ jobs:
           - test-cli
           - test-probe
           - test-sdk
+          # the browser bundles' gzip budgets (needs the SDK build, so it builds first)
+          - sdk:budget
           - db:drift
           - schema:drift
           - build

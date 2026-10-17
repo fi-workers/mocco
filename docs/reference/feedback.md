@@ -35,6 +35,8 @@ code_refs:
   - packages/frontend/src/pages/_sites/[site]/feedback/[board]/index.tsx
   - packages/frontend/src/pages/_sites/[site]/feedback/[board]/[number].tsx
   - packages/frontend/src/lib/feedback-client.ts
+  - packages/sdk-core/src/feedback.ts
+  - packages/sdk-core/src/whats-new.ts
 ---
 
 # Feedback board model
@@ -180,6 +182,8 @@ A board's changelog (#176): entries the team writes in Markdown, each announcing
 - **Sitemap.** The help site's sitemap lists `/feedback/<board>/changelog` once the board has a published entry, and each published entry (the newest 1000 per project).
 
 **`/v1` and the "what's new" badge.** `GET /boards/{slug}/changelog` pages published entries newest first (the same projection). `GET /boards/{slug}/changelog/unread` answers `{ count, lastSeenAt }`: the entries published after the end user's stored cursor when a token comes with the request; without one (or before their first "seen"), after `?since=`, which a widget keeps on the device for visitors; else every entry. It counts up to 100 (`CHANGELOG_UNREAD_CAP`). `POST /boards/{slug}/changelog/seen` needs `feedback:write` and an end-user token and moves the cursor to now, never back (`greatest`), in `mocco_feedback_changelog_reads` (one row per board and end user, board-scoped by the composite FK, deleted with the board). It has its own limit, 120 an hour per end user, so a widget opening often doesn't use up the address's write budget. Private and missing boards are 404, as everywhere on `/v1`.
+
+**SDKs** (#177, first slice). `FeedbackClient` (`@mocco/sdk-core/feedback`) and `WhatsNew` (`@mocco/sdk-core/whats-new`) call these routes; `@mocco/js/whats-new` mounts a badge and popover on a page and `@mocco/react-native/whats-new` has `useWhatsNew` and `<WhatsNewBadge />` ([SDK packages](./sdk.md), [customer guide](../customer/feedback/whats-new.md)). Every client sends `since`: the `publishedAt` of the newest entry the device has marked seen, so for a visitor the count never depends on the device's clock, and a user who signs in later starts from what this device saw. Signed in, marking seen also posts `changelog/seen`, and the server's cursor wins from then on.
 
 ## MCP tools
 

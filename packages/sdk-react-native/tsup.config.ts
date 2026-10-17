@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/mocco-react-native.ts', 'src/ota.ts', 'src/messenger.tsx'],
+  entry: ['src/mocco-react-native.ts', 'src/ota.ts', 'src/messenger.tsx', 'src/whats-new.tsx'],
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,

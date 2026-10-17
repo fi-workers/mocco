@@ -1126,3 +1126,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   cursor (migration 0082), for an app's "what's new" badge.
 - Docs touched: `reference/feedback.md`, `reference/public-api.md`, `reference/feature-map.md`, `log.md`
 - Source: branch `feat/feedback-changelog-v1` (issue #176)
+
+## 2026-10-17 — "What's new" in the web and React Native SDKs
+
+- `@mocco/js/whats-new` (an unread badge on a page's button and a popover of the newest changelog entries),
+  `@mocco/js/feedback`, `@mocco/react-native/whats-new` (`useWhatsNew`, `<WhatsNewBadge />`), over a new
+  `FeedbackClient` and `WhatsNew` in `@mocco/sdk-core`; a 25 KB gzip budget for the widget, checked in CI.
+- Docs touched: `customer/feedback/whats-new.md`, `reference/sdk.md`, `reference/feedback.md`,
+  `reference/feature-map.md`, `specs/2026-09-24-feedback-design.md`, `log.md`
+- Source: branch `feat/sdk-whats-new` (issue #177)

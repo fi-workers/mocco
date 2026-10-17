@@ -17,6 +17,18 @@
       "types": "./dist/status.d.ts",
       "import": "./dist/status.js",
       "require": "./dist/status.cjs"
+    },
+    "./feedback": {
+      "@mocco/source": "./src/feedback.ts",
+      "types": "./dist/feedback.d.ts",
+      "import": "./dist/feedback.js",
+      "require": "./dist/feedback.cjs"
+    },
+    "./whats-new": {
+      "@mocco/source": "./src/whats-new.ts",
+      "types": "./dist/whats-new.d.ts",
+      "import": "./dist/whats-new.js",
+      "require": "./dist/whats-new.cjs"
     }
   },
   "main": "./dist/sdk-core.cjs",
