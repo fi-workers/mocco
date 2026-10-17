@@ -6,6 +6,8 @@ import {
   FeedbackCommentAuthorKinds,
   FeedbackDuplicateMethods,
   FeedbackDuplicateStates,
+  FeedbackLinkKinds,
+  FeedbackLinkStates,
   FeedbackSourceTypes,
   FeedbackStatusMailStates,
   FeedbackLimits,
@@ -98,6 +100,8 @@ import type {
   FeedbackCommentAuthorKind,
   FeedbackDuplicateMethod,
   FeedbackDuplicateState,
+  FeedbackLinkKind,
+  FeedbackLinkState,
   FeedbackSourceType,
   FeedbackStatusMailState,
   FeedbackPostStatus,
@@ -4858,6 +4862,107 @@ export const feedbackPostSources = pgTable(
     check(
       'mocco_feedback_post_sources_excerpt_check',
       sql`char_length(${t.excerpt}) <= ${sql.raw(String(FEEDBACK_SOURCE_EXCERPT_MAX))}`,
+    ),
+  ],
+);
+
+/** A GitHub issue or pull request linked to a post (#178), with what it was when last seen:
+ * title, state and, once merged, the merge commit. Webhooks (`issues`, `pull_request`) and the
+ * backfill job keep it current. The repo FK carries the workspace, so a post can never link a repo
+ * another workspace registered, even through a direct insert; LinkService also requires the repo
+ * to be linked to the post's project. */
+export const feedbackLinks = pgTable(
+  'mocco_feedback_links',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    repoId: uuid('repo_id').notNull(),
+    kind: text().$type<FeedbackLinkKind>().notNull(),
+    externalNumber: integer('external_number').notNull(),
+    externalNodeId: text('external_node_id').notNull(),
+    title: text().notNull(),
+    url: text().notNull(),
+    state: text().$type<FeedbackLinkState>().notNull(),
+    mergeCommitSha: text('merge_commit_sha'),
+    mergedAt: timestamp('merged_at'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // When the provider last told us its state (link, webhook or backfill); the backfill takes the oldest.
+    refreshedAt: timestamp('refreshed_at').notNull().defaultNow(),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_links_post_target_uq').on(t.postId, t.repoId, t.kind, t.externalNumber),
+    // Webhook fan-in: the links to one issue or pull request, across posts.
+    index('mocco_feedback_links_target_idx').on(t.repoId, t.kind, t.externalNumber),
+    index('mocco_feedback_links_refreshed_idx').on(t.refreshedAt),
+    // Lets closers reference (id, workspace_id).
+    unique('mocco_feedback_links_id_workspace_uq').on(t.id, t.workspaceId),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_links_post_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_feedback_links_project_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.repoId, t.workspaceId],
+      foreignColumns: [repos.id, repos.workspaceId],
+      name: 'mocco_feedback_links_repo_workspace_fk',
+    }).onDelete('cascade'),
+    check('mocco_feedback_links_kind_check', sql`${t.kind} IN (${sqlInList(Object.values(FeedbackLinkKinds))})`),
+    check('mocco_feedback_links_state_check', sql`${t.state} IN (${sqlInList(Object.values(FeedbackLinkStates))})`),
+    check('mocco_feedback_links_number_check', sql`${t.externalNumber} > 0`),
+    // Only a pull request merges.
+    check(
+      'mocco_feedback_links_merged_check',
+      sql`${t.state} <> '${sql.raw(FeedbackLinkStates.merged)}' OR ${t.kind} = '${sql.raw(FeedbackLinkKinds.pullRequest)}'`,
+    ),
+  ],
+);
+
+/** The pull requests that close a linked issue when merged (#178), in the issue's repo: derived
+ * pull request links, replaced whenever the issue is resolved again and kept current by
+ * `pull_request` webhooks like the links themselves. */
+export const feedbackLinkClosers = pgTable(
+  'mocco_feedback_link_closers',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    linkId: uuid('link_id').notNull(),
+    repoId: uuid('repo_id').notNull(),
+    prNumber: integer('pr_number').notNull(),
+    externalNodeId: text('external_node_id').notNull(),
+    title: text().notNull(),
+    url: text().notNull(),
+    state: text().$type<FeedbackLinkState>().notNull(),
+    mergeCommitSha: text('merge_commit_sha'),
+    mergedAt: timestamp('merged_at'),
+    createdAt,
+    updatedAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_link_closers_link_pr_uq').on(t.linkId, t.prNumber),
+    // Webhook fan-in for a pull request event.
+    index('mocco_feedback_link_closers_repo_pr_idx').on(t.repoId, t.prNumber),
+    foreignKey({
+      columns: [t.linkId, t.workspaceId],
+      foreignColumns: [feedbackLinks.id, feedbackLinks.workspaceId],
+      name: 'mocco_feedback_link_closers_link_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.repoId, t.workspaceId],
+      foreignColumns: [repos.id, repos.workspaceId],
+      name: 'mocco_feedback_link_closers_repo_workspace_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_link_closers_state_check',
+      sql`${t.state} IN (${sqlInList(Object.values(FeedbackLinkStates))})`,
     ),
   ],
 );

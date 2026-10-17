@@ -1,0 +1,23 @@
+{
+  "action": "closed",
+  "number": 42,
+  "installation": { "id": 12345678 },
+  "repository": {
+    "id": 654321,
+    "name": "example-repo",
+    "owner": { "login": "fi-workers" }
+  },
+  "pull_request": {
+    "number": 42,
+    "node_id": "PR_kwDOAbCdEf5aBcDeFg",
+    "title": "Add dark mode",
+    "html_url": "https://github.com/fi-workers/example-repo/pull/42",
+    "state": "closed",
+    "merged": true,
+    "merged_at": "2026-10-17T09:30:00Z",
+    "merge_commit_sha": "c0ffee0000000000000000000000000000000042",
+    "head": { "ref": "feat/dark-mode", "sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432" },
+    "base": { "ref": "main", "sha": "1b2c3d4e5f60718293a4b5c6d7e8f9012a3b4c5d" }
+  },
+  "sender": { "id": 4242, "login": "ada" }
+}

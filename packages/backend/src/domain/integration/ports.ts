@@ -1,3 +1,4 @@
+import type { FeedbackLinkKind, FeedbackLinkState } from '@mocco/common/feedback';
 import type { AvailableRepoDto } from '@mocco/common/integration';
 
 // Provider-agnostic ports (ISP: one per consumer). NO vendor imports here — the
@@ -98,4 +99,53 @@ export interface RepositoryDispatcher {
     eventType: string,
     clientPayload: Record<string, unknown>,
   ): Promise<void>;
+}
+
+/** A provider repo an installation can read, by the installation (`externalAccountId`) and name. */
+export interface TrackerRepoRef {
+  externalAccountId: string;
+  owner: string;
+  name: string;
+}
+
+/** An issue or pull request as the provider reports it now. */
+export interface TrackerItem {
+  kind: FeedbackLinkKind;
+  number: number;
+  /** The provider's global id (github: the GraphQL node id). */
+  nodeId: string;
+  title: string;
+  url: string;
+  state: FeedbackLinkState;
+  /** Pull requests only: the merge commit once merged (null otherwise, and on search results). */
+  mergeCommitSha: string | null;
+  mergedAt: Date | null;
+}
+
+/** A pull request that closes an issue when it merges, in the issue's own repo. */
+export type TrackerPullRequest = Omit<TrackerItem, 'kind'>;
+
+/** Reads a repo's issues and pull requests for feedback links (#178). The GitHub adapter
+ * implements it under the App's `issues: read` and `pull_requests: read`. */
+export interface IssueTracker {
+  /** Up to `limit` issues or pull requests matching `query` (words, or a number), best match first. */
+  search(repo: TrackerRepoRef, kind: FeedbackLinkKind, query: string, limit: number): Promise<TrackerItem[]>;
+  /** One issue or pull request, or null when the repo has none of that kind with the number. */
+  get(repo: TrackerRepoRef, kind: FeedbackLinkKind, number: number): Promise<TrackerItem | null>;
+  /** The pull requests in the issue's repo that close it when merged (open, closed or merged). */
+  closingPullRequests(repo: TrackerRepoRef, issueNumber: number): Promise<TrackerPullRequest[]>;
+}
+
+/** An issue or pull request in a registered repo changed (any action): what it is now. The repo
+ * is resolved through the installation's connection, never by the provider's repo id alone. */
+export interface TrackerEvent {
+  workspaceId: string;
+  repoId: string;
+  ref: TrackerRepoRef;
+  item: TrackerItem;
+}
+
+/** Takes issue and pull request changes from the webhook pass (feedback links' LinkService). */
+export interface TrackerEventSink {
+  applyProviderEvent(event: TrackerEvent): Promise<void>;
 }

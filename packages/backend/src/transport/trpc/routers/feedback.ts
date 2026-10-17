@@ -7,6 +7,7 @@
 // FeedbackOfficialInternalError and FeedbackMergeInvalidError → BAD_REQUEST). Entities are looked up within the
 // caller's workspace and project, so another tenant's id is NOT_FOUND.
 import {
+  FEEDBACK_LINK_SEARCH_LIMIT,
   FeedbackLimits,
   FeedbackVoteSources,
   feedbackBoardInputSchema,
@@ -14,6 +15,8 @@ import {
   feedbackCommentInputSchema,
   feedbackConvertInputSchema,
   feedbackEndUserIdSchema,
+  feedbackLinkCreateInputSchema,
+  feedbackLinkSearchInputSchema,
   feedbackPageInputSchema,
   feedbackPostCreateInputSchema,
   feedbackPostListInputSchema,
@@ -252,6 +255,44 @@ export const feedbackRouter = router({
   postSources: feedbackProcedure.input(postInput).query(async ({ ctx, input }) => {
     await ctx.feedbackPosts.requirePost(scopeOf(input), input.postId);
     return { sources: await ctx.feedbackIntake.sourcesOf(scopeOf(input), input.postId) };
+  }),
+
+  /** The repos linked to the project, whose issues and pull requests a post can link (#178). */
+  linkRepos: feedbackProcedure.input(projectInput).query(async ({ ctx, input }) => ({
+    repos: await ctx.feedbackLinks.repos(scopeOf(input)),
+  })),
+
+  /** Search one of the project's repos for issues or pull requests (words, or a number). */
+  linkSearch: feedbackProcedure
+    .input(projectInput.extend(feedbackLinkSearchInputSchema.shape))
+    .query(async ({ ctx, input }) => ({
+      items: await ctx.feedbackLinks.search(
+        scopeOf(input),
+        { repoId: input.repoId, kind: input.kind, query: input.query },
+        FEEDBACK_LINK_SEARCH_LIMIT,
+      ),
+    })),
+
+  /** The post's GitHub links, with their state and an issue's closing pull requests. */
+  links: feedbackProcedure.input(postInput).query(async ({ ctx, input }) => ({
+    links: await ctx.feedbackLinks.list(scopeOf(input), input.postId),
+  })),
+
+  /** Link an issue or pull request of one of the project's repos to the post. */
+  link: feedbackProcedure
+    .input(postInput.extend(feedbackLinkCreateInputSchema.shape))
+    .mutation(async ({ ctx, input }) => ({
+      link: await ctx.feedbackLinks.link(scopeOf(input), ctx.session.user.id, input.postId, {
+        repoId: input.repoId,
+        kind: input.kind,
+        number: input.number,
+      }),
+    })),
+
+  /** Remove one of the project's links. */
+  unlink: feedbackProcedure.input(projectInput.extend({ linkId: z.uuid() })).mutation(async ({ ctx, input }) => {
+    await ctx.feedbackLinks.unlink(scopeOf(input), ctx.session.user.id, input.linkId);
+    return { ok: true } as const;
   }),
 
   /** The post's comments, oldest first, internal notes included. */

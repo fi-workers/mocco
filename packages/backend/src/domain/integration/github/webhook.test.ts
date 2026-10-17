@@ -19,6 +19,8 @@ function readFixture(name: string): string {
 const pushFixture = readFixture('push.json');
 const installationDeletedFixture = readFixture('installation-deleted.json');
 const pullRequestOpenedFixture = readFixture('pull-request-opened.json');
+const pullRequestMergedFixture = readFixture('pull-request-closed-merged.json');
+const issuesClosedFixture = readFixture('issues-closed.json');
 
 describe('parseWebhook', () => {
   it('parses a push event into commits', () => {
@@ -60,6 +62,23 @@ describe('parseWebhook', () => {
   it('parses a pull_request action we do not act on instead of refusing it', () => {
     const closed = JSON.stringify({ ...JSON.parse(pullRequestOpenedFixture), action: 'closed' });
     expect(parseWebhook('pull_request', closed)).toMatchObject({ kind: 'pull_request', data: { action: 'closed' } });
+  });
+
+  it('parses a merged pull_request with what a feedback link shows', () => {
+    expect(parseWebhook('pull_request', pullRequestMergedFixture)).toMatchObject({
+      kind: 'pull_request',
+      data: {
+        action: 'closed',
+        pull_request: { number: 42, state: 'closed', merged: true, merge_commit_sha: expect.any(String) },
+      },
+    });
+  });
+
+  it('parses an issues event', () => {
+    expect(parseWebhook('issues', issuesClosedFixture)).toMatchObject({
+      kind: 'issues',
+      data: { action: 'closed', issue: { number: 12, state: 'closed' } },
+    });
   });
 
   it('returns { kind: "ignored" } for an event type we do not handle', () => {

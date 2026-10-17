@@ -276,3 +276,32 @@ export const feedbackConvertInputSchema = z.union([
   }),
 ]);
 export type FeedbackConvertInput = z.infer<typeof feedbackConvertInputSchema>;
+
+// ─── GitHub links (#178) ─────────────────────────────────────────────────────
+
+/** What a post links to in a project's repos. */
+export const FeedbackLinkKinds = { issue: 'issue', pullRequest: 'pull_request' } as const;
+export type FeedbackLinkKind = (typeof FeedbackLinkKinds)[keyof typeof FeedbackLinkKinds];
+export const feedbackLinkKindSchema = z.enum(Object.values(FeedbackLinkKinds));
+
+/** A linked issue or pull request's state; only a pull request is ever `merged`. */
+export const FeedbackLinkStates = { open: 'open', closed: 'closed', merged: 'merged' } as const;
+export type FeedbackLinkState = (typeof FeedbackLinkStates)[keyof typeof FeedbackLinkStates];
+
+/** The most issues or pull requests a picker search answers. */
+export const FEEDBACK_LINK_SEARCH_LIMIT = 10;
+
+/** Search a linked repo's issues or pull requests: words, or a number (`12`, `#12`). */
+export const feedbackLinkSearchInputSchema = z.object({
+  repoId: z.uuid(),
+  kind: feedbackLinkKindSchema,
+  query: z.string().trim().max(200),
+});
+
+/** Link an issue or pull request, by number, of a repo linked to the post's project. */
+export const feedbackLinkCreateInputSchema = z.object({
+  repoId: z.uuid(),
+  kind: feedbackLinkKindSchema,
+  number: z.int().min(1).max(2_147_483_647),
+});
+export type FeedbackLinkCreateInput = z.infer<typeof feedbackLinkCreateInputSchema>;

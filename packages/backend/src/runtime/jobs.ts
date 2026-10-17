@@ -22,6 +22,8 @@ import { feedbackUnsubscribeUrl } from '@backend/domain/feedback/EmailVoteServic
 import { embedderFromEnv } from '@backend/domain/feedback/embed/ai-gateway';
 import { createFeedbackHandlers, feedbackSchedules } from '@backend/domain/feedback/jobs';
 import { feedbackLinkDepsFromEnv } from '@backend/domain/feedback/link-config';
+import { LinkService } from '@backend/domain/feedback/LinkService';
+import { PostService } from '@backend/domain/feedback/PostService';
 import { StatusMailService } from '@backend/domain/feedback/StatusMailService';
 import { createFlagsDomain } from '@backend/domain/flags/compose';
 import { createFlagHandlers, flagSchedules } from '@backend/domain/flags/jobs';
@@ -41,6 +43,7 @@ import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
 import { InboundReceiptRepo } from '@backend/domain/inbound/repos/inbound-receipt.repo';
 import { InboundSourceRepo } from '@backend/domain/inbound/repos/inbound-source.repo';
+import { getIntegration } from '@backend/domain/integration/instance';
 import { JobHandlerRegistry, type JobHandler } from '@backend/domain/jobs/handlers';
 import { JobRunner } from '@backend/domain/jobs/JobRunner';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
@@ -90,6 +93,7 @@ import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
+import type { IssueTracker } from '@backend/domain/integration/ports';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
 import type { Stage0Deps } from '@backend/domain/ops/config';
@@ -131,6 +135,8 @@ export interface JobRunnerRuntimeDeps {
   feedbackEmbedder?: Embedder;
   /** Where a help site is served (its custom domain or subdomain), for links in feedback mail. */
   helpSiteOriginOf?: (slug: string) => string | null;
+  /** Reads GitHub issues and pull requests for the feedback link refresh; undefined without a GitHub App. */
+  issueTracker?: IssueTracker;
   /** The stage0 canary and heartbeat (relay design §11); undefined (off) without
    * OPS_HEARTBEAT_URL and OPS_CANARY_SOURCE_ID. */
   stage0?: Stage0Deps;
@@ -248,6 +254,13 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
         ...(deps.feedbackEmbedder !== undefined && { embedder: deps.feedbackEmbedder }),
         now: deps.now,
       }),
+      links: new LinkService({
+        db,
+        audit,
+        posts: new PostService({ db, audit, boards: new BoardService({ db, audit }) }),
+        tracker: deps.issueTracker,
+        now: deps.now,
+      }),
     }),
     ...createMessengerHandlers({
       push: new MessengerPushService({ db, sender: deps.push ?? new ExpoPushSender(), now: deps.now }),
@@ -360,6 +373,7 @@ export function getJobRunner(): JobRunner {
       statusSubscribers: subscriberDepsFromEnv(env),
       feedbackLinks: feedbackLinkDepsFromEnv(env),
       feedbackEmbedder: embedderFromEnv(env),
+      issueTracker: getIntegration()?.provider,
       helpSiteOriginOf: slug => helpSiteOrigin(slug, env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.
       stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),

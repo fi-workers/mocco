@@ -1183,3 +1183,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/env.md`, `reference/feature-map.md`,
   `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-embeddings` (issue #181)
+
+## 2026-10-17 — Feedback: GitHub issue and pull request links
+
+- Staff link a post to issues and pull requests of the project's repos from the post page (migration 0087,
+  `mocco_feedback_links` and `mocco_feedback_link_closers`); `issues` and `pull_request` webhooks and a 10-minute
+  refresh job keep their state and merge commit current, and an issue lists the pull requests that close it. The
+  GitHub App needs Issues: read and the `issues` event; existing installations accept the change on GitHub.
+- Docs touched: `reference/feedback.md`, `reference/github-app.md` (new), `reference/feature-map.md`,
+  `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-github-links` (issue #178)

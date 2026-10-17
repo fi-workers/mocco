@@ -1,6 +1,8 @@
+import { FeedbackLinkKinds } from '@mocco/common/feedback';
+
 import { BadRequestError, ConflictError, NotFoundError } from '@backend/domain/errors';
 
-import type { ChangelogEntryState, FeedbackPostStatus } from '@mocco/common/feedback';
+import type { ChangelogEntryState, FeedbackLinkKind, FeedbackPostStatus } from '@mocco/common/feedback';
 
 /** A board the project doesn't have — NOT_FOUND. */
 export class FeedbackBoardNotFoundError extends NotFoundError {
@@ -155,5 +157,49 @@ export class FeedbackSourceNotFoundError extends NotFoundError {
   constructor(sourceType: string, sourceId: string, options?: ErrorOptions) {
     super(`The ${sourceType} ${sourceId} was not found`, options);
     this.name = 'FeedbackSourceNotFoundError';
+  }
+}
+
+/** A repo that isn't linked to the post's project (another project's, another workspace's, or
+ * none) — NOT_FOUND, so a post can only link a repo its project links. */
+export class FeedbackLinkRepoNotFoundError extends NotFoundError {
+  constructor(repoId: string, options?: ErrorOptions) {
+    super(`Repo ${repoId} is not linked to this project`, options);
+    this.name = 'FeedbackLinkRepoNotFoundError';
+  }
+}
+
+/** The repo has no issue or pull request with that number — NOT_FOUND. */
+export class FeedbackLinkTargetNotFoundError extends NotFoundError {
+  constructor(kind: FeedbackLinkKind, externalNumber: number, options?: ErrorOptions) {
+    super(
+      `The repo has no ${kind === FeedbackLinkKinds.issue ? 'issue' : 'pull request'} #${String(externalNumber)}`,
+      options,
+    );
+    this.name = 'FeedbackLinkTargetNotFoundError';
+  }
+}
+
+/** A link the project doesn't have — NOT_FOUND. */
+export class FeedbackLinkNotFoundError extends NotFoundError {
+  constructor(linkId: string, options?: ErrorOptions) {
+    super(`Feedback link ${linkId} was not found`, options);
+    this.name = 'FeedbackLinkNotFoundError';
+  }
+}
+
+/** The post links that issue or pull request already — CONFLICT. */
+export class FeedbackLinkExistsError extends ConflictError {
+  constructor(options?: ErrorOptions) {
+    super('The post is already linked to it', options);
+    this.name = 'FeedbackLinkExistsError';
+  }
+}
+
+/** This server has no GitHub App, so issues and pull requests can't be read — BAD_REQUEST. */
+export class FeedbackIssueTrackerUnavailableError extends BadRequestError {
+  constructor(options?: ErrorOptions) {
+    super('GitHub is not set up on this server', options);
+    this.name = 'FeedbackIssueTrackerUnavailableError';
   }
 }

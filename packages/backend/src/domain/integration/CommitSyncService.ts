@@ -7,12 +7,12 @@ import {
   GithubPullRequestActions,
   WebhookKinds,
 } from '@backend/domain/integration/github/constants';
-import { toSourceCommit } from '@backend/domain/integration/github/provider';
+import { toSourceCommit, toTrackerIssue, toTrackerPull } from '@backend/domain/integration/github/provider';
 import { EntityNotFoundError } from '@backend/infra/db/errors';
 
 import type { CommitConfigService } from '@backend/domain/integration/CommitConfigService';
 import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-events';
-import type { CommitSource, SourceCommit } from '@backend/domain/integration/ports';
+import type { CommitSource, SourceCommit, TrackerEventSink, TrackerItem } from '@backend/domain/integration/ports';
 import type { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
 import type { ConnectStateRepo } from '@backend/domain/integration/repos/connect-state.repo';
 import type { ProviderConnectionRepo } from '@backend/domain/integration/repos/provider-connection.repo';
@@ -22,8 +22,15 @@ import type { WebhookDeliveryRepo } from '@backend/domain/integration/repos/webh
 type PushData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.push }>['data'];
 type InstallationData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.installation }>['data'];
 type PullRequestData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.pull_request }>['data'];
+type IssuesData = Extract<ParsedWebhook, { kind: typeof WebhookKinds.issues }>['data'];
 // Row shapes are taken from the repos (a service never imports the drizzle schema).
 type RepoRow = Awaited<ReturnType<RepoRepo['getByConnectionAndExternalRepoId']>>;
+type ConnectionRow = NonNullable<Awaited<ReturnType<ProviderConnectionRepo['findByExternalAccount']>>>;
+/** A webhook's repo, resolved through its installation's connection. */
+interface ResolvedRepo {
+  connection: ConnectionRow;
+  repo: RepoRow;
+}
 type CommitInsert = Parameters<CommitRepo['upsertMany']>[0][number];
 
 const BRANCH_REF_PREFIX = 'refs/heads/';
@@ -57,6 +64,9 @@ export interface CommitSyncServiceDeps {
   flagFiles?: DefaultBranchPushSink;
   /** Reports what a pull request's `.mocco/flags.yml` would do once merged (#146); omitted where not wired. */
   flagPlans?: PullRequestSink;
+  /** Keeps feedback links' state current from `issues` and `pull_request` webhooks (#178); omitted
+   * where not wired. */
+  trackerEvents?: TrackerEventSink;
 }
 
 /** A push to a repo's default branch, for consumers that read repo files (flags-as-code). */
@@ -92,6 +102,46 @@ const PLANNED_PULL_REQUEST_ACTIONS = new Set<string>(Object.values(GithubPullReq
 
 /** All zeros: the push deleted the branch. */
 const DELETED_SHA = /^0+$/u;
+
+/** Hand a pull request into the default branch to the flags plan check. Best-effort, like the push sink. */
+async function checkPullRequest(data: PullRequestData, resolved: ResolvedRepo, sink: PullRequestSink): Promise<void> {
+  if (data.pull_request.base.ref !== resolved.repo.defaultBranch) {
+    return;
+  }
+  const { connection, repo } = resolved;
+  try {
+    await sink.checkPullRequest({
+      workspaceId: repo.workspaceId,
+      repoId: repo.id,
+      ref: { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
+      number: data.pull_request.number,
+      headSha: data.pull_request.head.sha,
+      baseSha: data.pull_request.base.sha,
+    });
+  } catch (error) {
+    console.error(`[commit-sync] flags plan check failed for repo ${repo.id} PR #${data.pull_request.number}`, error);
+  }
+}
+
+/** Hand what an issue or pull request is now to the feedback links. Best-effort: a payload
+ * without the fields a link shows, or a failure there, is logged and dropped. */
+async function notifyTracker(resolved: ResolvedRepo, sink: TrackerEventSink, toItem: () => TrackerItem | null) {
+  const { connection, repo } = resolved;
+  try {
+    const item = toItem();
+    if (item === null) {
+      return;
+    }
+    await sink.applyProviderEvent({
+      workspaceId: repo.workspaceId,
+      repoId: repo.id,
+      ref: { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
+      item,
+    });
+  } catch (error) {
+    console.error(`[commit-sync] feedback link update failed for repo ${repo.id}`, error);
+  }
+}
 
 /**
  * Turns provider webhooks into synced commit rows and applies installation-lifecycle
@@ -224,27 +274,35 @@ export class CommitSyncService {
     }
   }
 
-  /** Hand a pull request into the default branch to the flags plan check. Best-effort, like the push sink. */
-  private async checkPullRequest(data: PullRequestData): Promise<void> {
-    if (this.deps.flagPlans === undefined || !PLANNED_PULL_REQUEST_ACTIONS.has(data.action)) {
+  /** A pull request event: the flags plan check (head moves into the default branch) and the
+   * feedback links (any action). Resolved once, and not at all when neither listens. */
+  private async handlePullRequest(data: PullRequestData): Promise<void> {
+    const { flagPlans, trackerEvents } = this.deps;
+    const plans = flagPlans !== undefined && PLANNED_PULL_REQUEST_ACTIONS.has(data.action) ? flagPlans : undefined;
+    if (plans === undefined && trackerEvents === undefined) {
       return;
     }
     const resolved = await this.resolveRepo(data.installation.id, data.repository.id, 'pull_request');
-    if (resolved === undefined || data.pull_request.base.ref !== resolved.repo.defaultBranch) {
+    if (resolved === undefined) {
       return;
     }
-    const { connection, repo } = resolved;
-    try {
-      await this.deps.flagPlans.checkPullRequest({
-        workspaceId: repo.workspaceId,
-        repoId: repo.id,
-        ref: { externalAccountId: connection.externalAccountId, owner: repo.owner, name: repo.name },
-        number: data.pull_request.number,
-        headSha: data.pull_request.head.sha,
-        baseSha: data.pull_request.base.sha,
-      });
-    } catch (error) {
-      console.error(`[commit-sync] flags plan check failed for repo ${repo.id} PR #${data.pull_request.number}`, error);
+    if (plans !== undefined) {
+      await checkPullRequest(data, resolved, plans);
+    }
+    if (trackerEvents !== undefined) {
+      await notifyTracker(resolved, trackerEvents, () => toTrackerPull(data.pull_request));
+    }
+  }
+
+  /** An issue event: the feedback links only. */
+  private async handleIssue(data: IssuesData): Promise<void> {
+    const { trackerEvents } = this.deps;
+    if (trackerEvents === undefined) {
+      return;
+    }
+    const resolved = await this.resolveRepo(data.installation.id, data.repository.id, 'issues');
+    if (resolved !== undefined) {
+      await notifyTracker(resolved, trackerEvents, () => toTrackerIssue(data.issue));
     }
   }
 
@@ -258,6 +316,11 @@ export class CommitSyncService {
     return new CommitSyncService({ ...this.deps, flagPlans: sink });
   }
 
+  /** The same service, also handing issue and pull request changes to `sink` (feedback links, #178). */
+  withTrackerEvents(sink: TrackerEventSink): CommitSyncService {
+    return new CommitSyncService({ ...this.deps, trackerEvents: sink });
+  }
+
   /** Route a parsed webhook to its handler. The webhook route calls this in `waitUntil`. */
   async handle(parsed: ParsedWebhook): Promise<void> {
     if (parsed.kind === WebhookKinds.push) {
@@ -269,7 +332,11 @@ export class CommitSyncService {
       return;
     }
     if (parsed.kind === WebhookKinds.pull_request) {
-      await this.checkPullRequest(parsed.data);
+      await this.handlePullRequest(parsed.data);
+      return;
+    }
+    if (parsed.kind === WebhookKinds.issues) {
+      await this.handleIssue(parsed.data);
       return;
     }
     if (parsed.kind === WebhookKinds.installation_repositories) {

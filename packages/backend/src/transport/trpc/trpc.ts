@@ -12,6 +12,7 @@ import type { ChangelogService } from '@backend/domain/feedback/ChangelogService
 import type { CommentService } from '@backend/domain/feedback/CommentService';
 import type { DuplicateService } from '@backend/domain/feedback/DuplicateService';
 import type { IntakeService } from '@backend/domain/feedback/IntakeService';
+import type { LinkService } from '@backend/domain/feedback/LinkService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
@@ -133,6 +134,8 @@ export interface Context {
   feedbackMerges: MergeService;
   feedbackDuplicates: DuplicateService;
   feedbackIntake: IntakeService;
+  /** GitHub issues and pull requests linked to posts (#178). */
+  feedbackLinks: LinkService;
   /** A board's changelog (#176). */
   feedbackChangelog: ChangelogService;
   /** The status page: pages and components, incidents, maintenance (#148). */
