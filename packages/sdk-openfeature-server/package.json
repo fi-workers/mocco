@@ -1,6 +1,6 @@
 {
   "name": "@mocco/openfeature-server",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "An OpenFeature server provider for Mocco feature flags: local evaluation of the ETag-polled ruleset.",
   "license": "MIT",
   "type": "module",

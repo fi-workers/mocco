@@ -1,6 +1,6 @@
 {
   "name": "@mocco/js",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Mocco for the browser: one SDK, product features as subpath exports.",
   "license": "MIT",
   "type": "module",
