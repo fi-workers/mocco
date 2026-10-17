@@ -3,6 +3,7 @@
 import { apiKeyRouter } from '@backend/transport/trpc/routers/apiKey';
 import { approvalRouter } from '@backend/transport/trpc/routers/approval';
 import { auditRouter } from '@backend/transport/trpc/routers/audit';
+import { changelogRouter } from '@backend/transport/trpc/routers/changelog';
 import { credentialGrantRouter } from '@backend/transport/trpc/routers/credentialGrant';
 import { feedbackRouter } from '@backend/transport/trpc/routers/feedback';
 import { flagsRouter } from '@backend/transport/trpc/routers/flags';
@@ -40,6 +41,7 @@ export const appRouter = router({
   messenger: messengerRouter,
   help: helpRouter,
   feedback: feedbackRouter,
+  changelog: changelogRouter,
   status: statusRouter,
   apiKey: apiKeyRouter,
   mcp: mcpRouter,

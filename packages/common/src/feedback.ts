@@ -150,3 +150,63 @@ export const feedbackCommentInputSchema = z.object({
   isInternal: z.boolean().default(false),
 });
 export type FeedbackCommentInput = z.output<typeof feedbackCommentInputSchema>;
+
+// ─── Changelog (#176) ────────────────────────────────────────────────────────
+
+/** Where a changelog entry is: being written, waiting for its publish time, or public. */
+export const ChangelogEntryStates = { draft: 'draft', scheduled: 'scheduled', published: 'published' } as const;
+export type ChangelogEntryState = (typeof ChangelogEntryStates)[keyof typeof ChangelogEntryStates];
+export const changelogEntryStateSchema = z.enum(
+  Object.values(ChangelogEntryStates) as [ChangelogEntryState, ...ChangelogEntryState[]],
+);
+
+/** What kind of change an entry announces; an entry has any of them. */
+export const ChangelogTags = { new: 'new', improved: 'improved', fixed: 'fixed' } as const;
+export type ChangelogTag = (typeof ChangelogTags)[keyof typeof ChangelogTags];
+export const changelogTagSchema = z.enum(Object.values(ChangelogTags) as [ChangelogTag, ...ChangelogTag[]]);
+
+export const ChangelogLimits = {
+  titleMax: 200,
+  bodyMax: 50_000,
+  /** How many posts one entry can announce. */
+  postsMax: 50,
+} as const;
+
+/** A url-safe entry address within its board: lowercase alphanumerics and inner hyphens, 1–80
+ * chars. Mirrors the DB CHECK on `mocco_changelog_entries.slug`. */
+export const CHANGELOG_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+
+const changelogTitle = z.string().trim().min(1).max(ChangelogLimits.titleMax);
+const changelogBody = z.string().trim().max(ChangelogLimits.bodyMax);
+const changelogTags = z.array(changelogTagSchema).max(Object.keys(ChangelogTags).length);
+const changelogPostIds = z.array(z.uuid()).max(ChangelogLimits.postsMax);
+
+/** A new draft. The slug defaults to one made from the title (made unique on the board). */
+export const changelogEntryCreateInputSchema = z.object({
+  boardId: z.uuid(),
+  title: changelogTitle,
+  body: changelogBody.optional(),
+  slug: z.string().regex(CHANGELOG_SLUG_PATTERN).optional(),
+  tags: changelogTags.optional(),
+  /** The board's posts this entry announces. */
+  postIds: changelogPostIds.optional(),
+});
+export type ChangelogEntryCreateInput = z.infer<typeof changelogEntryCreateInputSchema>;
+
+/** A partial edit, in any state: only the given fields change; `postIds` and `tags` replace the lists. */
+export const changelogEntryUpdateInputSchema = z.object({
+  title: changelogTitle.optional(),
+  body: changelogBody.optional(),
+  slug: z.string().regex(CHANGELOG_SLUG_PATTERN).optional(),
+  tags: changelogTags.optional(),
+  postIds: changelogPostIds.optional(),
+});
+export type ChangelogEntryUpdateInput = z.infer<typeof changelogEntryUpdateInputSchema>;
+
+export const changelogEntryListInputSchema = z.object({
+  boardId: z.uuid(),
+  state: changelogEntryStateSchema.optional(),
+  limit: z.int().min(1).max(FeedbackLimits.listMax).default(FeedbackLimits.listDefault),
+  offset: z.int().min(0).default(0),
+});
+export type ChangelogEntryListQuery = z.output<typeof changelogEntryListInputSchema>;

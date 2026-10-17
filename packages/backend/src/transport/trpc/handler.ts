@@ -24,6 +24,7 @@ import type { AuditService } from '@backend/domain/audit/AuditService';
 import type { GrantService } from '@backend/domain/credential/GrantService';
 import type { RunService } from '@backend/domain/execution/RunService';
 import type { BoardService } from '@backend/domain/feedback/BoardService';
+import type { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import type { CommentService } from '@backend/domain/feedback/CommentService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
@@ -115,6 +116,7 @@ export interface TrpcDeps extends Services {
   feedbackComments: CommentService;
   feedbackSubscriptions: SubscriptionService;
   feedbackMerges: MergeService;
+  feedbackChangelog: ChangelogService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
   statusMaintenances: MaintenanceService;
@@ -185,6 +187,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         feedbackComments: deps.feedbackComments,
         feedbackSubscriptions: deps.feedbackSubscriptions,
         feedbackMerges: deps.feedbackMerges,
+        feedbackChangelog: deps.feedbackChangelog,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,
         statusMaintenances: deps.statusMaintenances,

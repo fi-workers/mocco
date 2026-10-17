@@ -1125,3 +1125,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
   so OTA hosting could not accept a release.
 - Docs touched: `reference/storage.md`, `log.md`
+
+## 2026-10-17 — Feedback changelog: entries, states and the publish job
+
+- Changelog entries per board (draft, scheduled, published; tags; the posts they announce), the `changelog` tRPC
+  router and a one-minute job that publishes scheduled entries. Migration 0081.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `log.md`
+- Source: branch `feat/feedback-changelog-core` (issue #176)

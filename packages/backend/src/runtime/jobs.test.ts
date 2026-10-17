@@ -13,6 +13,7 @@ import { AuditService } from '@backend/domain/audit/AuditService';
 import { AuditRepo } from '@backend/domain/audit/repos/audit.repo';
 import { EventJobKinds } from '@backend/domain/events/EventBus';
 import { createEventBus } from '@backend/domain/events/subscriptions';
+import { FeedbackJobKinds } from '@backend/domain/feedback/jobs';
 import { FlagJobKinds } from '@backend/domain/flags/jobs';
 import { createHelpDomain } from '@backend/domain/helpcenter/compose';
 import { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
@@ -90,6 +91,7 @@ describe('job runtime composition (pglite)', () => {
         OtaJobKinds.pruneUploadSessions,
         OtaJobKinds.rollupMetrics,
         OtaJobKinds.pruneMetrics,
+        FeedbackJobKinds.publishDueChangelog,
         FlagJobKinds.expireChangesets,
         FlagJobKinds.detectStale,
         FlagJobKinds.staleDigest,
