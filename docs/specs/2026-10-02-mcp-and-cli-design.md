@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -178,6 +178,7 @@ has several servers loaded.
 | `mocco_status_monitors_search` | A project's monitors: target host, state, components (state, name text) |
 | `mocco_status_monitors_get` | One monitor: latest state changes, open monitor incident, latest rounds |
 | `mocco_status_locations_search` | The workspace's probe locations, last seen and agent version, no token (kind) |
+| `mocco_status_run_incidents_list` | The status incidents a run is linked to, across the workspace's projects |
 | `mocco_help_articles_search` | A project's published help articles matching text (all or any word), or all in order; in a language where translated |
 | `mocco_help_articles_get` | One published help article as Markdown (excerpt or whole), in a language where translated, with its languages and 30-day helpfulness |
 | `mocco_help_translations_list` | A help center's translation counts per language and the published articles a filter lists (attention, stale, failed, all), with each language's status; offset-paged |
@@ -208,6 +209,12 @@ has several servers loaded.
 | `mocco_inbound_sources_create` | Add a GitHub webhook source, never returning its secret (owner or admin) |
 | `mocco_inbound_sources_pause` / `_resume` / `_delete` | Pause, resume or delete a webhook source (owner or admin) |
 | `mocco_monitors_check` | Run a monitor's next round now (`status:write`) |
+| `mocco_status_incident_create` | Open a published incident; the confirmation quotes what will be published (`status:write`) |
+| `mocco_status_incident_update_post` | Post an incident update, moving its status up to resolved; bound to the status and latest update shown (`status:write`) |
+| `mocco_status_incident_components_set` / `_postmortem_set` | Replace an incident's affected components, or set or clear its postmortem (`status:write`) |
+| `mocco_status_incident_run_link` / `_run_unlink` / `_runs_correlate` | Link or unlink a deploy, or recompute Mocco's suggestions (`status:write`) |
+| `mocco_status_maintenance_schedule` / `_cancel` | Schedule or cancel a maintenance window (`status:write`) |
+| `mocco_status_component_status_set` | Set the status a component reports by hand (`status:write`) |
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
 | `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
@@ -261,7 +268,7 @@ still refuses what the role refuses.
 | `runs:read` | List and read runs, steps and gates |
 | `approvals:read` | List and read approval requests and their votes |
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
-| `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
+| `status:write` | On MCP, change a project's status pages — incidents, deploy links, maintenance and component statuses (`mocco_status_incident_*`, `mocco_status_maintenance_*`, `mocco_status_component_status_set`) — and run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
 | `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
 

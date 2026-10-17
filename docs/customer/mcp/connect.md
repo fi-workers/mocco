@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -64,6 +64,7 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_status_monitors_search` | Which HTTP, TCP and heartbeat monitors a project has, what each checks (the host only), its state (for example the ones down) and since when, the components it reports on, and for a heartbeat its period, grace, last ping and last run |
 | `mocco_status_monitors_get` | One monitor: its latest state changes and why, its latest rounds, and the incident it opened that is still open |
 | `mocco_status_locations_search` | Where monitors run: Mocco's hosted regions, your private locations and the embedded probe, with when each agent was last seen |
+| `mocco_status_run_incidents_list` | Which status incidents a run is linked to, across your projects |
 | `mocco_help_articles_search` | Which published help center articles match a question (every word, or any word for a customer's message), or every article in order, in a language where translated |
 | `mocco_help_articles_get` | One published help article's Markdown, in the asked language where translated, the languages it is published in, and how readers answered "Was this helpful?" in the last 30 days (with their newest comments when detailed) |
 | `mocco_help_translations_list` | How far the help center is translated: per language, how many articles are reviewed, machine translated, out of date, failed or not translated, and which articles need attention (or are stale, or failed, or all), with each one's status per language |
@@ -148,6 +149,14 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_inbound_sources_pause` / `_resume` | Pauses a webhook source (its deliveries are refused) or resumes it |
 | `mocco_inbound_sources_delete` | Deletes a webhook source and the deliveries it received |
 | `mocco_monitors_check` | Runs an HTTP or TCP monitor's next round now, for example right after a deploy, instead of at its interval |
+| `mocco_status_incident_create` | Opens an incident on a status page as you; it is public at once and sent to the page's subscribers |
+| `mocco_status_incident_update_post` | Posts an update to an incident as you, moving its status (up to resolved, which closes it) |
+| `mocco_status_incident_components_set` | Replaces the components an incident affects and how badly |
+| `mocco_status_incident_postmortem_set` | Sets or clears an incident's postmortem |
+| `mocco_status_incident_run_link` / `_run_unlink` | Links a deploy to an incident (or as the fix), or removes a link |
+| `mocco_status_incident_runs_correlate` | Recomputes the deploys Mocco suggests for an incident; the ones people linked stay |
+| `mocco_status_maintenance_schedule` / `_cancel` | Schedules a maintenance window, or cancels one (one in progress ends now) |
+| `mocco_status_component_status_set` | Sets the status a component reports by hand |
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
 | `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
@@ -183,9 +192,34 @@ Installing the bot in a Discord server and removing a channel stay in the consol
 round, so it follows the same rules as the other changes: the workspace must allow agents to
 make changes, and your client first shows the monitor, what it checks, its state and when its
 next round is due. Nothing runs until you answer yes. It needs its own permission, asked for the
-first time it is used: **Run your status monitors' checks now, as you**. Any member of the
+first time it is used: **Change your status pages as you** (below). Any member of the
 project may check its monitors, as in the console. A heartbeat (its job pings it) and a paused
 monitor are refused before you are asked anything.
+
+**Running an incident from your agent.** The same permission and the same workspace switch
+let an agent do what the status page's incident and maintenance screens do: open an incident,
+post its updates up to resolved, change the components it affects, set its postmortem, link the
+deploy that caused or fixed it, schedule and cancel maintenance, and set a component's status.
+The permission is asked for the first time one of them is used: **Change your status pages as
+you: open and update incidents, schedule maintenance, set component statuses and run your
+monitors' checks**. Any member of the project may use them, as in the console, and each is
+recorded in the audit trail naming you.
+
+What your agent writes on a published incident is what your customers read, so your client
+always shows it first, exactly as it will appear, and says **PUBLIC** when it goes on the page
+and to its subscribers. For a new incident that is the page, the title, severity, status,
+affected components and the first update. For an update it is the incident's status now and its
+latest update, where the update moves it, and your text; an update to a draft incident (one a
+monitor opened, which only your team sees) says it stays in the console. Nothing is published
+until you answer yes. Each confirmation is for what it showed: if a teammate posts an update,
+changes a component or edits the postmortem before you answer, your answer is refused and you
+are asked again with what is there now, and answering the same confirmation twice changes
+things once. A move the incident can't make (back to investigating, or anything after resolved)
+is refused before you are asked, with the moves it can make.
+
+Some things stay in the console on purpose: deleting a status page (it deletes everything on it,
+with no undo), issuing or rotating a location's token or a heartbeat's ping URL (a credential is
+shown once, and never to an agent), and disabling a location.
 
 **Replying and assigning in the messenger.** `mocco_messenger_reply` sends what the inbox's
 **Send** does: your user reads it in the app, and gets a push notification if they turned them
@@ -383,6 +417,11 @@ Leave it off for workspaces where an agent only needs to report. That is most of
 | "Agents may not run checks in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… is a heartbeat; its job pings it" | A heartbeat has no rounds to run. Its last ping is in `mocco_status_monitors_search` |
 | "… is paused; resume it in the console to check it" | Resume the monitor in the console first |
+| "This connection may not open incidents" (or post incident updates, schedule maintenance, …) | The app was never allowed to change status pages. Reconnect it and allow the status permission when asked |
+| "Agents may not open incidents in this workspace" (or post incident updates, …) | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
+| "That confirmation was for a different change" after a status page change | Someone changed the incident, window or component before you answered. Call again to be asked with what is there now |
+| "An incident can't go from … to …" | The incident lifecycle doesn't allow that move. The message names the moves it allows |
+| "Status incident … was not found" (or page, component, maintenance) | It is in another project or workspace, or the id is wrong. `mocco_status_incidents_search` and `mocco_status_pages_get` give the ids |
 | "This connection may not reply in the messenger" or "… may not assign conversations" | The app was never allowed to reply or assign. Reconnect it and allow the messenger permission when asked |
 | "Agents may not reply in the messenger in this workspace" | Changes are off for that workspace. An owner or admin can turn them on in **Settings → Agents** |
 | "… isn't a member of this workspace" | A conversation can only go to a member of the workspace. `mocco_messenger_conversations_search` names the people who have conversations now |

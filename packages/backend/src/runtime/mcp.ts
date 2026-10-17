@@ -55,6 +55,12 @@ export function getMcpHandler(): McpHttpHandler {
       statusMonitors: status.statusMonitors,
       statusLocations: status.statusLocations,
       statusCorrelation: status.statusCorrelation,
+      statusChanges: {
+        pages: status.statusPages,
+        incidents: status.statusIncidents,
+        correlation: status.statusCorrelation,
+        maintenances: status.statusMaintenances,
+      },
       helpPublic: getHelpDomain().helpPublic,
       helpFeedback: getHelpDomain().helpFeedback,
       helpTranslations: getHelpDomain().helpTranslations,

@@ -16,7 +16,8 @@ const SCOPE_DESCRIPTIONS: Record<string, string> = {
   email: 'See your email address',
   offline_access: 'Stay signed in without asking you again',
   [McpScopes.approvalsWrite]: 'Approve or reject changes as you, in workspaces that allow agents to decide',
-  [McpScopes.statusWrite]: "Run your status monitors' checks now, as you",
+  [McpScopes.statusWrite]:
+    "Change your status pages as you: open and update incidents, schedule maintenance, set component statuses and run your monitors' checks",
   [McpScopes.messengerWrite]: 'Reply to and assign your messenger conversations, as you',
   [McpScopes.feedbackWrite]: 'Move, comment on, vote on and merge your feedback posts, as you',
   [McpScopes.otaWrite]:

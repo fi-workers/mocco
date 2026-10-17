@@ -160,8 +160,12 @@ async function pagesToRead(deps: StatusToolDeps, scope: ProjectInScope, pageId: 
   return [page];
 }
 
-/** The one page a read is about: the named one, or the project's only page. */
-async function onePage(deps: StatusToolDeps, scope: ProjectInScope, pageId: string | undefined) {
+/** The one page a call is about: the named one, or the project's only page. */
+export async function onePage(
+  deps: { statusPages: Pick<StatusPageService, 'listPages'> },
+  scope: ProjectInScope,
+  pageId: string | undefined,
+) {
   if (pageId !== undefined) {
     return pageId;
   }
