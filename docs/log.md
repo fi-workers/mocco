@@ -1119,6 +1119,13 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/ota-hosting.md`, `log.md`
 - Source: branch `fix/ota-rollback-runtime-scope`
 
+## 2026-10-17 — Production object storage
+
+- Production now has object storage: AWS S3 `fi-workers-mocco-storage` in `ap-northeast-2`, public only under `pub/`,
+  written by an IAM user scoped to that bucket. Before, every storage feature in production answered "not configured",
+  so OTA hosting could not accept a release.
+- Docs touched: `reference/storage.md`, `log.md`
+
 ## 2026-10-16 — Help center: rich text article editor
 
 - Articles open in a rich editor (editorcn's block editor on Tiptap 3, vendored) that stays Markdown in and out and
