@@ -268,7 +268,7 @@ A board's changelog (#176): entries the team writes in Markdown, each announcing
 
 **Audit.** `feedback.changelog.published` (by the team member, or with no actor from the job), `feedback.changelog.unpublished` (only from published) and `feedback.changelog.deleted`, each with the board, slug and title. Edits and scheduling aren't audited.
 
-**Router.** `changelog.entries`, `entry`, `create`, `update`, `publish`, `schedule` (`publishAt`), `unpublish` and `delete`, behind `productProcedure(Products.feedback)` like the feedback router. A test calls every procedure as a non-member and with another tenant's ids (NOT_FOUND).
+**Router.** `changelog.entries`, `entry`, `create`, `update`, `publish`, `schedule` (`publishAt`), `unpublish` and `delete`, behind `productProcedure(Products.feedback)` like the feedback router. A test calls every procedure as a non-member and with another tenant's ids (NOT_FOUND). Every procedure has an MCP tool ([MCP tools](#mcp-tools)).
 
 **Public changelog.** A public board's published entries are on its help site, beside its board and roadmap:
 
@@ -346,6 +346,21 @@ Seventeen more close the gap between the console and agents (ADR 0025), behind t
 | `mocco_feedback_post_sources_list` | `PostService.requirePost`, `IntakeService.sourcesOf` | A post's requests with their words (cut at 500 characters unless detailed, which adds who converted each) |
 
 The changes have the locks of every other feedback change: `feedback:write`, the opt-in and a confirmation round trip naming exactly what would change. Edits take only the fields given and answer without asking when nothing would change; each confirmation records the current values (a post's body as a hash), so an edit by anyone before the answer is refused as a different change. A taken board or category slug, a category of another board, and an incomplete or merged conversion target are refused before asking. Deleting a category says how many posts lose it (`or more` past a page). A dismissal reads the pair with `DuplicateService.requireOpen` (new: one open pair whose posts are both unmerged, else `FeedbackDuplicateNotFoundError`) and a conversion reads the preview; a request that became a post already answers that post without asking. Removing a vote is bound to the vote's state, and a merged post is refused.
+
+Eight more (`transport/mcp/tools/changelog.ts`) cover the [changelog](#changelog) router, over `ChangelogService` behind the same `ProjectScope` check:
+
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_changelog_entries_search` | `ChangelogService.list` | A board's entries, newest first, optionally in one state, `limit` up to 99, `offset`, `nextOffset`: id, slug, title, tags, state, `publishAt`, `publishedAt` and the post count; detailed adds the first 500 characters of the text, the post ids and the timestamps |
+| `mocco_changelog_entry_get` | `ChangelogService.get` | One entry with its post ids; concise cuts the text at 500 characters, detailed has it whole with the author and the release run it was drafted from |
+| `mocco_changelog_entry_create` | `ChangelogService.create` | Starts a draft as the caller (title, text, slug or one made from the title, tags, posts) |
+| `mocco_changelog_entry_update` | `ChangelogService.update` | Edits an entry in any state; only the fields given, `tags` and `postIds` replacing the lists |
+| `mocco_changelog_entry_publish` | `ChangelogService.publish` | Publishes a draft or scheduled entry now, as the caller; audited |
+| `mocco_changelog_entry_schedule` | `ChangelogService.schedule` | Publishes a draft (or moves a scheduled entry) at a time ahead |
+| `mocco_changelog_entry_unpublish` | `ChangelogService.unpublish` | Takes a published or scheduled entry back to a draft; audited from published |
+| `mocco_changelog_entry_delete` | `ChangelogService.delete` | Deletes an entry in any state; audited |
+
+The six changes have the same locks. A change to an existing entry names its state (a draft, scheduled at a time, or published and public) and is bound to that state, its `updatedAt`, its `publishAt` and its posts, so an edit, publish or schedule by anyone before the answer is refused as a different change. A move the state doesn't allow (publishing or scheduling a published entry, unpublishing a draft) is refused before asking with `ChangelogEntryStateError`'s message; a publish time that has passed by the answer is refused by the service (`ChangelogPublishAtPastError`). Deleting is a tool, unlike deleting a board: it removes one entry, and its confirmation says whether the entry is public and that it cannot be undone.
 
 ## The public /v1 surface
 

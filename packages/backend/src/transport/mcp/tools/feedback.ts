@@ -210,7 +210,7 @@ export async function getPost(deps: FeedbackToolDeps, args: GetPostArgs, userId:
 
 /** What `feedback:write` allows, as the consent screen words it: one permission for every feedback change. */
 export const FEEDBACK_WRITE_ALLOWS =
-  'set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped';
+  'set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, decide which ones a release shipped, and write and publish your changelog';
 
 const moveWords: DecisionWords = {
   verb: 'change feedback statuses',

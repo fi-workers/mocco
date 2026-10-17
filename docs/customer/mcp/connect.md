@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and setting up feedback boards, writing, moving, commenting on, voting on, merging and converting feedback posts and marking them shipped from a release. The plan is in the
+> assigning messenger conversations, setting up feedback boards, writing, moving, commenting on, voting on, merging and converting feedback posts and marking them shipped from a release, and writing and publishing changelog entries. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -83,6 +83,8 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_feedback_intake_preview` | What turning a messenger conversation into a feedback post starts from: a title, the customer's words, and the board's posts it may repeat |
 | `mocco_feedback_source_posts_list` | The feedback posts a messenger conversation became |
 | `mocco_feedback_post_sources_list` | The messenger conversations a feedback post came from, with the customer's words |
+| `mocco_changelog_entries_search` | A feedback board's changelog entries: drafts, scheduled and published, a page at a time |
+| `mocco_changelog_entry_get` | One changelog entry: its state, tags, the posts it announces and its text |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
 | `mocco_notifications_rules_search` | Which events go to which channel: the event type, the source and the filter of each rule |
 | `mocco_notifications_activity_search` | What became of each webhook and Mocco event: per channel, sent or failed (with the error), or why it got nothing |
@@ -170,6 +172,9 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_feedback_post_unvote` | Removes an end user's vote on a feedback post on their behalf, as you |
 | `mocco_feedback_duplicate_dismiss` | Marks a suggested duplicate pair as different requests, as you |
 | `mocco_feedback_intake_convert` | Turns a messenger conversation into a new feedback post, or adds it to one, as you |
+| `mocco_changelog_entry_create` / `_update` | Starts a draft changelog entry, or edits one, as you |
+| `mocco_changelog_entry_publish` / `_schedule` / `_unpublish` | Publishes a changelog entry now or at a time, or takes it back to a draft, as you |
+| `mocco_changelog_entry_delete` | Deletes a changelog entry, as you |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -226,7 +231,7 @@ status the post had when you were asked: if anyone moves the post before you ans
 answer is refused and you are asked afresh, and answering the same confirmation twice moves
 it once. Asking for the status a post has already answers without asking you. It follows the
 same rules as the other changes, needs the workspace to allow agents to make changes, and
-needs its own permission, asked for the first time it is used: **Set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you**. Any member
+needs its own permission, asked for the first time it is used: **Set up your feedback boards, write, move, comment on, vote on and merge your feedback posts, decide which ones a release shipped, and write and publish your changelog, as you**. Any member
 of the workspace may move posts, as on the board.
 
 **Commenting, voting and merging on feedback.** The same permission and the same workspace
@@ -279,6 +284,16 @@ an existing one, as **Convert to feedback** does: the confirmation quotes the cu
 signed in to your app. A conversation that became a post already is not made a second one.
 `mocco_feedback_post_unvote` removes one end user's vote, for when they ask or it was
 recorded by mistake; they keep following the post.
+
+**Writing the changelog.** The same permission and switch cover a board's changelog.
+`mocco_changelog_entry_create` starts a draft, which nobody outside your team sees, and
+`mocco_changelog_entry_update` edits an entry in any state (a published entry's page changes
+at once, and the confirmation says so). `mocco_changelog_entry_publish` puts it on the public
+changelog and its RSS feed now, `_schedule` at a time you give, and `_unpublish` takes it back
+to a draft. `mocco_changelog_entry_delete` deletes one entry; the confirmation says whether it
+is public and that it can't be undone. Each confirmation names the entry and its state, and
+if anyone edits, publishes or schedules it before you answer, the answer is refused and you
+are asked afresh.
 
 **Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
 a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product

@@ -17,10 +17,12 @@
 // under `feedback:write`, the four OTA setup changes (in `tools/ota-setup.ts`) under
 // `ota:write`, and the three project setup changes (in `tools/projects.ts`) under
 // `projects:write`. The rest of the feedback changes (in `tools/feedback-authoring.ts`,
-// `tools/feedback-intake.ts` and `tools/feedback-followers.ts`) are under `feedback:write` too.
+// `tools/feedback-intake.ts` and `tools/feedback-followers.ts`) and the changelog changes (in
+// `tools/changelog.ts`) are under `feedback:write` too.
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { registerApprovalTools, type ApprovalToolDeps } from '@backend/transport/mcp/tools/approvals';
+import { registerChangelogTools, type ChangelogToolDeps } from '@backend/transport/mcp/tools/changelog';
 import { registerFeedbackTools, type FeedbackToolDeps } from '@backend/transport/mcp/tools/feedback';
 import {
   registerFeedbackAuthoringTools,
@@ -76,6 +78,7 @@ export type McpToolDeps = RunToolDeps &
   FeedbackAuthoringToolDeps &
   FeedbackIntakeToolDeps &
   FeedbackFollowerToolDeps &
+  ChangelogToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
   InboundToolDeps &
@@ -110,6 +113,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerFeedbackAuthoringTools(server, deps);
   registerFeedbackIntakeTools(server, deps);
   registerFeedbackFollowerTools(server, deps);
+  registerChangelogTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
   registerInboundTools(server, deps);

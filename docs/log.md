@@ -1232,3 +1232,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
   `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/mcp-feedback-coverage`
+
+## 2026-10-17 — Feedback: MCP tools for the changelog
+
+- `mocco_changelog_entries_search` and `mocco_changelog_entry_get` read a board's changelog;
+  `mocco_changelog_entry_create`, `_update`, `_publish`, `_schedule`, `_unpublish` and `_delete` change it over
+  `ChangelogService`, behind `feedback:write`, the opt-in and a confirmation bound to the entry's state, `updatedAt`,
+  `publishAt` and posts. Every `changelog` procedure now has a tool. The consent line now names writing and publishing
+  the changelog.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-changelog-tools`

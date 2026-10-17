@@ -18,8 +18,8 @@
 // and `mocco_feedback_post_merge` for `feedback:write`, the OTA setup changes
 // (`tools/ota-setup.ts`) for `ota:write`, and the project setup changes (`tools/projects.ts`)
 // for `projects:write`. The board, category, post, intake, duplicate and unvote changes
-// (`tools/feedback-authoring.ts`, `tools/feedback-intake.ts`, `tools/feedback-followers.ts`) declare
-// `feedback:write` the same way.
+// (`tools/feedback-authoring.ts`, `tools/feedback-intake.ts`, `tools/feedback-followers.ts`) and the
+// changelog changes (`tools/changelog.ts`) declare `feedback:write` the same way.
 import { requireMcpAuth } from '@better-auth/mcp';
 import { mcpSignInScopes } from '@mocco/common/mcp';
 

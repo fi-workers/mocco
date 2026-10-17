@@ -197,6 +197,8 @@ has several servers loaded.
 | `mocco_feedback_intake_preview` | A request (messenger conversation) as a post on a board: title, words, requester, posts it became, similar posts |
 | `mocco_feedback_source_posts_list` | The posts a request became |
 | `mocco_feedback_post_sources_list` | The requests a post came from, with their words (the team's view) |
+| `mocco_changelog_entries_search` | A board's changelog entries (state), offset-paged |
+| `mocco_changelog_entry_get` | One changelog entry with its posts; the text cut short unless detailed |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
 | `mocco_notifications_rules_search` | Which events route to which channel (event type text, source) |
 | `mocco_notifications_activity_search` | The activity trace: per event, what each channel got or why not (source, channel, outcome) |
@@ -229,6 +231,8 @@ has several servers loaded.
 | `mocco_feedback_post_unvote` | Remove an end user's vote on their behalf (`feedback:write`) |
 | `mocco_feedback_duplicate_dismiss` | Set a suggested duplicate pair aside (`feedback:write`) |
 | `mocco_feedback_intake_convert` | Turn a request into a new post, or add it to one (`feedback:write`) |
+| `mocco_changelog_entry_create` / `_update` | Start a draft changelog entry, or edit one in any state (`feedback:write`) |
+| `mocco_changelog_entry_publish` / `_schedule` / `_unpublish` / `_delete` | Publish an entry now or at a time, take it back to a draft, or delete it (`feedback:write`) |
 
 ### Search, not list
 
@@ -278,7 +282,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
-| `feedback:write` | On MCP, set up boards and categories, write, move, comment on, vote on, merge and convert feedback posts, and decide ship suggestions and suggested duplicates (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_unvote`, `_post_merge`, `_ship_suggestions_accept`, `_ship_suggestions_dismiss`, `_board_create`, `_board_update`, `_board_release_policy_set`, `_category_create`, `_category_update`, `_category_delete`, `_post_create`, `_post_update`, `_duplicate_dismiss`, `_intake_convert`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, set up boards and categories, write, move, comment on, vote on, merge and convert feedback posts, and decide ship suggestions and suggested duplicates (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_unvote`, `_post_merge`, `_ship_suggestions_accept`, `_ship_suggestions_dismiss`, `_board_create`, `_board_update`, `_board_release_policy_set`, `_category_create`, `_category_update`, `_category_delete`, `_post_create`, `_post_update`, `_duplicate_dismiss`, `_intake_convert`), and write and publish the changelog (`mocco_changelog_entry_create`, `_update`, `_publish`, `_schedule`, `_unpublish`, `_delete`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -658,6 +662,11 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   reads `IntakeService.preview` and is bound to the request's words, its requester, the posts
   it became and the target; a request that became a post already answers that post without
   asking, as the service would.
+- **The changelog** (`tools/changelog.ts`) covers every `changelog` procedure over
+  `ChangelogService`, under the same scope; the consent line grew to **…, decide which ones a
+  release shipped, and write and publish your changelog, as you**. A change to an entry is bound
+  to its state, `updatedAt`, `publishAt` and posts. Deleting an entry is a tool, unlike deleting
+  a board: it removes one entry, and the confirmation says whether it is public.
 
 ## Evaluating it
 
