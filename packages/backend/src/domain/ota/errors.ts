@@ -220,11 +220,20 @@ export class OtaNothingToChangeError extends ConflictError {
 
 /** No pre-signed republish (or directive) exists for what a head serves. */
 export class OtaRollbackUnavailableError extends ConflictError {
-  constructor(channel: string, platform: string, opts: { isToEmbedded?: boolean } = {}, options?: ErrorOptions) {
+  constructor(
+    channel: string,
+    platform: string,
+    opts: { isToEmbedded?: boolean; runtimeVersion?: string; isRuntimeUnnamed?: boolean } = {},
+    options?: ErrorOptions,
+  ) {
+    const where = opts.runtimeVersion === undefined ? platform : `${platform} runtime ${opts.runtimeVersion}`;
+    // Across runtimes, one old head with a single release blocks the whole rollback: say which, and how to aim.
+    const aim =
+      opts.isRuntimeUnnamed === true ? '; name the runtime to roll back (runtimeVersion, `--runtime-version`)' : '';
     super(
       opts.isToEmbedded === true
-        ? `"${channel}" has no pre-signed roll-back-to-embedded directive on ${platform}`
-        : `"${channel}" has no pre-signed rollback on ${platform}: roll back to the embedded bundle, or publish a fix`,
+        ? `"${channel}" has no pre-signed roll-back-to-embedded directive on ${where}${aim}`
+        : `"${channel}" has no pre-signed rollback on ${where}${aim}: roll back to the embedded bundle, or publish a fix`,
       options,
     );
     this.name = 'OtaRollbackUnavailableError';

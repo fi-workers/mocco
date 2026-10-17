@@ -316,11 +316,27 @@ export class OtaChannelService {
    */
   private async planRollback(channel: OtaChannelRow, scope: HeadScope): Promise<ChangePlan> {
     const allHeads = await this.deps.heads.listHeadsOfChannel(channel.id);
-    const heads = allHeads.filter(isInScope(scope));
+    const heads = allHeads
+      .filter(isInScope(scope))
+      .filter(detail => detail.active !== null || detail.candidate !== null);
+    const isRuntimeUnnamed =
+      scope.runtimeVersion === null && new Set(heads.map(each => each.head.runtimeVersion)).size > 1;
     const plans = await Promise.all(
-      heads
-        .filter(detail => detail.active !== null || detail.candidate !== null)
-        .map(async detail => await this.rollbackOf(channel, detail)),
+      heads.map(async detail => {
+        try {
+          return await this.rollbackOf(channel, detail);
+        } catch (error) {
+          if (error instanceof OtaRollbackUnavailableError) {
+            throw new OtaRollbackUnavailableError(
+              channel.name,
+              detail.head.platform,
+              { runtimeVersion: detail.head.runtimeVersion, isRuntimeUnnamed },
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+      }),
     );
     if (plans.length === 0) {
       throw new OtaNothingToChangeError(`"${channel.name}" serves nothing to roll back`);
