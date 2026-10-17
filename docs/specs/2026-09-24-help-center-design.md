@@ -5,7 +5,7 @@ type: spec
 status: draft
 phase: design
 created: 2026-09-24
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, help-center]
@@ -283,6 +283,8 @@ Per [ADR 0025](../adr/0025-every-product-surface-ships-mcp-tools.md), translatio
 The two changing tools need a person's token, their own `help:write` scope, the workspace's opt-in and the confirmation round trip (`openDecision` / `confirmThenApply` in `transport/mcp/tools/deciding.ts`, as `mocco_feedback_post_set_status` uses them). The confirmation is bound to what the reviewer was shown: the proposal's revision id for accept, the translation's state for retranslate, so a draft or review that lands in between makes the answer no longer match. Saving a person's text stays in the console: an agent's text is a machine's, not a review.
 
 As built (#480, `tools/help-write.ts`): the three changes share `help:write`. Accept is bound to the draft's revision id and the published source revision; retranslate to the language's state and its current text revision, and passes the console's `confirm` only when the confirmed state was reviewed; glossary set to the term's id and value (or its absence). The glossary confirmation names the term before and after rather than the articles it re-translates: working those out would be a read the console's own save does not make, and the glossary page doesn't show it either. Details in the [reference](../reference/help-center.md#mcp-tools).
+
+The editor followed under ADR 0025: four reads of the editor's view (`mocco_help_site_get`, `_drafts_list`, `_draft_get`, `_revisions_list`) and nine changes under the same `help:write` (set up a site, add a collection or section, create an article, save or restore its draft, publish, unpublish, delete), each bound to the article's status, revision ids and draft hash. The tools, and what stays in the console and why, are in the [reference](../reference/help-center.md#the-editor-over-mcp).
 
 Post-v1 management API (workspace API key): `PUT /v1/help/articles/{externalKey}` (upsert from Markdown), `POST /v1/help/import` (Zendesk/Intercom export), enabling a `mocco help sync ./docs` CLI or GitHub Action for docs-as-code.
 

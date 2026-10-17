@@ -1138,3 +1138,19 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-09-24-help-center-design.md`,
   `specs/2026-10-02-mcp-and-cli-design.md`, `customer/mcp/connect.md`, `log.md`
 - Source: branch `feat/mcp-help-change-tools` (issue #480)
+
+## 2026-10-17 — MCP: the help center's editor
+
+- Closes the help center's MCP gap under ADR 0025. Reads: `mocco_help_site_get`, `mocco_help_drafts_list`,
+  `mocco_help_draft_get`, `mocco_help_revisions_list` (`transport/mcp/tools/help-authoring.ts`). Changes, under
+  `help:write`, the opt-in and the confirmation round trip: `mocco_help_site_enable`, `_collection_create`,
+  `_section_create`, `_article_create`, `_draft_save`, `_draft_restore`, `_article_publish`, `_article_unpublish`,
+  `_article_delete` (`help-authoring-write.ts`), thin over `HelpSiteService` and `HelpAuthoringService`.
+- Article changes are bound to the status, the published and draft revision ids and the draft's content hash; new
+  sections and articles to the ids already there, so a confirmation answered twice creates one. The `help:write`
+  consent line now names writing and publishing.
+- Excluded with reasons: `updateSite`, `deleteCollection`, `deleteSection` (not in the console; the deletes cascade
+  unaudited), `setAiTraining`, images, `importBundle`, `saveTranslation`, `importGlossary`. No migration.
+- Docs touched: `reference/help-center.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-help-coverage`

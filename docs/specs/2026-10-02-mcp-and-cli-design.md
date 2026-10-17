@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -183,6 +183,10 @@ has several servers loaded.
 | `mocco_help_translations_list` | A help center's translation counts per language and the published articles a filter lists (attention, stale, failed, all), with each language's status; offset-paged |
 | `mocco_help_translation_get` | One article in one language for review: state, reviewer and time, whether a machine draft waits, the source segments that changed (detailed: the texts) |
 | `mocco_help_glossary_list` | A help center's glossary: kept and fixed terms with their translations, by text, rule and language; offset-paged (detailed: id, note, changed) |
+| `mocco_help_site_get` | A help center's setup as its editors see it: address, languages, collections and sections with their ids and article counts (null without one) |
+| `mocco_help_drafts_list` | A help center's articles published or not, each with its draft title, status and whether the draft differs from what is published; by status, collection, section and title; offset-paged |
+| `mocco_help_draft_get` | One article as the editor shows it: status, place, draft and published revision ids, the draft's Markdown (excerpt or whole) |
+| `mocco_help_revisions_list` | An article's source-language history, newest first, marking the draft and the published revision; offset-paged, or one revision whole |
 | `mocco_messenger_conversations_search` | A project's inbox, newest activity first (status, assignee or unassigned, contact) |
 | `mocco_messenger_conversation_get` | One conversation's thread, notes marked, attachments as metadata only (never a signed link) |
 | `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
@@ -217,6 +221,11 @@ has several servers loaded.
 | `mocco_help_translation_accept` | Accept the machine draft beside a stale reviewed translation as the caller (`help:write`) |
 | `mocco_help_translation_retranslate` | Translate one language again by machine, replacing a reviewed one only when confirmed (`help:write`) |
 | `mocco_help_glossary_set` | Add, change or remove a help center glossary term as the caller (`help:write`) |
+| `mocco_help_site_enable` | Set up a project's help center: address, source language, translated languages (`help:write`) |
+| `mocco_help_collection_create` / `mocco_help_section_create` | Add a collection, or a section to a collection (`help:write`) |
+| `mocco_help_article_create` | Create an unpublished draft article in a section, with its Markdown when given (`help:write`) |
+| `mocco_help_draft_save` / `mocco_help_draft_restore` | Replace an article's draft, or make an earlier revision the draft again (`help:write`) |
+| `mocco_help_article_publish` / `_unpublish` / `_delete` | Publish an article's draft, take it off the site, or delete it with its history (`help:write`) |
 
 ### Search, not list
 
@@ -267,7 +276,7 @@ still refuses what the role refuses.
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
 | `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
-| `help:write` | On MCP, accept and redo help center translations and change the glossary (`mocco_help_translation_accept`, `_translation_retranslate`, `mocco_help_glossary_set`); stepped up for like `approvals:write` |
+| `help:write` | On MCP, set up a help center, write, publish and delete its articles, accept and redo its translations and change its glossary (`mocco_help_translation_accept`, `_translation_retranslate`, `mocco_help_glossary_set`, `mocco_help_site_enable`, `_collection_create`, `_section_create`, `_article_create`, `_draft_save`, `_draft_restore`, `_article_publish`, `_article_unpublish`, `_article_delete`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -607,8 +616,9 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 - **One scope for help center changes.** `mocco_help_translation_accept`,
   `mocco_help_translation_retranslate` and `mocco_help_glossary_set` (`tools/help-write.ts`) go
   through `openDecision` with `help:write`: they change what a public help site says in some
-  language, which none of the other scopes covers. The consent line is **Accept and redo
-  your help center's translations and change its glossary, as you**.
+  language, which none of the other scopes covers. The consent line is now **Set up your help
+  center, write, publish and delete its articles, review its translations and change its
+  glossary, as you**, since the writing tools share the scope (below).
 - **Each confirmation is bound to the state it showed.** Accept: the draft's revision id and
   the published source revision. Retranslate: the language's state and its current text
   revision. Glossary set: the term's id and value, or its absence. `review` gained
@@ -623,6 +633,43 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
 - **The window.** `acceptProposal` re-checks the draft and source under the translation's
   lock. The glossary service writes by id without comparing the old value, so an edit landing
   between the re-read and the write is overwritten, as with two console edits; both are audited.
+
+### How the help center's writing tools are built
+
+ADR 0025 asks for a tool for everything a person can do in the console. The help center's
+editor had none, so an agent could read what a site publishes but not draft, publish or
+organize it.
+
+- **Reads of the editor's view, beside the public one.** `mocco_help_site_get`,
+  `mocco_help_drafts_list`, `mocco_help_draft_get` and `mocco_help_revisions_list`
+  (`tools/help-authoring.ts`) read `HelpSiteService.get` and `HelpAuthoringService.tree`,
+  `article` and `history`, so drafts and unpublished articles are visible, with the revision
+  ids a change is confirmed against. Articles are named by their short id, as everywhere else.
+  Concise answers carry the first 600 characters of a draft; detailed, or one named revision,
+  the whole Markdown.
+- **The same scope.** The nine writing tools (`tools/help-authoring-write.ts`) are
+  `help:write`, with the opt-in and the confirmation round trip like the translation tools.
+  One permission for "change my help center" is what a person can judge; splitting drafting
+  from publishing would ask twice for the same trust.
+- **Bound to the article as shown.** Saving, restoring, publishing, unpublishing and deleting
+  are bound to the article's status, its published revision id, its draft revision id and a
+  hash of the draft's text. The hash matters: within an editing session the service rewrites
+  the draft revision in place, so the id alone would not notice a console edit. A save is also
+  bound to the hash of the new text, so an answer that carries a different body is a different
+  change.
+- **Once.** A new section or article is bound to the ids already in its collection or section,
+  so a second answer is a different change. A collection is bound to its slug and a site to the
+  project having none; both answer "unchanged" on a second call. A second delete finds nothing.
+- **Left out on purpose.** `updateSite`, `deleteCollection` and `deleteSection` exist on the
+  router but the console calls none of them, and a tool must not have a path the console lacks;
+  the two deletes also take every article in them along, without an audit entry.
+  `setAiTraining` is a licensing decision about the site's content, kept to a person.
+  `createImageUpload` / `completeImage` move bytes an MCP call does not carry, and
+  `importBundle` takes an export the console converts from uploaded files. `saveTranslation`
+  stays out as in #480. `importGlossary` is `mocco_help_glossary_set` one term at a time.
+- **The window.** The services write without comparing the state the tool re-read, so a
+  console edit landing between the re-read and the write wins or loses as two console edits
+  would. Publish, unpublish and delete are audited as the caller by the service.
 
 ## Evaluating it
 

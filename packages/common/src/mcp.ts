@@ -29,8 +29,8 @@ export const mcpSetAgentsMayDecideInputSchema = z.object({
  * the same way the first time a tool needs it. `messenger:write` lets an agent reply to a
  * conversation and assign it as its person, stepped up for the same way. `feedback:write` lets
  * an agent move, comment on, vote on and merge feedback posts as its person, and `help:write`
- * accept and redo help center translations and change the glossary as its person, each stepped
- * up for the same way.
+ * set up a help center, write, publish and delete its articles, accept and redo its translations
+ * and change its glossary as its person, each stepped up for the same way.
  * `ota:write` lets an agent set up OTA hosting as its person — host an app, add an open
  * channel, register a signing certificate and trust a repository to publish — stepped up for
  * the same way. It promotes, rolls out and rolls back nothing.

@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -27,8 +27,8 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, moving, commenting on, voting on and merging feedback posts, and reviewing
-> help center translations and the glossary. The plan is in the
+> assigning messenger conversations, moving, commenting on, voting on and merging feedback posts, and writing,
+> publishing and translating help center articles. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -70,6 +70,10 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_help_translations_list` | How far the help center is translated: per language, how many articles are reviewed, machine translated, out of date, failed or not translated, and which articles need attention (or are stale, or failed, or all), with each one's status per language |
 | `mocco_help_translation_get` | One article in one language: who reviewed it and when, whether a machine draft is waiting, and exactly which sentences of the original changed since it was translated (with the texts when detailed) |
 | `mocco_help_glossary_list` | The help center's glossary every translation follows: names kept as written in every language, and words translated one fixed way per language, found by text, rule or language |
+| `mocco_help_site_get` | Your help center as its editors see it: its address, its languages, and its collections and sections with how many articles each has |
+| `mocco_help_drafts_list` | Every help article, published or not, with its draft title and whether the draft has changes not yet published; by status, collection, section or title |
+| `mocco_help_draft_get` | One help article as the editor shows it: the draft's Markdown, and which revision is published |
+| `mocco_help_revisions_list` | An article's history, newest first, or one earlier revision in full |
 | `mocco_messenger_conversations_search` | Which messenger conversations are open (or closed), newest activity first, by assignee (yours, someone's, or no one's) or by contact (id, email or your app's user id), with a preview of the latest message and whether you have read it |
 | `mocco_messenger_conversation_get` | One conversation's thread: every message from the user and your team, internal notes marked, and each attachment's name, type and size |
 | `mocco_feedback_boards_list` | Which feedback boards a project has, whether each is public, and their categories in order |
@@ -158,6 +162,11 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_help_translation_accept` | Accepts the machine draft waiting beside an out-of-date reviewed translation as the reviewed text, as you |
 | `mocco_help_translation_retranslate` | Has the machine translate one language of a help article again; a language a person reviewed is replaced only when you confirm exactly that |
 | `mocco_help_glossary_set` | Adds, changes or removes a term in the help center glossary every translation follows |
+| `mocco_help_site_enable` | Sets up a project's help center: its address and its languages |
+| `mocco_help_collection_create` / `mocco_help_section_create` | Adds a collection, or a section to a collection |
+| `mocco_help_article_create` | Creates a help article as an unpublished draft, with its text when given |
+| `mocco_help_draft_save` / `mocco_help_draft_restore` | Replaces an article's draft, or makes an earlier revision its draft again |
+| `mocco_help_article_publish` / `_unpublish` / `_delete` | Publishes an article's draft, takes it off the site, or deletes it for good |
 
 Deciding is switched on per workspace by an owner or admin (below). Until then your agent
 can tell you a change is waiting on a second approval; it cannot be that approval.
@@ -233,9 +242,9 @@ switch cover three more changes, each confirmed in your client first:
   vote before you answer, you are asked again with the new counts; if either is merged
   elsewhere, the merge is refused.
 
-**Reviewing help center translations.** Three changes share one permission, asked for the
-first time any is used: **Accept and redo your help center's translations and change its
-glossary, as you**. Each needs the workspace to allow agents to make changes and is confirmed
+**Writing and translating the help center.** Every help center change shares one permission,
+asked for the first time any is used: **Set up your help center, write, publish and delete its
+articles, review its translations and change its glossary, as you**. Each needs the workspace to allow agents to make changes and is confirmed
 in your client first; any member of the project may make them, as in the console.
 
 - `mocco_help_translation_accept` shows the machine draft and whose reviewed text it replaces.
@@ -250,7 +259,19 @@ in your client first; any member of the project may make them, as in the console
   redo the sentences that contain it (a reviewed language gets a draft beside its text). If the
   term changes before you answer, you are asked again.
 
-Writing a translation yourself, and editing or publishing articles, stay in the console.
+- `mocco_help_article_create`, `mocco_help_draft_save` and `mocco_help_draft_restore` change
+  only the draft: readers keep seeing the published text until you publish. A save shows the
+  title and length before and after and the start of the new text; if the draft is edited
+  before you answer, you are asked again.
+- `mocco_help_article_publish` shows the draft it would publish, and says whether it replaces
+  what readers see. If the draft changes before you answer, you are asked again, so what goes
+  public is what you saw. The site's other languages are then translated from it.
+- `mocco_help_article_unpublish` takes an article off the site and keeps everything; publishing
+  it again brings it back. `mocco_help_article_delete` removes the article with its history and
+  translations, and can't be undone.
+
+Writing a translation yourself, uploading images, importing from another tool, letting AI
+training crawlers in, and changing a site's address or languages stay in the console.
 
 **Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
 a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product

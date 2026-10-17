@@ -107,7 +107,7 @@ export type RetranslateArgs = z.infer<typeof retranslateInput>;
 export type GlossarySetArgs = z.infer<typeof glossarySetInput>;
 
 /** Domain refusals the model reads and can act on; anything else is a fault. */
-function helpRefusal(error: unknown): CallToolResult {
+export function helpRefusal(error: unknown): CallToolResult {
   if (
     error instanceof NotFoundError ||
     error instanceof BadRequestError ||
@@ -132,9 +132,10 @@ async function reviewOf(deps: HelpWriteToolDeps, scope: ProjectInScope, args: { 
 const excerpt = (text: string) => (text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS)}…` : text);
 
 /** One permission for every help center change, worded as the consent screen words it. */
-const writeScope = () => ({
+export const writeScope = () => ({
   name: McpScopes.helpWrite,
-  allows: 'review your help center translations and change its glossary',
+  allows:
+    'set up your help center, write, publish and delete its articles, review its translations and change its glossary',
 });
 
 const acceptWords: DecisionWords = {
