@@ -42,6 +42,14 @@ export const GithubIssueStates = {
 } as const;
 export type GithubIssueState = (typeof GithubIssueStates)[keyof typeof GithubIssueStates];
 
+/** The compare API's `status` for `base...head`: how head's history relates to base. */
+export const GithubCompareStatuses = {
+  ahead: 'ahead',
+  behind: 'behind',
+  identical: 'identical',
+  diverged: 'diverged',
+} as const;
+
 /** A pull request's `state` in the GraphQL API (`PullRequestState`). */
 export const GithubGraphqlPullRequestStates = {
   OPEN: 'OPEN',

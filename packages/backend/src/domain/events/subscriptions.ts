@@ -8,10 +8,12 @@
 // composition free of import cycles.
 import { EventBus } from '@backend/domain/events/EventBus';
 import { DomainEventRepo } from '@backend/domain/events/repos/domain-event.repo';
+import { registerFeedbackSubscribers } from '@backend/domain/feedback/subscribers';
 import { registerNotificationSubscribers } from '@backend/domain/notification/subscribers';
 import { registerReleaseSubscribers } from '@backend/domain/project/subscribers';
 import { registerStatusSubscribers } from '@backend/domain/status/subscribers';
 
+import type { CommitAncestry } from '@backend/domain/integration/ports';
 import type { JobQueue } from '@backend/domain/jobs/ports';
 import type { Db } from '@backend/infra/db/types';
 
@@ -21,6 +23,9 @@ export interface EventBusCompositionDeps {
   now: () => Date;
   /** The app's origin (`resolveBaseOrigin`), for links in notification messages. */
   appOrigin: string;
+  /** Answers whether a release contains a merge commit (feedback shipping, #179); undefined
+   * without a GitHub App, and only the released commit itself counts. */
+  commitAncestry?: CommitAncestry;
 }
 
 /** A bus with every subscriber registered. */
@@ -30,5 +35,10 @@ export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   registerNotificationSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin });
   registerReleaseSubscribers(bus, { db: deps.db });
   registerStatusSubscribers(bus, { db: deps.db, queue: deps.queue, appOrigin: deps.appOrigin, now: deps.now });
+  registerFeedbackSubscribers(bus, {
+    db: deps.db,
+    now: deps.now,
+    ...(deps.commitAncestry !== undefined && { ancestry: deps.commitAncestry }),
+  });
   return bus;
 }

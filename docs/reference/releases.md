@@ -4,7 +4,7 @@ description: What counts as a production release without environments, the mocco
 type: reference
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, releases, events, governance, project]
@@ -94,13 +94,19 @@ governance event carries (`workspaceId`, `runId`, `repoFullName`, `pipelineName`
   consumer computes "what's in it" from the two commits;
 - `gates` (as stored on the row) and `resumedBy`, everyone whose vote counted, once per person
   and role;
-- `releasedAt` (ISO 8601).
+- `releasedAt` (ISO 8601);
+- `succeededSteps`: the names of the run's steps that succeeded, in pipeline order (#179; a
+  feedback board can require its release step).
 
 `occurredAt` is the run's finish time, so a release published late by the reconcile job still
 sorts and prunes by when it happened.
 
 The status [deploy watch](./status.md#the-deploy-watch) subscribes to it (`status.deploy_watch`) and checks the
 released projects' monitors every 30 seconds for 15 minutes.
+
+The feedback ship detector subscribes to it too (`feedback.ship_detect`): a release of a board's release repo
+suggests shipping the posts whose linked pull requests it contains ([feedback: shipping on
+release](./feedback.md#shipping-on-release), [ADR 0031](../adr/0031-feedback-ships-on-the-release-registry-not-environments.md)).
 
 The notification fan-out subscribes to `deploy.*`, so a channel rule on `deploy.released` posts a
 "Released: owner/name" message ([notifications: templates](./notifications.md#templates)). It is

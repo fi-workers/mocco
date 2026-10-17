@@ -93,7 +93,7 @@ import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { HelpIndexNow } from '@backend/domain/helpcenter/indexnow';
 import type { HelpPageRevalidator } from '@backend/domain/helpcenter/revalidate';
 import type { Translator } from '@backend/domain/helpcenter/translate/Translator';
-import type { IssueTracker } from '@backend/domain/integration/ports';
+import type { CommitAncestry, IssueTracker } from '@backend/domain/integration/ports';
 import type { PushSender } from '@backend/domain/messenger/push';
 import type { DiscordMessenger } from '@backend/domain/notification/DeliveryService';
 import type { Stage0Deps } from '@backend/domain/ops/config';
@@ -137,6 +137,8 @@ export interface JobRunnerRuntimeDeps {
   helpSiteOriginOf?: (slug: string) => string | null;
   /** Reads GitHub issues and pull requests for the feedback link refresh; undefined without a GitHub App. */
   issueTracker?: IssueTracker;
+  /** Answers whether a release contains a linked merge commit (feedback shipping); undefined without a GitHub App. */
+  commitAncestry?: CommitAncestry;
   /** The stage0 canary and heartbeat (relay design §11); undefined (off) without
    * OPS_HEARTBEAT_URL and OPS_CANARY_SOURCE_ID. */
   stage0?: Stage0Deps;
@@ -154,7 +156,13 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
     runOne: async id => await self.runner?.runOne(id),
     waitUntil: deps.waitUntil,
   });
-  const bus = createEventBus({ db, queue, now: deps.now, appOrigin: deps.appOrigin });
+  const bus = createEventBus({
+    db,
+    queue,
+    now: deps.now,
+    appOrigin: deps.appOrigin,
+    ...(deps.commitAncestry !== undefined && { commitAncestry: deps.commitAncestry }),
+  });
   // The inbound jobs (republish, prune) never open a secret; the box is resolved only
   // if one is opened, so a deploy without SECRETS_ENCRYPTION_KEYS still builds the runner.
   const inbound = new InboundService({
@@ -374,6 +382,7 @@ export function getJobRunner(): JobRunner {
       feedbackLinks: feedbackLinkDepsFromEnv(env),
       feedbackEmbedder: embedderFromEnv(env),
       issueTracker: getIntegration()?.provider,
+      commitAncestry: getIntegration()?.provider,
       helpSiteOriginOf: slug => helpSiteOrigin(slug, env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.
       stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),

@@ -136,6 +136,14 @@ export interface IssueTracker {
   closingPullRequests(repo: TrackerRepoRef, issueNumber: number): Promise<TrackerPullRequest[]>;
 }
 
+/** Whether one commit is in another's history (#179: is a merged pull request in a release?). The
+ * GitHub adapter answers through the compare API under the App's `contents: read`. */
+export interface CommitAncestry {
+  /** True when `ancestorSha` is `headSha` or reachable from it. False when it isn't, or when the
+   * repo doesn't have one of them (a commit force-pushed away and collected). */
+  containsCommit(repo: TrackerRepoRef, ancestorSha: string, headSha: string): Promise<boolean>;
+}
+
 /** An issue or pull request in a registered repo changed (any action): what it is now. The repo
  * is resolved through the installation's connection, never by the provider's repo id alone. */
 export interface TrackerEvent {

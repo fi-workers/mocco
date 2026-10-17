@@ -8,6 +8,7 @@ import { BACKFILL_MAX_LIMIT } from '@backend/domain/integration/constants';
 import {
   CONFIG_FILE_PATH,
   GithubGraphqlPullRequestStates,
+  GithubCompareStatuses,
   GithubIssueStates,
   GithubWebhookEvents,
   SIGNATURE_ALGORITHM,
@@ -31,6 +32,7 @@ import type { ParsedWebhook } from '@backend/domain/integration/github/webhook-e
 import type {
   CheckPublisher,
   CheckReport,
+  CommitAncestry,
   CommitSource,
   InstallationVerifier,
   IssueTracker,
@@ -409,6 +411,16 @@ export function toClosingPullRequests(data: unknown, repo: TrackerRepoRef): Trac
     });
 }
 
+const compareSchema = z.object({ status: z.string() });
+
+/** Pure mapper: the compare API's answer for `base...head` -> whether `base` is in `head`'s history.
+ * `ahead` (head has commits base lacks) and `identical` mean it is; `behind` and `diverged` mean it
+ * isn't. Unit-tested. */
+export function isBaseInHead(data: unknown): boolean {
+  const { status } = compareSchema.parse(data);
+  return status === GithubCompareStatuses.ahead || status === GithubCompareStatuses.identical;
+}
+
 /** A number the picker was given (`12`, `#12`), or null for words. */
 const NUMBER_QUERY = /^#?(\d{1,10})$/u;
 
@@ -451,7 +463,8 @@ export function createGitHubProvider(
   RepoArchiveSource &
   RepositoryDispatcher &
   CheckPublisher &
-  IssueTracker {
+  IssueTracker &
+  CommitAncestry {
   const app = new App({
     appId: config.appId,
     privateKey: config.privateKey,
@@ -649,6 +662,30 @@ export function createGitHubProvider(
         );
       }
       return toClosingPullRequests(data, ref);
+    },
+
+    // One commit (`per_page: 1`) is enough: only the comparison's status is read. A 404 is a SHA
+    // the repo doesn't have (force-pushed away and collected), so it isn't in the history.
+    async containsCommit(ref, ancestorSha, headSha) {
+      if (ancestorSha === headSha) {
+        return true;
+      }
+      const octokit = await mintInstallationOctokit(app, ref.externalAccountId);
+      try {
+        const { data } = await octokit.request('GET /repos/{owner}/{repo}/compare/{basehead}', {
+          owner: ref.owner,
+          repo: ref.name,
+          basehead: `${ancestorSha}...${headSha}`,
+          per_page: 1,
+        });
+        return isBaseInHead(data);
+      } catch (error) {
+        const status = octokitStatus(error);
+        if (status === 404) {
+          return false;
+        }
+        throw new GithubApiError(`failed to compare ${ancestorSha} with ${headSha}`, status, { cause: error });
+      }
     },
   };
 }
