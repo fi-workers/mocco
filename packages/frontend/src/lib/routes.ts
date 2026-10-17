@@ -83,6 +83,19 @@ export const Routes = {
   /** A feedback post in the console: triage, comments, votes, history and merging. */
   projectFeedbackPost: (id: string, projectId: string, postId: string) =>
     `/workspaces/${id}/p/${projectId}/feedback/posts/${postId}`,
+  /** A board's changelog in the console (#176): its entries, `state` filtering drafts, scheduled or published. */
+  projectFeedbackChangelog: (
+    id: string,
+    projectId: string,
+    filters: Readonly<Partial<Record<'board' | 'state', string>>> = {},
+  ) => {
+    const query = new URLSearchParams(filters).toString();
+    const path = `/workspaces/${id}/p/${projectId}/feedback/changelog`;
+    return query === '' ? path : `${path}?${query}`;
+  },
+  /** One changelog entry's editor. */
+  projectFeedbackChangelogEntry: (id: string, projectId: string, entryId: string) =>
+    `/workspaces/${id}/p/${projectId}/feedback/changelog/${entryId}`,
   /** The project's feedback boards: create, rename, publish or delete them, and their categories. */
   projectFeedbackBoards: (id: string, projectId: string) => `/workspaces/${id}/p/${projectId}/feedback/boards`,
   /** The project's help center (#96): setup, then its collections, sections and articles. */

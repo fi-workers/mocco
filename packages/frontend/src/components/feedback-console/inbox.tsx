@@ -141,6 +141,7 @@ function Filters({
   hrefWith,
   publicUrl,
   manageHref,
+  changelogHref,
   onChange,
 }: {
   boards: readonly Board[];
@@ -150,6 +151,7 @@ function Filters({
   hrefWith: (change: Partial<InboxFilters>) => string;
   publicUrl: string | null;
   manageHref: string;
+  changelogHref: string;
   onChange: (href: string | null) => Promise<void>;
 }) {
   return (
@@ -174,8 +176,13 @@ function Filters({
           </a>
         )}
         <Link
-          href={manageHref}
+          href={changelogHref}
           className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+          Changelog
+        </Link>
+        <Link
+          href={manageHref}
+          className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
           Manage boards
         </Link>
       </div>
@@ -315,6 +322,7 @@ function BoardInbox({
         hrefWith={hrefWith}
         publicUrl={siteSlug === null || !board.isPublic ? null : publicBoardUrl(siteSlug, board.slug)}
         manageHref={Routes.projectFeedbackBoards(workspaceId, projectId)}
+        changelogHref={Routes.projectFeedbackChangelog(workspaceId, projectId, { board: board.slug })}
         onChange={async href => {
           setOffset(0);
           if (href !== null) {

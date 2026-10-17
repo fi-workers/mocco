@@ -1149,3 +1149,10 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   two-minute undo window, once per change, by a one-minute job (migration 0083). Signed-in end users aren't mailed.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-status-mail` (issue #180)
+
+## 2026-10-17 — Feedback changelog in the console
+
+- The console's Changelog lists a board's entries by state and edits one: title, address, tags, Markdown with a
+  preview, the posts it shipped, and publishing now, scheduling, unpublishing or deleting it. This finishes #176.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-changelog-console` (issue #176)

@@ -117,6 +117,14 @@ Open a post to work on it:
 
 ![A post in Mocco: status, category, comments with an internal note and the official response, and votes](./images/feedback-console-post.png)
 
+### Announce what shipped
+
+**Changelog** in the inbox's header lists the board's entries: drafts, scheduled and published. Type a title and choose **New entry** to start one. In the entry, write what changed in Markdown (the preview shows it as readers will see it), tick New, Improved or Fixed, and add the posts it shipped. Then **Publish now**, or pick a time and **Schedule** it: Mocco publishes it within a minute of that time. A published entry can go back to a draft with **Unpublish**.
+
+![Writing a changelog entry: title, tags, Markdown with its preview, and the post it shipped](./images/feedback-console-changelog.png)
+
+People who voted for a post by email hear when it ships, and that mail links the entry that announced it.
+
 ## 7. Limits
 
 Each user can vote 30 times, comment 20 times and post 5 times an hour, and one network address can make 120 changes an hour, whoever signs in. An email address gets 3 vote mails an hour.

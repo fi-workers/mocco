@@ -1,7 +1,12 @@
 // Helpers the project's feedback console (#175) shares between its inbox, boards and post pages:
 // addresses, labels and the project's help site, kept apart from the components so they stay
 // fast-refreshable.
-import { FEEDBACK_EMAIL_END_USER_PREFIX, FeedbackPostSorts, FeedbackPostStatuses } from '@mocco/common/feedback';
+import {
+  ChangelogEntryStates,
+  FEEDBACK_EMAIL_END_USER_PREFIX,
+  FeedbackPostSorts,
+  FeedbackPostStatuses,
+} from '@mocco/common/feedback';
 import { Products } from '@mocco/common/project';
 
 import { publicSiteHost } from '@frontend/components/help/help-center';
@@ -9,7 +14,7 @@ import { Tones } from '@frontend/components/notifications/notification-ui';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { Tone } from '@frontend/components/notifications/notification-ui';
-import type { FeedbackPostSort, FeedbackPostStatus } from '@mocco/common/feedback';
+import type { ChangelogEntryState, FeedbackPostSort, FeedbackPostStatus } from '@mocco/common/feedback';
 
 /** A board or category address from its name: `Feature requests` → `feature-requests`. */
 export function feedbackSlugOf(name: string): string {
@@ -60,3 +65,18 @@ export const endUserLabel = (endUserId: string) =>
   endUserId.startsWith(FEEDBACK_EMAIL_END_USER_PREFIX)
     ? endUserId.slice(FEEDBACK_EMAIL_END_USER_PREFIX.length)
     : endUserId;
+
+export const changelogStateLabels: Record<ChangelogEntryState, string> = {
+  [ChangelogEntryStates.draft]: 'Draft',
+  [ChangelogEntryStates.scheduled]: 'Scheduled',
+  [ChangelogEntryStates.published]: 'Published',
+};
+
+export const changelogStateTones: Record<ChangelogEntryState, Tone> = {
+  [ChangelogEntryStates.draft]: Tones.neutral,
+  [ChangelogEntryStates.scheduled]: Tones.warn,
+  [ChangelogEntryStates.published]: Tones.ok,
+};
+
+/** "Oct 17, 2026, 9:30 AM" in the viewer's time zone. */
+export const formatWhen = (date: Date) => date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
