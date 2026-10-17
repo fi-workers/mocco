@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { ExecutorIds } from '@mocco/common/execution';
 import {
+  FeedbackLinkKinds,
+  FeedbackLinkStates,
   FeedbackPostSorts,
   FeedbackPostStatuses,
   FeedbackSourceTypes,
@@ -33,10 +35,14 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { expectOne } from '@backend/infra/db/rows';
+import { feedbackLinks, projectRepos, providerConnections, repos } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { feedbackRouter } from '@backend/transport/trpc/routers/feedback';
 import { contextServices } from '@backend/transport/trpc/testing/context-services';
+
+import type { Db } from '@backend/infra/db/types';
 
 const signUpViaHttp = async (auth: AuthService, email: string) => {
   const response = await auth.handler(
@@ -58,6 +64,9 @@ interface Ids {
   boardId: string;
   categoryId: string;
   postId: string;
+  /** A GitHub repo linked to the project, and a post's link to one of its pull requests. */
+  repoId: string;
+  linkId: string;
 }
 
 const intake = FeedbackSourceTypes.messengerConversation;
@@ -100,10 +109,23 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
   sourcePosts: async (api, scope) =>
     await api.feedback.sourcePosts({ ...scope, sourceType: intake, sourceId: randomUUID() }),
   postSources: async (api, scope, ids) => await api.feedback.postSources({ ...scope, postId: ids.postId }),
+  linkRepos: async (api, scope) => await api.feedback.linkRepos(scope),
+  linkSearch: async (api, scope, ids) =>
+    await api.feedback.linkSearch({ ...scope, repoId: ids.repoId, kind: FeedbackLinkKinds.issue, query: 'x' }),
+  links: async (api, scope, ids) => await api.feedback.links({ ...scope, postId: ids.postId }),
+  link: async (api, scope, ids) =>
+    await api.feedback.link({
+      ...scope,
+      postId: ids.postId,
+      repoId: ids.repoId,
+      kind: FeedbackLinkKinds.pullRequest,
+      number: 1,
+    }),
+  unlink: async (api, scope, ids) => await api.feedback.unlink({ ...scope, linkId: ids.linkId }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
-const scopeOnly = new Set(['boards', 'createBoard']);
+const scopeOnly = new Set(['boards', 'createBoard', 'linkRepos']);
 
 /** The tRPC error code a call ends with, or 'ok'. */
 const outcome = async (run: () => Promise<unknown>): Promise<string | undefined> => {
@@ -115,8 +137,9 @@ const outcome = async (run: () => Promise<unknown>): Promise<string | undefined>
   }
 };
 
-/** A board with a category and a categorized post, which one end user voted for. */
-const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
+/** A board with a category and a categorized post, which one end user voted for and which links a
+ * pull request of a GitHub repo linked to the project (written directly: no GitHub App here). */
+const seed = async (db: Db, api: Api, scope: Scope, slug: string): Promise<Ids> => {
   const { board } = await api.feedback.createBoard({ ...scope, slug, name: 'Ideas' });
   const { category } = await api.feedback.createCategory({ ...scope, boardId: board.id, slug: 'mobile', name: 'M' });
   const { post } = await api.feedback.createPost({
@@ -126,7 +149,48 @@ const seed = async (api: Api, scope: Scope, slug: string): Promise<Ids> => {
     categoryId: category.id,
   });
   await api.feedback.vote({ ...scope, postId: post.id, endUserId: 'voter' });
-  return { boardId: board.id, categoryId: category.id, postId: post.id };
+  const connection = expectOne(
+    await db
+      .insert(providerConnections)
+      .values({
+        workspaceId: scope.workspaceId,
+        provider: 'github',
+        externalAccountId: scope.workspaceId,
+        accountLogin: 'a',
+      })
+      .returning(),
+  );
+  const repo = expectOne(
+    await db
+      .insert(repos)
+      .values({
+        workspaceId: scope.workspaceId,
+        connectionId: connection.id,
+        externalRepoId: '9',
+        owner: 'acme',
+        name: 'app',
+        defaultBranch: 'main',
+      })
+      .returning(),
+  );
+  await db.insert(projectRepos).values({ ...scope, repoId: repo.id });
+  const link = expectOne(
+    await db
+      .insert(feedbackLinks)
+      .values({
+        ...scope,
+        postId: post.id,
+        repoId: repo.id,
+        kind: FeedbackLinkKinds.pullRequest,
+        externalNumber: 7,
+        externalNodeId: 'PR_7',
+        title: 'Dark mode',
+        url: 'https://github.com/acme/app/pull/7',
+        state: FeedbackLinkStates.open,
+      })
+      .returning(),
+  );
+  return { boardId: board.id, categoryId: category.id, postId: post.id, repoId: repo.id, linkId: link.id };
 };
 
 describe('feedback router on pglite', () => {
@@ -209,7 +273,7 @@ describe('feedback router on pglite', () => {
 
   it('runs a board end to end and maps domain errors', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'ideas');
+    const ids = await seed(t.db, api, scope, 'ideas');
 
     const { post, change } = await api.feedback.setPostStatus({
       ...scope,
@@ -252,7 +316,7 @@ describe('feedback router on pglite', () => {
 
   it('records votes on behalf of end users and takes the team comments', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'ideas');
+    const ids = await seed(t.db, api, scope, 'ideas');
 
     const again = await api.feedback.vote({ ...scope, postId: ids.postId, endUserId: 'voter' });
     expect(again.post.voteCount).toBe(1);
@@ -287,7 +351,7 @@ describe('feedback router on pglite', () => {
 
   it('merges a duplicate, lists subscribers and maps merge errors', async () => {
     const { api, scope } = await setup('owner@example.com', 'acme');
-    const ids = await seed(api, scope, 'ideas');
+    const ids = await seed(t.db, api, scope, 'ideas');
     const { post: duplicate } = await api.feedback.createPost({ ...scope, boardId: ids.boardId, title: 'Dark theme' });
     await api.feedback.vote({ ...scope, postId: duplicate.id, endUserId: 'voter' });
     await api.feedback.vote({ ...scope, postId: duplicate.id, endUserId: 'other' });
@@ -315,9 +379,9 @@ describe('feedback router on pglite', () => {
 
   it("rejects a non-member and another tenant's ids on every procedure", async () => {
     const owner = await setup('owner@example.com', 'acme');
-    const victim = await seed(owner.api, owner.scope, 'ideas');
+    const victim = await seed(t.db, owner.api, owner.scope, 'ideas');
     const attacker = await setup('attacker@example.com', 'evil');
-    const own = await seed(attacker.api, attacker.scope, 'ideas');
+    const own = await seed(t.db, attacker.api, attacker.scope, 'ideas');
 
     const results: Record<string, [string | undefined, string | undefined]> = {};
     // One at a time: the calls share one pglite connection.
@@ -363,6 +427,18 @@ describe('feedback router on pglite', () => {
     expect(subscribers.map(row => row.endUserId)).toEqual(['voter']);
     const { posts } = await owner.api.feedback.posts({ ...owner.scope, boardId: victim.boardId });
     expect(posts.map(row => row.id)).toEqual([victim.postId]);
+    const { links } = await owner.api.feedback.links({ ...owner.scope, postId: victim.postId });
+    expect(links.map(link => link.id)).toEqual([victim.linkId]);
+    // Linking the victim's repo from the attacker's own post is refused like any foreign id.
+    await expect(
+      attacker.api.feedback.link({
+        ...attacker.scope,
+        postId: own.postId,
+        repoId: victim.repoId,
+        kind: FeedbackLinkKinds.issue,
+        number: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     const { boards } = await attacker.api.feedback.boards(attacker.scope);
     expect(boards.map(row => row.id)).not.toContain(victim.boardId);
     expect(boards.map(row => row.id)).toContain(own.boardId);

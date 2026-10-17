@@ -11,6 +11,7 @@ export const GithubWebhookEvents = {
   installation: 'installation',
   installation_repositories: 'installation_repositories',
   pull_request: 'pull_request',
+  issues: 'issues',
 } as const;
 export type GithubWebhookEvent = (typeof GithubWebhookEvents)[keyof typeof GithubWebhookEvents];
 
@@ -33,6 +34,23 @@ export const GithubPullRequestActions = {
 } as const;
 export type GithubPullRequestAction = (typeof GithubPullRequestActions)[keyof typeof GithubPullRequestActions];
 
+/** An issue's or pull request's `state` in webhook payloads and the REST API. A merged pull
+ * request is `closed` with `merged: true`. */
+export const GithubIssueStates = {
+  open: 'open',
+  closed: 'closed',
+} as const;
+export type GithubIssueState = (typeof GithubIssueStates)[keyof typeof GithubIssueStates];
+
+/** A pull request's `state` in the GraphQL API (`PullRequestState`). */
+export const GithubGraphqlPullRequestStates = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  MERGED: 'MERGED',
+} as const;
+export type GithubGraphqlPullRequestState =
+  (typeof GithubGraphqlPullRequestStates)[keyof typeof GithubGraphqlPullRequestStates];
+
 /** `setup_action` query param on the GitHub App post-install redirect. */
 export const GithubSetupActions = {
   install: 'install',
@@ -48,6 +66,7 @@ export const WebhookKinds = {
   installation: 'installation',
   installation_repositories: 'installation_repositories',
   pull_request: 'pull_request',
+  issues: 'issues',
   ignored: 'ignored',
 } as const;
 export type WebhookKind = (typeof WebhookKinds)[keyof typeof WebhookKinds];

@@ -1,7 +1,7 @@
 // A feedback post in the console (#175): what the user asked for, and everything the team does
 // with it — change its status or category, edit it, answer (plainly, as the official response, or
 // as an internal note the public never sees), record a vote for a user who asked by email or on a
-// call, and merge it into the post it duplicates. Reads and writes only through `feedback.*`.
+// call, merge it into the post it duplicates, and link the GitHub issues and pull requests it is about. Reads and writes only through `feedback.*`.
 import {
   FeedbackCommentAuthorKinds,
   FeedbackLimits,
@@ -13,6 +13,7 @@ import {
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { GithubLinks } from '@frontend/components/feedback-console/github-links';
 import {
   Ago,
   errorMessage,
@@ -667,6 +668,12 @@ export default function FeedbackPost({ workspaceId, projectId, postId }: Props) 
         </div>
         <div className="flex flex-col gap-8">
           <Triage workspaceId={workspaceId} projectId={projectId} post={post} categories={categories} />
+          <GithubLinks
+            workspaceId={workspaceId}
+            projectId={projectId}
+            postId={postId}
+            isMerged={post.mergedIntoPostId !== null}
+          />
           <Votes
             workspaceId={workspaceId}
             projectId={projectId}

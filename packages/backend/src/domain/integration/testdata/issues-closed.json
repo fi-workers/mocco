@@ -1,0 +1,17 @@
+{
+  "action": "closed",
+  "installation": { "id": 12345678 },
+  "repository": {
+    "id": 654321,
+    "name": "example-repo",
+    "owner": { "login": "fi-workers" }
+  },
+  "issue": {
+    "number": 12,
+    "node_id": "I_kwDOAbCdEf5aBcDeFg",
+    "title": "Dark mode",
+    "html_url": "https://github.com/fi-workers/example-repo/issues/12",
+    "state": "closed"
+  },
+  "sender": { "id": 4242, "login": "ada" }
+}

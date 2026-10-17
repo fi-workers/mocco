@@ -94,6 +94,7 @@ describe('job runtime composition (pglite)', () => {
         FeedbackJobKinds.publishDueChangelog,
         FeedbackJobKinds.statusMail,
         FeedbackJobKinds.detectDuplicates,
+        FeedbackJobKinds.refreshLinks,
         FlagJobKinds.expireChangesets,
         FlagJobKinds.detectStale,
         FlagJobKinds.staleDigest,

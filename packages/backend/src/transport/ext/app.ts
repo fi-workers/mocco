@@ -421,7 +421,9 @@ export async function extHandler(request: Request): Promise<Response> {
     // eslint-disable-next-line n/no-sync -- a false positive on the `commitSync` identifier
     commitSync: integration?.commitSync
       .withFlagFiles(getFlagFiles(integration.provider))
-      .withFlagPlans(getFlagPlanChecks(integration.provider)),
+      .withFlagPlans(getFlagPlanChecks(integration.provider))
+      // Issue and pull request changes keep feedback links current (#178).
+      .withTrackerEvents(getFeedbackDomain().feedbackLinks),
     deliveries: integration?.deliveries,
     runs: execution.runs,
     broker: getCredential().broker,

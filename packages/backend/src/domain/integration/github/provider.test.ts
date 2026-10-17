@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 
+import { FeedbackLinkKinds, FeedbackLinkStates } from '@mocco/common/feedback';
 import { describe, expect, it } from 'vitest';
 
 import { GithubApiError } from '@backend/domain/integration/github/errors';
@@ -8,9 +9,14 @@ import {
   decodeGetContent,
   fitCheckOutput,
   toCheckRunBody,
+  toClosingPullRequests,
   toListedCommit,
   toRepo,
+  toSearchQuery,
   toSourceCommit,
+  toTrackerIssue,
+  toTrackerPull,
+  toTrackerSearchItems,
   verify,
 } from '@backend/domain/integration/github/provider';
 
@@ -182,5 +188,122 @@ describe('fitCheckOutput', () => {
     const fitted = fitCheckOutput('a'.repeat(CHECK_OUTPUT_MAX_CHARS + 10));
     expect(fitted).toHaveLength(CHECK_OUTPUT_MAX_CHARS);
     expect(fitted.endsWith('_…cut short: GitHub limits how long a check report can be._')).toBe(true);
+  });
+});
+
+/** A closing pull request node of the GraphQL answer. */
+const closingNode = (number: number, state: string, owner = 'acme') => ({
+  id: `PR_${String(number)}`,
+  number,
+  title: 'Fix',
+  url: `https://github.com/${owner}/app/pull/${String(number)}`,
+  state,
+  mergedAt: state === 'MERGED' ? '2026-10-02T00:00:00Z' : null,
+  mergeCommit: state === 'MERGED' ? { oid: 'beef' } : null,
+  repository: { name: 'app', owner: { login: owner } },
+});
+
+describe('issue tracker mappers', () => {
+  const repo = { externalAccountId: '1', owner: 'Acme', name: 'App' };
+  const base = { node_id: 'N', title: 'Dark mode', html_url: 'https://github.com/acme/app/issues/12' };
+
+  it('maps an issue, and refuses a pull request asked for as an issue', () => {
+    expect(toTrackerIssue({ ...base, number: 12, state: 'closed' })).toEqual({
+      kind: FeedbackLinkKinds.issue,
+      number: 12,
+      nodeId: 'N',
+      title: 'Dark mode',
+      url: 'https://github.com/acme/app/issues/12',
+      state: FeedbackLinkStates.closed,
+      mergeCommitSha: null,
+      mergedAt: null,
+    });
+    expect(toTrackerIssue({ ...base, number: 13, state: 'open', pull_request: { url: 'x' } })).toBeNull();
+  });
+
+  it('maps a pull request: merged with its merge commit, else open or closed without one', () => {
+    const merged = toTrackerPull({
+      ...base,
+      number: 42,
+      state: 'closed',
+      merged: true,
+      merge_commit_sha: 'c0ffee',
+      merged_at: '2026-10-17T09:30:00Z',
+    });
+    expect(merged).toMatchObject({
+      kind: FeedbackLinkKinds.pullRequest,
+      state: FeedbackLinkStates.merged,
+      mergeCommitSha: 'c0ffee',
+      mergedAt: new Date('2026-10-17T09:30:00Z'),
+    });
+    // GitHub sets merge_commit_sha on an open pull request (its test merge): not a merge.
+    expect(
+      toTrackerPull({ ...base, number: 43, state: 'open', merged: false, merge_commit_sha: 'test' }),
+    ).toMatchObject({
+      state: FeedbackLinkStates.open,
+      mergeCommitSha: null,
+    });
+    expect(toTrackerPull({ ...base, number: 44, state: 'closed', merged: false })).toMatchObject({
+      state: FeedbackLinkStates.closed,
+    });
+  });
+
+  it('keeps search results to the repo and the kind', () => {
+    const items = [
+      { ...base, number: 1, state: 'open', repository_url: 'https://api.github.com/repos/acme/app' },
+      {
+        ...base,
+        number: 2,
+        state: 'closed',
+        repository_url: 'https://api.github.com/repos/acme/app',
+        pull_request: { merged_at: '2026-10-01T00:00:00Z' },
+      },
+      {
+        ...base,
+        number: 3,
+        state: 'closed',
+        repository_url: 'https://api.github.com/repos/acme/app',
+        pull_request: { merged_at: null },
+      },
+      { ...base, number: 4, state: 'open', repository_url: 'https://api.github.com/repos/acme/secret' },
+      { not: 'an item' },
+    ];
+    expect(toTrackerSearchItems({ items }, repo, FeedbackLinkKinds.issue).map(item => item.number)).toEqual([1]);
+    expect(
+      toTrackerSearchItems({ items }, repo, FeedbackLinkKinds.pullRequest).map(item => [item.number, item.state]),
+    ).toEqual([
+      [2, FeedbackLinkStates.merged],
+      [3, FeedbackLinkStates.closed],
+    ]);
+  });
+
+  it('builds a search query that cannot leave the repo', () => {
+    expect(toSearchQuery(repo, FeedbackLinkKinds.pullRequest, ' dark  repo:other/x "mode" ')).toBe(
+      'repo:Acme/App is:pr dark mode',
+    );
+    expect(toSearchQuery(repo, FeedbackLinkKinds.issue, '')).toBe('repo:Acme/App is:issue');
+  });
+
+  it("keeps the closing pull requests in the issue's own repo", () => {
+    const data = {
+      repository: {
+        issue: {
+          closedByPullRequestsReferences: {
+            nodes: [
+              closingNode(1, 'MERGED'),
+              closingNode(2, 'OPEN'),
+              closingNode(3, 'CLOSED'),
+              closingNode(4, 'MERGED', 'fork'),
+            ],
+          },
+        },
+      },
+    };
+    expect(toClosingPullRequests(data, repo).map(pull => [pull.number, pull.state, pull.mergeCommitSha])).toEqual([
+      [1, FeedbackLinkStates.merged, 'beef'],
+      [2, FeedbackLinkStates.open, null],
+      [3, FeedbackLinkStates.closed, null],
+    ]);
+    expect(toClosingPullRequests({ repository: null }, repo)).toEqual([]);
   });
 });

@@ -129,6 +129,14 @@ Mocco compares each new post with the board's older ones, within a minute or so 
 
 ![Possible duplicates: three pairs, each with Merge and Not the same](./images/feedback-console-duplicates.png)
 
+### Link GitHub issues and pull requests
+
+Tie a post to the work that delivers it. On the post's page, under **GitHub**, choose **Link an issue or pull request…**, pick one of the repositories linked to the project, choose **Issue** or **Pull request**, and search by words or by number (`#128`). Click a result to link it. Each link shows whether it is open, closed or merged, with the merge commit once merged; a linked issue also lists the pull requests that close it. Mocco keeps these up to date as things change on GitHub, so you don't need to come back and refresh them. **Unlink** removes one.
+
+Only repositories linked to the post's project can be searched or linked; link a repository on the project's page first. If you installed the Mocco GitHub App before linking was available, GitHub asks an owner of your organization to accept two read-only permissions (Issues and Pull requests): look for **Review request** on the App's installation page in your GitHub settings. Until then, searching issues fails.
+
+![A post linked to a closed issue, the merged pull request that closed it, and an open pull request](./images/feedback-github-links.png)
+
 ### Announce what shipped
 
 **Changelog** in the inbox's header lists the board's entries: drafts, scheduled and published. Type a title and choose **New entry** to start one. In the entry, write what changed in Markdown (the preview shows it as readers will see it), tick New, Improved or Fixed, and add the posts it shipped. Then **Publish now**, or pick a time and **Schedule** it: Mocco publishes it within a minute of that time. A published entry can go back to a draft with **Unpublish**.
