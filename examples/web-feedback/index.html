@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme — Mocco feedback example</title>
+    <!--
+      The built SDK files, served by server.mjs from this repository. An app with a bundler
+      installs @mocco/js and imports the same names; no import map is needed there.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@mocco/js/feedback-sheet": "/sdk/js/feedback-sheet.js",
+          "@mocco/js/whats-new": "/sdk/js/whats-new.js",
+          "@mocco/sdk-core": "/sdk/core/sdk-core.js",
+          "@mocco/sdk-core/feedback": "/sdk/core/feedback.js",
+          "@mocco/sdk-core/feedback-sheet": "/sdk/core/feedback-sheet.js",
+          "@mocco/sdk-core/whats-new": "/sdk/core/whats-new.js"
+        }
+      }
+    </script>
+    <style>
+      body {
+        margin: 0;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        color: #18181b;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        border-bottom: 1px solid #e4e4e7;
+      }
+      header strong {
+        margin-right: auto;
+      }
+      header button {
+        padding: 6px 12px;
+        border: 1px solid #d4d4d8;
+        border-radius: 8px;
+        background: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      main {
+        max-width: 640px;
+        padding: 24px 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Acme</strong>
+      <button id="whats-new" type="button">What's new</button>
+      <button id="ideas" type="button">Ideas</button>
+    </header>
+    <main>
+      <h1>Your dashboard</h1>
+      <p>
+        <label><input id="signed-in" type="checkbox" /> Signed in as <code>user-42</code></label>
+      </p>
+      <p>
+        Signed in, the sheet behind <b>Ideas</b> votes and posts as that user, with a token the server signs. Signed
+        out, it lists the ideas only.
+      </p>
+    </main>
+    <script type="module">
+      import { createFeedbackSheet } from '@mocco/js/feedback-sheet';
+      import { createWhatsNew } from '@mocco/js/whats-new';
+
+      const config = await (await fetch('/config.json')).json();
+      const signedIn = document.querySelector('#signed-in');
+      signedIn.checked = localStorage.getItem('example-signed-in') === 'yes';
+      signedIn.addEventListener('change', () => {
+        localStorage.setItem('example-signed-in', signedIn.checked ? 'yes' : 'no');
+        location.reload();
+      });
+
+      // Your server signs the token for its signed-in user; null while nobody is signed in.
+      const endUserToken = async () => {
+        if (!signedIn.checked) {
+          return null;
+        }
+        const response = await fetch('/api/mocco-token');
+        return response.ok ? (await response.json()).token : null;
+      };
+
+      createWhatsNew({ ...config, endUserToken }).mount('#whats-new');
+      createFeedbackSheet({ ...config, endUserToken }).mount('#ideas');
+    </script>
+  </body>
+</html>

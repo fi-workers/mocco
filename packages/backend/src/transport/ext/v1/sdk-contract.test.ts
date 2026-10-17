@@ -6,9 +6,18 @@ import {
   type feedbackV1ChangelogListSchema,
   type feedbackV1ChangelogSeenSchema,
   type feedbackV1ChangelogUnreadSchema,
+  type feedbackV1CommentInputSchema,
+  type feedbackV1CommentListSchema,
+  type feedbackV1CommentResultSchema,
+  type feedbackV1PostCreateInputSchema,
   type feedbackV1PostDetailSchema,
   type feedbackV1PostListQuerySchema,
   type feedbackV1PostListSchema,
+  type feedbackV1PostResultSchema,
+  type feedbackV1RoadmapSchema,
+  type feedbackV1SimilarQuerySchema,
+  type feedbackV1SimilarSchema,
+  type feedbackV1SubscriptionResultSchema,
   type feedbackV1VoteResultSchema,
 } from '@mocco/common/feedback-v1';
 import {
@@ -84,9 +93,15 @@ import type {
   FeedbackChangelogPage,
   FeedbackChangelogSeen,
   FeedbackChangelogUnread,
+  FeedbackComment,
+  FeedbackCommentPage,
+  FeedbackPost,
+  FeedbackPostCreateRequest,
   FeedbackPostDetail,
   FeedbackPostListOptions,
   FeedbackPostPage,
+  FeedbackRoadmap,
+  FeedbackSubscription,
   FeedbackVoteResult,
 } from '@mocco/sdk-core/feedback';
 import type {
@@ -156,6 +171,18 @@ describe('SDK wire types match the /v1 schemas', () => {
     expectTypeOf<z.output<typeof feedbackV1ChangelogListSchema>>().toExtend<FeedbackChangelogPage>();
     expectTypeOf<z.output<typeof feedbackV1ChangelogUnreadSchema>>().toExtend<FeedbackChangelogUnread>();
     expectTypeOf<z.output<typeof feedbackV1ChangelogSeenSchema>>().toExtend<FeedbackChangelogSeen>();
+  });
+
+  it('feedback writes: posting, similar posts, comments, follows and the roadmap', () => {
+    expectTypeOf<FeedbackPostCreateRequest>().toExtend<z.input<typeof feedbackV1PostCreateInputSchema>>();
+    expectTypeOf<{ q: string; limit?: number }>().toExtend<z.input<typeof feedbackV1SimilarQuerySchema>>();
+    expectTypeOf<{ body: string }>().toExtend<z.input<typeof feedbackV1CommentInputSchema>>();
+    expectTypeOf<z.output<typeof feedbackV1PostResultSchema>>().toExtend<{ post: FeedbackPost }>();
+    expectTypeOf<z.output<typeof feedbackV1SimilarSchema>>().toExtend<{ posts: FeedbackPost[] }>();
+    expectTypeOf<z.output<typeof feedbackV1CommentListSchema>>().toExtend<FeedbackCommentPage>();
+    expectTypeOf<z.output<typeof feedbackV1CommentResultSchema>>().toExtend<{ comment: FeedbackComment }>();
+    expectTypeOf<z.output<typeof feedbackV1SubscriptionResultSchema>>().toExtend<FeedbackSubscription>();
+    expectTypeOf<z.output<typeof feedbackV1RoadmapSchema>>().toExtend<{ roadmap: FeedbackRoadmap }>();
   });
 
   it('status: what the SDK sends is accepted, and what the routes answer is what it types', () => {

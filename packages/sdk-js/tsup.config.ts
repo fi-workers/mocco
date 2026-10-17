@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/mocco-js.ts', 'src/feedback.ts', 'src/whats-new.ts'],
+  entry: ['src/mocco-js.ts', 'src/feedback.ts', 'src/whats-new.ts', 'src/feedback-sheet.ts'],
   format: ['esm'],
   dts: true,
   clean: true,

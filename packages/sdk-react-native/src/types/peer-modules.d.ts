@@ -30,10 +30,39 @@ declare module 'react-native' {
   interface PrimitiveProps {
     style?: unknown;
     accessibilityLabel?: string;
+    accessibilityRole?: string;
+    accessibilityState?: { disabled?: boolean; selected?: boolean; busy?: boolean };
+    testID?: string;
     children?: ReactNode;
   }
   export const View: ComponentType<PrimitiveProps>;
-  export const Text: ComponentType<PrimitiveProps>;
+  export const Text: ComponentType<PrimitiveProps & { numberOfLines?: number }>;
+  export const ScrollView: ComponentType<
+    PrimitiveProps & { contentContainerStyle?: unknown; keyboardShouldPersistTaps?: 'always' | 'handled' | 'never' }
+  >;
+  export const Pressable: ComponentType<
+    PrimitiveProps & { onPress?: () => void; disabled?: boolean; hitSlop?: number }
+  >;
+  export const TextInput: ComponentType<
+    PrimitiveProps & {
+      value?: string;
+      onChangeText?: (text: string) => void;
+      placeholder?: string;
+      placeholderTextColor?: string;
+      multiline?: boolean;
+      maxLength?: number;
+      editable?: boolean;
+      returnKeyType?: string;
+    }
+  >;
+  export const ActivityIndicator: ComponentType<PrimitiveProps & { color?: string }>;
+  export const Modal: ComponentType<{
+    visible?: boolean;
+    animationType?: 'none' | 'slide' | 'fade';
+    presentationStyle?: 'fullScreen' | 'pageSheet' | 'formSheet' | 'overFullScreen';
+    onRequestClose?: () => void;
+    children?: ReactNode;
+  }>;
   export const AppState: {
     currentState: string;
     addEventListener(type: 'change', listener: (state: string) => void): { remove(): void };

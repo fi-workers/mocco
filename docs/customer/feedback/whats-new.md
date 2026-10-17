@@ -10,6 +10,7 @@ owner: andrea
 tags: [customer, feedback, guide, sdk]
 related:
   - ./public-board.md
+  - ./in-app-ideas.md
   - ../messenger/contact-us.md
   - ../../reference/sdk.md
   - ../../reference/feedback.md
@@ -148,7 +149,7 @@ await feedback.vote(posts[0].id); // voting again changes nothing; feedback.unvo
 const { viewer } = await feedback.post(posts[0].id); // viewer.vote: 'counted' once they voted
 ```
 
-Voting without a signed-in user is refused with a `MoccoError` whose `code` is `missing_end_user_token`, before anything is sent. Posting ideas and commenting from the app come in a later release; until then, link signed-in users to the public board.
+Voting without a signed-in user is refused with a `MoccoError` whose `code` is `missing_end_user_token`, before anything is sent. To let users post ideas, comment and follow from the app, or to open a ready-made sheet of ideas, see [Collect ideas in your app](./in-app-ideas.md).
 
 ## 6. Limits
 

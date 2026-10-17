@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/sdk-core.ts', 'src/status.ts', 'src/feedback.ts', 'src/whats-new.ts'],
+  entry: ['src/sdk-core.ts', 'src/status.ts', 'src/feedback.ts', 'src/whats-new.ts', 'src/feedback-sheet.ts'],
   format: ['esm', 'cjs'],
   dts: true,
   clean: true,

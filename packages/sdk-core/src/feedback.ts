@@ -97,6 +97,46 @@ export interface FeedbackChangelogSeen {
   lastSeenAt: string;
 }
 
+/** The board's roadmap: its public posts in each roadmap column. */
+export interface FeedbackRoadmap {
+  planned: FeedbackPost[];
+  in_progress: FeedbackPost[];
+  shipped: FeedbackPost[];
+}
+
+/**
+ * A comment as the public sees it: the team's (`authorKind: 'staff'`, `isOfficial` for an
+ * official answer) or an end user's, never who wrote it; `isMine` marks the viewer's own.
+ */
+export interface FeedbackComment {
+  id: string;
+  authorKind: 'staff' | 'end_user';
+  isOfficial: boolean;
+  isMine: boolean;
+  body: string;
+  createdAt: string;
+}
+
+export interface FeedbackCommentPage {
+  comments: FeedbackComment[];
+  nextOffset: number | null;
+}
+
+/** A new post from the signed-in end user. It starts under review, with their vote. */
+export interface FeedbackPostCreateRequest {
+  /** 1–200 characters. */
+  title: string;
+  /** Up to 20,000 characters. */
+  body?: string;
+  /** One of the board's categories (`FeedbackBoard.categories[].id`). */
+  categoryId?: string;
+}
+
+/** Whether the signed-in end user follows a post. */
+export interface FeedbackSubscription {
+  subscribed: boolean;
+}
+
 export interface FeedbackPageOptions {
   /** 1–100 (default 20). */
   limit?: number;
@@ -156,6 +196,15 @@ export interface FeedbackBoardClient {
   get(): Promise<FeedbackBoard>;
   /** The board's posts (merged duplicates left out), most voted first unless `sort: 'new'`. */
   posts(opts?: FeedbackPostListOptions): Promise<FeedbackPostPage>;
+  /** The board's public posts by roadmap column: planned, in progress and shipped. */
+  roadmap(): Promise<FeedbackRoadmap>;
+  /**
+   * Posts like `title`, e.g. while the end user types an idea, so they can vote for one
+   * instead of posting a duplicate. Up to `limit` (1–10, default 5).
+   */
+  similar(title: string, opts?: { limit?: number }): Promise<FeedbackPost[]>;
+  /** Post an idea as the signed-in end user (needs feedback:write); it counts their vote. */
+  createPost(input: FeedbackPostCreateRequest): Promise<FeedbackPost>;
   /** Published changelog entries, newest first. */
   changelog(opts?: FeedbackPageOptions): Promise<FeedbackChangelogPage>;
   /**
@@ -252,6 +301,22 @@ export class FeedbackClient {
           'none',
         );
       },
+      roadmap: async () => {
+        const answer = await this.request<{ roadmap: FeedbackRoadmap }>('GET', `${path}/roadmap`, 'none');
+        return answer.roadmap;
+      },
+      similar: async (title, opts = {}) => {
+        const answer = await this.request<{ posts: FeedbackPost[] }>(
+          'GET',
+          `${path}/similar${queryOf({ q: title, limit: opts.limit })}`,
+          'none',
+        );
+        return answer.posts;
+      },
+      createPost: async input => {
+        const answer = await this.request<{ post: FeedbackPost }>('POST', `${path}/posts`, 'required', input);
+        return answer.post;
+      },
       changelog: async (opts = {}) =>
         await this.request<FeedbackChangelogPage>(
           'GET',
@@ -277,6 +342,47 @@ export class FeedbackClient {
   /** Vote for a post as the signed-in end user; voting again changes nothing. */
   async vote(postId: string): Promise<FeedbackVoteResult> {
     return await this.request<FeedbackVoteResult>('POST', `/posts/${encodeURIComponent(postId)}/vote`, 'required');
+  }
+
+  /** A post's public comments, oldest first; signed in, `isMine` marks the end user's own. */
+  async comments(postId: string, opts: FeedbackPageOptions = {}): Promise<FeedbackCommentPage> {
+    return await this.request<FeedbackCommentPage>(
+      'GET',
+      `/posts/${encodeURIComponent(postId)}/comments${queryOf({ limit: opts.limit, offset: opts.offset })}`,
+      'optional',
+    );
+  }
+
+  /** Comment on a post as the signed-in end user (1–8,000 characters). */
+  async comment(postId: string, body: string): Promise<FeedbackComment> {
+    const answer = await this.request<{ comment: FeedbackComment }>(
+      'POST',
+      `/posts/${encodeURIComponent(postId)}/comments`,
+      'required',
+      { body },
+    );
+    return answer.comment;
+  }
+
+  /**
+   * Follow a post as the signed-in end user, to hear when it moves. Voting follows a post
+   * already; `unfollow` opts out, and a later vote doesn't follow it again.
+   */
+  async follow(postId: string): Promise<FeedbackSubscription> {
+    return await this.request<FeedbackSubscription>(
+      'POST',
+      `/posts/${encodeURIComponent(postId)}/subscription`,
+      'required',
+    );
+  }
+
+  /** Stop following a post. */
+  async unfollow(postId: string): Promise<FeedbackSubscription> {
+    return await this.request<FeedbackSubscription>(
+      'DELETE',
+      `/posts/${encodeURIComponent(postId)}/subscription`,
+      'required',
+    );
   }
 
   /** Take the signed-in end user's vote back. */
