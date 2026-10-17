@@ -1,6 +1,7 @@
 // The release registry's service over a db. Pure (no instance imports): the event bus
 // composition (domain/events/subscriptions.ts) and the job runtime (runtime/jobs.ts) both
 // build it with their own bus.
+import { RunStepRepo } from '@backend/domain/execution/repos/run-step.repo';
 import { RunRepo } from '@backend/domain/execution/repos/run.repo';
 import { ResumeRepo } from '@backend/domain/governance/repos/resume.repo';
 import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
@@ -16,6 +17,7 @@ export function createReleaseService(db: Db, deps: { bus: EventPublisher }): Rel
     releases: new ReleaseRepo(db),
     projectRepos: new ProjectRepoRepo(db),
     runs: new RunRepo(db),
+    steps: new RunStepRepo(db),
     runGates: new RunGateRepo(db),
     resumes: new ResumeRepo(db),
     bus: deps.bus,

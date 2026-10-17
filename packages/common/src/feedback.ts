@@ -33,8 +33,9 @@ export const RoadmapColumns = [
 ] as const satisfies readonly FeedbackPostStatus[];
 export type RoadmapColumn = (typeof RoadmapColumns)[number];
 
-/** Why a post's status changed. Only `created` and `manual` are written so far; the ship
- * detector writes `ship_suggestion` and `auto_apply`, and merging writes `merge`. */
+/** Why a post's status changed: `created` and `manual` by the team, `ship_suggestion` when the
+ * team accepts a ship suggestion, `auto_apply` when a board ships it without asking (#179), and
+ * `merge` when a duplicate is merged. */
 export const FeedbackStatusChangeReasons = {
   created: 'created',
   manual: 'manual',
@@ -305,3 +306,41 @@ export const feedbackLinkCreateInputSchema = z.object({
   number: z.int().min(1).max(2_147_483_647),
 });
 export type FeedbackLinkCreateInput = z.infer<typeof feedbackLinkCreateInputSchema>;
+
+// ─── Shipping on release (#179) ──────────────────────────────────────────────
+
+/** Where a ship suggestion is: waiting for the team, accepted or dismissed by them, or applied
+ * without asking by a board in `auto_apply` mode. */
+export const ShipSuggestionStates = {
+  pending: 'pending',
+  accepted: 'accepted',
+  dismissed: 'dismissed',
+  autoApplied: 'auto_applied',
+} as const;
+export type ShipSuggestionState = (typeof ShipSuggestionStates)[keyof typeof ShipSuggestionStates];
+
+/** When a post counts as shipped by a release: once every link that counts has shipped, or
+ * once any one has. */
+export const ShipPolicies = { allLinksShipped: 'all_links_shipped', anyLinkShipped: 'any_link_shipped' } as const;
+export type ShipPolicy = (typeof ShipPolicies)[keyof typeof ShipPolicies];
+export const shipPolicySchema = z.enum(Object.values(ShipPolicies));
+
+/** What a board does with a post a release shipped: ask the team (the default), or mark it
+ * shipped at once. */
+export const ShipModes = { suggest: 'suggest', autoApply: 'auto_apply' } as const;
+export type ShipMode = (typeof ShipModes)[keyof typeof ShipModes];
+export const shipModeSchema = z.enum(Object.values(ShipModes));
+
+/** The longest release step name a board keeps (a `.mocco.yml` step's name). */
+export const FEEDBACK_RELEASE_STEP_NAME_MAX = 100;
+
+/** A board's release policy: whose releases ship its posts, and how. */
+export const feedbackReleasePolicyInputSchema = z.object({
+  /** The repo whose releases count; null turns shipping on release off. */
+  releaseRepoId: z.uuid().nullable(),
+  /** Only a release whose run succeeded this step counts; null = any release of the repo. */
+  releaseStepName: z.string().trim().min(1).max(FEEDBACK_RELEASE_STEP_NAME_MAX).nullable(),
+  shipPolicy: shipPolicySchema,
+  shipMode: shipModeSchema,
+});
+export type FeedbackReleasePolicyInput = z.infer<typeof feedbackReleasePolicyInputSchema>;

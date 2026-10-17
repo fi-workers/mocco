@@ -3,6 +3,8 @@
 // link. The links take no key; the signed token is the credential. The confirmation link counts
 // the address's pending votes. The unsubscribe link asks first (GET), so a mail scanner opening
 // it unsubscribes nobody, and the form or the mail client's one-click POST (RFC 8058) does it.
+// The same token at `/unsubscribe/{token}/all` stops all of the project's feedback mail (#180),
+// asking the same way; the confirmation page offers to turn it back on, by a form that posts.
 // Every route is limited per client address, and an email vote also per address mailed.
 import { createHash } from 'node:crypto';
 
@@ -14,6 +16,7 @@ import {
 } from '@mocco/common/feedback-v1';
 import { Hono } from 'hono';
 
+import { UNSUBSCRIBE_ALL_SUFFIX } from '@backend/domain/feedback/EmailVoteService';
 import { FeedbackLinkInvalidError, FeedbackMailUnavailableError } from '@backend/domain/feedback/errors';
 import { FeedbackLinkPageKinds, renderLinkPage } from '@backend/domain/feedback/link-mail';
 import { ipBucketOf, limit, requireKey } from '@backend/transport/ext/v1/middleware';
@@ -23,6 +26,17 @@ import type { EmailVoteService } from '@backend/domain/feedback/EmailVoteService
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
+
+/** What the link routes call on EmailVoteService. */
+export type FeedbackLinkMethod =
+  | 'canSendMail'
+  | 'start'
+  | 'confirm'
+  | 'resumeMail'
+  | 'describeUnsubscribe'
+  | 'unsubscribe'
+  | 'describeUnsubscribeAll'
+  | 'unsubscribeAll';
 
 export const FeedbackLinkRateLimits = {
   /** Email votes per client address. */
@@ -50,8 +64,7 @@ const mailUnavailable = () =>
 export function createFeedbackLinkRoutes(
   deps: V1Deps,
   links: {
-    emailVotes:
-      Pick<EmailVoteService, 'canSendMail' | 'start' | 'confirm' | 'describeUnsubscribe' | 'unsubscribe'> | undefined;
+    emailVotes: Pick<EmailVoteService, FeedbackLinkMethod> | undefined;
     answer: (work: () => Promise<Response>) => Promise<Response>;
     send: <S extends z.ZodType>(c: Context, schema: S, body: z.input<S>, status?: 200 | 201 | 202) => Response;
     /** Who may start an email vote: a key with feedback:write, or a public board's site. */
@@ -136,8 +149,24 @@ export function createFeedbackLinkRoutes(
     '/identify/email/confirm',
     async c =>
       await onLink(c, async () => {
-        const { counted } = await required().confirm(c.req.query('token') ?? '');
-        return renderLinkPage(FeedbackLinkPageKinds.confirmed, { counted });
+        const token = c.req.query('token') ?? '';
+        const { counted, isMailStopped, projectName } = await required().confirm(token);
+        // An address that stopped all mail stays stopped; the page asks, and its form turns it back on.
+        const resume = `${c.req.path.replace(/\/confirm$/u, '/resume')}?token=${encodeURIComponent(token)}`;
+        return renderLinkPage(FeedbackLinkPageKinds.confirmed, {
+          counted,
+          projectName,
+          ...(isMailStopped && { formAction: resume }),
+        });
+      }),
+  );
+
+  app.post(
+    '/identify/email/resume',
+    async c =>
+      await onLink(c, async () => {
+        const { projectName } = await required().resumeMail(c.req.query('token') ?? '');
+        return renderLinkPage(FeedbackLinkPageKinds.mailResumed, { projectName });
       }),
   );
 
@@ -146,8 +175,13 @@ export function createFeedbackLinkRoutes(
     '/unsubscribe/:token',
     async c =>
       await onLink(c, async () => {
-        const { postTitle } = await required().describeUnsubscribe(c.req.param('token') ?? '');
-        return renderLinkPage(FeedbackLinkPageKinds.unsubscribeAsk, { postTitle, formAction: c.req.path });
+        const { postTitle, projectName } = await required().describeUnsubscribe(c.req.param('token') ?? '');
+        return renderLinkPage(FeedbackLinkPageKinds.unsubscribeAsk, {
+          postTitle,
+          projectName,
+          formAction: c.req.path,
+          allFormAction: `${c.req.path}${UNSUBSCRIBE_ALL_SUFFIX}`,
+        });
       }),
   );
 
@@ -158,6 +192,25 @@ export function createFeedbackLinkRoutes(
       await onLink(c, async () => {
         const { postTitle } = await required().unsubscribe(c.req.param('token') ?? '');
         return renderLinkPage(FeedbackLinkPageKinds.unsubscribed, { postTitle });
+      }),
+  );
+
+  // Every post of the project at once: asks on GET too, and the page's form does it.
+  app.get(
+    `/unsubscribe/:token${UNSUBSCRIBE_ALL_SUFFIX}`,
+    async c =>
+      await onLink(c, async () => {
+        const { projectName } = await required().describeUnsubscribeAll(c.req.param('token') ?? '');
+        return renderLinkPage(FeedbackLinkPageKinds.unsubscribeAllAsk, { projectName, formAction: c.req.path });
+      }),
+  );
+
+  app.post(
+    `/unsubscribe/:token${UNSUBSCRIBE_ALL_SUFFIX}`,
+    async c =>
+      await onLink(c, async () => {
+        const { projectName } = await required().unsubscribeAll(c.req.param('token') ?? '');
+        return renderLinkPage(FeedbackLinkPageKinds.unsubscribedAll, { projectName });
       }),
   );
 

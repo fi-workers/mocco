@@ -31,6 +31,7 @@ import type { IntakeService } from '@backend/domain/feedback/IntakeService';
 import type { LinkService } from '@backend/domain/feedback/LinkService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
+import type { ShipSuggestionService } from '@backend/domain/feedback/ShipSuggestionService';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
@@ -122,6 +123,7 @@ export interface TrpcDeps extends Services {
   feedbackDuplicates: DuplicateService;
   feedbackIntake: IntakeService;
   feedbackLinks: LinkService;
+  feedbackShipSuggestions: ShipSuggestionService;
   feedbackChangelog: ChangelogService;
   statusPages: StatusPageService;
   statusIncidents: IncidentService;
@@ -196,6 +198,7 @@ export function createTrpcHandler(deps: TrpcDeps) {
         feedbackDuplicates: deps.feedbackDuplicates,
         feedbackIntake: deps.feedbackIntake,
         feedbackLinks: deps.feedbackLinks,
+        feedbackShipSuggestions: deps.feedbackShipSuggestions,
         feedbackChangelog: deps.feedbackChangelog,
         statusPages: deps.statusPages,
         statusIncidents: deps.statusIncidents,

@@ -16,6 +16,9 @@ import {
   FeedbackStatusChangeReasons,
   FeedbackVoteSources,
   FeedbackVoteStates,
+  ShipModes,
+  ShipPolicies,
+  ShipSuggestionStates,
 } from '@mocco/common/feedback';
 import {
   ChangesetSources,
@@ -108,6 +111,9 @@ import type {
   FeedbackStatusChangeReason,
   FeedbackVoteSource,
   FeedbackVoteState,
+  ShipMode,
+  ShipPolicy,
+  ShipSuggestionState,
 } from '@mocco/common/feedback';
 import type {
   AttributeClause,
@@ -4300,8 +4306,8 @@ export const statusSubscriberDeliveries = pgTable(
 // Feedback board (#98, slice #172): a project's boards, their categories, posts and each post's
 // status history. Every row carries `workspace_id`; children reach their board through composite
 // FKs on (board_id, workspace_id, project_id), so a row can never point at another tenant's board.
-// Votes, comments, subscriptions and merges came with #173; GitHub links and shipping come in
-// later slices.
+// Votes, comments, subscriptions and merges came with #173, GitHub links with #178, and shipping
+// on release (the board's release policy and ship suggestions) with #179.
 // ─────────────────────────────────────────────────────────────
 
 /** A feedback board of a project. `slug` is unique within the project. */
@@ -4316,11 +4322,27 @@ export const feedbackBoards = pgTable(
     isPublic: boolean('is_public').notNull().default(true),
     // The number the board's next post gets; taken under the board row's lock (FeedbackBoardRepo).
     nextPostNumber: integer('next_post_number').notNull().default(1),
+    // The release policy (#179): the repo whose releases ship the board's posts (one linked to the
+    // project, BoardService checks it; null = off), the step such a release's run must have
+    // succeeded (null = any), when a post counts as shipped, and whether to ask the team first.
+    releaseRepoId: uuid('release_repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    releaseStepName: text('release_step_name'),
+    shipPolicy: text('ship_policy').$type<ShipPolicy>().notNull().default(ShipPolicies.allLinksShipped),
+    shipMode: text('ship_mode').$type<ShipMode>().notNull().default(ShipModes.suggest),
     createdAt,
     updatedAt,
   },
   t => [
     uniqueIndex('mocco_feedback_boards_project_slug_uq').on(t.projectId, t.slug),
+    // The ship detector's lookup: the boards a released repo ships.
+    index('mocco_feedback_boards_release_repo_idx')
+      .on(t.releaseRepoId)
+      .where(sql`${t.releaseRepoId} IS NOT NULL`),
+    check(
+      'mocco_feedback_boards_ship_policy_check',
+      sql`${t.shipPolicy} IN (${sqlInList(Object.values(ShipPolicies))})`,
+    ),
+    check('mocco_feedback_boards_ship_mode_check', sql`${t.shipMode} IN (${sqlInList(Object.values(ShipModes))})`),
     index('mocco_feedback_boards_workspace_idx').on(t.workspaceId),
     // A UNIQUE CONSTRAINT so children's composite FKs can reference (id, workspace_id, project_id).
     unique('mocco_feedback_boards_scope_uq').on(t.id, t.workspaceId, t.projectId),
@@ -4619,11 +4641,18 @@ export const changelogEntries = pgTable(
     publishedAt: timestamp('published_at'),
     // SET NULL keeps the entry when its author leaves.
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // The release run whose shipped posts the ship detector drafted this entry from (#179); null
+    // for an entry the team started. SET NULL keeps the entry when the run goes.
+    sourceRunId: uuid('source_run_id').references(() => runs.id, { onDelete: 'set null' }),
     createdAt,
     updatedAt,
   },
   t => [
     uniqueIndex('mocco_changelog_entries_board_slug_uq').on(t.boardId, t.slug),
+    // One draft per board and release run, so a repeated release event drafts once.
+    uniqueIndex('mocco_changelog_entries_board_source_run_uq')
+      .on(t.boardId, t.sourceRunId)
+      .where(sql`${t.sourceRunId} IS NOT NULL`),
     index('mocco_changelog_entries_board_state_published_idx').on(t.boardId, t.state, t.publishedAt.desc()),
     // The publish job's scan: scheduled entries by when they are due.
     index('mocco_changelog_entries_due_idx')
@@ -4732,6 +4761,31 @@ export const feedbackStatusMails = pgTable(
     check(
       'mocco_feedback_status_mails_state_check',
       sql`${t.state} IN (${sqlInList(Object.values(FeedbackStatusMailStates))})`,
+    ),
+  ],
+);
+
+/** An end user who stopped all feedback mail from a project (#180), every post at once. A row is
+ * the opt-out; deleting it turns the mail back on. Per-post opt-outs stay on the subscriptions. */
+export const feedbackMailOptOuts = pgTable(
+  'mocco_feedback_mail_opt_outs',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    endUserId: text('end_user_id').notNull(),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_mail_opt_outs_project_end_user_uq').on(t.projectId, t.endUserId),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_feedback_mail_opt_outs_project_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_mail_opt_outs_end_user_check',
+      sql`char_length(${t.endUserId}) BETWEEN 1 AND ${sql.raw(String(FeedbackLimits.endUserIdMax))}`,
     ),
   ],
 );
@@ -4890,11 +4944,22 @@ export const feedbackLinks = pgTable(
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     // When the provider last told us its state (link, webhook or backfill); the backfill takes the oldest.
     refreshedAt: timestamp('refreshed_at').notNull().defaultNow(),
+    // The first release run that contained it (#179): a merged pull request's merge commit, or for
+    // an issue the merge commit of a pull request closing it. Set once; never moved by later runs.
+    shippedRunId: uuid('shipped_run_id').references(() => runs.id, { onDelete: 'set null' }),
+    shippedAt: timestamp('shipped_at'),
     createdAt,
     updatedAt,
   },
   t => [
     uniqueIndex('mocco_feedback_links_post_target_uq').on(t.postId, t.repoId, t.kind, t.externalNumber),
+    // The ship detector's scan: a repo's links no release has shipped yet.
+    index('mocco_feedback_links_unshipped_idx')
+      .on(t.repoId)
+      .where(sql`${t.shippedRunId} IS NULL`),
+    index('mocco_feedback_links_shipped_run_idx')
+      .on(t.shippedRunId)
+      .where(sql`${t.shippedRunId} IS NOT NULL`),
     // Webhook fan-in: the links to one issue or pull request, across posts.
     index('mocco_feedback_links_target_idx').on(t.repoId, t.kind, t.externalNumber),
     index('mocco_feedback_links_refreshed_idx').on(t.refreshedAt),
@@ -4963,6 +5028,63 @@ export const feedbackLinkClosers = pgTable(
     check(
       'mocco_feedback_link_closers_state_check',
       sql`${t.state} IN (${sqlInList(Object.values(FeedbackLinkStates))})`,
+    ),
+  ],
+);
+
+/** A release run shipped a post (#179): its linked work is in the run's commit, so the team is
+ * asked to mark it shipped (or the board did so itself, in `auto_apply` mode). One per post and
+ * run, so a repeated release event suggests once. */
+export const feedbackShipSuggestions = pgTable(
+  'mocco_feedback_ship_suggestions',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    boardId: uuid('board_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    // CASCADE: a suggestion means nothing without its run (deleted with its repo).
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    // The released commit, and the resumed gates the run passed ("approved by"), as the release
+    // said them, so the banner reads them without going back to the run.
+    commitSha: text('commit_sha').notNull(),
+    gateNames: text('gate_names')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    state: text().$type<ShipSuggestionState>().notNull().default(ShipSuggestionStates.pending),
+    // The draft changelog entry grouping the run's shipped posts; SET NULL when it is deleted.
+    changelogEntryId: uuid('changelog_entry_id').references(() => changelogEntries.id, { onDelete: 'set null' }),
+    decidedByUserId: uuid('decided_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    // Set exactly once decided (DB-checked).
+    decidedAt: timestamp('decided_at'),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_ship_suggestions_post_run_uq').on(t.postId, t.runId),
+    // The banner: a board's suggestions waiting for the team, by run.
+    index('mocco_feedback_ship_suggestions_board_pending_idx')
+      .on(t.boardId, t.runId)
+      .where(sql`${t.state} = '${sql.raw(ShipSuggestionStates.pending)}'`),
+    foreignKey({
+      columns: [t.boardId, t.workspaceId, t.projectId],
+      foreignColumns: [feedbackBoards.id, feedbackBoards.workspaceId, feedbackBoards.projectId],
+      name: 'mocco_feedback_ship_suggestions_board_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_ship_suggestions_post_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_ship_suggestions_state_check',
+      sql`${t.state} IN (${sqlInList(Object.values(ShipSuggestionStates))})`,
+    ),
+    check(
+      'mocco_feedback_ship_suggestions_decided_check',
+      sql`(${t.decidedAt} IS NULL) = (${t.state} = '${sql.raw(ShipSuggestionStates.pending)}')`,
     ),
   ],
 );

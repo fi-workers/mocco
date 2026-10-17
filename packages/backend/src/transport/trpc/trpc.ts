@@ -15,6 +15,7 @@ import type { IntakeService } from '@backend/domain/feedback/IntakeService';
 import type { LinkService } from '@backend/domain/feedback/LinkService';
 import type { MergeService } from '@backend/domain/feedback/MergeService';
 import type { PostService } from '@backend/domain/feedback/PostService';
+import type { ShipSuggestionService } from '@backend/domain/feedback/ShipSuggestionService';
 import type { SubscriptionService } from '@backend/domain/feedback/SubscriptionService';
 import type { VoteService } from '@backend/domain/feedback/VoteService';
 import type { FlagGovernanceService } from '@backend/domain/flags/FlagGovernanceService';
@@ -136,6 +137,7 @@ export interface Context {
   feedbackIntake: IntakeService;
   /** GitHub issues and pull requests linked to posts (#178). */
   feedbackLinks: LinkService;
+  feedbackShipSuggestions: ShipSuggestionService;
   /** A board's changelog (#176). */
   feedbackChangelog: ChangelogService;
   /** The status page: pages and components, incidents, maintenance (#148). */

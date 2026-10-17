@@ -46,6 +46,18 @@ export class FeedbackPostRepo {
     return row;
   }
 
+  /** These posts of the scope, by number (merged ones too). */
+  async findMany(scope: FeedbackScope, ids: readonly string[]): Promise<FeedbackPostRow[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return await this.db
+      .select()
+      .from(p)
+      .where(and(scoped(scope), inArray(p.id, [...ids])))
+      .orderBy(asc(p.number));
+  }
+
   /** Which of these posts are live posts of the board: on it, in the scope, not merged away. */
   async liveIdsOnBoard(scope: FeedbackScope, boardId: string, ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) {

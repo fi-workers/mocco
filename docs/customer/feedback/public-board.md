@@ -99,7 +99,9 @@ Someone your app hasn't signed in can still vote, with their email address. Mocc
 
 Voting by email needs Mocco to send mail. On a self-hosted Mocco without an email sender, the form says it isn't available.
 
-People who voted by email also hear when the post moves: Mocco mails them when it becomes planned, in progress, shipped or closed. A shipped mail links the changelog entry it went out in. Each mail goes out two minutes after the change, so you can undo a slip. If the post moves again within those two minutes, only the newest status is mailed, and moving a post back to under review mails no one. Every mail has a one-click unsubscribe link. Mocco doesn't mail people your app signed in, because it doesn't keep their addresses. Your app can tell them itself.
+People who voted by email also hear when the post moves: Mocco mails them when it becomes planned, in progress, shipped or closed. A shipped mail links the changelog entry it went out in. Each mail goes out two minutes after the change, so you can undo a slip. If the post moves again within those two minutes, only the newest status is mailed, and moving a post back to under review mails no one. Every mail has a one-click unsubscribe link for that post, and a link that stops all mail about your project's feedback. Someone who stopped all mail still gets the mail that confirms a new email vote, and its page offers to turn the rest back on. Mocco doesn't mail people your app signed in, because it doesn't keep their addresses. Your app can tell them itself.
+
+![The unsubscribe page: stop one post's mail, or all mail about the project's feedback](./images/feedback-unsubscribe-all.png)
 
 ## 6. Triage in the inbox
 
@@ -136,6 +138,18 @@ Tie a post to the work that delivers it. On the post's page, under **GitHub**, c
 Only repositories linked to the post's project can be searched or linked; link a repository on the project's page first. If you installed the Mocco GitHub App before linking was available, GitHub asks an owner of your organization to accept two read-only permissions (Issues and Pull requests): look for **Review request** on the App's installation page in your GitHub settings. Until then, searching issues fails.
 
 ![A post linked to a closed issue, the merged pull request that closed it, and an open pull request](./images/feedback-github-links.png)
+
+### Mark posts shipped when they release
+
+Mocco can tell you when the work behind a post is live. On **Manage boards**, under **Shipping on release**, pick the **Release repository**: the repository whose releases put this board's features in front of users. A release is a run of that repository's pipeline that succeeded and passed an approval gate, so a run with no gate never ships anything. If the same pipeline deploys to more than one place, name the step that deploys to your users under **Release step** (for example `deploy-production`), and only runs that finished that step count. Then choose when a post counts as shipped: when **every** linked issue and pull request has shipped, or when **any** one has. A pull request closed without merging, or an issue closed without one, doesn't hold a post back.
+
+![Shipping on release: the release repository, an optional release step, the policy, and marking posts shipped without asking](./images/feedback-release-policy.png)
+
+When a release contains a post's linked pull request (its merge commit is the released commit, or GitHub says the release includes it), the inbox shows a banner: how many posts the release shipped, the run they shipped in, and who approved it. **Mark shipped** moves them all to shipped, and followers who voted by email hear about it as with any status change. **Dismiss** leaves the posts as they are. Mocco also drafts a changelog entry listing the posts and their pull requests; **Draft changelog entry** opens it so you can edit and publish it.
+
+![The inbox banner: two posts shipped in a release approved by sre](./images/feedback-ship-banner.png)
+
+If you'd rather not be asked, turn on **Mark posts shipped without asking**: Mocco then marks the posts shipped as soon as it sees the release, and the change shows in the post's history and the audit log as made by Mocco. It is off unless you turn it on. Mocco looks at a post's pull requests only in the release repository, so a post whose work also lands in another repository waits for that work under "every". Posts already shipped, merged into another post, or waiting on an earlier banner are left alone.
 
 ### Announce what shipped
 

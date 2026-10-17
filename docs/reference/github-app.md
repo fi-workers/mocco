@@ -30,7 +30,7 @@ Confidence is medium: the list is derived from the calls in `provider.ts`, not r
 | Permission | Access | Used by |
 |---|---|---|
 | Metadata | Read | Required by GitHub for every App; `GET /installation/repositories` (connecting repos) |
-| Contents | Read and write | Read: commit history (`GET /repos/{owner}/{repo}/commits`), `.mocco.yml` and `.mocco/flags.yml` at a commit (`GET …/contents/{path}`), the code archive for the flags deploy check (`GET …/tarball/{ref}`). Write: `repository_dispatch` (`POST …/dispatches`), which starts a GitHub Actions run for a pipeline step |
+| Contents | Read and write | Read: commit history (`GET /repos/{owner}/{repo}/commits`), `.mocco.yml` and `.mocco/flags.yml` at a commit (`GET …/contents/{path}`), the code archive for the flags deploy check (`GET …/tarball/{ref}`), whether a release contains a feedback post's merged pull request (`GET …/compare/{base}...{head}`, #179). Write: `repository_dispatch` (`POST …/dispatches`), which starts a GitHub Actions run for a pipeline step |
 | Checks | Read and write | The flags plan check on a pull request (`POST …/check-runs`, #146) |
 | Pull requests | Read | `pull_request` webhooks (flags plan check, #146; feedback links, #178), and reading a linked pull request (`GET …/pulls/{number}`) and the pull requests that close a linked issue (GraphQL `closedByPullRequestsReferences`) |
 | Issues | Read | **New for feedback links (#178).** Reading a linked issue (`GET …/issues/{number}`), searching issues and pull requests in a repo (`GET /search/issues`, always scoped with `repo:owner/name`), and `issues` webhooks |

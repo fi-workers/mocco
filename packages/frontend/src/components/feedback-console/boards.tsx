@@ -1,7 +1,14 @@
 // A project's feedback boards (#175): create one, rename it or change its address, make it public
-// or private, delete it, and edit its categories. A public board's page lives on the project's
-// help center site (`/feedback/<slug>`), so the board links there when the project has one.
-import { FEEDBACK_SLUG_PATTERN, FeedbackLimits } from '@mocco/common/feedback';
+// or private, delete it, and edit its categories and its release policy (#179). A public board's page
+// lives on the project's help center site (`/feedback/<slug>`), so the board links there when the
+// project has one.
+import {
+  FEEDBACK_RELEASE_STEP_NAME_MAX,
+  FEEDBACK_SLUG_PATTERN,
+  FeedbackLimits,
+  ShipModes,
+  ShipPolicies,
+} from '@mocco/common/feedback';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
@@ -11,6 +18,8 @@ import { Button } from '@frontend/components/ui/button';
 import { feedbackSlugOf, publicBoardUrl, useHelpSiteSlug } from '@frontend/lib/feedback-console';
 import { Routes } from '@frontend/lib/routes';
 import { trpc } from '@frontend/lib/trpc';
+
+import type { ShipMode, ShipPolicy } from '@mocco/common/feedback';
 
 interface Props {
   workspaceId: string;
@@ -22,6 +31,161 @@ interface BoardFields {
   slug: string;
   name: string;
   isPublic: boolean;
+}
+
+interface ReleasePolicyFields {
+  id: string;
+  releaseRepoId: string | null;
+  releaseStepName: string | null;
+  shipPolicy: ShipPolicy;
+  shipMode: ShipMode;
+}
+
+const shipPolicyLabels: Record<ShipPolicy, string> = {
+  [ShipPolicies.allLinksShipped]: 'When every linked issue and pull request has shipped',
+  [ShipPolicies.anyLinkShipped]: 'When any linked pull request has shipped',
+};
+
+/**
+ * Whose releases ship the board's posts (#179). A release is a run of the repo that succeeded and
+ * passed a resumed gate; a post ships when the release contains its linked pull requests' merge
+ * commits. Off until a repo is picked; asks the team unless they turn on marking shipped at once.
+ */
+function ReleasePolicy({ workspaceId, projectId, board }: Props & { board: ReleasePolicyFields }) {
+  const utils = trpc.useUtils();
+  const reposQuery = trpc.feedback.linkRepos.useQuery({ workspaceId, projectId });
+  const [repoId, setRepoId] = useState(board.releaseRepoId ?? '');
+  const [stepName, setStepName] = useState(board.releaseStepName ?? '');
+  const [policy, setPolicy] = useState<ShipPolicy>(board.shipPolicy);
+  const [isAutoApply, setIsAutoApply] = useState(board.shipMode === ShipModes.autoApply);
+  const save = trpc.feedback.setReleasePolicy.useMutation({
+    onSuccess: async () => {
+      await utils.feedback.boards.invalidate();
+    },
+  });
+  const repos = reposQuery.data?.repos ?? [];
+  // eslint-disable-next-line sonarjs/null-dereference -- stepName is a useState<string>, never null
+  const trimmedStep = stepName.trim();
+  const mode = isAutoApply ? ShipModes.autoApply : ShipModes.suggest;
+  const isUnchanged =
+    (board.releaseRepoId ?? '') === repoId &&
+    (board.releaseStepName ?? '') === trimmedStep &&
+    board.shipPolicy === policy &&
+    board.shipMode === mode;
+
+  return (
+    <form
+      aria-label="Release policy"
+      className="flex flex-col gap-3"
+      onSubmit={event => {
+        event.preventDefault();
+        save.mutate({
+          workspaceId,
+          projectId,
+          boardId: board.id,
+          releaseRepoId: repoId === '' ? null : repoId,
+          releaseStepName: trimmedStep === '' ? null : trimmedStep,
+          shipPolicy: policy,
+          shipMode: mode,
+        });
+      }}>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium">Shipping on release</h3>
+        <p className="text-xs text-muted-foreground">
+          When a release of this repository (a run that passed an approval gate) contains a post&apos;s linked pull
+          requests, Mocco suggests marking the post shipped and drafts a changelog entry for it.
+        </p>
+      </div>
+      {reposQuery.isPending ? <Spinner /> : null}
+      {reposQuery.isSuccess && repos.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Link a repository to this project on the{' '}
+          <Link href={Routes.project(workspaceId, projectId)} className="underline underline-offset-2">
+            project page
+          </Link>{' '}
+          first.
+        </p>
+      ) : null}
+      {repos.length === 0 ? null : (
+        <>
+          <div className="flex flex-wrap gap-3">
+            <label className={`${labelClass} min-w-48 flex-1`}>
+              Release repository
+              <select
+                value={repoId}
+                onChange={event => {
+                  setRepoId(event.target.value);
+                }}
+                className={inputClass}>
+                <option value="">Off</option>
+                {repos.map(repo => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.owner}/{repo.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`${labelClass} min-w-40 flex-1`}>
+              Release step (optional)
+              <input
+                value={stepName}
+                maxLength={FEEDBACK_RELEASE_STEP_NAME_MAX}
+                placeholder="Any step, e.g. deploy-production"
+                disabled={repoId === ''}
+                onChange={event => {
+                  setStepName(event.target.value);
+                }}
+                className={`${inputClass} font-mono`}
+              />
+            </label>
+          </div>
+          <fieldset className="flex flex-col gap-1.5" disabled={repoId === ''}>
+            <legend className="mb-1 text-xs text-muted-foreground">A post counts as shipped</legend>
+            {Object.values(ShipPolicies).map(value => (
+              <label key={value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name={`ship-policy-${board.id}`}
+                  checked={policy === value}
+                  onChange={() => {
+                    setPolicy(value);
+                  }}
+                />
+                {shipPolicyLabels[value]}
+              </label>
+            ))}
+          </fieldset>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={isAutoApply}
+              disabled={repoId === ''}
+              onChange={event => {
+                setIsAutoApply(event.target.checked);
+              }}
+            />
+            <span>
+              Mark posts shipped without asking
+              <span className="block text-xs text-muted-foreground">
+                Off: the inbox asks you first. On: the post is marked shipped as soon as the release is seen, and
+                followers who voted by email are told.
+              </span>
+            </span>
+          </label>
+          {save.error ? <p className="text-sm text-destructive">{errorMessage(save.error)}</p> : null}
+          <Button
+            type="submit"
+            variant="outline"
+            className="w-fit text-sm"
+            pending={save.isPending}
+            disabled={isUnchanged}>
+            Save release policy
+          </Button>
+        </>
+      )}
+    </form>
+  );
 }
 
 /** Create a board, or edit `board`'s name, address and visibility. */
@@ -325,6 +489,13 @@ export default function FeedbackBoards({ workspaceId, projectId }: Props) {
               board={board}
             />
             <Categories workspaceId={workspaceId} projectId={projectId} boardId={board.id} />
+            <ReleasePolicy
+              // A saved policy starts a fresh draft.
+              key={`${board.releaseRepoId ?? ''}:${board.releaseStepName ?? ''}:${board.shipPolicy}:${board.shipMode}`}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              board={board}
+            />
             <DeleteBoard workspaceId={workspaceId} projectId={projectId} board={board} />
           </section>
         );

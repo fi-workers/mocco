@@ -6,11 +6,11 @@
 //   from creating or merging the post, one on a private board, or any change while this deployment
 //   sends no email is settled with no mail. Otherwise each follower who can be mailed gets one
 //   queued mail: an email voter (`email:` id) still following, whose vote counts, so an address
-//   nobody confirmed is never mailed. Signed-in end users' addresses aren't stored; their app
+//   nobody confirmed is never mailed, and who hasn't stopped all mail from the project. Signed-in end users' addresses aren't stored; their app
 //   tells them.
 // - `sendQueued` sends queued mails, at most once each: a mail is claimed before it goes out, a
-//   claim left by a run that died is given up, a follower who stopped following meanwhile is
-//   skipped, and a transient failure is tried again up to StatusMailPolicy.maxAttempts times.
+//   claim left by a run that died is given up, a follower who stopped following (the post, or all
+//   of the project's mail) meanwhile is skipped, and a transient failure is tried again up to StatusMailPolicy.maxAttempts times.
 import {
   FEEDBACK_NOTIFIED_STATUSES,
   FeedbackPostStatuses,
@@ -18,7 +18,7 @@ import {
   FeedbackStatusMailStates,
 } from '@mocco/common/feedback';
 
-import { EMAIL_END_USER_PREFIX } from '@backend/domain/feedback/EmailVoteService';
+import { EMAIL_END_USER_PREFIX, unsubscribeAllUrlOf } from '@backend/domain/feedback/EmailVoteService';
 import { ChangelogEntryRepo } from '@backend/domain/feedback/repos/changelog-entry.repo';
 import { FeedbackStatusMailRepo } from '@backend/domain/feedback/repos/status-mail.repo';
 import { renderStatusMail } from '@backend/domain/feedback/status-mail';
@@ -79,36 +79,57 @@ export class StatusMailService {
     return context?.isPublic === true && context.mergedIntoPostId === null && context.status === change.toStatus;
   }
 
-  private async sendOne(repo: FeedbackStatusMailRepo, mail: FeedbackStatusMailRow): Promise<boolean> {
-    const change = await repo.findChange(mail.statusChangeId);
+  /** What every mail about one change shares: read once per run, not once per follower. */
+  private async loadChange(repo: FeedbackStatusMailRepo, statusChangeId: string) {
+    const change = await repo.findChange(statusChangeId);
     const context = change === undefined ? undefined : await repo.postContext(change.postId);
-    if (
-      change === undefined ||
-      context === undefined ||
-      this.deps.email === undefined ||
-      !isNotified(change.toStatus) ||
-      !(await repo.isFollowing(change.postId, mail.endUserId))
-    ) {
-      await repo.settle(mail.id, { state: FeedbackStatusMailStates.skipped });
-      return false;
+    if (change === undefined || context === undefined || !isNotified(change.toStatus)) {
+      return undefined;
     }
     const scope = { workspaceId: context.workspaceId, projectId: context.projectId };
-    const postPath = `/feedback/${context.boardSlug}/${String(context.number)}`;
     const [entry] =
       change.toStatus === FeedbackPostStatuses.shipped
         ? await new ChangelogEntryRepo(this.deps.db).listPublishedForPost(scope, change.postId, 1)
         : [];
-    const message = renderStatusMail({
-      to: mail.endUserId.slice(EMAIL_END_USER_PREFIX.length),
-      projectName: context.projectName,
-      postTitle: context.title,
+    return {
+      postId: change.postId,
       status: change.toStatus,
-      postUrl: await this.deps.publicUrlOf(scope, postPath),
+      context,
+      scope,
+      postUrl: await this.deps.publicUrlOf(scope, `/feedback/${context.boardSlug}/${String(context.number)}`),
       changelogUrl:
         entry === undefined
           ? null
           : await this.deps.publicUrlOf(scope, `/feedback/${context.boardSlug}/changelog/${entry.slug}`),
-      unsubscribeUrl: this.deps.unsubscribeUrlOf(scope, change.postId, mail.endUserId),
+    };
+  }
+
+  private async sendOne(
+    repo: FeedbackStatusMailRepo,
+    mail: FeedbackStatusMailRow,
+    changes: Map<string, ReturnType<StatusMailService['loadChange']>>,
+  ): Promise<boolean> {
+    const loaded = changes.get(mail.statusChangeId) ?? this.loadChange(repo, mail.statusChangeId);
+    changes.set(mail.statusChangeId, loaded);
+    const about = await loaded;
+    if (
+      about === undefined ||
+      this.deps.email === undefined ||
+      !(await repo.isFollowing(about.postId, about.context.projectId, mail.endUserId))
+    ) {
+      await repo.settle(mail.id, { state: FeedbackStatusMailStates.skipped });
+      return false;
+    }
+    const unsubscribeUrl = this.deps.unsubscribeUrlOf(about.scope, about.postId, mail.endUserId);
+    const message = renderStatusMail({
+      to: mail.endUserId.slice(EMAIL_END_USER_PREFIX.length),
+      projectName: about.context.projectName,
+      postTitle: about.context.title,
+      status: about.status,
+      postUrl: about.postUrl,
+      changelogUrl: about.changelogUrl,
+      unsubscribeUrl,
+      unsubscribeAllUrl: unsubscribeAllUrlOf(unsubscribeUrl),
     });
     const result = await this.deps.email.send(message);
     if (result.kind === EmailResultKinds.sent) {
@@ -154,11 +175,12 @@ export class StatusMailService {
     const repo = new FeedbackStatusMailRepo(this.deps.db);
     await repo.giveUpStale(new Date(now.getTime() - StatusMailPolicy.claimTimeoutMs));
     const claimed = await repo.claimQueued(now, StatusMailPolicy.mailsPerRun);
+    const changes = new Map<string, ReturnType<StatusMailService['loadChange']>>();
     let sent = 0;
     // eslint-disable-next-line no-restricted-syntax -- one mail at a time keeps the relay's pace
     for (const mail of claimed) {
       // eslint-disable-next-line no-await-in-loop -- see above
-      if (await this.sendOne(repo, mail)) {
+      if (await this.sendOne(repo, mail, changes)) {
         sent++;
       }
     }

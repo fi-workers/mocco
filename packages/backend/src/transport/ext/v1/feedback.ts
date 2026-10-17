@@ -52,6 +52,7 @@ import type {
   PublicComment,
   PublicPost,
 } from '@backend/domain/feedback/PublicBoardService';
+import type { FeedbackLinkMethod } from '@backend/transport/ext/v1/feedback-links';
 import type { V1Deps, V1Env } from '@backend/transport/ext/v1/middleware';
 import type { RoadmapColumn } from '@mocco/common/feedback';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -76,7 +77,7 @@ export interface FeedbackServingDeps {
   >;
   endUsers: Pick<EndUserTokenService, 'verify'>;
   /** Voting by email and the signed mail links; undefined without AUTH_SECRET (those routes 503). */
-  emailVotes?: Pick<EmailVoteService, 'canSendMail' | 'start' | 'confirm' | 'describeUnsubscribe' | 'unsubscribe'>;
+  emailVotes?: Pick<EmailVoteService, FeedbackLinkMethod>;
 }
 
 /** End users' write limits, on top of the key's own (feedback design §8). */

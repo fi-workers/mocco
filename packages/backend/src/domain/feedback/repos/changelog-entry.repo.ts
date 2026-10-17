@@ -68,6 +68,15 @@ export class ChangelogEntryRepo {
     return rows.map(row => row.slug);
   }
 
+  /** The entry drafted from a release run on the board (#179), if there is one. */
+  async findBySourceRun(workspaceId: string, boardId: string, runId: string): Promise<ChangelogEntryRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(e)
+      .where(and(eq(e.workspaceId, workspaceId), eq(e.boardId, boardId), eq(e.sourceRunId, runId)));
+    return row;
+  }
+
   /** A taken slug throws UniqueConstraintError (`mocco_changelog_entries_board_slug_uq`). */
   async insert(row: typeof e.$inferInsert): Promise<ChangelogEntryRow> {
     try {

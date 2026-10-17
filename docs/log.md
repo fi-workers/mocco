@@ -1193,3 +1193,29 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
 - Docs touched: `reference/feedback.md`, `reference/github-app.md` (new), `reference/feature-map.md`,
   `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-github-links` (issue #178)
+
+## 2026-10-17 — Feedback: ship posts on release
+
+- A board names the repo whose releases ship its posts, an optional release step, `all_links_shipped` or
+  `any_link_shipped`, and whether to ask (`suggest`, the default) or mark them shipped at once (`auto_apply`). The
+  `feedback.ship_detect` subscriber on `deploy.released` checks each linked merge commit against the release (same SHA,
+  or the `CommitAncestry` port over GitHub's compare API, cached, at most 50 calls a release), suggests once per post
+  and run, and drafts one changelog entry per run (migration 0088: `mocco_feedback_ship_suggestions`, the boards'
+  policy columns, `shipped_run_id` on links, `source_run_id` on changelog entries). The inbox banner marks a run's
+  posts shipped or dismisses them; audited as `feedback.shipped_suggested`, `feedback.shipped` and
+  `feedback.board.release_policy_changed`. `deploy.released` gained `succeededSteps`. ADR 0031 records the release
+  designation.
+- Docs touched: `adr/0031-feedback-ships-on-the-release-registry-not-environments.md` (new), `adr/README.md`,
+  `reference/feedback.md`, `reference/events.md`, `reference/releases.md`, `reference/github-app.md`,
+  `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: stop all mail, and a 10,000-follower load test
+
+- An email voter can stop all feedback mail from a project, not only one post's: the same signed unsubscribe link at
+  `/unsubscribe/{token}/all` asks on GET and acts on POST (migration 0089, `mocco_feedback_mail_opt_outs`). Status mail skips the address at queueing and at sending.
+  A later vote by email still mails its confirmation; confirming doesn't turn mail back on, the page's button does.
+- A load test sends a change's mail to 10,000 followers through a fake transport, in runs of 200, each address once.
+  A run now reads each change's post and links once instead of once per mail.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-mail-optout` (issue #180)

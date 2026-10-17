@@ -4,7 +4,7 @@
 // (an entry is content, like a help article). The public pages, RSS and /v1 read published
 // entries only.
 import { AuditActions } from '@mocco/common/audit';
-import { ChangelogEntryStates } from '@mocco/common/feedback';
+import { ChangelogEntryStates, ChangelogLimits } from '@mocco/common/feedback';
 
 import {
   ChangelogEntryNotFoundError,
@@ -42,6 +42,7 @@ export type ChangelogEntry = ChangelogEntryRow & { postIds: string[] };
 export const CHANGELOG_PUBLISH_BATCH = 100;
 
 const SLUG_CONSTRAINT = 'mocco_changelog_entries_board_slug_uq';
+const SOURCE_RUN_CONSTRAINT = 'mocco_changelog_entries_board_source_run_uq';
 
 /** An address from a title: `Dark mode is here!` → `dark-mode-is-here`; '' when nothing is left. */
 export function changelogSlugOf(title: string): string {
@@ -129,6 +130,22 @@ export class ChangelogService {
     });
   }
 
+  /** The entry announcing its posts and then these, in that order. */
+  private async addPosts(
+    scope: FeedbackScope,
+    row: ChangelogEntryRow,
+    postIds: readonly string[],
+  ): Promise<ChangelogEntry> {
+    const repo = new ChangelogEntryRepo(this.deps.db);
+    const announced = await repo.postIdsOf([row.id]);
+    const current = announced.get(row.id) ?? [];
+    const merged = [...new Set([...current, ...postIds])];
+    if (merged.length !== current.length) {
+      await repo.replacePosts(scope.workspaceId, row.id, merged);
+    }
+    return { ...row, postIds: merged };
+  }
+
   private async audit(
     workspaceId: string,
     actorUserId: string | null,
@@ -188,6 +205,51 @@ export class ChangelogService {
       return { ...row, postIds };
     });
     return entry;
+  }
+
+  /**
+   * The draft grouping the posts a release run shipped on the board (#179), made once per board and
+   * run (`source_run_id`, unique per board). When it exists, the posts it doesn't announce yet are
+   * added after its own, and its words and state are left as the team made them. No author: the
+   * ship detector writes it. Posts that aren't live posts of the board are left out.
+   */
+  async draftForRun(
+    scope: FeedbackScope,
+    boardId: string,
+    runId: string,
+    draft: { title: string; body: string; postIds: readonly string[] },
+  ): Promise<ChangelogEntry> {
+    const live = await new FeedbackPostRepo(this.deps.db).liveIdsOnBoard(scope, boardId, draft.postIds);
+    const postIds = [...new Set(draft.postIds)].flatMap(id => (live.has(id) ? [id] : []));
+    const existing = await new ChangelogEntryRepo(this.deps.db).findBySourceRun(scope.workspaceId, boardId, runId);
+    if (existing !== undefined) {
+      return await this.addPosts(scope, existing, postIds);
+    }
+    try {
+      return await this.deps.db.transaction(async tx => {
+        const repo = new ChangelogEntryRepo(tx);
+        const base = changelogSlugOf(draft.title) || this.now().toISOString().slice(0, 10);
+        const row = await repo.insert({
+          ...scope,
+          boardId,
+          slug: freeSlug(base, await repo.slugsLike(boardId, base)),
+          title: draft.title.slice(0, ChangelogLimits.titleMax),
+          bodyMd: draft.body,
+          sourceRunId: runId,
+        });
+        await repo.replacePosts(scope.workspaceId, row.id, postIds);
+        return { ...row, postIds };
+      });
+    } catch (error) {
+      // Another delivery of the same release drafted it first: add to that one.
+      if (error instanceof UniqueConstraintError && error.constraint === SOURCE_RUN_CONSTRAINT) {
+        const winner = await new ChangelogEntryRepo(this.deps.db).findBySourceRun(scope.workspaceId, boardId, runId);
+        if (winner !== undefined) {
+          return await this.addPosts(scope, winner, postIds);
+        }
+      }
+      throw error;
+    }
   }
 
   /** Edit the entry in any state; a published entry changes where it is shown. */

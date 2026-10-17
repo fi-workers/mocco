@@ -10,6 +10,8 @@ import {
   FeedbackStatusChangeReasons,
   FeedbackVoteSources,
   FeedbackVoteStates,
+  ShipModes,
+  ShipPolicies,
 } from '@mocco/common/feedback';
 import { Products } from '@mocco/common/project';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -35,8 +37,15 @@ import { RunGateRepo } from '@backend/domain/governance/repos/run-gate.repo';
 import { RoleService } from '@backend/domain/governance/RoleService';
 import { CommitConfigRepo } from '@backend/domain/integration/repos/commit-config.repo';
 import { CommitRepo } from '@backend/domain/integration/repos/commit.repo';
+import { seedRun } from '@backend/domain/status/testing/deploys';
 import { expectOne } from '@backend/infra/db/rows';
-import { feedbackLinks, projectRepos, providerConnections, repos } from '@backend/infra/db/schema';
+import {
+  feedbackLinks,
+  feedbackShipSuggestions,
+  projectRepos,
+  providerConnections,
+  repos,
+} from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 import { appRouter } from '@backend/transport/trpc/root';
 import { feedbackRouter } from '@backend/transport/trpc/routers/feedback';
@@ -67,6 +76,8 @@ interface Ids {
   /** A GitHub repo linked to the project, and a post's link to one of its pull requests. */
   repoId: string;
   linkId: string;
+  /** A release run of that repo that shipped the post: its suggestion waits for the team. */
+  runId: string;
 }
 
 const intake = FeedbackSourceTypes.messengerConversation;
@@ -122,6 +133,20 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
       number: 1,
     }),
   unlink: async (api, scope, ids) => await api.feedback.unlink({ ...scope, linkId: ids.linkId }),
+  setReleasePolicy: async (api, scope, ids) =>
+    await api.feedback.setReleasePolicy({
+      ...scope,
+      boardId: ids.boardId,
+      releaseRepoId: ids.repoId,
+      releaseStepName: null,
+      shipPolicy: ShipPolicies.anyLinkShipped,
+      shipMode: ShipModes.autoApply,
+    }),
+  shipSuggestions: async (api, scope, ids) => await api.feedback.shipSuggestions({ ...scope, boardId: ids.boardId }),
+  acceptShipSuggestions: async (api, scope, ids) =>
+    await api.feedback.acceptShipSuggestions({ ...scope, boardId: ids.boardId, runId: ids.runId }),
+  dismissShipSuggestions: async (api, scope, ids) =>
+    await api.feedback.dismissShipSuggestions({ ...scope, boardId: ids.boardId, runId: ids.runId }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */
@@ -190,7 +215,16 @@ const seed = async (db: Db, api: Api, scope: Scope, slug: string): Promise<Ids> 
       })
       .returning(),
   );
-  return { boardId: board.id, categoryId: category.id, postId: post.id, repoId: repo.id, linkId: link.id };
+  const { runId, sha } = await seedRun(db, { workspaceId: scope.workspaceId, repoId: repo.id, finishedAt: new Date() });
+  await db.insert(feedbackShipSuggestions).values({
+    ...scope,
+    boardId: board.id,
+    postId: post.id,
+    runId,
+    commitSha: sha,
+    gateNames: ['production'],
+  });
+  return { boardId: board.id, categoryId: category.id, postId: post.id, repoId: repo.id, linkId: link.id, runId };
 };
 
 describe('feedback router on pglite', () => {
@@ -437,6 +471,19 @@ describe('feedback router on pglite', () => {
         repoId: victim.repoId,
         kind: FeedbackLinkKinds.issue,
         number: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    // The victim's ship suggestion still waits, and the attacker can't point a board at their repo.
+    const { runs } = await owner.api.feedback.shipSuggestions({ ...owner.scope, boardId: victim.boardId });
+    expect(runs.map(run => [run.runId, run.posts.map(row => row.id)])).toEqual([[victim.runId, [victim.postId]]]);
+    await expect(
+      attacker.api.feedback.setReleasePolicy({
+        ...attacker.scope,
+        boardId: own.boardId,
+        releaseRepoId: victim.repoId,
+        releaseStepName: null,
+        shipPolicy: ShipPolicies.allLinksShipped,
+        shipMode: ShipModes.suggest,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     const { boards } = await attacker.api.feedback.boards(attacker.scope);

@@ -1,7 +1,9 @@
 // Voting by email (#174): someone without a signed-in account votes with their address. The vote
 // is written pending and a mail with a signed link goes to the address; opening the link counts
 // every pending vote that address cast in the project in the last week. The same mail carries a
-// signed one-click unsubscribe link (List-Unsubscribe), which any later feedback mail can reuse.
+// signed one-click unsubscribe link (List-Unsubscribe), which any later feedback mail can reuse;
+// the same token, at `<link>/all`, stops all of the project's feedback mail (#180). Confirming a
+// later vote doesn't turn that mail back on by itself: the confirmation page asks, and its form does.
 // Mail goes through the notifications email sender (EMAIL_DRIVER; `log` prints it instead).
 import { FeedbackVoteStates, FEEDBACK_EMAIL_END_USER_PREFIX } from '@mocco/common/feedback';
 
@@ -13,6 +15,7 @@ import {
 } from '@backend/domain/feedback/errors';
 import { renderIdentifyMail } from '@backend/domain/feedback/link-mail';
 import { FeedbackLinkPurposes } from '@backend/domain/feedback/link-tokens';
+import { FeedbackMailOptOutRepo } from '@backend/domain/feedback/repos/mail-opt-out.repo';
 import { FeedbackVoteRepo } from '@backend/domain/feedback/repos/vote.repo';
 import { EmailResultKinds } from '@backend/domain/notification/senders/email';
 
@@ -58,6 +61,11 @@ export function feedbackUnsubscribeUrl(
   return `${links.appOrigin}${LINK_BASE}/unsubscribe/${encodeURIComponent(token)}`;
 }
 
+/** The page of an unsubscribe link that stops all of the project's feedback mail, not one post's.
+ * The same token, so every link already mailed works for both. */
+export const UNSUBSCRIBE_ALL_SUFFIX = '/all';
+export const unsubscribeAllUrlOf = (unsubscribeUrl: string): string => `${unsubscribeUrl}${UNSUBSCRIBE_ALL_SUFFIX}`;
+
 export class EmailVoteService {
   constructor(private readonly deps: EmailVoteServiceDeps) {}
 
@@ -75,6 +83,22 @@ export class EmailVoteService {
       ...claims,
       postId: claims.postId,
     };
+  }
+
+  private claimsOfIdentify(token: string) {
+    const claims = this.deps.tokens.verify(FeedbackLinkPurposes.identify, token, this.now());
+    if (claims === null) {
+      throw new FeedbackLinkInvalidError();
+    }
+    return { scope: { workspaceId: claims.workspaceId, projectId: claims.projectId }, endUserId: claims.endUserId };
+  }
+
+  private async projectNameOrInvalid(scope: FeedbackScope): Promise<string> {
+    const name = await new FeedbackMailOptOutRepo(this.deps.db).findProjectName(scope);
+    if (name === undefined) {
+      throw new FeedbackLinkInvalidError();
+    }
+    return name;
   }
 
   private async titleOrInvalid(scope: FeedbackScope, postId: string): Promise<string> {
@@ -106,13 +130,17 @@ export class EmailVoteService {
     const endUserId = emailEndUserIdOf(input.email);
     await this.deps.boards.vote(scope, input.postId, endUserId, input.source, FeedbackVoteStates.pending);
     const postTitle = await this.deps.boards.postTitle(scope, input.postId);
+    const projectName = await this.projectNameOrInvalid(scope);
+    const unsubscribeUrl = this.unsubscribeUrlOf(scope, input.postId, endUserId);
     const token = this.deps.tokens.issue(FeedbackLinkPurposes.identify, { ...scope, endUserId }, this.now());
     const result = await email.send(
       renderIdentifyMail({
         to: input.email.trim(),
         postTitle,
+        projectName,
         confirmUrl: `${this.deps.appOrigin}${LINK_BASE}/identify/email/confirm?token=${encodeURIComponent(token)}`,
-        unsubscribeUrl: this.unsubscribeUrlOf(scope, input.postId, endUserId),
+        unsubscribeUrl,
+        unsubscribeAllUrl: unsubscribeAllUrlOf(unsubscribeUrl),
       }),
     );
     if (result.kind !== EmailResultKinds.sent) {
@@ -120,13 +148,11 @@ export class EmailVoteService {
     }
   }
 
-  /** Count the pending votes of the address the link names; how many it counted. */
-  async confirm(token: string): Promise<{ counted: number }> {
-    const claims = this.deps.tokens.verify(FeedbackLinkPurposes.identify, token, this.now());
-    if (claims === null) {
-      throw new FeedbackLinkInvalidError();
-    }
-    const scope = { workspaceId: claims.workspaceId, projectId: claims.projectId };
+  /** Count the pending votes of the address the link names; how many it counted, and whether the
+   * address stopped all of the project's mail (the page then offers to turn it back on). */
+  async confirm(token: string): Promise<{ counted: number; isMailStopped: boolean; projectName: string }> {
+    const claims = this.claimsOfIdentify(token);
+    const { scope } = claims;
     const postIds = await new FeedbackVoteRepo(this.deps.db).pendingPostIds(
       scope,
       claims.endUserId,
@@ -145,13 +171,41 @@ export class EmailVoteService {
         throw error;
       }
     }, Promise.resolve(0));
-    return { counted: confirmed };
+    const isMailStopped = await new FeedbackMailOptOutRepo(this.deps.db).isOptedOut(scope, claims.endUserId);
+    return { counted: confirmed, isMailStopped, projectName: await this.projectNameOrInvalid(scope) };
   }
 
-  /** The post an unsubscribe link is about, for the page that asks first. */
-  async describeUnsubscribe(token: string): Promise<{ postTitle: string }> {
+  /** Turn the address's feedback mail from the project back on, from the confirmation page's form:
+   * the same day-long link, so only someone who can read the address's mail can. Idempotent. */
+  async resumeMail(token: string): Promise<{ projectName: string }> {
+    const { scope, endUserId } = this.claimsOfIdentify(token);
+    const projectName = await this.projectNameOrInvalid(scope);
+    await new FeedbackMailOptOutRepo(this.deps.db).optIn(scope, endUserId);
+    return { projectName };
+  }
+
+  /** The post an unsubscribe link is about and its project, for the page that asks first. */
+  async describeUnsubscribe(token: string): Promise<{ postTitle: string; projectName: string }> {
     const claims = this.claimsOfUnsubscribe(token);
-    return { postTitle: await this.titleOrInvalid(claims.scope, claims.postId) };
+    return {
+      postTitle: await this.titleOrInvalid(claims.scope, claims.postId),
+      projectName: await this.projectNameOrInvalid(claims.scope),
+    };
+  }
+
+  /** The project an unsubscribe link's "stop all mail" page is about. The post needn't exist any more. */
+  async describeUnsubscribeAll(token: string): Promise<{ projectName: string }> {
+    const claims = this.claimsOfUnsubscribe(token);
+    return { projectName: await this.projectNameOrInvalid(claims.scope) };
+  }
+
+  /** Stop all of the end user's feedback mail from the project, every post. Idempotent; the
+   * per-post choices stay as they are, for when mail is turned back on. */
+  async unsubscribeAll(token: string): Promise<{ projectName: string }> {
+    const { scope, endUserId } = this.claimsOfUnsubscribe(token);
+    const projectName = await this.projectNameOrInvalid(scope);
+    await new FeedbackMailOptOutRepo(this.deps.db).optOut(scope, endUserId);
+    return { projectName };
   }
 
   /** Stop the end user's mail about the post (or, for a merged duplicate, about the post it was

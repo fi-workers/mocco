@@ -63,6 +63,29 @@ export class FeedbackBoardRepo {
     }
   }
 
+  /** Set the board's release policy (#179); undefined when the scope has no such board. */
+  async setReleasePolicy(
+    scope: FeedbackScope,
+    id: string,
+    values: Pick<FeedbackBoardRow, 'releaseRepoId' | 'releaseStepName' | 'shipPolicy' | 'shipMode'>,
+  ): Promise<FeedbackBoardRow | undefined> {
+    const [row] = await this.db
+      .update(b)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(scoped(scope), eq(b.id, id)))
+      .returning();
+    return row;
+  }
+
+  /** The workspace's boards whose releases come from `repoId`, oldest first (the ship detector). */
+  async releasedBy(workspaceId: string, repoId: string): Promise<FeedbackBoardRow[]> {
+    return await this.db
+      .select()
+      .from(b)
+      .where(and(eq(b.workspaceId, workspaceId), eq(b.releaseRepoId, repoId)))
+      .orderBy(asc(b.createdAt), asc(b.id));
+  }
+
   /**
    * Take the board's next post number, or undefined when the scope has no such board. The
    * update locks the board row, so concurrent posts on one board get distinct numbers; run it

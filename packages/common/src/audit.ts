@@ -109,6 +109,12 @@ export const AuditActions = {
   feedbackPostLinked: 'feedback.post.linked',
   /** Staff removed a post's GitHub issue or pull request link. */
   feedbackPostUnlinked: 'feedback.post.unlinked',
+  /** A board's release policy changed: whose releases ship its posts, and whether without asking (#179). */
+  feedbackBoardReleasePolicyChanged: 'feedback.board.release_policy_changed',
+  /** A release shipped a post's linked work, and Mocco suggested marking it shipped (no actor). */
+  feedbackShippedSuggested: 'feedback.shipped_suggested',
+  /** A post was marked shipped from a release: the team accepted the suggestion, or the board applied it (no actor). */
+  feedbackShipped: 'feedback.shipped',
   /** A changelog entry went public, by a team member or at its scheduled time (no actor). */
   changelogEntryPublished: 'feedback.changelog.published',
   /** A published changelog entry was taken back to a draft. */
@@ -249,6 +255,9 @@ export const auditActionLabels: Readonly<Record<AuditAction, string>> = {
   [AuditActions.feedbackPostConverted]: 'Request converted to feedback',
   [AuditActions.feedbackPostLinked]: 'GitHub issue or pull request linked to a feedback post',
   [AuditActions.feedbackPostUnlinked]: 'GitHub link removed from a feedback post',
+  [AuditActions.feedbackBoardReleasePolicyChanged]: 'Feedback board release policy changed',
+  [AuditActions.feedbackShippedSuggested]: 'Feedback post shipped by a release, suggested',
+  [AuditActions.feedbackShipped]: 'Feedback post marked shipped from a release',
   [AuditActions.changelogEntryPublished]: 'Changelog entry published',
   [AuditActions.changelogEntryUnpublished]: 'Changelog entry unpublished',
   [AuditActions.changelogEntryDeleted]: 'Changelog entry deleted',
