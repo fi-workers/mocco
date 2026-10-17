@@ -353,6 +353,8 @@ describe('mocco_status_monitors_* and mocco_status_locations_search (pglite, ove
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
+      feedbackShipSuggestions: { listPending: refuse, accept: refuse, dismiss: refuse },
+      feedbackChangelog: { get: refuse },
       feedbackVotes: { list: refuse, find: refuse, vote: refuse },
       feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
       feedbackMerges: { merge: refuse },

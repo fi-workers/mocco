@@ -32,6 +32,7 @@ code_refs:
   - packages/frontend/src/components/feedback-console/github-links.tsx
   - packages/backend/src/transport/trpc/routers/feedback.ts
   - packages/backend/src/transport/mcp/tools/feedback.ts
+  - packages/backend/src/transport/mcp/tools/feedback-shipping.ts
   - packages/backend/src/transport/mcp/tools/feedback-engagement.ts
   - packages/backend/src/domain/feedback/PublicBoardService.ts
   - packages/backend/src/domain/enduser/EndUserTokenService.ts
@@ -207,7 +208,9 @@ Every step is idempotent: a release delivered again marks nothing new (marks sta
 
 **Deciding** (`ShipSuggestionService`): `listPending` groups a board's waiting suggestions by run, the newest first. `accept` takes every waiting suggestion of a run on the board in one transaction (the suggestions locked, then the posts in id order) and moves each post to `shipped` with a status change of reason `ship_suggestion` by the team member; a post merged or shipped meanwhile has its suggestion decided with no change. The suggestions become `accepted` with who and when, and each shipped post records `feedback.shipped`. The status change is like any other, so [status mail](#status-mail) follows. `autoApply` does the same as no one, with reason `auto_apply` and state `auto_applied`. `dismiss` sets them `dismissed` and leaves the posts (not audited). A run with nothing waiting on the board is `FeedbackShipSuggestionNotFoundError` (NOT_FOUND). The draft stays a draft either way: publishing it is the team's call.
 
-Not yet: MCP tools to list and decide suggestions, the staff Slack notice, and noticing a later release that no longer contains a shipped link (a revert or rollback).
+Agents list and decide suggestions through three MCP tools ([MCP tools](#mcp-tools)); `listPending` gives each post's `mergedIntoPostId` so they can say a merged post is left as it is.
+
+Not yet: the staff Slack notice, and noticing a later release that no longer contains a shipped link (a revert or rollback).
 
 ## Audit
 
@@ -311,6 +314,16 @@ Five more (`transport/mcp/tools/feedback-engagement.ts`, #473) sit over `VoteSer
 | `mocco_feedback_post_merge` | `MergeService.merge` | Merges a duplicate into another post on its board as the caller |
 
 The three changes have the locks of `mocco_feedback_post_set_status`: `feedback:write`, the opt-in and a confirmation round trip. Each confirmation is bound to what it showed. A comment is bound to its text and kind. A vote is bound to whether the end user had a pending vote or none; one that counts already answers without asking. A merge is bound to both posts, their board and each post's vote count, so a vote on either before the answer asks again. A post merged in between, a post into itself, or a post on another board is refused before asking. The services check the same rules again under their locks ([Merging duplicates](#merging-duplicates)).
+
+Three more (`transport/mcp/tools/feedback-shipping.ts`, #179) sit over `ShipSuggestionService` and `ChangelogService.get` behind the same `ProjectScope` check, for [shipping on release](#shipping-on-release):
+
+| Tool | Over | Answers or does |
+|---|---|---|
+| `mocco_feedback_ship_suggestions_list` | `BoardService.listBoards`, `ShipSuggestionService.listPending`, `ChangelogService.get` | The release runs waiting for the team on one board (`boardId`) or every board of the project, the newest first: board, run id, released commit, `approvedBy` (the resumed gates), when suggested, and each post (suggestion id, post id, number, title, status, votes, and `mergedIntoPostId` for a post merged since), with the draft changelog entry's id, title and state (null when it was deleted); detailed adds the draft's slug, Markdown body and post ids |
+| `mocco_feedback_ship_suggestions_accept` | `ShipSuggestionService.accept` | Marks every post of a run still waiting on a board shipped, as the caller |
+| `mocco_feedback_ship_suggestions_dismiss` | `ShipSuggestionService.dismiss` | Sets a run's waiting suggestions on a board aside, as the caller |
+
+The two changes decide a run on a board at a time, as the inbox banner does, and have the same locks: `feedback:write`, the opt-in and a confirmation round trip. The confirmation names the run, its commit and approver, and each post with its status now and what happens to it (`in_progress → shipped`, or left as it is when merged or shipped since); accepting also says email voters are mailed and the draft stays a draft. It is bound to the board, the run, the waiting suggestions' ids and each post's status and `mergedIntoPostId`, so a suggestion decided or added, or a post moved or merged, before the answer is refused as a different change and the next call asks with what is there then. A run with nothing waiting on the board (decided already, unknown, or another project's) is refused before asking with `FeedbackShipSuggestionNotFoundError`'s message, and so is accepting a run whose every post was merged or shipped since: nothing would ship, so the refusal says to dismiss it. `accept` locks the suggestions and posts again, so a post merged in the gap is decided without a change. The changes are the console's: reason `ship_suggestion` and `feedback.shipped` naming the caller, and [status mail](#status-mail) follows.
 
 ## The public /v1 surface
 

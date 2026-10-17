@@ -42,6 +42,8 @@ export interface PendingShipRun {
     title: string;
     status: FeedbackPostStatus;
     voteCount: number;
+    /** Set when the post was merged into another since: accepting leaves it as it is. */
+    mergedIntoPostId: string | null;
   }[];
 }
 

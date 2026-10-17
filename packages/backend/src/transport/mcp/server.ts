@@ -11,7 +11,8 @@
 // here, before any tool sees it. `mocco_monitors_check` (in `tools/status-monitors.ts`) has the
 // same locks under its own `status:write` scope, and `mocco_messenger_reply` and
 // `mocco_messenger_assign` (in `tools/messenger.ts`) under `messenger:write`, and
-// `mocco_feedback_post_set_status` (in `tools/feedback.ts`) and `mocco_feedback_comment_create`,
+// `mocco_feedback_post_set_status` (in `tools/feedback.ts`), `mocco_feedback_ship_suggestions_accept`
+// and `_dismiss` (in `tools/feedback-shipping.ts`) and `mocco_feedback_comment_create`,
 // `mocco_feedback_post_vote` and `mocco_feedback_post_merge` (in `tools/feedback-engagement.ts`)
 // under `feedback:write`, the four OTA setup changes (in `tools/ota-setup.ts`) under
 // `ota:write`, and the three project setup changes (in `tools/projects.ts`) under
@@ -24,6 +25,10 @@ import {
   registerFeedbackEngagementTools,
   type FeedbackEngagementToolDeps,
 } from '@backend/transport/mcp/tools/feedback-engagement';
+import {
+  registerFeedbackShippingTools,
+  type FeedbackShippingToolDeps,
+} from '@backend/transport/mcp/tools/feedback-shipping';
 import { registerFlagTools, type FlagToolDeps } from '@backend/transport/mcp/tools/flags';
 import { registerGateTools, type GateToolDeps } from '@backend/transport/mcp/tools/gates';
 import { registerHelpTools, type HelpToolDeps } from '@backend/transport/mcp/tools/help';
@@ -56,6 +61,7 @@ export type McpToolDeps = RunToolDeps &
   HelpToolDeps &
   MessengerToolDeps &
   FeedbackToolDeps &
+  FeedbackShippingToolDeps &
   FeedbackEngagementToolDeps &
   NotificationToolDeps &
   NotificationWriteToolDeps &
@@ -86,6 +92,7 @@ export function createMcpServer(deps: McpToolDeps): McpServer {
   registerHelpTools(server, deps);
   registerMessengerTools(server, deps);
   registerFeedbackTools(server, deps);
+  registerFeedbackShippingTools(server, deps);
   registerFeedbackEngagementTools(server, deps);
   registerNotificationTools(server, deps);
   registerNotificationWriteTools(server, deps);
