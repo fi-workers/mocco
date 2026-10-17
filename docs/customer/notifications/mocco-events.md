@@ -4,7 +4,7 @@ description: The events Mocco produces on its own for deploy governance (runs an
 type: guide
 status: active
 created: 2026-09-25
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, notifications, events, governance, guide]
@@ -35,10 +35,17 @@ On a channel's **Rules**, choose the **Mocco** preset and click **Apply**. It ad
 `ota.promotion.approved`, `ota.promotion.rejected` and `ota.emergency_launch.spike`; and the
 feature-flag events `flags.changeset.requested`, `flags.changeset.applied`,
 `flags.changeset.rejected`, `flags.flag.killed` and `flags.stale.digest`; and the messenger events
-`messenger.conversation.created` and `messenger.message.received`. It leaves out
+`messenger.conversation.created` and `messenger.message.received`; and the feedback event
+`feedback.ship.suggested`. It leaves out
 `run.succeeded`, which is often noisy, and `messenger.conversation.unassigned` (a new conversation
 nobody in the inbox rotation was available for), which repeats a created message; add them by
 hand if you want them. You can also use `gate.*` or `run.*` to get a whole family.
+
+`feedback.ship.suggested` tells your team that a release shipped posts on a feedback board that wait
+to be marked shipped: how many, which ones, the release's commit, the gates that approved it, and a
+link to the board's inbox. It arrives once per board and release, and not at all for a board that
+marks posts shipped without asking. Filter it to one board with `board=<the board's slug>`. See
+[Mark posts shipped when they release](../feedback/public-board.md#mark-posts-shipped-when-they-release).
 
 Mocco events never come from a source, so a rule limited with **Only from source** never matches
 them.

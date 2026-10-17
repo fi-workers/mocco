@@ -9,6 +9,8 @@
 // marked with the first release that contained it; a post whose links meet the board's policy gets
 // one suggestion per (post, run), and the run's posts are grouped in one draft changelog entry.
 // Every write is idempotent, so a repeated delivery of the same release suggests nothing new.
+// The posts left waiting for the team are announced once per board and run as
+// `feedback.ship.suggested` (#180), for the workspace's notification rules to route.
 import { AuditActions } from '@mocco/common/audit';
 import {
   FeedbackLinkKinds,
@@ -26,8 +28,10 @@ import { FeedbackLinkRepo } from '@backend/domain/feedback/repos/link.repo';
 import { FeedbackPostRepo } from '@backend/domain/feedback/repos/post.repo';
 import { ShipSuggestionRepo } from '@backend/domain/feedback/repos/ship-suggestion.repo';
 import { FeedbackTrackerRepoRepo } from '@backend/domain/feedback/repos/tracker-repo.repo';
+import { shipNoticeEvent } from '@backend/domain/feedback/ship-notice';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { ChangelogService } from '@backend/domain/feedback/ChangelogService';
 import type { FeedbackBoardRow } from '@backend/domain/feedback/repos/board.repo';
 import type { FeedbackLinkCloserRow } from '@backend/domain/feedback/repos/link-closer.repo';
@@ -122,6 +126,10 @@ export interface ShipDetectorDeps {
   ancestry?: CommitAncestry;
   /** Ancestry calls per release; `SHIP_ANCESTRY_CALL_CAP` by default. */
   ancestryCallCap?: number;
+  /** Where the staff notice goes (`feedback.ship.suggested`); without one, no notice. */
+  events?: EventPublisher;
+  /** The app's origin, for the notice's link to the inbox. */
+  appOrigin?: string;
   now?: () => Date;
 }
 
@@ -217,7 +225,45 @@ export class ShipDetector {
     if (board.shipMode === ShipModes.autoApply) {
       await this.deps.suggestions.autoApply(scope, board.id, release.runId);
     }
+    await this.notify(board, release, posts);
     return inserted;
+  }
+
+  /**
+   * Tell the team which posts the run shipped on the board that wait for them: one
+   * `feedback.ship.suggested` per board and run (its dedupe key), so handling the release again
+   * announces nothing new. Posts marked shipped without asking (auto-apply) wait for no one, so a
+   * board in that mode gets no notice. A failure to publish throws, and the delivery job retries
+   * the whole release, whose writes are idempotent.
+   */
+  private async notify(
+    board: FeedbackBoardRow,
+    release: ShippingRelease,
+    posts: readonly FeedbackPostRow[],
+  ): Promise<void> {
+    const { events } = this.deps;
+    if (events === undefined) {
+      return;
+    }
+    const ofRun = await new ShipSuggestionRepo(this.deps.db).ofRun(board.workspaceId, board.id, release.runId);
+    const waiting = new Set(ofRun.filter(row => row.state === ShipSuggestionStates.pending).map(row => row.postId));
+    // By number: `posts` comes in that order.
+    const waitingPosts = posts.filter(post => waiting.has(post.id));
+    if (waitingPosts.length === 0) {
+      return;
+    }
+    await events.publish(
+      shipNoticeEvent(
+        {
+          board,
+          runId: release.runId,
+          commitSha: release.commitSha,
+          gateNames: release.gateNames,
+          posts: waitingPosts,
+        },
+        this.deps.appOrigin,
+      ),
+    );
   }
 
   /**

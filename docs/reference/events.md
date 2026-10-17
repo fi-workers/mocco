@@ -54,6 +54,7 @@ Every type has one zod payload schema in `@mocco/common/events` (`domainEventPay
 | `status.monitor.down`, `status.monitor.degraded`, `status.monitor.recovered` | `MonitorTransitionService`, after the verdict evaluator moves a monitor to `down`, to `degraded`, or to `up` after an outage or a degradation ([status](./status.md#what-a-state-change-does)) | `status_monitor_state_change` / state change id |
 | `status.monitor.tls_expiring` | The verdict evaluator, through `MonitorTransitionService.warnTls`, once per threshold an HTTP monitor's certificate crosses ([status](./status.md#tls-expiry-warnings)) | `status_monitor` / monitor id |
 | `status.location.unhealthy`, `status.location.recovered` | `LocationHealthService` (the `status.evaluate` job), once when a private location's probe goes silent and once when it polls again ([status](./status.md#location-health)) | `status_location` / location id |
+| `feedback.ship.suggested` | `ShipDetector` (the `feedback.ship_detect` subscriber), once per board and release run that left posts waiting for the team to mark them shipped; dedupe key `feedback.ship.suggested:<board id>:<run id>` ([feedback](./feedback.md#shipping-on-release)) | `feedback_board` / board id |
 | `status.maintenance.overran` | `MaintenanceService` (the `status.maintenance.tick` job), once, when a window a resumed gate started is still in progress after its expected minutes ([status](./status.md#maintenance-from-gated-runs)) | `status_maintenance` / window id |
 
 A gate reject ends the run in `rejected`; it publishes `gate.rejected` only, not `run.failed`.
@@ -80,6 +81,14 @@ days or fewer) and a link to the monitor. Its dedupe key is
 titles "Location silent: <name>" and "Location back: <name>", the last time the probe was seen, and no project or
 link, since locations belong to the workspace. Their dedupe key is `<type>:<location id>:<when it went silent>`.
 Only private locations publish them; a shared location's silence is logged for Mocco's operator instead.
+
+### Feedback payloads
+
+`feedback.ship.suggested` carries a rendered message (`{ facts, message }`) with the fact `board` (the board's slug):
+the title "N posts shipped on <board> in run <short sha>", the first ten posts by number and title ("…and N more"),
+the fields Board, Posts, Commit and Approved by (the resumed gates' names, as on the inbox banner), an info severity
+and a link to the board's inbox (`/workspaces/<id>/p/<project id>/feedback?board=<slug>`). Only posts still waiting
+count: a board that marks posts shipped without asking (`auto_apply`) publishes none.
 
 ### Governance payloads
 
@@ -200,8 +209,8 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
   composition free of import cycles (see [jobs: composition](./jobs.md#composition)).
 - Registered today: the notification fan-out (`registerNotificationSubscribers`,
   `domain/notification/subscribers.ts`), one `<family>.*` subscription per catalog family:
-  `gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`
-  (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
+  `gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*`, `status.*`
+  and `feedback.*` (see [notifications](./notifications.md#fan-out)). `createEventBus` takes the app origin for
   the links in its messages.
 - The release registry (`registerReleaseSubscribers`, `domain/project/subscribers.ts`) as
   `release.record` on `run.succeeded`: it records the run's releases and publishes
@@ -211,7 +220,8 @@ bus.subscribe('gate.*', 'notification.fan-out', async event => {
   minutes ([status: the deploy watch](./status.md#the-deploy-watch)).
 - The feedback ship detector (`registerFeedbackSubscribers`, `domain/feedback/subscribers.ts`) as
   `feedback.ship_detect` on `deploy.released`: it suggests shipping the board posts whose linked pull
-  requests the release contains ([feedback: shipping on release](./feedback.md#shipping-on-release)).
+  requests the release contains ([feedback: shipping on release](./feedback.md#shipping-on-release)),
+  and publishes `feedback.ship.suggested` on the same bus for the posts left waiting.
   `createEventBus` takes the `CommitAncestry` port for it (the GitHub App; without one, only a merge
   commit that is the released commit counts).
 - Gate-linked maintenance (same factory) as `status.maintenance.gate_resumed` on `gate.resumed`, which starts the

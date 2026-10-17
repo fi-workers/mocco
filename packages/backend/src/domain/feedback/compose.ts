@@ -16,6 +16,7 @@ import { SubscriptionService } from '@backend/domain/feedback/SubscriptionServic
 import { VoteService } from '@backend/domain/feedback/VoteService';
 
 import type { AuditService } from '@backend/domain/audit/AuditService';
+import type { EventPublisher } from '@backend/domain/events/ports';
 import type { FeedbackSourceReaders } from '@backend/domain/feedback/IntakeService';
 import type { FeedbackLinkEnvDeps } from '@backend/domain/feedback/link-config';
 import type { CommitAncestry, IssueTracker } from '@backend/domain/integration/ports';
@@ -107,7 +108,15 @@ export function createFeedbackDomain(
 /** The ship detector over a db (#179), for the `deploy.released` subscriber. */
 export function createShipDetector(
   db: Db,
-  deps: { audit: Pick<AuditService, 'record'>; ancestry?: CommitAncestry; ancestryCallCap?: number; now?: () => Date },
+  deps: {
+    audit: Pick<AuditService, 'record'>;
+    ancestry?: CommitAncestry;
+    ancestryCallCap?: number;
+    /** Where the staff notice for new suggestions goes (#180); none, and no notice. */
+    events?: EventPublisher;
+    appOrigin?: string;
+    now?: () => Date;
+  },
 ): ShipDetector {
   const now = deps.now === undefined ? {} : { now: deps.now };
   const boards = new BoardService({ db, audit: deps.audit });
@@ -118,6 +127,8 @@ export function createShipDetector(
     suggestions: new ShipSuggestionService({ db, audit: deps.audit, boards, ...now }),
     ...(deps.ancestry !== undefined && { ancestry: deps.ancestry }),
     ...(deps.ancestryCallCap !== undefined && { ancestryCallCap: deps.ancestryCallCap }),
+    ...(deps.events !== undefined && { events: deps.events }),
+    ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
     ...now,
   });
 }

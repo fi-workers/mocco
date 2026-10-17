@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-import { FlagEventTypes, GovernanceEventTypes, MessengerEventTypes, OtaEventTypes, StatusEventTypes } from './events';
+import {
+  FeedbackEventTypes,
+  FlagEventTypes,
+  GovernanceEventTypes,
+  MessengerEventTypes,
+  OtaEventTypes,
+  StatusEventTypes,
+} from './events';
 import { InboundEventTypes } from './inbound';
 
 import type { RuleFilter } from './notification';
@@ -51,6 +58,7 @@ export const rulePresetRules: Readonly<Record<RulePreset, readonly PresetRule[]>
     { eventType: StatusEventTypes.statusMonitorTlsExpiring, filter: {} },
     { eventType: StatusEventTypes.statusLocationUnhealthy, filter: {} },
     { eventType: StatusEventTypes.statusLocationRecovered, filter: {} },
+    { eventType: FeedbackEventTypes.feedbackShipSuggested, filter: {} },
   ],
   [RulePresets.sentry]: [{ eventType: InboundEventTypes['sentry.issue.created'], filter: {} }],
   [RulePresets.vercel]: [

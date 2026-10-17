@@ -38,6 +38,7 @@ export function createEventBus(deps: EventBusCompositionDeps): EventBus {
   registerFeedbackSubscribers(bus, {
     db: deps.db,
     now: deps.now,
+    appOrigin: deps.appOrigin,
     ...(deps.commitAncestry !== undefined && { ancestry: deps.commitAncestry }),
   });
   return bus;

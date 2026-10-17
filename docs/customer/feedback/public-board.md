@@ -147,6 +147,8 @@ When a release contains a post's linked pull request (its merge commit is the re
 
 ![The inbox banner: two posts shipped in a release approved by sre](./images/feedback-ship-banner.png)
 
+You don't have to keep the inbox open to see the banner. Mocco also sends a notification, `feedback.ship.suggested`, once per board and release: how many posts shipped, which ones, the release's commit, who approved it, and a link to the inbox. To receive it in a Discord channel, apply the **Mocco** preset on the channel's **Rules** in **Notifications**, which includes it, or add a rule for it by hand; the filter `board=<slug>` limits it to one board (see [Mocco events](../notifications/mocco-events.md#the-mocco-preset)).
+
 If you'd rather not be asked, turn on **Mark posts shipped without asking**: Mocco then marks the posts shipped as soon as it sees the release, and the change shows in the post's history and the audit log as made by Mocco. It is off unless you turn it on. Mocco looks at a post's pull requests only in the release repository, so a post whose work also lands in another repository waits for that work under "every". Posts already shipped, merged into another post, or waiting on an earlier banner are left alone.
 
 ### Announce what shipped

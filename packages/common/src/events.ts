@@ -220,6 +220,13 @@ export const StatusEventTypes = {
   statusLocationRecovered: 'status.location.recovered',
 } as const;
 
+/** Feedback (#180): a release shipped board posts, and the team is asked to mark them shipped. */
+export const FeedbackEventTypes = {
+  /** One per board and release run with posts waiting for the team (not sent when the board marks them shipped
+   * without asking). */
+  feedbackShipSuggested: 'feedback.ship.suggested',
+} as const;
+
 /** A product event that, like an inbound one, carries its message rendered when it
  * happened, plus the flat facts rules filter on (`app`, `channel`, `release`). */
 export const renderedEventPayloadSchema = z.object({
@@ -258,6 +265,10 @@ export const statusEventPayloadSchemas = {
   [StatusEventTypes.statusLocationRecovered]: renderedEventPayloadSchema,
 } as const;
 
+export const feedbackEventPayloadSchemas = {
+  [FeedbackEventTypes.feedbackShipSuggested]: renderedEventPayloadSchema,
+} as const;
+
 /** Every domain event type. Extension point: spread each area's types here. */
 export const DomainEventTypes = {
   ...GovernanceEventTypes,
@@ -267,6 +278,7 @@ export const DomainEventTypes = {
   ...FlagEventTypes,
   ...MessengerEventTypes,
   ...StatusEventTypes,
+  ...FeedbackEventTypes,
 } as const;
 export type DomainEventType = (typeof DomainEventTypes)[keyof typeof DomainEventTypes];
 
@@ -279,6 +291,7 @@ export const domainEventPayloadSchemas = {
   ...flagEventPayloadSchemas,
   ...messengerEventPayloadSchemas,
   ...statusEventPayloadSchemas,
+  ...feedbackEventPayloadSchemas,
 } as const satisfies Record<DomainEventType, z.ZodType>;
 
 export type DomainEventPayload<T extends DomainEventType> = z.output<(typeof domainEventPayloadSchemas)[T]>;

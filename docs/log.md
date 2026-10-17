@@ -1209,3 +1209,15 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feedback.md`, `reference/events.md`, `reference/releases.md`, `reference/github-app.md`,
   `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: staff notice for ship suggestions
+
+- The ship detector publishes `feedback.ship.suggested` when a release leaves posts waiting on a board: one per board
+  and run (dedupe key `feedback.ship.suggested:<board id>:<run id>`), a rendered message with the post count, the
+  first ten posts, the commit, the approving gates and a link to the board's inbox, and the fact `board`. None for a
+  board in `auto_apply` mode. The new `feedback.*` family has its fan-out subscriber (`notification.fan-out.feedback`)
+  and the type is in the `mocco` preset, so a team routes it with its channel rules (Discord today; no Slack sender
+  yet). No migration.
+- Docs touched: `reference/events.md`, `reference/notifications.md`, `reference/feedback.md`,
+  `reference/feature-map.md`, `customer/notifications/mocco-events.md`, `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-ship-notice` (issue #180)
