@@ -82,11 +82,12 @@ export class MoccoApi {
     action: 'pause' | 'rollback' | 'rollback-to-embedded',
     apiKey: string,
     platform: string | null = null,
+    runtimeVersion: string | null = null,
   ): Promise<PromotionResult> {
     return await this.postJson<PromotionResult>(
       `/ota/apps/${appId}/channels/${channel}/${action}`,
       apiKey,
-      { platform },
+      { platform, runtimeVersion },
       `${action} on ${channel}`,
     );
   }

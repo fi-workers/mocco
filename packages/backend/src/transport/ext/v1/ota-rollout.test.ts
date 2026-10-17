@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { AuditActions } from '@mocco/common/audit';
 import { ApprovalDecisions } from '@mocco/common/governance';
 import { FULL_ROLLOUT_BP, OtaDeploymentKinds, StopActions } from '@mocco/common/ota-hosting';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RoleMembershipRepo } from '@backend/domain/governance/repos/role-membership.repo';
 import { RoleRepo } from '@backend/domain/governance/repos/role.repo';
 import { rolloutBucket } from '@backend/domain/ota/serving/select';
 import { expectOne } from '@backend/infra/db/rows';
-import { auditLog, otaChannelHeads, otaDeployments, users } from '@backend/infra/db/schema';
+import { auditLog, otaChannelHeads, otaDeployments, otaSignedDirectives, users } from '@backend/infra/db/schema';
 import { API, createOtaFixture, RUNTIME } from '@backend/transport/ext/v1/testing/ota-fixture';
 
 import type { OtaFixture } from '@backend/transport/ext/v1/testing/ota-fixture';
@@ -166,6 +167,61 @@ describe('staged rollout, pause and instant rollback', () => {
     expect(await check('device-1', v1.updateId)).toMatchObject({ status: 200, part: 'directive' });
     // A first release has no earlier republish to return to.
     await expect(stop(StopActions.rollback)).rejects.toThrow(/no pre-signed rollback on ios/u);
+  });
+
+  it('rolls back to the embedded bundle after a rollback, with a directive newer than the republish', async () => {
+    const v1 = await f.publishReady('v1');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v1.releaseId, f.ownerId, null);
+    const v2 = await f.publishReady('v2');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v2.releaseId, f.ownerId, null);
+    await stop(StopActions.rollback);
+    const republish = await check('device-1', v2.updateId);
+
+    await stop(StopActions.rollbackEmbedded);
+
+    // Devices on the republish get the directive, and it is newer than the republish, or
+    // expo-updates would keep running the republish.
+    const served = await check('device-1', republish.id ?? '');
+    expect(served).toMatchObject({ status: 200, part: 'directive' });
+    const [directive] = await f.t.db
+      .select()
+      .from(otaSignedDirectives)
+      .where(eq(otaSignedDirectives.releaseId, v2.releaseId));
+    expect(directive?.commitTime?.getTime()).toBeGreaterThan(new Date(republish.createdAt ?? 0).getTime());
+  });
+
+  it('names the runtime that blocks a rollback across runtimes, and rolls back the one named', async () => {
+    // An old runtime with a single release, and the current one with two.
+    const old = await f.publishReady('old', '0.9.0');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, old.releaseId, f.ownerId, null);
+    const v1 = await f.publishReady('v1');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v1.releaseId, f.ownerId, null);
+    const v2 = await f.publishReady('v2');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v2.releaseId, f.ownerId, null);
+
+    await expect(stop(StopActions.rollback)).rejects.toThrow(/ios runtime 0\.9\.0; name the runtime to roll back/u);
+    const result = await f.ota.otaChannels.stopFromConsole(f.appRow, staging.id, StopActions.rollback, f.ownerId, {
+      runtimeVersion: RUNTIME,
+      reason: null,
+    });
+
+    expect(result).toMatchObject({ kind: OtaDeploymentKinds.rollback, releaseId: v2.releaseId, changed: true });
+  });
+
+  it('runs the stop action each CI path names', async () => {
+    const v1 = await f.publishReady('v1');
+    await f.ota.otaChannels.promote(f.appRow, staging.id, v1.releaseId, f.ownerId, null);
+    const stopOver = async (path: string) => {
+      const response = await f.call('POST', `${API}/ota/apps/${f.otaAppId}/channels/staging/${path}`, f.secretToken, {
+        platform: 'ios',
+      });
+      return (await response.json()) as { kind?: string; status?: number; detail?: string };
+    };
+
+    // rollback-to-embedded once ran as rollback: a param pattern's alternation is unanchored in TrieRouter.
+    expect(await stopOver('rollback-to-embedded')).toMatchObject({ kind: OtaDeploymentKinds.rollbackEmbedded });
+    // Pause, not a rollback: there is no rollout to pause.
+    expect(await stopOver('pause')).toMatchObject({ status: 409, detail: '"staging" has no rollout in progress' });
   });
 
   it('gates rollout changes on a protected channel, never the stop actions, and records every change', async () => {

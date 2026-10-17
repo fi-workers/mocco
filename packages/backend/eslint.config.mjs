@@ -113,6 +113,14 @@ export default [
           selector: "MemberExpression[object.object.name='process'][object.property.name='env']",
           message: 'Read env through getEnv() (config/env.ts) — the single, zod-validated env surface.',
         },
+        {
+          // Hono's TrieRouter (what SmartRouter falls back to for the full ext app) does not
+          // anchor a param pattern's alternation, so `:action{rollback|rollback-to-embedded}`
+          // routed rollback-to-embedded to rollback. Tests ran on RegExpRouter and passed.
+          selector: 'Literal[value=/\\/:[A-Za-z]+\\{[^}]*\\|/]',
+          message:
+            'No alternation in a route param pattern (`:x{a|b}`): TrieRouter matches it unanchored. Declare one route per value.',
+        },
       ],
     },
   },

@@ -49,10 +49,12 @@ const USAGE = `Usage:
       Point a channel at a ready release, or roll it out to a share of devices; a
       protected channel gets an approval request (--wait waits for the decision).
 
-  mocco ota pause --channel <name>
-  mocco ota rollback --channel <name> [--platform ios|android] [--to-embedded]
+  mocco ota pause --channel <name> [--runtime-version <v>]
+  mocco ota rollback --channel <name> [--platform ios|android] [--runtime-version <v>] [--to-embedded]
       Stop a rollout, or roll back instantly to the pre-signed republish (or to the
-      embedded bundle). Never gated. Both need MOCCO_API_KEY.
+      embedded bundle). Never gated. Both need MOCCO_API_KEY. Without --runtime-version
+      every runtime on the channel is changed; an old runtime with a single release has
+      nothing to roll back to, so name the runtime of the bad release.
 `;
 
 const run = promisify(execFile);
@@ -214,6 +216,7 @@ async function runStop(command: 'pause' | 'rollback', args: readonly string[]): 
     options: {
       channel: { type: 'string' },
       platform: { type: 'string' },
+      'runtime-version': { type: 'string' },
       'to-embedded': { type: 'boolean', default: false },
       'app-id': { type: 'string' },
       'api-url': { type: 'string' },
@@ -226,7 +229,14 @@ async function runStop(command: 'pause' | 'rollback', args: readonly string[]): 
   const { appId, apiBase } = await targetOf(path.resolve(values.project), values);
   const rollbackAction = values['to-embedded'] ? 'rollback-to-embedded' : 'rollback';
   const action = command === 'pause' ? 'pause' : rollbackAction;
-  const result = await new MoccoApi(apiBase).stop(appId, values.channel, action, apiKeyOf(), values.platform ?? null);
+  const result = await new MoccoApi(apiBase).stop(
+    appId,
+    values.channel,
+    action,
+    apiKeyOf(),
+    values.platform ?? null,
+    values['runtime-version'] ?? null,
+  );
   log(`${result.channel}: ${result.kind.replace('_', ' ')} done (${result.platforms.join(', ')}).`);
 }
 
