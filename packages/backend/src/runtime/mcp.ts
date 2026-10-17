@@ -62,6 +62,8 @@ export function getMcpHandler(): McpHttpHandler {
       messengerInbox: getMessengerDomain().inbox,
       feedbackBoards: getFeedbackDomain().feedbackBoards,
       feedbackPosts: getFeedbackDomain().feedbackPosts,
+      feedbackShipSuggestions: getFeedbackDomain().feedbackShipSuggestions,
+      feedbackChangelog: getFeedbackDomain().feedbackChangelog,
       feedbackVotes: getFeedbackDomain().feedbackVotes,
       feedbackComments: getFeedbackDomain().feedbackComments,
       feedbackMerges: getFeedbackDomain().feedbackMerges,

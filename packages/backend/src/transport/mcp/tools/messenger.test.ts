@@ -349,6 +349,8 @@ describe('mocco_messenger_* (pglite, over HTTP)', () => {
       messengerInbox: messenger.inbox,
       feedbackBoards: { listBoards: refuse, getBoard: refuse },
       feedbackPosts: { list: refuse, get: refuse, requirePost: refuse, setStatus: refuse },
+      feedbackShipSuggestions: { listPending: refuse, accept: refuse, dismiss: refuse },
+      feedbackChangelog: { get: refuse },
       feedbackVotes: { list: refuse, find: refuse, vote: refuse },
       feedbackComments: { listForStaff: refuse, createAsStaff: refuse },
       feedbackMerges: { merge: refuse },

@@ -252,6 +252,8 @@ describe('mocco_feedback votes, comments and merging (pglite, over HTTP)', () =>
       messengerInbox: { list: refuse, get: refuse, write: refuse, assign: refuse, assignable: refuse },
       feedbackBoards: feedback.feedbackBoards,
       feedbackPosts: feedback.feedbackPosts,
+      feedbackShipSuggestions: feedback.feedbackShipSuggestions,
+      feedbackChangelog: feedback.feedbackChangelog,
       feedbackVotes: feedback.feedbackVotes,
       feedbackComments: feedback.feedbackComments,
       feedbackMerges: feedback.feedbackMerges,

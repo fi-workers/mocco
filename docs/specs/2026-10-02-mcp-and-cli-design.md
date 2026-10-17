@@ -4,7 +4,7 @@ description: How agents and terminals reach Mocco — a stateless remote MCP ser
 type: spec
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [spec, design, mcp, cli, governance, api, oauth, security]
@@ -188,6 +188,7 @@ has several servers loaded.
 | `mocco_feedback_boards_list` | A project's feedback boards with their categories in order |
 | `mocco_feedback_posts_search` | A board's posts (status, category; by status or newest), offset-paged |
 | `mocco_feedback_post_get` | One feedback post with its status history; the body cut short unless detailed |
+| `mocco_feedback_ship_suggestions_list` | Release runs waiting to mark posts shipped: commit, approver, posts, draft changelog entry |
 | `mocco_feedback_votes_list` | A post's votes (end user, counted or pending), offset-paged |
 | `mocco_feedback_comments_list` | A post's comments as the team sees them, internal notes marked, offset-paged |
 | `mocco_notifications_channels_search` | The workspace's notification channels (status, name), no secrets |
@@ -211,6 +212,7 @@ has several servers loaded.
 | `mocco_messenger_reply` | Send a text reply to a conversation's contact as the caller (`messenger:write`) |
 | `mocco_messenger_assign` | Give a conversation to a workspace member or to no one (`messenger:write`) |
 | `mocco_feedback_post_set_status` | Move a feedback post to another status as the caller (`feedback:write`) |
+| `mocco_feedback_ship_suggestions_accept` / `_dismiss` | Mark a release run's suggested posts shipped, or set them aside, as the caller (`feedback:write`) |
 | `mocco_feedback_comment_create` | Comment on a post as the caller: public, official or internal (`feedback:write`) |
 | `mocco_feedback_post_vote` | Record an end user's vote on their behalf as the caller (`feedback:write`) |
 | `mocco_feedback_post_merge` | Merge a duplicate post into another as the caller (`feedback:write`) |
@@ -263,7 +265,7 @@ still refuses what the role refuses.
 | `approvals:write` | Vote and resume. **Only ever on a person's token, never on an API key** |
 | `status:write` | On MCP, run a monitor's ad-hoc check (`mocco_monitors_check`); stepped up for like `approvals:write` |
 | `messenger:write` | On MCP, reply to and assign messenger conversations (`mocco_messenger_reply`, `mocco_messenger_assign`); stepped up for like `approvals:write` |
-| `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`); stepped up for like `approvals:write` |
+| `feedback:write` | On MCP, move, comment on, vote on and merge feedback posts, and decide ship suggestions (`mocco_feedback_post_set_status`, `_comment_create`, `_post_vote`, `_post_merge`, `_ship_suggestions_accept`, `_ship_suggestions_dismiss`); stepped up for like `approvals:write` |
 
 `approvals:write` existing as a scope and being unavailable to keys is the point: the
 model stays uniform and the refusal is one check in one place, rather than a shape the
@@ -429,8 +431,11 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
    `mocco_feedback_votes_list` and `mocco_feedback_comments_list` over `VoteService.list` and
    `CommentService.listForStaff`, and the changes `mocco_feedback_comment_create`,
    `mocco_feedback_post_vote` and `mocco_feedback_post_merge` over `CommentService.createAsStaff`,
-   `VoteService.vote` and `MergeService.merge`. Accepting a ship suggestion gets its tool in
-   the slice that builds it.
+   `VoteService.vote` and `MergeService.merge`. Ship suggestions follow (*shipped*, issue #179;
+   see *How the ship suggestion tools are built*): `mocco_feedback_ship_suggestions_list` over
+   `ShipSuggestionService.listPending` and `ChangelogService.get`, and the changes
+   `mocco_feedback_ship_suggestions_accept` and `_dismiss` over `ShipSuggestionService.accept` /
+   `dismiss`.
 
 ### How the vote is built (slice 6b)
 
@@ -597,6 +602,25 @@ public read API for runs, which any dashboard or SDK wants regardless of MCP.
   team member. Both reads page with `limit` and `nextOffset`.
 - **Nothing the console can't do.** `vote`, `createComment` and `mergePost` in the `feedback`
   router call the same methods; a merge is audited as `feedback.post.merged` naming the caller.
+
+### How the ship suggestion tools are built (issue #179)
+
+- **A run at a time.** The inbox banner decides a release run's suggestions on a board
+  together, and `ShipSuggestionService` has no per-post decision, so the tools
+  (`tools/feedback-shipping.ts`) take a board and a run. An agent that wants one post shipped
+  and not another moves that post with `mocco_feedback_post_set_status` instead.
+- **The same scope.** Both changes use `feedback:write`; the consent line grew to say so
+  (**Move, comment on, vote on and merge your feedback posts, and decide which ones a release
+  shipped, as you**). Tokens granted before keep working: the scope is the same.
+- **Bound to the run as shown.** The confirmation names the run, its commit and approver, and
+  each post with what happens to it, and records the waiting suggestions' ids and each post's
+  status and merge target. Anything that changes one of those before the answer (another
+  member deciding the run, a post moved or merged) makes the answer a different change. A run
+  with nothing waiting, and accepting a run whose every post was merged or shipped since, are
+  refused before asking.
+- **Nothing the console can't do.** `acceptShipSuggestions` and `dismissShipSuggestions` in
+  the `feedback` router call the same methods; accepting is audited as `feedback.shipped`
+  naming the caller, and status mail follows.
 
 ## Evaluating it
 

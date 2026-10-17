@@ -4,7 +4,7 @@ description: Add Mocco's MCP server to Claude Code, Claude Desktop, Cursor, VS C
 type: guide
 status: draft
 created: 2026-10-02
-updated: 2026-10-16
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [customer, mcp, agents, setup]
@@ -27,7 +27,7 @@ https://www.mocco.club/api/mcp
 
 > The read tools are in, and so are the deciding tools: voting on an approval request,
 > resuming or rejecting a paused run, changing where notifications go, replying to and
-> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts. The plan is in the
+> assigning messenger conversations, and moving, commenting on, voting on and merging feedback posts and marking them shipped from a release. The plan is in the
 > [design spec](https://github.com/fi-workers/mocco/blob/main/docs/specs/2026-10-02-mcp-and-cli-design.md).
 
 ## What it can do
@@ -74,6 +74,7 @@ you belong to — never more, because the server has no privileges of its own.
 | `mocco_feedback_boards_list` | Which feedback boards a project has, whether each is public, and their categories in order |
 | `mocco_feedback_posts_search` | A board's posts by status (under review, planned, in progress, shipped, closed) or newest first, by status or category, a page at a time |
 | `mocco_feedback_post_get` | One feedback post, and every status it took and when |
+| `mocco_feedback_ship_suggestions_list` | The releases waiting for you to mark feedback posts shipped: the commit, who approved it, the posts and the draft changelog entry |
 | `mocco_feedback_votes_list` | Who voted for a feedback post (your app's id for each end user), and whether each vote counts yet or waits for an email confirmation |
 | `mocco_feedback_comments_list` | A feedback post's comments as your team sees them: end users' comments, your official response, and internal notes, marked |
 | `mocco_notifications_channels_search` | Which Discord channels Mocco posts to, and why a disabled one is disabled |
@@ -151,6 +152,8 @@ edit rules and add sources in the console or with the changing tools below. On a
 | `mocco_messenger_reply` | Sends a text reply to a messenger conversation as you; the user reads it in your app |
 | `mocco_messenger_assign` | Gives a messenger conversation to a member of the workspace (you, or someone else) or to no one |
 | `mocco_feedback_post_set_status` | Moves a feedback post to another status as you, recorded in its history |
+| `mocco_feedback_ship_suggestions_accept` | Marks the posts a release shipped as shipped, as you; their email voters are mailed |
+| `mocco_feedback_ship_suggestions_dismiss` | Sets a release's ship suggestions aside, as you; the posts stay as they are |
 | `mocco_feedback_comment_create` | Comments on a feedback post as you: a public comment, the official response, or an internal note only your team sees |
 | `mocco_feedback_post_vote` | Records an end user's vote on a feedback post on their behalf, as you; it counts at once |
 | `mocco_feedback_post_merge` | Merges a duplicate feedback post into the post it repeats, as you; votes and followers move over |
@@ -210,7 +213,7 @@ status the post had when you were asked: if anyone moves the post before you ans
 answer is refused and you are asked afresh, and answering the same confirmation twice moves
 it once. Asking for the status a post has already answers without asking you. It follows the
 same rules as the other changes, needs the workspace to allow agents to make changes, and
-needs its own permission, asked for the first time it is used: **Move, comment on, vote on and merge your feedback posts, as you**. Any member
+needs its own permission, asked for the first time it is used: **Move, comment on, vote on and merge your feedback posts, and decide which ones a release shipped, as you**. Any member
 of the workspace may move posts, as on the board.
 
 **Commenting, voting and merging on feedback.** The same permission and the same workspace
@@ -228,6 +231,17 @@ switch cover three more changes, each confirmed in your client first:
   is closed, keeping its comments and history. A merge can't be undone. If either post gets a
   vote before you answer, you are asked again with the new counts; if either is merged
   elsewhere, the merge is refused.
+
+**Marking feedback shipped from a release.** When a release contains a post's linked work,
+the board's inbox suggests marking it shipped. The same permission and switch let your agent
+decide, a release at a time per board, as the inbox banner does.
+`mocco_feedback_ship_suggestions_list` shows each waiting release: its commit, who approved
+it, the posts and the draft changelog entry. `mocco_feedback_ship_suggestions_accept` shows
+the release and each post with what happens to it; a post merged or shipped since is left as
+it is, the post's email voters are mailed, and the draft stays a draft for you to publish.
+`mocco_feedback_ship_suggestions_dismiss` leaves the posts as they are. If anyone moves or
+merges one of the posts before you answer, the answer is refused and you are asked afresh;
+if someone decides the release first, the answer is refused.
 
 **Setting up a project.** Starting from an empty workspace, `mocco_projects_create` creates
 a project, `mocco_projects_apps_add` adds its apps and `mocco_products_enable` turns a product

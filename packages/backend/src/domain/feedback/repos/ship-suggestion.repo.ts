@@ -75,6 +75,7 @@ export class ShipSuggestionRepo {
           title: posts.title,
           status: posts.status,
           voteCount: posts.voteCount,
+          mergedIntoPostId: posts.mergedIntoPostId,
         },
       })
       .from(s)

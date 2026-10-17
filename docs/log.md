@@ -1209,3 +1209,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feedback.md`, `reference/events.md`, `reference/releases.md`, `reference/github-app.md`,
   `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: MCP tools for ship suggestions
+
+- `mocco_feedback_ship_suggestions_list` reads the release runs waiting on one board or every board of the project
+  (commit, approver, posts, draft changelog entry); `mocco_feedback_ship_suggestions_accept` and `_dismiss` decide a
+  run on a board as the inbox banner does, behind `feedback:write`, the opt-in and a confirmation bound to the run's
+  waiting suggestions and each post's status and merge. `listPending` now gives each post's `mergedIntoPostId`. The
+  consent line now names deciding ship suggestions.
+- Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `specs/2026-10-02-mcp-and-cli-design.md`,
+  `specs/2026-09-24-feedback-design.md`, `customer/mcp/connect.md`, `log.md`
+- Source: branch `feat/mcp-ship-suggestions` (issue #179)
