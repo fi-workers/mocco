@@ -113,6 +113,15 @@ export class MessengerConversationRepo {
       .limit(limit);
   }
 
+  /** Every conversation id the contact has, for erasing them. */
+  async idsForContact(workspaceId: string, contactId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: conv.id })
+      .from(conv)
+      .where(and(eq(conv.workspaceId, workspaceId), eq(conv.contactId, contactId)));
+    return rows.map(row => row.id);
+  }
+
   async findForContact(workspaceId: string, contactId: string, conversationId: string) {
     const [row] = await this.db
       .select()

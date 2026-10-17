@@ -1,8 +1,11 @@
 // Production composition root for the feedback domain. Lazy so builds don't need env at import.
+import { FeedbackSourceTypes } from '@mocco/common/feedback';
+
 import { getAudit } from '@backend/domain/audit/instance';
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { createFeedbackDomain } from '@backend/domain/feedback/compose';
 import { feedbackLinkDepsFromEnv } from '@backend/domain/feedback/link-config';
+import { messengerFeedbackSource } from '@backend/domain/messenger/feedback-source';
 import { getEnv } from '@backend/infra/config/env';
 import { getDb } from '@backend/infra/db/client';
 
@@ -16,6 +19,7 @@ export function getFeedbackDomain(): FeedbackDomain {
     const links = feedbackLinkDepsFromEnv(env);
     state.feedback = createFeedbackDomain(getDb(), {
       audit: getAudit().audit,
+      sources: { [FeedbackSourceTypes.messengerConversation]: messengerFeedbackSource(getDb()) },
       ...(links !== undefined && {
         links: {
           ...links,

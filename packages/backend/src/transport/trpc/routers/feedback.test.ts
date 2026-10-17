@@ -4,6 +4,7 @@ import { ExecutorIds } from '@mocco/common/execution';
 import {
   FeedbackPostSorts,
   FeedbackPostStatuses,
+  FeedbackSourceTypes,
   FeedbackStatusChangeReasons,
   FeedbackVoteSources,
   FeedbackVoteStates,
@@ -59,6 +60,8 @@ interface Ids {
   postId: string;
 }
 
+const intake = FeedbackSourceTypes.messengerConversation;
+
 /** One call per feedback procedure: `scope` is the tenant the caller claims, `ids` the entities it targets. */
 const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknown>> = {
   boards: async (api, scope) => await api.feedback.boards(scope),
@@ -90,6 +93,13 @@ const calls: Record<string, (api: Api, scope: Scope, ids: Ids) => Promise<unknow
     await api.feedback.mergePost({ ...scope, postId: ids.postId, intoPostId: randomUUID() }),
   duplicates: async (api, scope, ids) => await api.feedback.duplicates({ ...scope, boardId: ids.boardId }),
   dismissDuplicate: async (api, scope) => await api.feedback.dismissDuplicate({ ...scope, duplicateId: randomUUID() }),
+  intakePreview: async (api, scope, ids) =>
+    await api.feedback.intakePreview({ ...scope, boardId: ids.boardId, sourceType: intake, sourceId: randomUUID() }),
+  convertSource: async (api, scope, ids) =>
+    await api.feedback.convertSource({ ...scope, sourceType: intake, sourceId: randomUUID(), intoPostId: ids.postId }),
+  sourcePosts: async (api, scope) =>
+    await api.feedback.sourcePosts({ ...scope, sourceType: intake, sourceId: randomUUID() }),
+  postSources: async (api, scope, ids) => await api.feedback.postSources({ ...scope, postId: ids.postId }),
 };
 
 /** Procedures that take no entity id: with the caller's own scope they act on the caller's own data. */

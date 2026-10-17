@@ -1164,3 +1164,12 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   later in #181.
 - Docs touched: `reference/feedback.md`, `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-duplicates` (issue #181)
+
+## 2026-10-17 — Feedback: convert a conversation
+
+- A messenger conversation becomes a board post, or joins a suggested one, from the conversation page (migration 0085,
+  `mocco_feedback_post_sources`); the signed-in requester votes for it and the post page quotes its sources. Erasing
+  the contact removes the quotes.
+- Docs touched: `reference/feedback.md`, `reference/messenger.md`, `reference/feature-map.md`,
+  `customer/feedback/public-board.md`, `log.md`
+- Source: branch `feat/feedback-intake` (issue #182)

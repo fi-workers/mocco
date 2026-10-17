@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
 
+import ConvertToFeedback from '@frontend/components/feedback-console/convert-to-feedback';
 import { INBOX_REFRESH_MS } from '@frontend/components/messenger/inbox';
 import { replyAttachmentProblem, useReplyAttachments } from '@frontend/components/messenger/use-reply-attachments';
 import {
@@ -415,6 +416,7 @@ export default function Conversation({ workspaceId, projectId, conversationId }:
           <Composer workspaceId={workspaceId} projectId={projectId} conversationId={conversationId} />
         </section>
         <aside aria-label="About the user" className="flex flex-col gap-4 lg:border-l lg:border-border lg:pl-6">
+          <ConvertToFeedback workspaceId={workspaceId} projectId={projectId} conversationId={conversationId} />
           <div className="flex flex-col gap-1">
             <h3 className="flex items-center gap-2 text-sm font-medium">
               User

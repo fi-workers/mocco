@@ -6,9 +6,11 @@ import {
   FeedbackCommentAuthorKinds,
   FeedbackDuplicateMethods,
   FeedbackDuplicateStates,
+  FeedbackSourceTypes,
   FeedbackStatusMailStates,
   FeedbackLimits,
   FeedbackPostStatuses,
+  FEEDBACK_SOURCE_EXCERPT_MAX,
   FeedbackStatusChangeReasons,
   FeedbackVoteSources,
   FeedbackVoteStates,
@@ -96,6 +98,7 @@ import type {
   FeedbackCommentAuthorKind,
   FeedbackDuplicateMethod,
   FeedbackDuplicateState,
+  FeedbackSourceType,
   FeedbackStatusMailState,
   FeedbackPostStatus,
   FeedbackStatusChangeReason,
@@ -4784,6 +4787,50 @@ export const feedbackDuplicateCandidates = pgTable(
     check(
       'mocco_feedback_duplicate_candidates_dismissed_check',
       sql`(${t.state} = '${sql.raw(FeedbackDuplicateStates.dismissed)}') = (${t.dismissedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** Where a post came from outside the board (#182): a messenger conversation turned into it, with
+ * the request's words at the time. One row per (source, post): converting the same source again
+ * finds the post instead of making another. `source_id` is the source's own id (text, so each
+ * product keeps its id type); the feedback domain reads sources only through FeedbackSourceReader. */
+export const feedbackPostSources = pgTable(
+  'mocco_feedback_post_sources',
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull(),
+    projectId: uuid('project_id').notNull(),
+    postId: uuid('post_id').notNull(),
+    sourceType: text('source_type').$type<FeedbackSourceType>().notNull(),
+    sourceId: text('source_id').notNull(),
+    excerpt: text().notNull(),
+    // The requester's end-user id when the source knew it (their vote was recorded), else null.
+    endUserId: text('end_user_id'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt,
+  },
+  t => [
+    uniqueIndex('mocco_feedback_post_sources_source_post_uq').on(t.sourceType, t.sourceId, t.postId),
+    index('mocco_feedback_post_sources_project_source_idx').on(t.projectId, t.sourceType, t.sourceId),
+    index('mocco_feedback_post_sources_post_idx').on(t.postId),
+    foreignKey({
+      columns: [t.postId, t.workspaceId],
+      foreignColumns: [feedbackPosts.id, feedbackPosts.workspaceId],
+      name: 'mocco_feedback_post_sources_post_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.projectId, t.workspaceId],
+      foreignColumns: [projects.id, projects.workspaceId],
+      name: 'mocco_feedback_post_sources_project_fk',
+    }).onDelete('cascade'),
+    check(
+      'mocco_feedback_post_sources_type_check',
+      sql`${t.sourceType} IN (${sqlInList(Object.values(FeedbackSourceTypes))})`,
+    ),
+    check(
+      'mocco_feedback_post_sources_excerpt_check',
+      sql`char_length(${t.excerpt}) <= ${sql.raw(String(FEEDBACK_SOURCE_EXCERPT_MAX))}`,
     ),
   ],
 );

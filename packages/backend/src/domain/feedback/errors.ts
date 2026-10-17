@@ -149,3 +149,11 @@ export class FeedbackDuplicateNotFoundError extends NotFoundError {
     this.name = 'FeedbackDuplicateNotFoundError';
   }
 }
+
+/** The source to convert isn't in the project, or no reader serves its type — NOT_FOUND. */
+export class FeedbackSourceNotFoundError extends NotFoundError {
+  constructor(sourceType: string, sourceId: string, options?: ErrorOptions) {
+    super(`The ${sourceType} ${sourceId} was not found`, options);
+    this.name = 'FeedbackSourceNotFoundError';
+  }
+}

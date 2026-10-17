@@ -76,6 +76,35 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** Where the post came from outside the board (#182): conversations turned into it, quoted. */
+function Sources({ workspaceId, projectId, postId }: Props) {
+  const sourcesQuery = trpc.feedback.postSources.useQuery({ workspaceId, projectId, postId });
+  const sources = sourcesQuery.data?.sources ?? [];
+  if (sources.length === 0) {
+    return null;
+  }
+  return (
+    <Section title={`From conversations (${String(sources.length)})`}>
+      <ul className="flex flex-col gap-2">
+        {sources.map(source => (
+          <li key={source.id} className="flex flex-col gap-1 rounded-lg border border-border p-3">
+            <p className="line-clamp-4 text-sm whitespace-pre-wrap">{source.excerpt}</p>
+            <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Link
+                href={Routes.projectConversation(workspaceId, projectId, source.sourceId)}
+                className="underline underline-offset-2 hover:text-foreground">
+                Open the conversation
+              </Link>
+              {source.endUserId === null ? null : <span>{endUserLabel(source.endUserId)} voted</span>}
+              <Ago date={source.createdAt} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
 function EditPost({
   workspaceId,
   projectId,
@@ -645,6 +674,7 @@ export default function FeedbackPost({ workspaceId, projectId, postId }: Props) 
             voteCount={post.voteCount}
             isMerged={post.mergedIntoPostId !== null}
           />
+          <Sources workspaceId={workspaceId} projectId={projectId} postId={postId} />
           <History workspaceId={workspaceId} history={history} />
         </div>
       </div>
