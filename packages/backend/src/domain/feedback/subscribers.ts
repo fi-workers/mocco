@@ -18,16 +18,21 @@ export interface FeedbackSubscriberDeps {
   db: Db;
   /** Answers whether a release contains a merge commit; undefined without a GitHub App. */
   ancestry?: CommitAncestry;
+  /** The app's origin, for the staff notice's link to the inbox. */
+  appOrigin?: string;
   now?: () => Date;
 }
 
-/** On `deploy.released`, suggest shipping the board posts the release contains. A failure throws,
- * so the delivery job retries (every write is idempotent). */
+/** On `deploy.released`, suggest shipping the board posts the release contains, and publish the
+ * staff notice (`feedback.ship.suggested`) on the same bus. A failure throws, so the delivery job
+ * retries (every write is idempotent, and the notice is deduped per board and run). */
 export function registerFeedbackSubscribers(bus: EventBus, deps: FeedbackSubscriberDeps): void {
   const detector = createShipDetector(deps.db, {
     audit: new AuditService({ audit: new AuditRepo(deps.db) }),
     ...(deps.ancestry !== undefined && { ancestry: deps.ancestry }),
+    ...(deps.appOrigin !== undefined && { appOrigin: deps.appOrigin }),
     ...(deps.now !== undefined && { now: deps.now }),
+    events: bus,
   });
   bus.subscribe(DomainEventTypes.deployReleased, SHIP_DETECT_SUBSCRIBER, async event => {
     const { payload } = event;

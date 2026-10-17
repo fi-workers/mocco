@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AuditActions } from '@mocco/common/audit';
-import { DomainEventTypes } from '@mocco/common/events';
+import { DomainEventTypes, FeedbackEventTypes } from '@mocco/common/events';
 import {
   ChangelogEntryStates,
   FeedbackLinkKinds,
@@ -12,6 +12,8 @@ import {
   ShipPolicies,
   ShipSuggestionStates,
 } from '@mocco/common/feedback';
+import { Severities } from '@mocco/common/notification';
+import { rulePresetRules } from '@mocco/common/notification-presets';
 import { and, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -23,6 +25,8 @@ import { createFeedbackDomain, createShipDetector } from '@backend/domain/feedba
 import { SHIP_DETECT_SUBSCRIBER } from '@backend/domain/feedback/subscribers';
 import { PostgresJobQueue } from '@backend/domain/jobs/PostgresJobQueue';
 import { JobRepo } from '@backend/domain/jobs/repos/job.repo';
+import { NotificationSubscribers } from '@backend/domain/notification/constants';
+import { seedChannel, seedRule } from '@backend/domain/notification/testing/seed';
 import { createProjectDomain } from '@backend/domain/project/instance';
 import { seedRepo, seedRun } from '@backend/domain/status/testing/deploys';
 import { expectOne } from '@backend/infra/db/rows';
@@ -30,15 +34,18 @@ import {
   auditLog,
   changelogEntries,
   commits,
+  domainEvents,
   feedbackLinkClosers,
   feedbackLinks,
   feedbackShipSuggestions,
   feedbackStatusChanges,
+  notificationDeliveries,
   users,
   workspaces,
 } from '@backend/infra/db/schema';
 import { createTestDb, type TestDb } from '@backend/infra/db/testing/pglite';
 
+import type { PublishInput } from '@backend/domain/events/EventBus';
 import type { FeedbackDomain } from '@backend/domain/feedback/compose';
 import type { FeedbackScope } from '@backend/domain/feedback/scope';
 import type { ShippingRelease } from '@backend/domain/feedback/ShipDetector';
@@ -46,6 +53,7 @@ import type { CommitAncestry, TrackerRepoRef } from '@backend/domain/integration
 import type { FeedbackReleasePolicyInput } from '@mocco/common/feedback';
 
 const NOW = new Date('2026-10-17T12:00:00Z');
+const APP_ORIGIN = 'https://mocco.test';
 
 /**
  * The CommitAncestry port over an in-memory history: each head lists the commits reachable from
@@ -186,6 +194,37 @@ describe('shipping posts on release (pglite)', () => {
     const [row] = await suggestionsOf(postId);
     return row;
   };
+
+  /** A bus with every subscriber, whose kicks run nothing: the test hands events over itself. */
+  const eventBus = () =>
+    createEventBus({
+      db: t.db,
+      queue: new PostgresJobQueue({
+        jobs: new JobRepo(t.db),
+        now: () => now,
+        runOne: async () => await Promise.resolve(null),
+        waitUntil: () => {},
+      }),
+      now: () => now,
+      appOrigin: APP_ORIGIN,
+      commitAncestry: ancestry,
+    });
+
+  /** The detector with the staff notice wired to a fresh bus. */
+  const announcing = () =>
+    createShipDetector(t.db, { audit: audit(), ancestry, events: eventBus(), appOrigin: APP_ORIGIN, now: () => now });
+
+  /** The staff notices published in the workspace. */
+  const notices = async () =>
+    await t.db
+      .select()
+      .from(domainEvents)
+      .where(
+        and(
+          eq(domainEvents.workspaceId, scope.workspaceId),
+          eq(domainEvents.type, FeedbackEventTypes.feedbackShipSuggested),
+        ),
+      );
 
   const auditActions = async () => {
     const rows = await t.db.select().from(auditLog).where(eq(auditLog.workspaceId, scope.workspaceId));
@@ -581,25 +620,71 @@ describe('shipping posts on release (pglite)', () => {
     expect(await auditActions()).toContain(AuditActions.feedbackBoardReleasePolicyChanged);
   });
 
+  it('announces the posts waiting for the team once per board and run', async () => {
+    await policy({});
+    const dark = await post('Dark mode');
+    const csv = await post('Export CSV');
+    const shipped = await release({ gateNames: ['sre', 'production'] });
+    await pullLink(dark.id, 1, shipped.commitSha);
+    await pullLink(csv.id, 2, shipped.commitSha);
+
+    await announcing().detect(shipped);
+    // The release handled again (a redelivery, the hourly reconcile) announces nothing new.
+    await announcing().detect(shipped);
+
+    const sent = await notices();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      projectId: scope.projectId,
+      subjectType: 'feedback_board',
+      subjectId: boardId,
+      dedupeKey: `feedback.ship.suggested:${boardId}:${shipped.runId}`,
+    });
+    const sha = shipped.commitSha.slice(0, 7);
+    expect(sent[0]?.payload).toEqual({
+      facts: { board: 'ideas' },
+      message: {
+        title: `2 posts shipped on Ideas in run ${sha}`,
+        url: `${APP_ORIGIN}/workspaces/${scope.workspaceId}/p/${scope.projectId}/feedback?board=ideas`,
+        description: `• #${String(dark.number)} Dark mode\n• #${String(csv.number)} Export CSV\n\nMark them shipped in the inbox to tell the people who voted.`,
+        severity: Severities.info,
+        fields: [
+          { name: 'Board', value: 'Ideas', inline: true },
+          { name: 'Posts', value: '2', inline: true },
+          { name: 'Commit', value: sha, inline: true },
+          { name: 'Approved by', value: 'sre, production', inline: false },
+        ],
+        footer: 'Mocco feedback',
+      },
+    });
+  });
+
+  it('sends no notice when nothing waits: auto-applied posts, or a run that shipped nothing', async () => {
+    await policy({ shipMode: ShipModes.autoApply });
+    const dark = await post('Dark mode');
+    const shipped = await release();
+    await pullLink(dark.id, 1, shipped.commitSha);
+
+    expect(await announcing().detect(shipped)).toHaveLength(1);
+    expect(await statusOf(dark.id)).toBe(FeedbackPostStatuses.shipped);
+    expect(await announcing().detect(await release())).toEqual([]);
+
+    expect(await notices()).toEqual([]);
+  });
+
   it('runs from deploy.released through the bus subscriber, once per event', async () => {
     await policy({});
     const dark = await post('Dark mode');
     const shipped = await release();
     ancestry.commit(shipped.commitSha, ['merged']);
     await pullLink(dark.id, 1, 'merged');
-    const bus = createEventBus({
-      db: t.db,
-      queue: new PostgresJobQueue({
-        jobs: new JobRepo(t.db),
-        now: () => now,
-        runOne: async () => await Promise.resolve(null),
-        waitUntil: () => {},
-      }),
-      now: () => now,
-      appOrigin: 'https://mocco.test',
-      commitAncestry: ancestry,
-    });
-    const { event, subscribers } = await bus.publish({
+    // A channel that applied the Mocco preset gets the staff notice.
+    const channel = await seedChannel(t.db, scope.workspaceId, 'product');
+    const presetRule = rulePresetRules.mocco.find(rule => rule.eventType === FeedbackEventTypes.feedbackShipSuggested);
+    expect(presetRule).toBeDefined();
+    await seedRule(t.db, channel, { eventType: presetRule?.eventType ?? '', filter: presetRule?.filter ?? {} });
+    const bus = eventBus();
+    const releasedEvent: Extract<PublishInput, { type: typeof DomainEventTypes.deployReleased }> = {
       type: DomainEventTypes.deployReleased,
       workspaceId: scope.workspaceId,
       subject: { type: 'run', id: shipped.runId },
@@ -620,11 +705,17 @@ describe('shipping posts on release (pglite)', () => {
         releasedAt: now.toISOString(),
         succeededSteps: ['deploy'],
       },
-    });
+    };
+    const { event, subscribers } = await bus.publish(releasedEvent);
     expect(subscribers).toContain(SHIP_DETECT_SUBSCRIBER);
 
     await bus.deliver(event.id, SHIP_DETECT_SUBSCRIBER);
     await bus.deliver(event.id, SHIP_DETECT_SUBSCRIBER);
+    // A second deploy.released for the same run (published under another key) suggests and
+    // announces nothing new.
+    const duplicate = await bus.publish({ ...releasedEvent, dedupeKey: `duplicate:${shipped.runId}` });
+    expect(duplicate.created).toBe(true);
+    await bus.deliver(duplicate.event.id, SHIP_DETECT_SUBSCRIBER);
 
     expect(await suggestionsOf(dark.id)).toMatchObject([{ runId: shipped.runId, gateNames: ['sre'] }]);
     expect(
@@ -638,5 +729,23 @@ describe('shipping posts on release (pglite)', () => {
           ),
         ),
     ).toEqual([]);
+
+    const [notice, ...others] = await notices();
+    expect(others).toEqual([]);
+    // The notification fan-out takes it, as `events.deliver` would hand it over.
+    expect(bus.subscribersFor(FeedbackEventTypes.feedbackShipSuggested)).toEqual([
+      NotificationSubscribers.feedback.name,
+    ]);
+    await bus.deliver(notice?.id ?? '', NotificationSubscribers.feedback.name);
+    const deliveries = await t.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.workspaceId, scope.workspaceId));
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({ channelId: channel.id });
+    expect(deliveries[0]?.message).toMatchObject({
+      title: `1 post shipped on Ideas in run ${shipped.commitSha.slice(0, 7)}`,
+      fields: expect.arrayContaining([{ name: 'Approved by', value: 'sre', inline: false }]),
+    });
   });
 });

@@ -45,6 +45,7 @@ export const NotificationSubscribers = {
   flags: { pattern: 'flags.*', name: 'notification.fan-out.flags' },
   messenger: { pattern: 'messenger.*', name: 'notification.fan-out.messenger' },
   status: { pattern: 'status.*', name: 'notification.fan-out.status' },
+  feedback: { pattern: 'feedback.*', name: 'notification.fan-out.feedback' },
 } as const satisfies FanOutSubscribers;
 
 export const DeliveryPolicy = {

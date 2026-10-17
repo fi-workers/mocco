@@ -4,7 +4,7 @@ description: The notification model (channels, rules, deliveries, Discord guilds
 type: reference
 status: active
 created: 2026-09-25
-updated: 2026-10-06
+updated: 2026-10-17
 confidence: medium
 owner: andrea
 tags: [reference, notifications, discord, events, jobs]
@@ -124,7 +124,7 @@ leaves `rule_id` null.
 
 | Preset | Rules |
 |---|---|
-| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed`, the OTA and flag types, `messenger.conversation.created` and `messenger.message.received` (not `messenger.conversation.unassigned`, which repeats a created event; a channel that wants only the conversations no one took adds that rule by hand), and `status.monitor.down` / `.degraded` / `.recovered` (never source-bound) |
+| `mocco` | `gate.pending`, `gate.resumed`, `gate.rejected`, `run.failed`, the OTA and flag types, `messenger.conversation.created` and `messenger.message.received` (not `messenger.conversation.unassigned`, which repeats a created event; a channel that wants only the conversations no one took adds that rule by hand), `status.monitor.down` / `.degraded` / `.recovered`, and `feedback.ship.suggested` (never source-bound) |
 | `sentry` | `sentry.issue.created` |
 | `vercel` | `vercel.deployment.succeeded` `{ target: production }`, `vercel.deployment.error`, `vercel.deployment.canceled` |
 | `github` | `github.push` `{ hasCommits: true }`, `github.pull_request.opened` / `.reopened` / `.merged` / `.closed`, `github.issues.opened` / `.reopened` / `.closed`, `github.release.published`, `github.workflow_run.failed` |
@@ -208,7 +208,7 @@ trace, e.g. ``rule `vercel.deployment.succeeded` needs target = "production" (th
 
 The bus subscriptions live in `createEventBus` (`domain/events/subscriptions.ts`), registered by
 `registerNotificationSubscribers`, one `<family>.*` subscription per event family of the catalog:
-`gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*` and `status.*`,
+`gate.*`, `run.*`, `deploy.*`, `sentry.*`, `vercel.*`, `github.*`, `ota.*`, `flags.*`, `messenger.*`, `status.*` and `feedback.*`,
 under the permanent names in `NotificationSubscribers` (`notification.fan-out.<family>`). A rule can
 name any catalog type, so every family must reach the fan-out: `NotificationSubscribers` satisfies
 a type keyed by every family in `DomainEventTypes`, so a family added to the catalog without its
