@@ -1,8 +1,9 @@
 // The frame of a public feedback board (pages/_sites/[site]/feedback/**, #175): the site's name
 // (back to its help center), the board with its Ideas, Roadmap and Changelog, and the search and
 // share metadata. Canonical and Open
-// Graph URLs are absolute on the site's own origin (its custom domain when it has one). Links
-// are plain anchors: the pages are served on the site's host, under /feedback/<board>.
+// Graph URLs are absolute on the site's own origin (its custom domain when it has one, or the app's
+// own origin for the site HELP_APP_HOST_SITE mounts there). Links are plain anchors: the pages are
+// served on the site's host (or that app host), under /feedback/<board>.
 import Head from 'next/head';
 
 import SeoHead from '@frontend/components/seo-head';
@@ -75,7 +76,7 @@ export default function FeedbackSiteLayout({
       </Head>
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <header className="flex h-14 items-center gap-3 border-b border-border px-4 md:px-6">
-          {/* The site's help center home, on the site's own host: not a page of this app's router. */}
+          {/* The site's help center home on its own host (the app's home on the app's host): not a page of this app's router. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a rewritten host, see above */}
           <a href="/" className="shrink-0 font-semibold tracking-tight">
             {site.name}

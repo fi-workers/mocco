@@ -1209,3 +1209,14 @@ Structural changes to the wiki itself also get their rationale in the [meta chan
   `reference/feedback.md`, `reference/events.md`, `reference/releases.md`, `reference/github-app.md`,
   `reference/feature-map.md`, `customer/feedback/public-board.md`, `log.md`
 - Source: branch `feat/feedback-ship-suggestions` (issue #179)
+
+## 2026-10-17 — Feedback: one help site's board on the app's host
+
+- `HELP_APP_HOST_SITE=<slug>` serves that help site's public board pages (board, roadmap, posts, changelog and its
+  RSS) on the app's own host under `/feedback/…`, so Mocco's own board is at `www.mocco.club/feedback/<board>` beside
+  `/docs` ([Mocco on Mocco](https://github.com/fi-workers/mocco/pull/515)). The site's board origin becomes the app's
+  for canonical, share and JSON-LD URLs, the app's sitemap, the feed, status mail and the console's links; its other
+  hosts redirect `/feedback/*` there (308). The host rewrites and redirects are built in `@mocco/common/help-hosts`.
+  Unset, nothing changes; it needs `SERVICE_DOMAIN`.
+- Docs touched: `reference/env.md`, `reference/feedback.md`, `reference/seo.md`, `log.md`
+- Source: branch `feat/feedback-app-host-site`

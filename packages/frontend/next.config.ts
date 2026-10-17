@@ -1,3 +1,5 @@
+import { appHostSiteOf, helpHostRoutes } from '@mocco/common/help-hosts';
+
 import type { NextConfig } from 'next';
 
 // Next matches `host` against the hostname (no port), as a regex.
@@ -5,6 +7,14 @@ const hostnameOf = (domain: string | undefined) => (domain ?? '').split(':', 1)[
 const escape = (hostname: string) => hostname.replaceAll('.', String.raw`\.`);
 // A request that prefers Markdown (`Accept: text/markdown`) gets a page's Markdown instead of its HTML.
 const acceptsMarkdown = { type: 'header' as const, key: 'accept', value: '.*text/markdown.*' };
+// Help centers on their hosts (HELP_SITES_DOMAIN, HELP_CUSTOM_DOMAINS), and HELP_APP_HOST_SITE.
+const helpEnv = {
+  SERVICE_DOMAIN: process.env.SERVICE_DOMAIN,
+  HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN,
+  HELP_CUSTOM_DOMAINS: process.env.HELP_CUSTOM_DOMAINS,
+  HELP_APP_HOST_SITE: process.env.HELP_APP_HOST_SITE,
+};
+const helpRoutes = helpHostRoutes(helpEnv);
 
 const config: NextConfig = {
   // `next dev` serves local help centers at <site>.help.localhost (HELP_SITES_DOMAIN).
@@ -46,6 +56,8 @@ const config: NextConfig = {
     NEXT_PUBLIC_SITE_HOST: process.env.SERVICE_DOMAIN ?? process.env.VERCEL_URL ?? '',
     NEXT_PUBLIC_HELP_SITES_DOMAIN: process.env.HELP_SITES_DOMAIN ?? '',
     NEXT_PUBLIC_HELP_CUSTOM_DOMAINS: process.env.HELP_CUSTOM_DOMAINS ?? '',
+    // The site whose board the app's own host serves, so the console links it there (empty when none).
+    NEXT_PUBLIC_HELP_APP_HOST_SITE: appHostSiteOf(helpEnv) ?? '',
   },
   // The public API host (ADR 0017): with PUBLIC_API_DOMAIN set (e.g. api.mocco.club),
   // https://<that host>/v1/* is served by the ext app's /api/ext/v1 routes.
@@ -54,12 +66,10 @@ const config: NextConfig = {
     { source: '/docs/:set/:page', headers: [{ key: 'Vary', value: 'Accept' }] },
     { source: '/:locale/articles/:ref', headers: [{ key: 'Vary', value: 'Accept' }] },
   ],
+  // A site mounted on the app host (HELP_APP_HOST_SITE): its own hosts send /feedback/* there (308).
+  redirects: async () => helpRoutes.redirects,
   rewrites: async () => {
     const apiHostname = hostnameOf(process.env.PUBLIC_API_DOMAIN);
-    // Help centers (#96, ADR 0015): with HELP_SITES_DOMAIN set (e.g. help.mocco.club),
-    // https://<site>.<that domain>/* is served by pages/_sites/<site>/*; a domain in
-    // HELP_CUSTOM_DOMAINS (help.example.com=<site>) serves that site on the customer's own host.
-    const helpHostname = hostnameOf(process.env.HELP_SITES_DOMAIN);
     const beforeFiles = [
       // Every host's robots.txt and sitemap.xml (#363) — the app's and each help center's —
       // come from one route that looks at the host, so they go before the help rewrites.
@@ -67,7 +77,8 @@ const config: NextConfig = {
       { source: '/og/v1/:path*', destination: '/api/ext/og/v1/:path*' },
       { source: '/robots.txt', destination: '/api/seo/robots' },
       { source: '/sitemap.xml', destination: '/api/seo/sitemap' },
-      // A public board's changelog feed (#176), on the help site's host (others answer 404).
+      // A public board's changelog feed (#176), on its help site's host or, for HELP_APP_HOST_SITE, the
+      // app's host (others answer 404).
       { source: '/feedback/:board/changelog.rss', destination: '/api/seo/changelog?board=:board' },
       { source: '/indexnow.txt', destination: '/api/seo/indexnow' },
       // Agents (#366): llms.txt, llms-full.txt and every page's Markdown — by a `.md` URL, or
@@ -98,31 +109,9 @@ const config: NextConfig = {
               destination: '/api/ext/v1/:path*',
             },
           ]),
-      ...(helpHostname === ''
-        ? []
-        : [
-            {
-              // Everything but Next's own assets and the API routes.
-              source: '/:path((?!_next/|api/|favicon).*)',
-              has: [{ type: 'host' as const, value: String.raw`^(?<site>[a-z0-9-]+)\.${escape(helpHostname)}$` }],
-              destination: '/_sites/:site/:path',
-            },
-          ]),
-      // HELP_CUSTOM_DOMAINS: `help.example.com=example,docs.other.app=other` (domain = site slug).
-      ...(process.env.HELP_CUSTOM_DOMAINS ?? '').split(',').flatMap(entry => {
-        const [domain, site] = entry.split('=', 2).map(part => part.trim());
-        const hostname = hostnameOf(domain).toLowerCase();
-        if (hostname === '' || site === undefined || !/^[a-z0-9-]+$/u.test(site)) {
-          return [];
-        }
-        return [
-          {
-            source: '/:path((?!_next/|api/|favicon).*)',
-            has: [{ type: 'host' as const, value: `^${escape(hostname)}$` }],
-            destination: `/_sites/${site}/:path`,
-          },
-        ];
-      }),
+      // Help centers (#96, ADR 0015), and the one site whose /feedback pages the app's own host
+      // serves (HELP_APP_HOST_SITE): see @mocco/common/help-hosts.
+      ...helpRoutes.rewrites,
     ];
     return { beforeFiles, afterFiles: [], fallback: [] };
   },

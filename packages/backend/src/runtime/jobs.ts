@@ -37,7 +37,7 @@ import { HelpTranslationService } from '@backend/domain/helpcenter/HelpTranslati
 import { helpIndexNowFromEnv } from '@backend/domain/helpcenter/indexnow-http';
 import { createHelpHandlers } from '@backend/domain/helpcenter/jobs';
 import { helpRevalidatorFromEnv } from '@backend/domain/helpcenter/revalidate-http';
-import { helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
+import { feedbackSiteOrigin } from '@backend/domain/helpcenter/site-url';
 import { translatorFromEnv } from '@backend/domain/helpcenter/translate/ai-gateway';
 import { InboundService } from '@backend/domain/inbound/InboundService';
 import { createInboundHandlers, inboundSchedules } from '@backend/domain/inbound/jobs';
@@ -133,8 +133,8 @@ export interface JobRunnerRuntimeDeps {
   feedbackLinks?: FeedbackLinkEnvDeps;
   /** Embeds feedback posts so the duplicate sweep matches by meaning; undefined without an LLM configured. */
   feedbackEmbedder?: Embedder;
-  /** Where a help site is served (its custom domain or subdomain), for links in feedback mail. */
-  helpSiteOriginOf?: (slug: string) => string | null;
+  /** Where a help site's /feedback pages are served (the app's host, its custom domain or subdomain), for links in feedback mail. */
+  feedbackSiteOriginOf?: (slug: string) => string | null;
   /** Reads GitHub issues and pull requests for the feedback link refresh; undefined without a GitHub App. */
   issueTracker?: IssueTracker;
   /** Answers whether a release contains a linked merge commit (feedback shipping); undefined without a GitHub App. */
@@ -250,7 +250,7 @@ export function createJobRunner(db: Db, deps: JobRunnerRuntimeDeps): JobRunner {
               ),
         publicUrlOf: async (scope, path) => {
           const site = await new HelpSiteService({ db, audit }).get(scope.workspaceId, scope.projectId);
-          const origin = site === undefined ? null : (deps.helpSiteOriginOf?.(site.slug) ?? null);
+          const origin = site === undefined ? null : (deps.feedbackSiteOriginOf?.(site.slug) ?? null);
           return origin === null ? null : `${origin}${path}`;
         },
         now: deps.now,
@@ -383,7 +383,7 @@ export function getJobRunner(): JobRunner {
       feedbackEmbedder: embedderFromEnv(env),
       issueTracker: getIntegration()?.provider,
       commitAncestry: getIntegration()?.provider,
-      helpSiteOriginOf: slug => helpSiteOrigin(slug, env),
+      feedbackSiteOriginOf: slug => feedbackSiteOrigin(slug, env),
       // The box is resolved only when a canary is signed, like the inbound jobs' above.
       stage0: stage0FromEnv(env, { fetch, box: { open: (sealed, aad) => getSecretBox().open(sealed, aad) } }),
     });

@@ -11,6 +11,7 @@ import { Products } from '@mocco/common/project';
 
 import { publicSiteHost } from '@frontend/components/help/help-center';
 import { Tones } from '@frontend/components/notifications/notification-ui';
+import { siteOrigin } from '@frontend/lib/seo';
 import { trpc } from '@frontend/lib/trpc';
 
 import type { Tone } from '@frontend/components/notifications/notification-ui';
@@ -39,8 +40,14 @@ export function useHelpSiteSlug(workspaceId: string, projectId: string): string 
   return siteQuery.data?.site?.slug ?? null;
 }
 
-/** Where a public board is served, or null when help sites aren't served here. */
+/**
+ * Where a public board is served: on the app's own host for the site mounted there
+ * (HELP_APP_HOST_SITE), else on the site's host; null when help sites aren't served here.
+ */
 export function publicBoardUrl(siteSlug: string, boardSlug: string): string | null {
+  if (siteSlug === process.env.NEXT_PUBLIC_HELP_APP_HOST_SITE) {
+    return `${siteOrigin()}/feedback/${boardSlug}`;
+  }
   const site = publicSiteHost(siteSlug);
   return site === null ? null : `${site.url}/feedback/${boardSlug}`;
 }

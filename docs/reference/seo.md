@@ -4,7 +4,7 @@ description: What Mocco serves to search engines, AI search and other crawlers o
 type: reference
 status: active
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-17
 confidence: high
 owner: andrea
 tags: [reference, seo, help-center]
@@ -23,7 +23,7 @@ Part of the SEO epic (#362). Every host this deployment serves answers `/robots.
 ## The app's host
 
 - **robots.txt** allows every crawler — search and AI alike — and keeps them out of the console and auth screens (`/workspaces`, `/account`, `/auth/`, `/api/`).
-- **sitemap.xml** lists the landing page and every customer guide (`/docs/<set>/<page>`), each guide with `lastmod` from its frontmatter `updated:` date. The guides are read from `docs/customer` at request time, so `next.config.ts` traces those files into the route (`outputFileTracingIncludes`).
+- **sitemap.xml** lists the landing page and every customer guide (`/docs/<set>/<page>`), each guide with `lastmod` from its frontmatter `updated:` date. The guides are read from `docs/customer` at request time, so `next.config.ts` traces those files into the route (`outputFileTracingIncludes`). With `HELP_APP_HOST_SITE` it also lists that help site's public board pages, which the app's host serves under `/feedback/…` ([public board pages](./feedback.md#public-board-pages)); the site's own sitemap then leaves them out.
 
 URLs are absolute on `SERVICE_DOMAIN` (else `VERCEL_URL`), whatever host asked. Vercel preview deployments add `X-Robots-Tag: noindex` themselves.
 

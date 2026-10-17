@@ -21,6 +21,7 @@
     "./jobs": "./src/jobs.ts",
     "./help": "./src/help.ts",
     "./help-glossary-csv": "./src/help-glossary-csv.ts",
+    "./help-hosts": "./src/help-hosts.ts",
     "./help-import": "./src/help-import.ts",
     "./help-v1": "./src/help-v1.ts",
     "./messenger": "./src/messenger.ts",

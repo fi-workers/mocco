@@ -1,9 +1,16 @@
 // Production wiring for /robots.txt and /sitemap.xml (#363) and for llms.txt and the pages'
 // Markdown (#366): binds seoFile and agentFile to the env and the help center's public read.
 // The frontend's API routes call these with the request host.
+import { appHostSiteOf } from '@mocco/common/help-hosts';
+
 import { resolveBaseOrigin } from '@backend/domain/execution/endpoints';
 import { getHelpDomain, helpIndexNowKeyFor } from '@backend/domain/helpcenter/instance';
-import { helpSiteForHost, helpSiteOrigin } from '@backend/domain/helpcenter/site-url';
+import {
+  feedbackSiteForHost,
+  feedbackSiteOrigin,
+  helpSiteForHost,
+  helpSiteOrigin,
+} from '@backend/domain/helpcenter/site-url';
 import { getEnv } from '@backend/infra/config/env';
 import { agentFile } from '@backend/transport/seo/agents';
 import { seoFile } from '@backend/transport/seo/files';
@@ -24,6 +31,7 @@ export async function seoFileFor(
   appPages: () => readonly AppPage[],
 ): Promise<SeoFileResponse> {
   const env = getEnv();
+  const appHostSite = appHostSiteOf(env);
   return await seoFile(file, host, {
     appOrigin: resolveBaseOrigin({ serviceDomain: env.SERVICE_DOMAIN, vercelUrl: env.VERCEL_URL }),
     appPages,
@@ -32,6 +40,7 @@ export async function seoFileFor(
     help: getHelpDomain().helpPublic,
     indexNowKeyOf: helpIndexNowKeyFor,
     feedbackPages: async slug => await feedbackPages().sitemapPages(slug),
+    ...(appHostSite !== null && { appHostSite }),
   });
 }
 
@@ -51,13 +60,13 @@ export async function agentFileFor(
   });
 }
 
-/** A public board's changelog as RSS for the request's host (#176): 404 off a help site, or for a
- * private or missing board. */
+/** A public board's changelog as RSS for the request's host (#176): 404 off a help site (or the app's
+ * host, for HELP_APP_HOST_SITE), or for a private or missing board. */
 export async function changelogRssFor(host: string, boardSlug: string): Promise<SeoFileResponse> {
   const env = getEnv();
   const notFound = { status: 404, contentType: 'text/plain; charset=utf-8', body: 'Not found\n' } as const;
-  const site = helpSiteForHost(host, env);
-  const origin = site === null ? null : helpSiteOrigin(site, env);
+  const site = feedbackSiteForHost(host, env);
+  const origin = site === null ? null : feedbackSiteOrigin(site, env);
   if (site === null || origin === null) {
     return notFound;
   }

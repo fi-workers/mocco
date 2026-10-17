@@ -148,6 +148,36 @@ describe('seoFile', () => {
     expect(file.body).toContain('<loc>https://help.syt.app/ko/articles/abc123-widget</loc>');
   });
 
+  it("lists a site mounted on the app's host (HELP_APP_HOST_SITE) in the app's sitemap, not its own", async () => {
+    const changed = new Date('2026-10-05T00:00:00Z');
+    const mounted = deps({
+      appHostSite: 'syt',
+      feedbackPages: async slug =>
+        await Promise.resolve(slug === 'syt' ? [{ path: '/feedback/ideas/changelog', lastModified: changed }] : []),
+    });
+
+    const app = await seoFile(SeoFiles.sitemap, 'www.mocco.club', mounted);
+    const site = await seoFile(SeoFiles.sitemap, 'help.syt.app', mounted);
+
+    expect(app.body).toContain('<loc>https://www.mocco.club/feedback/ideas/changelog</loc>');
+    expect(app.body).toContain('<loc>https://www.mocco.club/docs/start/overview</loc>');
+    expect(site.body).not.toContain('/feedback/');
+    // The site's help center pages stay on its own host.
+    expect(site.body).toContain('<loc>https://help.syt.app/ko/articles/abc123-widget</loc>');
+  });
+
+  it("lists no board pages on the app's host when no site is mounted there", async () => {
+    const file = await seoFile(
+      SeoFiles.sitemap,
+      'www.mocco.club',
+      deps({
+        feedbackPages: async () => await Promise.resolve([{ path: '/feedback/ideas', lastModified: new Date() }]),
+      }),
+    );
+
+    expect(file.body).not.toContain('/feedback/');
+  });
+
   it("serves a help site's IndexNow key on its host, and none on the app's", async () => {
     const help = await seoFile(SeoFiles.indexNowKey, 'help.syt.app', deps());
     const app = await seoFile(SeoFiles.indexNowKey, 'www.mocco.club', deps());
